@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -e
+
+cd $PROJECT_DIRECTORY
+build/$PROJECT_NAME
+cd - >& /dev/null

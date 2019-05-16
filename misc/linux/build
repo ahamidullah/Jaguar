@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -e
+
+pushd . >& /dev/null
+
+cd $PROJECT_DIRECTORY
+
+if [ ! -d build ]; then
+	mkdir build
+fi
+
+DEVELOPMENT=true
+DEBUG=true
+
+COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include"
+if [ DEVELOPMENT ]; then
+	COMPILER_FLAGS+=" -DDEVELOPMENT -I/usr/include/freetype2"
+fi
+if [ DEBUG ]; then
+	COMPILER_FLAGS+=" -DDEBUG"
+fi
+
+LINKER_FLAGS="-ldl -lm -lX11 -lfreetype"
+if [ DEVELOPMENT ]; then
+	LINKER_FLAGS+=""
+fi
+
+/usr/bin/time --format='Build time: %es.' g++ $COMPILER_FLAGS code/$PROJECT_NAME.cpp $LINKER_FLAGS -o build/$PROJECT_NAME
+
+popd >& /dev/null

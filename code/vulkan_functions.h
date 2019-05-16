@@ -1,0 +1,7 @@
+VK_EXPORTED_FUNCTION(vkGetInstanceProcAddr)
+VK_EXPORTED_FUNCTION(vkGetDeviceProcAddr)
+VK_GLOBAL_FUNCTION(vkCreateInstance)
+VK_GLOBAL_FUNCTION(vkEnumerateInstanceExtensionProperties)
+VK_GLOBAL_FUNCTION(vkEnumerateInstanceLayerProperties)
+VK_INSTANCE_FUNCTION(vkDestroyInstance)
+VK_INSTANCE_FUNCTION(vkCreateDebugUtilsMessengerEXT)

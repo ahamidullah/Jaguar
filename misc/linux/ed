@@ -1,0 +1,3 @@
+#!/bin/bash
+#kstart -fullscreen vim.gtk -g -c "cd $PROJECT_DIRECTORY/code" "$@" >& /dev/null
+kstart -fullscreen xterm -e "cd $PROJECT_DIRECTORY/code; vim" "$@" >& /dev/null

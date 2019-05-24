@@ -4,16 +4,20 @@ set -e
 
 pushd . >& /dev/null
 
-cd $PROJECT_DIRECTORY
+cd $PROJECT_DIRECTORY/code
 
-if [ ! -d build ]; then
-	mkdir build
+BUILD_DIRECTORY=$PROJECT_DIRECTORY/build
+
+if [ ! -d $BUILD_DIRECTORY ]; then
+	mkdir $BUILD_DIRECTORY
 fi
 
 DEVELOPMENT=true
 DEBUG=true
 
-COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include"
+#COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -ffast-math -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include"
+COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -ffast-math -fexceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include"
+
 if [ DEVELOPMENT ]; then
 	COMPILER_FLAGS+=" -DDEVELOPMENT -I/usr/include/freetype2"
 fi
@@ -21,11 +25,15 @@ if [ DEBUG ]; then
 	COMPILER_FLAGS+=" -DDEBUG"
 fi
 
-LINKER_FLAGS="-ldl -lm -lX11 -lfreetype"
+#LINKER_FLAGS="-lX11 -ldl -lm -lfreetype"
+LINKER_FLAGS="-lX11 -ldl -lm -lfreetype -lvulkan"
 if [ DEVELOPMENT ]; then
 	LINKER_FLAGS+=""
 fi
 
-/usr/bin/time --format='Build time: %es.' g++ $COMPILER_FLAGS code/$PROJECT_NAME.cpp $LINKER_FLAGS -o build/$PROJECT_NAME
+"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/test.vert -o $BUILD_DIRECTORY/vertex.spirv
+"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/test.frag -o $BUILD_DIRECTORY/fragment.spirv
+
+/usr/bin/time --format='Build time: %es.' g++ $COMPILER_FLAGS $PROJECT_NAME.cpp $LINKER_FLAGS -o $BUILD_DIRECTORY/$PROJECT_NAME
 
 popd >& /dev/null

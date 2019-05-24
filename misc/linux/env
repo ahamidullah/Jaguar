@@ -2,4 +2,7 @@ export PROJECT_ROOT="/home/ahh/development"
 export PROJECT_NAME="jaguar"
 export PROJECT_DIRECTORY="$PROJECT_ROOT/$PROJECT_NAME"
 export PATH=$PROJECT_DIRECTORY/misc/linux:$PROJECT_DIRECTORY/build:$PATH
-export VK_LAYER_PATH="$PROJECT_DIRECTORY/dependencies/vulkan/1.1.106.0/etc/explicit_layer.d"
+
+export VULKAN_SDK_PATH="$PROJECT_DIRECTORY/dependencies/vulkan/1.1.106.0"
+export VK_LAYER_PATH="$VULKAN_SDK_PATH/etc/explicit_layer.d"
+export LD_LIBRARY_PATH="$VULKAN_SDK_PATH/lib:${LD_LIBRARY_PATH:-}"

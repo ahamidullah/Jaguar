@@ -32,6 +32,8 @@ enum Log_Type {
 #define MEGABYTE(b) (KILOBYTE(b)*1024)
 #define GIGABYTE(b) (MEGABYTE(b)*1024)
 
+#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
+
 template <typename F>
 struct Scope_Exit {
 	Scope_Exit(F _f) : f(_f) {}
@@ -165,9 +167,44 @@ struct Array {
 
 template <typename T>
 struct Static_Array {
-	s32 num_bytes;
+	s32 capacity;
 	T *data;
 
 	T &operator[](s32 i);
 };
 
+struct Chunk_Header {
+	u8 *base_block;
+	u8 *block_frontier;
+	Chunk_Header *next_chunk;
+};
+
+struct Block_Header {
+	size_t byte_capacity;
+	size_t bytes_used;
+	Block_Header *next_block;
+	Block_Header *previous_block;
+};
+
+struct Free_Entry {
+	size_t size;
+	Free_Entry *next;
+};
+
+struct Entry_Header {
+	size_t size;
+	char *next;
+	char *prev;
+};
+
+struct Memory_Arena {
+	Free_Entry *entry_free_head;
+	char *last_entry;
+	Block_Header *base_block;
+	Block_Header *active_block;
+};
+
+struct String_Result {
+	char *data;
+	u64 length; // @TODO: This really should be a File_Offset...
+};

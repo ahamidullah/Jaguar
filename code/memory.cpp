@@ -1,40 +1,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-//
-// Memory.
-//
-struct Chunk_Header {
-	u8 *base;
-	u8 *block_frontier;
-	Chunk_Header *next;
-};
-
-struct Block_Header {
-	size_t capacity;
-	size_t nbytes_used;
-	Block_Header *next;
-	Block_Header *prev;
-};
-
-struct Free_Entry {
-	size_t size;
-	Free_Entry *next;
-};
-
-// Points to the start of the next and prev entry data.
-struct Entry_Header {
-	size_t size;
-	char *next;
-	char *prev;
-};
-
-struct Memory_Arena {
-	Free_Entry *entry_free_head;
-	char *last_entry;
-	Block_Header *base;
-	Block_Header *active_block;
-};
+Memory_Arena temporary_memory_arena;
+Memory_Arena permanent_memory_arena;
 
 size_t platform_page_size;
 
@@ -176,17 +144,10 @@ size_t get_platform_page_size() {
 
 Chunk_Header *make_memory_chunk() {
 	Chunk_Header *chunk = (Chunk_Header *)get_platform_memory(CHUNK_DATA_PLUS_HEADER_SIZE);
-	chunk->base = (u8 *)chunk;
-	chunk->block_frontier = (u8 *)chunk->base + sizeof(Chunk_Header);
-	chunk->next = NULL;
+	chunk->base_block = (u8 *)chunk;
+	chunk->block_frontier = (u8 *)chunk->base_block + sizeof(Chunk_Header);
+	chunk->next_chunk = NULL;
 	return chunk;
-}
-
-void init_memory() {
-	platform_page_size = get_platform_page_size();
-	memory_chunks = make_memory_chunk();
-	active_memory_chunk = memory_chunks;
-	memory_block_free_head = NULL;
 }
 
 u8 *get_block_start(Block_Header *block) {
@@ -201,19 +162,19 @@ Block_Header *make_memory_block() {
 	Block_Header *block;
 	if (memory_block_free_head) {
 		block = memory_block_free_head;
-		memory_block_free_head = memory_block_free_head->next;
+		memory_block_free_head = memory_block_free_head->next_block;
 	} else {
-		if (((active_memory_chunk->block_frontier + BLOCK_DATA_PLUS_HEADER_SIZE) - active_memory_chunk->base) > CHUNK_DATA_SIZE) {
-			active_memory_chunk->next = make_memory_chunk();
-			active_memory_chunk = active_memory_chunk->next;
+		if (((active_memory_chunk->block_frontier + BLOCK_DATA_PLUS_HEADER_SIZE) - active_memory_chunk->base_block) > CHUNK_DATA_SIZE) {
+			active_memory_chunk->next_chunk = make_memory_chunk();
+			active_memory_chunk = active_memory_chunk->next_chunk;
 		}
 		block = (Block_Header *)active_memory_chunk->block_frontier;
 		active_memory_chunk->block_frontier += BLOCK_DATA_PLUS_HEADER_SIZE;
 	}
-	block->capacity = BLOCK_DATA_SIZE;
-	block->nbytes_used = 0;
-	block->next = NULL;
-	block->prev = NULL;
+	block->byte_capacity = BLOCK_DATA_SIZE;
+	block->bytes_used = 0;
+	block->next_block = NULL;
+	block->previous_block = NULL;
 	return block;
 }
 
@@ -221,22 +182,36 @@ Memory_Arena make_memory_arena() {
 	Memory_Arena arena;
 	arena.entry_free_head = NULL;
 	arena.last_entry = NULL;
-	arena.base = make_memory_block();
-	arena.active_block = arena.base;
+	arena.base_block = make_memory_block();
+	arena.active_block = arena.base_block;
 	return arena;
 }
 
+void clear_memory_arena(Memory_Arena *arena) {
+	arena->active_block = arena->base_block;
+}
+
 void free_memory_block(Block_Header *block) {
-	block->next = memory_block_free_head;
+	block->next_block = memory_block_free_head;
 	memory_block_free_head = block;
 }
 
 void free_memory_arena(Memory_Arena *arena) {
-	for (Block_Header *block = arena->base, *next = NULL; block; block = next) {
-		next = block->next;
+	for (Block_Header *block = arena->base_block, *next = NULL; block; block = next) {
+		next = block->next_block;
 		free_memory_block(block);
 	}
 	//ma->base = ma->active_block = NULL;
+}
+
+void initialize_memory() {
+	platform_page_size = get_platform_page_size();
+	memory_chunks = make_memory_chunk();
+	active_memory_chunk = memory_chunks;
+	memory_block_free_head = NULL;
+
+	temporary_memory_arena = make_memory_arena();
+	permanent_memory_arena = make_memory_arena();
 }
 
 #if 0
@@ -310,8 +285,8 @@ mem_has_elems(Memory_Arena *ma)
 
 void add_memory_arena_block(Memory_Arena *arena) {
 	Block_Header *new_block = make_memory_block();
-	new_block->prev = arena->active_block;
-	arena->active_block->next = new_block;
+	new_block->previous_block = arena->active_block;
+	arena->active_block->next_block = new_block;
 	arena->active_block = new_block;
 }
 
@@ -324,35 +299,44 @@ s32 round_up(f32 f) {
 	return (f > 0.0f) ? (s32)(f + 1.0f) : (s32)(f - 1.0f);
 }
 
-#define allocate_array(arena, type, count) (type *)allocate(arena, sizeof(type) * count)
+#define allocate_array(arena, type, count) (type *)memory_arena_allocate(arena, sizeof(type) * count)
 
+void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
+	void *result = (char *)arena->active_block + sizeof(Block_Header) + arena->active_block->bytes_used;
+	arena->active_block->bytes_used += size;
+	assert(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
+	return result;
+}
+
+/*
 // TODO: combine the block group logic here with mem_make_block and just call that.
-void *allocate(Memory_Arena *arena, size_t size) {
+void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	assert(size <= CHUNK_DATA_SIZE);
 	size_t num_blocks_needed = round_up((f32)(size + sizeof(Block_Header)) / BLOCK_DATA_PLUS_HEADER_SIZE);
 
 	// We could try to find our needed blocks among the free blocks, but for now we just take what we need from the block frontier of the chunk.
 	// Is there enough space in our current chunk for the contiguous memory requested?
-	if (active_memory_chunk->block_frontier + (BLOCK_DATA_PLUS_HEADER_SIZE * num_blocks_needed) - active_memory_chunk->base > CHUNK_DATA_SIZE) {
+	if (active_memory_chunk->block_frontier + (BLOCK_DATA_PLUS_HEADER_SIZE * num_blocks_needed) - active_memory_chunk->base_block > CHUNK_DATA_SIZE) {
 		// Add all of the unused blocks in the current chunk to the free list.
-		while (active_memory_chunk->block_frontier + BLOCK_DATA_PLUS_HEADER_SIZE - active_memory_chunk->base > CHUNK_DATA_SIZE) {
+		while (active_memory_chunk->block_frontier + BLOCK_DATA_PLUS_HEADER_SIZE - active_memory_chunk->base_block > CHUNK_DATA_SIZE) {
 			free_memory_block(get_block_header(active_memory_chunk->block_frontier));
 			active_memory_chunk->block_frontier += BLOCK_DATA_PLUS_HEADER_SIZE;
 		}
-		active_memory_chunk->next = make_memory_chunk();
-		active_memory_chunk = active_memory_chunk->next;
+		active_memory_chunk->next_chunk = make_memory_chunk();
+		active_memory_chunk = active_memory_chunk->next_chunk;
 	}
 	// Move us forward to the last block, where we will keep the footer for the enitre block group.
 	Block_Header *block = get_block_header(active_memory_chunk->block_frontier + ((num_blocks_needed - 1) * BLOCK_DATA_PLUS_HEADER_SIZE));
-	block->capacity = num_blocks_needed * BLOCK_DATA_PLUS_HEADER_SIZE - sizeof(Block_Header);
-	block->nbytes_used = size;
-	block->prev = arena->active_block;
-	block->next = NULL;
-	arena->active_block->next = block;
+	block->byte_capacity = num_blocks_needed * BLOCK_DATA_PLUS_HEADER_SIZE - sizeof(Block_Header);
+	block->bytes_used = size;
+	block->previous_block = arena->active_block;
+	block->next_block = NULL;
+	arena->active_block->next_block = block;
 	arena->active_block = block;
 	active_memory_chunk->block_frontier += BLOCK_DATA_PLUS_HEADER_SIZE * num_blocks_needed;
 	return get_block_start(block);
 }
+*/
 
 // TODO: Keep track of the largest free entry available to speed up allocation?
 void *memory_arena_push(size_t size, Memory_Arena *ma) {

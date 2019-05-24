@@ -1,32 +1,84 @@
-/*
-String
-read_entire_file(const char *path, Memory_Arena *ma)
-{
-	File_Handle fh = platform_open_file(path, O_RDONLY); // @TODO: Platform generic flags.
-	if (fh == FILE_HANDLE_ERROR)
-		return STRING_ERROR;
-	File_Offset len = platform_seek_file(fh, 0, FILE_SEEK_END);
-	if (len == FILE_OFFSET_ERROR)
-		return STRING_ERROR;
-	platform_seek_file(fh, 0, FILE_SEEK_START);
-	char *buf = mem_alloc_array(char, (len+1), ma);
-	// Read may return less bytes than requested, so we have to loop.
-	File_Offset tot_read = 0, cur_read = 0;
-	char *pos = buf;
-	do {
-		cur_read = platform_read_file(fh, len - tot_read, pos);
-		tot_read += cur_read;
-		pos += cur_read;
-	} while (tot_read < len && cur_read != 0);
-	if (tot_read != len)
-		return STRING_ERROR;
-	buf[len] = '\0';
-	platform_close_file(fh);
-	return String{buf, len};
+// @TODO: Handle log types.
+void log_print_actual(Log_Type, const char *file, int line, const char *func, const char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	debug_print("%s: %s: line %d: ", file, func, line);
+	debug_print(fmt, args);
+	debug_print("\n");
+	va_end(args);
 }
-*/
 
-#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
+void _abort_actual(const char *file, s32 line, const char *func, const char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	debug_print("!!!!!!!!!!!!!!!!!!!!!!!!!!PROGRAM ABORT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n*\n*\n*\n");
+	debug_print("%s: %s: line %d: ", file, func, line);
+	debug_print(fmt, args);
+	debug_print("\n*\n*\n*\n");
+	va_end(args);
+#ifdef DEBUG
+	assert(0);
+#else
+	_exit(1);
+#endif
+}
+
+u32 u32_max(u32 a, u32 b) {
+	return a > b ? a : b;
+}
+
+u32 u32_min(u32 a, u32 b) {
+	return a < b ? a : b;
+}
+
+String_Result read_entire_file(const char *path, Memory_Arena *arena) {
+	auto file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
+	if (file_handle == FILE_HANDLE_ERROR) {
+		return String_Result{NULL, 0};
+	}
+	auto file_length = get_file_length(file_handle);
+	auto string_buffer = allocate_array(arena, char, (file_length+1));
+	auto read_result = read_file(file_handle, file_length, string_buffer);
+	if (!read_result) {
+		return String_Result{NULL, 0};
+	}
+
+	return String_Result{string_buffer, file_length};
+/*
+	auto file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
+	if (file_handle == FILE_HANDLE_ERROR) {
+		return STRING_ERROR;
+	}
+	auto file_length = seek_file(file_handle, 0, FILE_SEEK_END);
+	if (file_length == FILE_OFFSET_ERROR) {
+		return STRING_ERROR;
+	}
+	seek_file(fh, 0, FILE_SEEK_START);
+
+	auto string_buffer = allocate_array(arena, char, (file_length+1));
+	File_Offset total_bytes_read = 0, current_bytes_read = 0;
+	char *position = string_buffer;
+	// Read may return less bytes than requested, so we have to loop.
+	do {
+		current_bytes_read = read_file(file_handle, file_length - total_bytes_read, position);
+		total_bytes_read += current_bytes_read;
+		position += current_bytes_read;
+	} while (total_bytes_read < file_length && current_bytes_read != 0);
+	if (total_bytes_read != file_length) {
+		return STRING_ERROR;
+	}
+	string_buffer[file_length] = '\0';
+	close_file(file_handle);
+
+	return {string_buffer, file_length};
+*/
+}
+
+template <typename T>
+T &Static_Array<T>::operator[](s32 index) {
+	assert(index < capacity);
+	return data[index];
+}
 
 const char *strchr(const char *s, char c) {
 	while (*s && *s != c)
@@ -183,29 +235,21 @@ size_t format_string(const char *fmt, va_list arg_list, char *buf) {
 	return nbytes_writ;
 }
 
-// @TODO: Handle log types.
-void log_print_actual(Log_Type, const char *file, int line, const char *func, const char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-	debug_print("%s: %s: line %d: ", file, func, line);
-	debug_print(fmt, args);
-	debug_print("\n");
-	va_end(args);
-}
+u8 strings_subset_test(const char **set_a, s32 num_set_a_strings, const char **set_b, s32 num_set_b_strings) {
+	for (s32 i = 0; i < num_set_a_strings; i++) {
+		u8 found = false;
+		for (s32 j = 0; j < num_set_b_strings; j++) {
+			if (compare_strings(set_a[i], set_b[j]) == 0) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			return false;
+		}
+	}
 
-void _abort_actual(const char *file, s32 line, const char *func, const char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-	debug_print("!!!!!!!!!!!!!!!!!!!!!!!!!!PROGRAM ABORT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n*\n*\n*\n");
-	debug_print("%s: %s: line %d: ", file, func, line);
-	debug_print(fmt, args);
-	debug_print("\n*\n*\n*\n");
-	va_end(args);
-#ifdef DEBUG
-	assert(0);
-#else
-	_exit(1);
-#endif
+	return true;
 }
 
 #if 0

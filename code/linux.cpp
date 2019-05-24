@@ -66,13 +66,15 @@ enum Mouse_Button {
 	MOUSE_BUTTON_RIGHT,
 };
 
-typedef int       File_Handle;
+typedef s32       File_Handle;
 typedef pthread_t Thread_Handle;
 typedef timespec  Platform_Time;
 typedef sem_t     Semaphore_Handle;
 typedef void *    Library_Handle;
+typedef u64       File_Offset;
 
 File_Handle FILE_HANDLE_ERROR = -1;
+File_Offset FILE_OFFSET_ERROR = (File_Offset)-1;
 
 enum File_Seek_Relative {
 	FILE_SEEK_START = SEEK_SET,
@@ -300,6 +302,7 @@ s32 main(s32, char **) {
 	debug_init();
 #endif
 
+	XSync(linux_context.display, False);
 
 	////////////////////
 	application_entry();
@@ -641,6 +644,82 @@ void *open_shared_library(const char *filename) {
 	return lib;
 }
 
+void close_shared_library(Library_Handle library) {
+	s32 error_code = dlclose(library);
+	if (error_code < 0) {
+		log_print(MINOR_ERROR_LOG, "Failed to close shared library: %s\n", dlerror());
+	}
+}
+
+void *load_shared_library_function(Library_Handle library, const char *function_name) {
+	void *function = dlsym(library, function_name);
+	if (!function) {
+		
+	}
+}
+
+// @TODO: Handle modes.
+File_Handle open_file(const char *path, s32 flags) {
+	File_Handle file_handle = open(path, flags, 0666);
+	if (file_handle < 0) {
+		log_print(MAJOR_ERROR_LOG, "Could not open file: %s", path);
+		return FILE_HANDLE_ERROR;
+	}
+	return file_handle;
+}
+
+u8 close_file(File_Handle file_handle) {
+	s32 result = close(file_handle);
+	if (result == -1) {
+		log_print(MINOR_ERROR_LOG, "Could not close file: %s.", strerror(errno));
+		return false;
+	}
+	return true;
+}
+
+//#include <errno.h>
+//#include <string.h>
+u8 read_file(File_Handle file_handle, size_t num_bytes_to_read, void *buffer) {
+	size_t total_bytes_read = 0;
+	ssize_t current_bytes_read = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
+	char *position = (char *)buffer;
+
+	do {
+		current_bytes_read = read(file_handle, position, num_bytes_to_read - total_bytes_read);
+		total_bytes_read += current_bytes_read;
+		position += current_bytes_read;
+	} while (total_bytes_read < num_bytes_to_read && current_bytes_read != 0 && current_bytes_read != -1);
+
+	if (current_bytes_read == -1) {
+		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s.", strerror(errno));
+		return false;
+	} else if (total_bytes_read != num_bytes_to_read) {
+		// @TODO: Add file name to file handle.
+		log_print(MAJOR_ERROR_LOG, "Could only read %lu bytes, but %lu bytes were requested", total_bytes_read, num_bytes_to_read);
+		return false;
+	}
+
+	return true;
+}
+
+File_Offset get_file_length(File_Handle file_handle) {
+	struct stat stat; 
+	if (fstat(file_handle, &stat) == 0) {
+		return (File_Offset)stat.st_size;
+	}
+
+	return FILE_OFFSET_ERROR; 
+}
+
+File_Offset seek_file(File_Handle file_handle, File_Offset offset, File_Seek_Relative relative) {
+	off_t result = lseek(file_handle, offset, relative);
+	if (result == (off_t)-1) {
+		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", strerror(errno));
+	}
+
+	return result;
+}
+
 #if 0
 void
 platform_swap_buffers()
@@ -652,71 +731,6 @@ platform_swap_buffers()
 // @TODO: Signal IO errors.
 //
 
-// @TODO: Handle modes.
-File_Handle
-platform_open_file(const char *path, s32 flags)
-{
-	File_Handle fh;
-	fh = open(path, flags, 0666);
-	if (fh < 0) {
-		log_print(MAJOR_ERROR_LOG, "Could not open file %s.", path);
-		return FILE_HANDLE_ERROR;
-	}
-	return fh;
-}
-
-bool
-platform_close_file(File_Handle fh)
-{
-	int ret = close(fh);
-	if (ret == -1) {
-		log_print(MINOR_ERROR_LOG, "Could not close file -- %s.", strerror(errno));
-		return false;
-	}
-	return true;
-}
-
-#include <errno.h>
-#include <string.h>
-File_Offset
-platform_read_file(File_Handle fh, size_t read_nbytes, void *buf)
-{
-	size_t tot_read = 0;
-	ssize_t cur_read = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
-	char *pos = (char *)buf;
-	do {
-		cur_read = read(fh, pos, (read_nbytes - tot_read));
-		tot_read += cur_read;
-		pos += cur_read;
-	} while (tot_read < read_nbytes && cur_read != 0 && cur_read != -1);
-	if (cur_read == -1) {
-		log_print(MAJOR_ERROR_LOG, "Could not read from file -- %s.", strerror(errno));
-		return 0;
-	} else if (tot_read != read_nbytes) {
-		// @TODO: Add file name to file handle.
-		log_print(MAJOR_ERROR_LOG, "Could only read %lu bytes, but %lu bytes requested.", tot_read, read_nbytes);
-		return 0;
-	}
-	return tot_read;
-}
-
-File_Offset
-platform_size_file(File_Handle fh)
-{
-	struct stat st; 
-	if (fstat(fh, &st) == 0)
-		return (File_Offset)st.st_size;
-	return FILE_OFFSET_ERROR; 
-}
-
-File_Offset
-platform_seek_file(File_Handle fh, File_Offset offset, File_Seek_Relative fsr)
-{
-	off_t ret = lseek(fh, offset, fsr);
-	if (ret == (off_t)-1)
-		log_print(MAJOR_ERROR_LOG, "File seek failed -- %s.", perrno());
-	return ret;
-}
 
 char *
 platform_get_memory(size_t len)

@@ -11,17 +11,17 @@ typedef double   f64;
 
 s32 window_width, window_height;
 
-enum Execution_State {
-	RUNNING_STATE,
-	PAUSED_STATE,
-	EXITING_STATE,
+enum Game_Execution_Status {
+	GAME_RUNNING,
+	GAME_PAUSED,
+	GAME_EXITING,
 };
 
 enum Log_Type {
 	STANDARD_LOG,
 	MINOR_ERROR_LOG,
 	MAJOR_ERROR_LOG,
-	CATASTROPHIC_ERROR_LOG,
+	CRITICAL_ERROR_LOG,
 };
 
 #define INVALID_CODE_PATH assert(!"Invalid code path.");
@@ -64,6 +64,7 @@ void _abort_actual(const char *file, int line, const char *func, const char *fmt
 
 struct V2 {
 	f32 x, y;
+	f32 &operator[](int i);
 };
 
 struct V2s {
@@ -98,25 +99,39 @@ struct M4 {
 	f32 m[4][4];
 };
 
-typedef struct IO_Button {
-	u8 down;
-	u8 pressed;
-	u8 released;
-} IO_Button;
+struct Quaternion {
+	//Quaternion() {}
+	//Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
+	//Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
+	//Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
+	f32 x = 0.0f;
+	f32 y = 0.0f;
+	f32 z = 0.0f;
+	f32 w = 1.0f;
+};
 
-#define NUM_MOUSE_BUTTONS 3
+template <u32 BUTTON_COUNT>
+struct IO_Buttons {
+	u8 down[BUTTON_COUNT];
+	u8 pressed[BUTTON_COUNT];
+	u8 released[BUTTON_COUNT];
+};
+
+#define MOUSE_BUTTON_COUNT 3
 struct Mouse {
 	s32 wheel;
-	V2 position;
-	V2 delta_position;
+	s32 x, y;
+	s32 delta_x, delta_y;
+	//V2 position;
+	//V2 delta_position;
 	f32 sensitivity;
-	IO_Button buttons[NUM_MOUSE_BUTTONS];
+	IO_Buttons<MOUSE_BUTTON_COUNT> buttons;
 };
 
 #define MAX_SCANCODES 256
-struct Input {
+struct Game_Input {
 	Mouse mouse;
-	IO_Button keyboard[MAX_SCANCODES];
+	IO_Buttons<MAX_SCANCODES> keyboard;
 };
 
 struct Camera {
@@ -197,14 +212,124 @@ struct Entry_Header {
 	char *prev;
 };
 
+Block_Header *create_memory_block();
+
 struct Memory_Arena {
-	Free_Entry *entry_free_head;
-	char *last_entry;
-	Block_Header *base_block;
-	Block_Header *active_block;
+	Free_Entry *entry_free_head = NULL;
+	char *last_entry = NULL;
+	Block_Header *base_block = NULL;
+	Block_Header *active_block = NULL;
 };
 
 struct String_Result {
 	char *data;
 	u64 length; // @TODO: This really should be a File_Offset...
+};
+
+//@TODO: Change lookup to a hash table.
+//@TODO: Change lookup to a hash table.
+//@TODO: Change lookup to a hash table.
+//@TODO: Change lookup to a hash table.
+
+template <typename T, typename U>
+struct Asset_Info {
+	void *memory = NULL;
+	size_t size = 0;
+	u32 instance_count = 0;
+	U *instances = NULL;
+	u32 *instance_lookup = NULL;
+};
+
+struct Mesh {
+/*
+	u32 vao;
+	u32 vbo;
+	u32 ebo;
+	u32 index_count;
+	u32 texture_id;
+*/
+	//std::vector<Vertex> vertices;
+	//std::vector<u32> indices;
+};
+
+struct Model_Asset {
+	u32 mesh_count;
+	//std::vector<Mesh> meshes; // @TODO
+};
+
+struct Model_Instance {
+	u32 mesh_count;
+	Mesh *meshes;
+};
+
+struct Skeleton_Joint_Pose {
+	Quaternion rotation;
+	V3 translation;
+	f32 scale;
+};
+
+struct Skeleton_Joint_Skinning_Info {
+	u32 vertex_influence_count;
+	u32 *vertices;
+	f32 *weights;
+};
+
+// @TODO: We could store animation transforms as 4x3 matrix, maybe?
+struct Skeleton_Asset {
+	u8 joint_count;
+	const char *joint_names; // @TODO: Get rid of this aiString.
+	Skeleton_Joint_Skinning_Info *joint_skinning_info;
+	u8 *joint_parent_indices;
+	M4 *joint_inverse_rest_pose;
+
+	u8 leaf_node_count;
+	u8 *leaf_node_parent_indices;
+	M4 *leaf_node_translations; // @TODO @Memory: Could probably just be a V3 translation?
+};
+
+struct Skeleton_Instance {
+	Skeleton_Asset *asset;
+
+	u32 local_joint_pose_count;
+	Skeleton_Joint_Pose *local_joint_poses; // Currently, this is parent * node_transform, but it should probably just be node_transform for blending purposes.
+
+	u32 global_joint_pose_count;
+	M4 *global_joint_poses; // Currently, this is parent * node_transform, but it should probably just be node_transform for blending purposes.
+};
+
+struct Animation_Sample {
+	u32 joint_pose_count;
+	Skeleton_Joint_Pose *joint_poses;
+};
+
+struct Animation_Asset {
+	Skeleton_Asset *skeleton;
+
+	u32 sample_count;
+	Animation_Sample *samples;
+
+	f32 frame_count;
+	f32 frames_per_second;
+	s8 looped;
+};
+
+struct Animation_Instance {
+	Animation_Asset *asset;
+	f32 time;
+	u32 current_frame;
+};
+struct Game_Assets {
+	Memory_Arena arena;
+
+	Asset_Info<Animation_Asset, Animation_Instance> animations;
+	Asset_Info<Model_Asset, Model_Instance> models;
+};
+
+struct Game_State {
+	Game_Execution_Status execution_status;
+	Game_Input input;
+	Game_Assets assets;
+	Camera camera;
+
+	Memory_Arena frame_arena;
 };

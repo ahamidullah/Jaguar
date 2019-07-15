@@ -19,23 +19,31 @@
 #include "math.cpp"
 #include "library.cpp"
 #include "vulkan.cpp"
+#include "asset.cpp"
+#include "input.cpp"
+#include "camera.cpp"
+
+void update(Game_State *game_state) {
+	update_input(&game_state->input, &game_state->execution_status);
+	update_camera(&game_state->camera, &game_state->input);
+}
 
 void application_entry() {
-	initialize_memory();
-	initialize_vulkan();
+	Game_State game_state = {};
+	game_state.execution_status = GAME_RUNNING;
 
-	Input input = {};
+	initialize_memory(&game_state);
+	initialize_renderer(&game_state);
+	initialize_input(&game_state);
+	initialize_camera(&game_state.camera, {2, 2, 2}, {1, 1, 1}, 1);
 
-	Execution_State execution_state = RUNNING_STATE;
-	while (execution_state != EXITING_STATE) {
-		execution_state = handle_platform_events(&input, execution_state);
+	while (game_state.execution_status != GAME_EXITING) {
+		update(&game_state);
 
-		render();
+		render(&game_state);
 
-		clear_memory_arena(&temporary_memory_arena);
-
-		vkDeviceWaitIdle(vulkan_context.device);
+		clear_memory_arena(&game_state.frame_arena);
 	}
 
-	vulkan_cleanup();
+	cleanup_renderer();
 }

@@ -1,24 +1,24 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-Memory_Arena temporary_memory_arena;
-Memory_Arena permanent_memory_arena;
-
 size_t platform_page_size;
 
 #define MAP_ANONYMOUS 0x20
 
-void *allocate_memory(size_t len) {
-	void *m = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (m == (void *)-1)
-		_abort("failed to get memory from platform.");
-	return m;
+void *acquire_platform_memory(size_t size) {
+	void *result = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (result == (void *)-1) {
+		_abort("Failed to get memory from platform: %s", get_platform_error());
+	}
+
+	return result;
 }
 
-void free_memory(void *m, size_t len) {
-	s32 ret = munmap(m, len);
-	if (ret == -1)
-		_abort("failed to free memory.");
+void release_platform_memory(void *memory, size_t size) {
+	s32 return_code = munmap(memory, size);
+	if (return_code == -1) {
+		_abort("Failed to free memory: %s", get_platform_error());
+	}
 }
 
 #if 0
@@ -158,7 +158,7 @@ Block_Header *get_block_header(u8 *start) {
 	return (Block_Header *)(start - sizeof(Block_Header));
 }
 
-Block_Header *make_memory_block() {
+Block_Header *create_memory_block() {
 	Block_Header *block;
 	if (memory_block_free_head) {
 		block = memory_block_free_head;
@@ -182,7 +182,7 @@ Memory_Arena make_memory_arena() {
 	Memory_Arena arena;
 	arena.entry_free_head = NULL;
 	arena.last_entry = NULL;
-	arena.base_block = make_memory_block();
+	arena.base_block = create_memory_block();
 	arena.active_block = arena.base_block;
 	return arena;
 }
@@ -204,14 +204,13 @@ void free_memory_arena(Memory_Arena *arena) {
 	//ma->base = ma->active_block = NULL;
 }
 
-void initialize_memory() {
+void initialize_memory(Game_State *game_state) {
 	platform_page_size = get_platform_page_size();
 	memory_chunks = make_memory_chunk();
 	active_memory_chunk = memory_chunks;
 	memory_block_free_head = NULL;
 
-	temporary_memory_arena = make_memory_arena();
-	permanent_memory_arena = make_memory_arena();
+	game_state->frame_arena = make_memory_arena();
 }
 
 #if 0
@@ -284,7 +283,7 @@ mem_has_elems(Memory_Arena *ma)
 #endif
 
 void add_memory_arena_block(Memory_Arena *arena) {
-	Block_Header *new_block = make_memory_block();
+	Block_Header *new_block = create_memory_block();
 	new_block->previous_block = arena->active_block;
 	arena->active_block->next_block = new_block;
 	arena->active_block = new_block;

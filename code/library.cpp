@@ -1,21 +1,22 @@
 // @TODO: Handle log types.
-void log_print_actual(Log_Type, const char *file, int line, const char *func, const char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-	debug_print("%s: %s: line %d: ", file, func, line);
-	debug_print(fmt, args);
+void log_print_actual(Log_Type, const char *file_name, int line, const char *function_name, const char *format, ...) {
+	va_list arguments;
+	va_start(arguments, format);
+	debug_print("%s: %s: %d: ", file_name, function_name, line);
+	debug_print(format, arguments);
 	debug_print("\n");
-	va_end(args);
+	va_end(arguments);
 }
 
-void _abort_actual(const char *file, s32 line, const char *func, const char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-	debug_print("!!!!!!!!!!!!!!!!!!!!!!!!!!PROGRAM ABORT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n*\n*\n*\n");
-	debug_print("%s: %s: line %d: ", file, func, line);
-	debug_print(fmt, args);
-	debug_print("\n*\n*\n*\n");
-	va_end(args);
+void _abort_actual(const char *file_name, s32 line, const char *function_name, const char *format, ...) {
+	va_list arguments;
+	va_start(arguments, format);
+	debug_print("###########################################################################\n");
+	debug_print("[PROGRAM ABORT]\n");
+	debug_print("%s: %s: %d:\n", file_name, function_name, line);
+	debug_print(format, arguments);
+	debug_print("\n###########################################################################\n");
+	va_end(arguments);
 #ifdef DEBUG
 	assert(0);
 #else
@@ -80,7 +81,7 @@ T &Static_Array<T>::operator[](s32 index) {
 	return data[index];
 }
 
-const char *strchr(const char *s, char c) {
+const char *first_occurrence_of(const char *s, char c) {
 	while (*s && *s != c)
 		s++;
 	if (*s == c)
@@ -89,7 +90,7 @@ const char *strchr(const char *s, char c) {
 }
 
 // "Naive" approach. We don't use this for anthing perf critical now.
-const char *_strstr(const char *s, const char *substring) {
+const char *first_occurrence_of(const char *s, const char *substring) {
 	while (*s) {
 		const char *subs = substring;
 		if (*s != *subs) {
@@ -108,18 +109,18 @@ const char *_strstr(const char *s, const char *substring) {
 	return NULL;
 }
 
-size_t _strlen(const char *s) {
+size_t string_length(const char *s) {
 	size_t count = 0;
 	while (*s++)
 		++count;
 	return count;
 }
 
-void string_copy(char *dest, const char *src) {
-	while (*src) {
-		*dest++ = *src++;
+void copy_string(char *destination, const char *source) {
+	while (*source) {
+		*destination++ = *source++;
 	}
-	*dest = '\0';
+	*destination = '\0';
 }
 
 void strrev(char *start, char *end) {
@@ -250,6 +251,23 @@ u8 strings_subset_test(const char **set_a, s32 num_set_a_strings, const char **s
 	}
 
 	return true;
+}
+
+const char *get_directory(const char *path, Memory_Arena *arena) {
+	auto slash = first_occurrence_of(path, '/');
+	if (slash == NULL) {
+		return path;
+		//char *directory = allocate_array(string_length(path) + 1);
+		//return copy_string(directory, path);
+	}
+
+	return slash + 1;
+	//auto directory_length = (slash - path) + 1; // Including the '/'.
+	//auto directory = allocate_array(arena, char, directory_length + 1);//(char *)get_temporary_storage(directory_len + 1);
+	//copy_string(directory, path, directory_len);
+	//directory[directory_len] = '\0';
+
+	//return directory;
 }
 
 #if 0

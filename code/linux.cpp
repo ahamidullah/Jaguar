@@ -3,6 +3,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/XInput2.h>
 
 #define ALSA_PCM_NEW_HW_PARAMS_API
 
@@ -17,6 +18,9 @@
 #include <semaphore.h>
 #include <signal.h>
 #include <dlfcn.h>
+#include <errno.h>
+
+#include <string.h>
 
 #define STDOUT 1
 #define STDIN 0
@@ -92,23 +96,23 @@ f32  scaled_meters_per_pixel     =  0;
 
 // @TODO: Store colormap and free it on exit.
 struct Linux_Context {
-	Display *  display = NULL;
+	Display   *display;
 	Window     window;
 	Atom       wm_delete_window;
+	s32        xinput_opcode;
 	//snd_pcm_t *pcm_handle;
 } linux_context;
 
 void platform_exit(int exit_code);
 bool platform_write_file(File_Handle fh, size_t n, const void *buf);
 
-// @TODO
-const char *perrno() {
-	return "";
+const char *get_platform_error() {
+	return strerror(errno);
 }
 
-static bool x11_error_occured = false;
+static s8 x11_error_occured = false;
 
-int x11_error_handler(Display *, XErrorEvent *event) {
+s32 x11_error_handler(Display *, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linux_context.display, event->error_code, buffer, sizeof(buffer));
 	log_print(MAJOR_ERROR_LOG, "X11 error: %s.", buffer);
@@ -116,31 +120,155 @@ int x11_error_handler(Display *, XErrorEvent *event) {
 	return 0;
 }
 
-/*
-bool is_extension_supported(const char *ext_list, const char *ext) {
+#if 0
+const char *first_occurrence_of(const char *s, char c);
+const char *first_occurrence_of(const char *s, const char *substring);
+size_t string_length(const char *s);
+
+s8 is_extension_supported(const char *extension_list, const char *extension) {
 	const char *start;
 	const char *where, *terminator;
 
 	// Extension names should not have spaces.
-	where = strchr(ext, ' ');
-	if (where || *ext == '\0')
+	where = first_occurrence_of(extension, ' ');
+	if (where || *extension == '\0') {
 		return false;
+	}
 
-	for (start = ext_list;;) {
-		where = _strstr(start, ext);
-		if (!where)
+	for (start = extension_list;;) {
+		where = first_occurrence_of(start, extension);
+		if (!where) {
 			break;
+		}
 
-		terminator = where + _strlen(ext);
-		if (where == start || *(where - 1) == ' ')
-			if (*terminator == ' ' || *terminator == '\0')
+		terminator = where + string_length(extension);
+		if (where == start || *(where - 1) == ' ') {
+			if (*terminator == ' ' || *terminator == '\0') {
 				return true;
+			}
+		}
 		start = terminator;
 	}
 
 	return false;
 }
-*/
+
+typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+glXCreateContextAttribsARBProc glXCreateContextAttribsARB = NULL;
+
+GLXContext create_opengl_context(Display *display, GLXDrawable drawable, s32 screen) {
+	s32 context_attributes[] = {
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 1,
+		GLX_CONTEXT_PROFILE_MASK_ARB,  GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+		GLX_CONTEXT_FLAGS_ARB,         GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		None
+	};
+
+	s32 framebuffer_attributes[] = {
+		GLX_X_RENDERABLE, True,
+		GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+		GLX_RENDER_TYPE, GLX_RGBA_BIT,
+		GLX_X_VISUAL_TYPE, GLX_TRUE_COLOR,
+		GLX_RED_SIZE, 8,
+		GLX_GREEN_SIZE, 8,
+		GLX_BLUE_SIZE, 8,
+		GLX_ALPHA_SIZE, 8,
+		GLX_DEPTH_SIZE, 24,
+		GLX_STENCIL_SIZE, 8,
+		GLX_DOUBLEBUFFER, True,
+		None
+	};
+
+	s32 framebuffer_config_count = 0;
+	GLXFBConfig *framebuffer_configs = glXChooseFBConfig(display, screen, framebuffer_attributes, &framebuffer_config_count);
+	if (framebuffer_configs == NULL || framebuffer_config_count == 0) {
+		_abort("Failed to retrieve frame buffer configurations");
+	}
+
+	s32 best_fbc = -1, best_num_samp = -1;
+	for (s32 i = 0; i < framebuffer_config_count; ++i) {
+		XVisualInfo *visual = glXGetVisualFromFBConfig(display, framebuffer_configs[i]);
+		if (visual) {
+			s32 sample_buffer, samples;
+			glXGetFBConfigAttrib(display, framebuffer_configs[i], GLX_SAMPLE_BUFFERS, &sample_buffer);
+			glXGetFBConfigAttrib(display, framebuffer_configs[i], GLX_SAMPLES, &samples);
+
+			if (best_fbc < 0 || (sample_buffer && samples > best_num_samp)) {
+				best_fbc = i, best_num_samp = samples;
+			}
+		}
+		XFree(visual);
+	}
+
+	if (best_fbc < 0) {
+		_abort("Failed to get a frame buffer");
+	}
+
+	auto selected_framebuffer_config = framebuffer_configs[0]; // @TEMP
+	XFree(framebuffer_configs);
+
+	int major_version, minor_version;
+	if (!glXQueryVersion(display, &major_version, &minor_version)) {
+		_abort("Unable to query GLX version");
+	}
+	if ((major_version == 1 && minor_version < 3) || major_version < 1) {
+		_abort("GLX version is too old");
+	}
+
+	const char *extensions = glXQueryExtensionsString(display, screen);
+	if (!is_extension_supported(extensions, "GLX_ARB_create_context")) {
+		_abort("OpenGL does not support glXCreateContextAttribsARB extension");
+	}
+
+	glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte *)"glXCreateContextAttribsARB");
+	if (!glXCreateContextAttribsARB) {
+		_abort("Could not load glXCreateContextAttribsARB()");
+	}
+
+	auto opengl_context = glXCreateContextAttribsARB(display, selected_framebuffer_config, 0, True, context_attributes);
+
+	XSync(display, False);
+	if (x11_error_occured || opengl_context == NULL) {
+		_abort("Failed to create OpenGL context");
+	}
+	if (glXMakeCurrent(display, drawable, opengl_context) == False) {
+		_abort("Could not call glXMakeCurrent on the main thread OpenGL context");
+	}
+
+	// Try to enable vsync.
+	if (is_extension_supported(extensions, "GLX_EXT_swap_control")) {
+		typedef int (*glXSwapIntervalEXTProc)(Display *, GLXDrawable, int);
+		glXSwapIntervalEXTProc glXSwapIntervalEXT = NULL;
+		glXSwapIntervalEXT = (glXSwapIntervalEXTProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalEXT");
+		if (glXSwapIntervalEXT) {
+			glXSwapIntervalEXT(glXGetCurrentDisplay(), glXGetCurrentDrawable(), 1);
+		} else {
+			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalEXT()");
+		}
+	} else if (is_extension_supported(extensions, "GLX_MESA_swap_control")) {
+		typedef int (*glXSwapIntervalMESAProc)(int);
+		glXSwapIntervalMESAProc glXSwapIntervalMESA = NULL;
+		glXSwapIntervalMESA = (glXSwapIntervalMESAProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalMESA");
+		if (glXSwapIntervalMESA) {
+			glXSwapIntervalMESA(1);
+		} else {
+			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalMESA()");
+		}
+	} else if (is_extension_supported(extensions, "GLX_SGI_swap_control")) {
+		typedef int (*glXSwapIntervalSGIProc)(int);
+		glXSwapIntervalSGIProc glXSwapIntervalSGI = NULL;
+		glXSwapIntervalSGI = (glXSwapIntervalSGIProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalSGI");
+		if (glXSwapIntervalSGI) {
+			glXSwapIntervalSGI(1);
+		} else {
+			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalSGI()");
+		}
+	}
+
+	return opengl_context;
+}
+#endif
 
 #if 0
 void render_init();
@@ -181,76 +309,106 @@ void platform_toggle_fullscreen();
 void application_entry();
 
 s32 main(s32, char **) {
-	// Install a new error handler.
-	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
-	int (*old_x11_error_handler)(Display*, XErrorEvent*) = XSetErrorHandler(&x11_error_handler);
-
 	srand(time(0));
 
+	// Enable X11 multithreading.
 	//XInitThreads();
+
+	// Install a new error handler.
+	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
+	XSetErrorHandler(&x11_error_handler);
+
 	linux_context.display = XOpenDisplay(NULL);
 	if (!linux_context.display) {
-		_abort("Failed to create display.");
+		_abort("Failed to create display");
 	}
 
-	auto xscreen = XDefaultScreen(linux_context.display);
+	auto screen = XDefaultScreen(linux_context.display);
+	auto root_window = XRootWindow(linux_context.display, screen);
 
-	s64 visual_mask = VisualScreenMask;
-	s32 number_of_visuals;
-	XVisualInfo visual_info_template = {};
-	visual_info_template.screen = xscreen;
-	auto visual_info = XGetVisualInfo(linux_context.display, visual_mask, &visual_info_template, &number_of_visuals);
+	// Initialize XInput2.
+	{
+		s32 event, error, major_version, minor_version;
+		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &event, &error)) {
+			_abort("The X server does not support the XInput extension");
+		}
 
-	auto root_window = XRootWindow(linux_context.display, xscreen);
-	XSetWindowAttributes window_attributes;
-	window_attributes.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone);
-	window_attributes.background_pixel = 0xFFFFFFFF;
-	window_attributes.border_pixmap = None;
-	window_attributes.border_pixel = 0;
-	window_attributes.event_mask = StructureNotifyMask
-	                             | FocusChangeMask
-	                             | EnterWindowMask
-	                             | LeaveWindowMask
-	                             | ExposureMask
-	                             | ButtonPressMask
-	                             | ButtonReleaseMask
-	                             | OwnerGrabButtonMask
-	                             | KeyPressMask
-	                             | KeyReleaseMask;
+		XIQueryVersion(linux_context.display, &major_version, &minor_version);
+		if (major_version < 2) {
+			_abort("XInput version 2.0 or greater is required: version %d.%d is available", major_version, minor_version);
+		}
 
-	s32 window_attributes_mask = CWBackPixel
-	                           | CWColormap
-	                           | CWBorderPixel
-	                           | CWEventMask;
+		XIEventMask event_mask;
+		u8 mask[3] = { 0,0,0 };
+		event_mask.deviceid = XIAllMasterDevices;
+		event_mask.mask_len = sizeof(mask);
+		event_mask.mask = mask;
 
-	assert(visual_info->c_class == TrueColor);
+		XISetMask(mask, XI_RawMotion);
+		XISetMask(mask, XI_RawButtonPress);
+		XISetMask(mask, XI_RawButtonRelease);
+		XISetMask(mask, XI_RawKeyPress);
+		XISetMask(mask, XI_RawKeyRelease);
 
-	s32 requested_window_width = 800;
-	s32 requested_window_height = 600;
-
-	linux_context.window = XCreateWindow(linux_context.display,
-	                                     root_window,
-	                                     0,
-	                                     0,
-	                                     requested_window_width,
-	                                     requested_window_height,
-	                                     0,
-	                                     visual_info->depth,
-	                                     InputOutput,
-	                                     visual_info->visual,
-	                                     window_attributes_mask,
-	                                     &window_attributes);
-
-	if (!linux_context.window) {
-		_abort("Failed to create a window.");
+		if (XISelectEvents(linux_context.display, root_window, &event_mask, 1) != Success) {
+			_abort("Failed to select XInput events");
+		}
 	}
 
-	XFree(visual_info);
+	// Create window.
+	{
+		XVisualInfo visual_info_template = {};
+		visual_info_template.screen = screen;
 
-	XStoreName(linux_context.display, linux_context.window, "cge");
-	XMapWindow(linux_context.display, linux_context.window);
+		s32 number_of_visuals;
+		auto visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
+		assert(visual_info->c_class == TrueColor);
 
-	//platform_toggle_fullscreen();
+		XSetWindowAttributes window_attributes = {};
+		window_attributes.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone);
+		window_attributes.background_pixel = 0xFFFFFFFF;
+		window_attributes.border_pixmap = None;
+		window_attributes.border_pixel = 0;
+		window_attributes.event_mask = StructureNotifyMask
+		                             | FocusChangeMask
+		                             | EnterWindowMask
+		                             | LeaveWindowMask
+		                             | ExposureMask
+		                             | ButtonPressMask
+		                             | ButtonReleaseMask
+		                             | KeyPressMask
+		                             | KeyReleaseMask;
+
+		s32 window_attributes_mask = CWBackPixel
+		                           | CWColormap
+		                           | CWBorderPixel
+		                           | CWEventMask;
+
+		s32 requested_window_width = 800;
+		s32 requested_window_height = 600;
+
+		linux_context.window = XCreateWindow(linux_context.display,
+		                                     root_window,
+		                                     0,
+		                                     0,
+		                                     requested_window_width,
+		                                     requested_window_height,
+		                                     0,
+		                                     visual_info->depth,
+		                                     InputOutput,
+		                                     visual_info->visual,
+		                                     window_attributes_mask,
+		                                     &window_attributes);
+
+		if (!linux_context.window) {
+			_abort("Failed to create a window");
+		}
+
+		XFree(visual_info);
+
+		XStoreName(linux_context.display, linux_context.window, "cge");
+		XMapWindow(linux_context.display, linux_context.window);
+	}
 
 	XFlush(linux_context.display);
 	if ((linux_context.wm_delete_window = XInternAtom(linux_context.display, "WM_DELETE_WINDOW", 1))) {
@@ -259,13 +417,14 @@ s32 main(s32, char **) {
 		log_print(MINOR_ERROR_LOG, "Unable to register WM_DELETE_WINDOW atom.");
 	}
 
-	s32 win_x, win_y;
-	u32 border_width, depth;
-	// Get actual draw area dimensions without borders.
-	if (XGetGeometry(linux_context.display, linux_context.window, &root_window, &win_x, &win_y, &window_pixel_width, &window_pixel_height, &border_width, &depth) == 0) {
-		_abort("Failed to get the screen's geometry.");
+	// Get actual window dimensions without window borders.
+	{
+		s32 win_x, win_y;
+		u32 border_width, depth;
+		if (XGetGeometry(linux_context.display, linux_context.window, &root_window, &win_x, &win_y, &window_pixel_width, &window_pixel_height, &border_width, &depth) == 0) {
+			_abort("Failed to get the screen's geometry.");
+		}
 	}
-
 #if 0
 	// @TODO: Handle this stuff on resize too.
 	u32 reference_window_width  = 640;
@@ -302,24 +461,26 @@ s32 main(s32, char **) {
 	debug_init();
 #endif
 
-	XSync(linux_context.display, False);
+	//XSync(linux_context.display, False);
 
-	////////////////////
 	application_entry();
-	////////////////////
-
 
 	//render_cleanup();
 
-	platform_exit(EXIT_SUCCESS);
+	//platform_exit(EXIT_SUCCESS);
 
 	return 0;
 }
 
-void platform_exit(s32 exit_code) {
+void cleanup_platform_display() {
 	XDestroyWindow(linux_context.display, linux_context.window);
 	XCloseDisplay(linux_context.display);
-	_exit(exit_code);
+}
+
+u32 key_symbol_to_scancode(Key_Symbol key_symbol) {
+	u32 scancode = XKeysymToKeycode(linux_context.display, key_symbol);
+	assert(scancode > 0);
+	return scancode;
 }
 
 #if 0
@@ -411,19 +572,6 @@ Key_Symbol platform_keycode_to_keysym(u32 keycode, s8 level) {
 
 #endif
 
-void press_button(IO_Button *b) {
-	b->pressed = !b->down;
-	b->down = true;
-}
-
-void release_button(IO_Button *b) {
-	b->released = b->down;
-	b->down = false;
-	//db.released = db.down;
-	//db.down = false;
-	//return db;
-}
-
 /*
 void
 platform_reset_mouse(Mouse *m)
@@ -480,24 +628,25 @@ platform_is_key_down(const Digital_Button *keys, Key_Symbol ks)
 
 */
 
-void update_mouse_position(Mouse *mouse) {
-	s32 screen_x, screen_y, win_x, win_y;
+void get_mouse_xy(s32 *x, s32 *y) {
+	s32 screen_x, screen_y;
 	Window root, child;
 	u32 mouse_buttons;
 	//XIButtonState button_state;
 	//XIModifierState mods;
 	//XIGroupState group;
 
-	V2 old_position = mouse->position;
+	//V2 old_position = mouse->position;
 
-	XQueryPointer(linux_context.display, linux_context.window, &root, &child, &screen_x, &screen_y, &win_x, &win_y, &mouse_buttons);
+	XQueryPointer(linux_context.display, linux_context.window, &root, &child, &screen_x, &screen_y, x, y, &mouse_buttons);
+	*y = (window_pixel_height - *y); // Bottom left is zero for us, top left is zero for x11.
 
 	//XIQueryPointer(linux_context.display, 2, linux_context.window, &root, &child, &root_x, &root_y, &win_x, &win_y, &button_state, &mods, &group);
-	mouse->position.x = win_x;// * scaled_meters_per_pixel;
-	mouse->position.y = (window_pixel_height - win_y);// * scaled_meters_per_pixel; // Bottom left is zero for us, top left is zero for x11.
+	//mouse->position.x = win_x;// * scaled_meters_per_pixel;
+	//mouse->position.y = (window_pixel_height - win_y);// * scaled_meters_per_pixel; // Bottom left is zero for us, top left is zero for x11.
 
-	mouse->delta_position.x = old_position.x - mouse->position.x;
-	mouse->delta_position.y = old_position.y - mouse->position.y;
+	//mouse->delta_position.x = old_position.x - mouse->position.x;
+	//mouse->delta_position.y = old_position.y - mouse->position.y;
 
 	//mouse->delta_position.x = mouse->position.x - old_window_x;
 	//mouse->delta_position.y = mouse->position.x - old_window_y;
@@ -505,9 +654,32 @@ void update_mouse_position(Mouse *mouse) {
 }
 
 
-void render_resize_window();
+#include <stdio.h>
 
-Execution_State handle_platform_events(Input *input, Execution_State current_state) {
+void render_resize_window();
+template <u32 T> void press_button(u32 index, IO_Buttons<T> *buttons);
+template <u32 T> void release_button(u32 index, IO_Buttons<T> *buttons);
+
+static void parse_valuators(const double *input_values,unsigned char *mask,int mask_len,
+                            double *output_values,int output_values_len) {
+    int i = 0,z = 0;
+    int top = mask_len * 8;
+    //if (top > MAX_AXIS)
+        //top = MAX_AXIS;
+
+    memset(output_values,0,output_values_len * sizeof(double));
+    for (; i < top && z < output_values_len; i++) {
+        if (XIMaskIsSet(mask, i)) {
+            const int value = (int) *input_values;
+            output_values[z] = value;
+            input_values++;
+        }
+        z++;
+    }
+}
+void handle_platform_events(Game_Input *input, Game_Execution_Status *execution_status) {
+#if 0
+#if 0
 	// Reset per-frame mouse state.
 	for (s32 i = 0; i < NUM_MOUSE_BUTTONS; ++i) {
 		input->mouse.buttons[i].pressed = input->mouse.buttons[i].released = 0;
@@ -518,30 +690,29 @@ Execution_State handle_platform_events(Input *input, Execution_State current_sta
 		input->keyboard[i].pressed  = 0;
 		input->keyboard[i].released = 0;
 	}
-
+#endif
 	//Window active;
 	//int revert_to;
 	//XGetInputFocus(linux_context.display, &active, &revert_to);
 	//if (active == linux_context.window)
 		//platform_get_mouse_position(&in->mouse.screen_x, &in->mouse.screen_y, &in->mouse.window_x, &in->mouse.window_y, &in->mouse.delta_screen_x, &in->mouse.delta_screen_y);
 
-	f32 delta_x = 0.0f, delta_y = 0.0f;
-	f64 delta_delta;
-	u8 mouse_moved = false;
+	//f32 delta_x = 0.0f, delta_y = 0.0f;
+	//f64 delta_delta;
+	//u8 mouse_moved = false;
 
 	// @TODO: Set up an auto-pause when we lose focus?
 	XFlush(linux_context.display);
 	XEvent event;
 	while (XPending(linux_context.display)) {
 		XNextEvent(linux_context.display, &event);
-		if (event.type == ClientMessage) {
-			if ((Atom)event.xclient.data.l[0] == linux_context.wm_delete_window)
-				return EXITING_STATE;
+		if (event.type == ClientMessage && (Atom)event.xclient.data.l[0] == linux_context.wm_delete_window) {
+			*execution_status = GAME_EXITING;
 		}
 
 		switch(event.type) {
 		case KeyPress: {
-			press_button(&input->keyboard[event.xkey.keycode]);
+			press_button(event.xkey.keycode, &input->keyboard);
 		} break;
 		case KeyRelease: {
 			if (XEventsQueued(linux_context.display, QueuedAfterReading)) {
@@ -555,19 +726,19 @@ Execution_State handle_platform_events(Input *input, Execution_State current_sta
 					break;
 				}
 			}
-			release_button(&input->keyboard[event.xkey.keycode]);
+			release_button(event.xkey.keycode, &input->keyboard);
 		} break;
 		case ButtonPress: {
-				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > NUM_MOUSE_BUTTONS) {
+				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > MOUSE_BUTTON_COUNT) {
 					break;
 				}
-				press_button(&input->mouse.buttons[event.xbutton.button - 1]);
+				press_button(event.xbutton.button - 1, &input->mouse.buttons);
 		} break;
 		case ButtonRelease: {
-				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > NUM_MOUSE_BUTTONS) {
+				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > MOUSE_BUTTON_COUNT) {
 					break;
 				}
-				release_button(&input->mouse.buttons[event.xbutton.button - 1]);
+				release_button(event.xbutton.button - 1, &input->mouse.buttons);
 		} break;
 		case ConfigureNotify: {
 			XConfigureEvent xce = event.xconfigure;
@@ -595,27 +766,72 @@ Execution_State handle_platform_events(Input *input, Execution_State current_sta
 		}
 	}
 
-	update_mouse_position(&input->mouse);
+	//update_mouse_position(&input->mouse);
+#endif
+	XEvent ev;
+	XGenericEventCookie *cookie = &ev.xcookie; // hacks!
+	XIDeviceEvent *devev;
 
-	return current_state;
+	XFlush(linux_context.display);
+	while (XPending(linux_context.display)) {
+		XNextEvent(linux_context.display, &ev);
+		if (!XGetEventData(linux_context.display, cookie)) { // extended event
+			continue;
+		}
+		// check if this belongs to XInput
+		if(cookie->type == GenericEvent && cookie->extension == linux_context.xinput_opcode)
+		{
+			static int last = -1;
+
+			devev = (XIDeviceEvent *)cookie->data;
+			switch(devev->evtype) {
+			case XI_RawMotion: {
+			   static Time prev_time = 0;
+			   static double prev_rel_coords[2];
+				const XIRawEvent *rawev = (const XIRawEvent*)cookie->data;
+				/*
+				const double *dd = rawev->raw_values;
+				int v1 = (int) *dd;
+				dd++;
+				int v2 = (int) *dd;
+				double relative_coords[2] = {v1, v2};
+				*/
+
+
+				double relative_coords[2];
+            parse_valuators(rawev->raw_values,rawev->valuators.mask,
+                            rawev->valuators.mask_len,relative_coords,2);
+
+				if ((rawev->time == prev_time) && (relative_coords[0] == prev_rel_coords[0]) && (relative_coords[1] == prev_rel_coords[1])) {
+					//break;
+				}
+				prev_rel_coords[0] = relative_coords[0];
+				prev_rel_coords[1] = relative_coords[1];
+				prev_time = rawev->time;
+				printf("%g %g\n", rawev->raw_values[0], rawev->raw_values[1]);
+			} break;
+			}
+		}
+	}
 }
 
-#include <errno.h>
-#include <string.h>
 u8 write_file(File_Handle fh, size_t n, const void *buf) {
 	size_t tot_writ = 0;
 	ssize_t cur_writ = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
 	const char *pos = (char *)buf;
+
 	do {
 		cur_writ = write(fh, pos, (n - tot_writ));
 		tot_writ += cur_writ;
 		pos += cur_writ;
 	} while (tot_writ < n && cur_writ != 0);
+
 	if (tot_writ != n) {
 		// @TODO: Add file name to file handle.
-		log_print(MAJOR_ERROR_LOG, "Could not write to file -- %s.", strerror(errno));
+		log_print(MAJOR_ERROR_LOG, "Could not write to file: %s", get_platform_error());
 		return false;
 	}
+
 	return true;
 }
 
@@ -637,11 +853,12 @@ void debug_print(const char *fmt, ...) {
 }
 
 void *open_shared_library(const char *filename) {
-	void* lib = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
-	if (!lib) {
+	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
+	if (!library) {
 		_abort("Failed to load shared library: %s", dlerror());
 	}
-	return lib;
+
+	return library;
 }
 
 void close_shared_library(Library_Handle library) {
@@ -654,7 +871,7 @@ void close_shared_library(Library_Handle library) {
 void *load_shared_library_function(Library_Handle library, const char *function_name) {
 	void *function = dlsym(library, function_name);
 	if (!function) {
-		
+		_abort("Failed to load shared library function %s", function_name);
 	}
 }
 
@@ -671,7 +888,7 @@ File_Handle open_file(const char *path, s32 flags) {
 u8 close_file(File_Handle file_handle) {
 	s32 result = close(file_handle);
 	if (result == -1) {
-		log_print(MINOR_ERROR_LOG, "Could not close file: %s.", strerror(errno));
+		log_print(MINOR_ERROR_LOG, "Could not close file: %s", get_platform_error());
 		return false;
 	}
 	return true;
@@ -691,7 +908,7 @@ u8 read_file(File_Handle file_handle, size_t num_bytes_to_read, void *buffer) {
 	} while (total_bytes_read < num_bytes_to_read && current_bytes_read != 0 && current_bytes_read != -1);
 
 	if (current_bytes_read == -1) {
-		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s.", strerror(errno));
+		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s", get_platform_error());
 		return false;
 	} else if (total_bytes_read != num_bytes_to_read) {
 		// @TODO: Add file name to file handle.
@@ -714,7 +931,7 @@ File_Offset get_file_length(File_Handle file_handle) {
 File_Offset seek_file(File_Handle file_handle, File_Offset offset, File_Seek_Relative relative) {
 	off_t result = lseek(file_handle, offset, relative);
 	if (result == (off_t)-1) {
-		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", strerror(errno));
+		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", get_platform_error());
 	}
 
 	return result;

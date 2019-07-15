@@ -26,7 +26,7 @@ if [ DEBUG ]; then
 fi
 
 #LINKER_FLAGS="-lX11 -ldl -lm -lfreetype"
-LINKER_FLAGS="-lX11 -ldl -lm -lfreetype -lvulkan"
+LINKER_FLAGS="-lX11 -ldl -lm -lfreetype -lXi -lassimp"
 if [ DEVELOPMENT ]; then
 	LINKER_FLAGS+=""
 fi

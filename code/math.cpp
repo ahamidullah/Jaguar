@@ -90,6 +90,13 @@ f32 &V3::operator[](int i) {
 	return z;
 }
 
+// @TODO: USE A SWITCH!
+f32 &V2::operator[](int i) {
+	assert(i >= 0 && i <= 1);
+	if (i == 0)  return x;
+	return y;
+}
+
 V4 operator/(V4 v, f32 s) {
 	return {v.x / s, v.y / s, v.z / s, v.w / s};
 }
@@ -267,30 +274,36 @@ V3 get_translation(M4 m) {
 	return V3{ m[0][3], m[1][3], m[2][3] };
 }
 
-M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
-	f32 top = tan(DEGREES_TO_RADIANS(fovy / 2)) * near;
-	f32 right = top * aspect_ratio;
-	auto result = M4 {
-		(near / right),  0,             0,                             0,
-		0,               (near / top),  0,                             0,
-		0,               0,             -(far + near) / (far - near),  (-2.0f * far * near) / (far - near),
-		0,               0,             -1.0f,                         0,
+M4 transpose(M4 matrix) {
+	return {
+		matrix[0][0], matrix[1][0], matrix[2][0], matrix[3][0],
+		matrix[0][1], matrix[1][1], matrix[2][1], matrix[3][1],
+		matrix[0][2], matrix[1][2], matrix[2][2], matrix[3][2],
+		matrix[0][3], matrix[1][3], matrix[2][3], matrix[3][3],
 	};
-	return result;
+}
+
+M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
+	f32 focal_length = 1 / tan(fovy / 2);
+
+	return {
+		focal_length, 0,                            0,                            0,
+		0,            -focal_length * aspect_ratio,  0,                            0,
+		0,            0,                           -(far + near) / (far - near), -(2.0f * far * near) / (far - near),
+		0,            0,                           -1.0f,                         0,
+	};
 }
 
 // Assumes near is 0.01f and far is infinity.
 M4 perspective_projection(f32 fovy, f32 aspect_ratio) {
 	const f32 near = 0.01f;
-
-	f32 top = tan(DEGREES_TO_RADIANS(fovy / 2)) * near;
-	f32 right = top * aspect_ratio;
+	f32 focal_length = 1 / tan(fovy / 2);
 
 	return {
-		(near / right),  0,             0,     0,
-		0,               (near / top),  0,     0,
-		0,               0,             1.0f,  -2.0f*near,
-		0,               0,             1.0f,  0
+		focal_length,  0,                            0,     0,
+		0,             -focal_length * aspect_ratio,  0,     0,
+		0,             0,                           -1.0f, -2.0f*near,
+		0,             0,                           -1.0f,  0,
 	};
 }
 
@@ -315,10 +328,10 @@ M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f
 
 M4 view_matrix(V3 position, V3 forward, V3 side, V3 up) {
 	return {
-		side.x,     side.y,     side.z,     -dot_product(side, position),
-		up.x,       up.y,       up.z,       -dot_product(up, position),
-		forward.x,  forward.y,  forward.z,  -dot_product(forward, position),
-		0,          0,          0,          1.0f
+		 side.x,     side.y,     side.z,    -dot_product(side, position),
+		 up.x,       up.y,       up.z,      -dot_product(up, position),
+		-forward.x, -forward.y, -forward.z,  dot_product(forward, position),
+		 0,          0,          0,          1.0f
 	};
 }
 
@@ -330,17 +343,6 @@ M4 look_at(V3 position, V3 target, V3 world_up) {
 
 	return view_matrix(position, forward, side, up);
 }
-
-struct Quaternion {
-	Quaternion() {}
-	Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
-	Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
-	//Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
-	f32 x = 0.0f;
-	f32 y = 0.0f;
-	f32 z = 0.0f;
-	f32 w = 1.0f;
-};
 
 Quaternion operator*(Quaternion q1, Quaternion q2) {
 	return {
@@ -365,7 +367,7 @@ Quaternion conjugate(Quaternion q) {
 }
 
 V3 rotate_vector(V3 v, Quaternion q) {
-	Quaternion result = q * Quaternion(v) * conjugate(q);
+	Quaternion result = q * Quaternion{v.x, v.y, v.z, 0.0} * conjugate(q);
 	return {result.x, result.y, result.z};
 }
 

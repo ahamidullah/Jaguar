@@ -116,6 +116,12 @@ size_t string_length(const char *s) {
 	return count;
 }
 
+void copy_string(char *destination, const char *source, size_t count) {
+	for (s32 i = 0; i < count && source[i]; i++) {
+		destination[i] = source[i];
+	}
+}
+
 void copy_string(char *destination, const char *source) {
 	while (*source) {
 		*destination++ = *source++;
@@ -147,7 +153,7 @@ void _memmove(void *destination, void *source, size_t len) {
 }
 
 void _memcpy(void *destination, const void *source, size_t count) {
-	const char *s = (char *)source;
+	const char *s = (const char *)source;
 	char *d = (char *)destination;
 	for (size_t i = 0; i < count; ++i) {
 		d[i] = s[i];
@@ -256,45 +262,63 @@ u8 strings_subset_test(const char **set_a, s32 num_set_a_strings, const char **s
 const char *get_directory(const char *path, Memory_Arena *arena) {
 	auto slash = first_occurrence_of(path, '/');
 	if (slash == NULL) {
-		return path;
+		return "";
 		//char *directory = allocate_array(string_length(path) + 1);
 		//return copy_string(directory, path);
 	}
 
-	return slash + 1;
-	//auto directory_length = (slash - path) + 1; // Including the '/'.
-	//auto directory = allocate_array(arena, char, directory_length + 1);//(char *)get_temporary_storage(directory_len + 1);
-	//copy_string(directory, path, directory_len);
-	//directory[directory_len] = '\0';
-
-	//return directory;
+	auto directory_length = slash - path;
+	auto directory = allocate_array(arena, char, directory_length + 1);
+	copy_string(directory, path, directory_length);
+	directory[directory_length] = '\0';
+	return directory;
 }
 
-#if 0
+char *join_paths(const char *path_1, const char *path_2, Memory_Arena *arena) {
+	auto path_1_length = string_length(path_1);
+	auto path_2_length = string_length(path_2);
+
+	auto result = allocate_array(arena, char, path_1_length + path_2_length + 2);
+	copy_string(result, path_1);
+	result[path_1_length] = '/';
+	copy_string(result + path_1_length + 1, path_2);
+	result[path_1_length + path_2_length + 1] = '\0';
+	return result;
+}
+
 #define TIMED_BLOCK(name) Block_Timer __block_timer__##__LINE__(#name)
 #define MAX_TIMER_NAME_LEN 256
 
 struct Block_Timer {
-	Block_Timer(const char *n)
+	Block_Timer(const char *timer_name)
 	{
-		size_t name_len = _strlen(n);
-		assert(name_len < MAX_TIMER_NAME_LEN);
-		string_copy(name, n);
-		start = platform_get_time();
+		//size_t name_len = _strlen(n);
+		//assert(name_len < MAX_TIMER_NAME_LEN);
+		copy_string(name, timer_name);
+		start = get_current_platform_time();
 	}
 	~Block_Timer()
 	{
-		Time_Spec end = platform_get_time();
+		Platform_Time end = get_current_platform_time();
 		unsigned ns_res=1, us_res=1000, ms_res=1000000;
-		long ns = platform_time_diff(start, end, ns_res);
-		long ms = platform_time_diff(start, end, ms_res);
-		long us = platform_time_diff(start, end, us_res);
-		debug_print("%s - %dns %dus %dms\n", name, ns, us, ms);
+		long ns = platform_time_difference(start, end, ns_res);
+		long ms = platform_time_difference(start, end, ms_res);
+		long us = platform_time_difference(start, end, us_res);
+		debug_print("%s - %dms %dus %dns\n", name, ms, us, ns);
 	}
-	Time_Spec start;
+
+	Platform_Time start;
 	char name[MAX_TIMER_NAME_LEN];
 };
 
+void print_m4_actual(const char *name, M4 matrix) {
+	printf("%s:\n", name);
+	for (s32 i = 0; i < 4; i++) {
+		printf("%f %f %f %f\n", matrix.m[i][0], matrix.m[i][1], matrix.m[i][2], matrix.m[i][3]);
+	}
+}
+
+#if 0
 /*
 bool
 get_base_name(const char *path, char *name_buf)

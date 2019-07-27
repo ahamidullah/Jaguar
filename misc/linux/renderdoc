@@ -1,0 +1,2 @@
+#!/bin/bash
+/home/ahh/Downloads/renderdoc_1.4/bin/qrenderdoc >& /dev/null &

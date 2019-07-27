@@ -141,7 +141,7 @@ V4 &M4::operator[](int i) {
 }
 
 M4 m4_identity() {
-	return M4 {
+	return {
 		1.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, 1.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 1.0f, 0.0f,
@@ -151,8 +151,8 @@ M4 m4_identity() {
 
 M4 operator*(M4 a, M4 b) {
 	M4 result;
-	for (int i = 0; i < 4; ++i) {
-		for (int j = 0; j < 4; ++j) {
+	for (s32 i = 0; i < 4; i++) {
+		for (s32 j = 0; j < 4; j++) {
 			result.m[i][j] = a.m[i][0] * b.m[0][j]
 			               + a.m[i][1] * b.m[1][j]
 			               + a.m[i][2] * b.m[2][j]
@@ -320,8 +320,8 @@ M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top) {
 M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
 	return {
 		2.0f / (right - left),  0,                      0,                     -(right + left) / (right - left),
-	    0,                      2.0f / (top - bottom),  0,                     -(top + bottom) / (top - bottom),
-	    0,                      0,                      1.0f / (far - near),  -near / (far - near),
+	    0,                      -2.0f / (top - bottom),  0,                     -(top + bottom) / (top - bottom),
+	    0,                      0,                      -1.0f / (far - near),  -near / (far - near),
 	    0,                      0,                      0,                     1.0f,
 	};
 }

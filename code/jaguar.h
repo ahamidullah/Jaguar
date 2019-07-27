@@ -61,6 +61,7 @@ void _abort_actual(const char *file, int line, const char *func, const char *fmt
 #define print_v4(v4) print_v4_actual(#v4, v4)
 #define print_v3(v3) print_v3_actual(#v3, v3)
 #define print_v2(v2) print_v2_actual(#v2, v2)
+#define print_m4(m4) print_m4_actual(#m4, m4)
 
 struct V2 {
 	f32 x, y;
@@ -122,6 +123,7 @@ struct Mouse {
 	s32 wheel;
 	s32 x, y;
 	s32 delta_x, delta_y;
+	f32 raw_delta_x, raw_delta_y;
 	//V2 position;
 	//V2 delta_position;
 	f32 sensitivity;
@@ -240,7 +242,18 @@ struct Asset_Info {
 	u32 *instance_lookup = NULL;
 };
 
-struct Mesh {
+typedef u32 Material_ID;
+
+#define MAX_MATERIAL_COUNT 100
+
+struct Vertex {
+	V3 position;
+	V3 color;
+	V2 uv;
+	V3 normal;
+};
+
+struct Mesh_Asset {
 /*
 	u32 vao;
 	u32 vbo;
@@ -248,18 +261,25 @@ struct Mesh {
 	u32 index_count;
 	u32 texture_id;
 */
-	//std::vector<Vertex> vertices;
-	//std::vector<u32> indices;
+	//Material_Type material_type;
+	Material_ID material_id;
+
+	Vertex *vertices;
+	u32 vertex_count;
+
+	u32 *indices;
+	u32 index_count;
 };
 
 struct Model_Asset {
 	u32 mesh_count;
+	Mesh_Asset *meshes;
 	//std::vector<Mesh> meshes; // @TODO
 };
 
 struct Model_Instance {
 	u32 mesh_count;
-	Mesh *meshes;
+	Mesh_Asset *meshes;
 };
 
 struct Skeleton_Joint_Pose {
@@ -318,11 +338,47 @@ struct Animation_Instance {
 	f32 time;
 	u32 current_frame;
 };
+
+enum Asset_ID {
+	GUY1_ASSET,
+	GUY2_ASSET,
+};
+
+enum Shader_Type {
+	TEXTURED_STATIC_SHADER,
+	UNTEXTURED_STATIC_SHADER,
+	SHADOW_MAP_STATIC_SHADER,
+
+	SHADER_COUNT
+};
+
+#include <assimp/cimport.h>
+struct Material {
+	aiString name; // @TODO: Remove name member.
+
+	Shader_Type shader;
+
+	V3 diffuse_color;
+	V3 specular_color;
+
+	Asset_ID diffuse_map;
+	Asset_ID specular_map;
+	Asset_ID normal_map;
+};
+
+// @TODO: Calculate based on available memory?
+#define MAX_LOADED_ASSET_COUNT 1000
+
 struct Game_Assets {
 	Memory_Arena arena;
 
+	Material materials[MAX_MATERIAL_COUNT];
+	s32 material_count;
+
 	Asset_Info<Animation_Asset, Animation_Instance> animations;
 	Asset_Info<Model_Asset, Model_Instance> models;
+
+	void *lookup[MAX_LOADED_ASSET_COUNT];
 };
 
 struct Game_State {
@@ -332,4 +388,5 @@ struct Game_State {
 	Camera camera;
 
 	Memory_Arena frame_arena;
+	Memory_Arena permanant_arena;
 };

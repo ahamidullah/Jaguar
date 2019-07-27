@@ -34,8 +34,11 @@ void application_entry() {
 
 	initialize_memory(&game_state);
 	initialize_renderer(&game_state);
+	initialize_assets(&game_state);
 	initialize_input(&game_state);
 	initialize_camera(&game_state.camera, {2, 2, 2}, {1, 1, 1}, 1);
+
+	build_vulkan_command_buffers(&game_state.assets);
 
 	while (game_state.execution_status != GAME_EXITING) {
 		update(&game_state);

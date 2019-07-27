@@ -95,11 +95,13 @@ f32  meters_per_pixel            =  0;
 f32  scaled_meters_per_pixel     =  0;
 
 // @TODO: Store colormap and free it on exit.
+// @TODO: Free blank_cursor.
 struct Linux_Context {
 	Display   *display;
 	Window     window;
 	Atom       wm_delete_window;
 	s32        xinput_opcode;
+	Cursor     blank_cursor;
 	//snd_pcm_t *pcm_handle;
 } linux_context;
 
@@ -110,13 +112,10 @@ const char *get_platform_error() {
 	return strerror(errno);
 }
 
-static s8 x11_error_occured = false;
-
 s32 x11_error_handler(Display *, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linux_context.display, event->error_code, buffer, sizeof(buffer));
-	log_print(MAJOR_ERROR_LOG, "X11 error: %s.", buffer);
-	x11_error_occured = true;
+	_abort("X11 error: %s.", buffer);
 	return 0;
 }
 
@@ -349,6 +348,8 @@ s32 main(s32, char **) {
 		XISetMask(mask, XI_RawButtonRelease);
 		XISetMask(mask, XI_RawKeyPress);
 		XISetMask(mask, XI_RawKeyRelease);
+		XISetMask(mask, XI_FocusOut);
+		XISetMask(mask, XI_FocusIn);
 
 		if (XISelectEvents(linux_context.display, root_window, &event_mask, 1) != Success) {
 			_abort("Failed to select XInput events");
@@ -369,23 +370,15 @@ s32 main(s32, char **) {
 		window_attributes.background_pixel = 0xFFFFFFFF;
 		window_attributes.border_pixmap = None;
 		window_attributes.border_pixel = 0;
-		window_attributes.event_mask = StructureNotifyMask
-		                             | FocusChangeMask
-		                             | EnterWindowMask
-		                             | LeaveWindowMask
-		                             | ExposureMask
-		                             | ButtonPressMask
-		                             | ButtonReleaseMask
-		                             | KeyPressMask
-		                             | KeyReleaseMask;
+		window_attributes.event_mask = StructureNotifyMask;
 
 		s32 window_attributes_mask = CWBackPixel
 		                           | CWColormap
 		                           | CWBorderPixel
 		                           | CWEventMask;
 
-		s32 requested_window_width = 800;
-		s32 requested_window_height = 600;
+		s32 requested_window_width = 1200;
+		s32 requested_window_height = 1000;
 
 		linux_context.window = XCreateWindow(linux_context.display,
 		                                     root_window,
@@ -425,6 +418,15 @@ s32 main(s32, char **) {
 			_abort("Failed to get the screen's geometry.");
 		}
 	}
+
+	// Create a blank cursor for when we want to hide the cursor.
+	{
+		XColor xcolor;
+		static char cursor_pixels[] = {0x00};
+		auto pixmap = XCreateBitmapFromData(linux_context.display, linux_context.window, cursor_pixels, 1, 1);
+		linux_context.blank_cursor = XCreatePixmapCursor(linux_context.display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
+		XFreePixmap(linux_context.display, pixmap);
+	}
 #if 0
 	// @TODO: Handle this stuff on resize too.
 	u32 reference_window_width  = 640;
@@ -461,11 +463,7 @@ s32 main(s32, char **) {
 	debug_init();
 #endif
 
-	//XSync(linux_context.display, False);
-
 	application_entry();
-
-	//render_cleanup();
 
 	//platform_exit(EXIT_SUCCESS);
 
@@ -572,85 +570,13 @@ Key_Symbol platform_keycode_to_keysym(u32 keycode, s8 level) {
 
 #endif
 
-/*
-void
-platform_reset_mouse(Mouse *m)
-{
-	//m->left.num_presses = m->left.num_releases = 0;
-	//m->middle.num_presses = m->middle.num_releases = 0;
-	//m->right.num_presses = m->right.num_releases = 0;
-}
-
-Mouse
-platform_clear_mouse(Mouse m)
-{
-	_memset(&m.spatial, 0, sizeof(m.spatial));
-	_memset(&m.buttons, 0, sizeof(m.buttons));
-	return m;
-}
-
-Keyboard
-platform_reset_keyboard(Keyboard old_kb)
-{
-	for (int i = 0; i < MAX_SCANCODES; ++i) {
-		old_kb.keys[i].pressed = 0;
-		old_kb.keys[i].released = 0;
-	}
-	old_kb.num_keys_pressed_since_last_pull = 0;
-	return old_kb;
-}
-
-*/
-/*
-bool
-platform_was_key_pressed_at_all(const Digital_Button *keys, Key_Symbol ks)
-{
-	unsigned scancode = platform_keysym_to_scancode(ks);
-	assert(scancode < MAX_SCANCODES);
-	return keys[scancode].num_presses;
-}
-
-bool
-platform_was_key_pressed_toggle(const Digital_Button *keys, Key_Symbol ks)
-{
-	unsigned scancode = platform_keysym_to_scancode(ks);
-	assert(scancode < MAX_SCANCODES);
-	return (keys[scancode].num_presses % 2) == 1;
-}
-
-bool
-platform_is_key_down(const Digital_Button *keys, Key_Symbol ks)
-{
-	unsigned scancode = platform_keysym_to_scancode(ks);
-	assert(scancode < MAX_SCANCODES);
-	return keys[scancode].down;
-}
-
-*/
-
 void get_mouse_xy(s32 *x, s32 *y) {
 	s32 screen_x, screen_y;
 	Window root, child;
 	u32 mouse_buttons;
-	//XIButtonState button_state;
-	//XIModifierState mods;
-	//XIGroupState group;
-
-	//V2 old_position = mouse->position;
 
 	XQueryPointer(linux_context.display, linux_context.window, &root, &child, &screen_x, &screen_y, x, y, &mouse_buttons);
 	*y = (window_pixel_height - *y); // Bottom left is zero for us, top left is zero for x11.
-
-	//XIQueryPointer(linux_context.display, 2, linux_context.window, &root, &child, &root_x, &root_y, &win_x, &win_y, &button_state, &mods, &group);
-	//mouse->position.x = win_x;// * scaled_meters_per_pixel;
-	//mouse->position.y = (window_pixel_height - win_y);// * scaled_meters_per_pixel; // Bottom left is zero for us, top left is zero for x11.
-
-	//mouse->delta_position.x = old_position.x - mouse->position.x;
-	//mouse->delta_position.y = old_position.y - mouse->position.y;
-
-	//mouse->delta_position.x = mouse->position.x - old_window_x;
-	//mouse->delta_position.y = mouse->position.x - old_window_y;
-	// @NOTE: We can't set mouse buttons here because we would miss multiple button presses that happen in the span of a single update.
 }
 
 
@@ -678,139 +604,62 @@ static void parse_valuators(const double *input_values,unsigned char *mask,int m
     }
 }
 void handle_platform_events(Game_Input *input, Game_Execution_Status *execution_status) {
-#if 0
-#if 0
-	// Reset per-frame mouse state.
-	for (s32 i = 0; i < NUM_MOUSE_BUTTONS; ++i) {
-		input->mouse.buttons[i].pressed = input->mouse.buttons[i].released = 0;
-	}
-
-	// Reset per-frame keyboard state.
-	for (s32 i = 1; i < MAX_SCANCODES; ++i) {
-		input->keyboard[i].pressed  = 0;
-		input->keyboard[i].released = 0;
-	}
-#endif
-	//Window active;
-	//int revert_to;
-	//XGetInputFocus(linux_context.display, &active, &revert_to);
-	//if (active == linux_context.window)
-		//platform_get_mouse_position(&in->mouse.screen_x, &in->mouse.screen_y, &in->mouse.window_x, &in->mouse.window_y, &in->mouse.delta_screen_x, &in->mouse.delta_screen_y);
-
-	//f32 delta_x = 0.0f, delta_y = 0.0f;
-	//f64 delta_delta;
-	//u8 mouse_moved = false;
-
-	// @TODO: Set up an auto-pause when we lose focus?
-	XFlush(linux_context.display);
 	XEvent event;
+	XGenericEventCookie *cookie = &event.xcookie;
+	XIRawEvent *raw_event;
+
+	XFlush(linux_context.display);
 	while (XPending(linux_context.display)) {
 		XNextEvent(linux_context.display, &event);
+
 		if (event.type == ClientMessage && (Atom)event.xclient.data.l[0] == linux_context.wm_delete_window) {
 			*execution_status = GAME_EXITING;
+			break;
+		}
+		if (event.type == ConfigureNotify) {
+			XConfigureEvent configure_event = event.xconfigure;
+			// @TODO Window resize.
+			break;
 		}
 
-		switch(event.type) {
-		case KeyPress: {
-			press_button(event.xkey.keycode, &input->keyboard);
-		} break;
-		case KeyRelease: {
-			if (XEventsQueued(linux_context.display, QueuedAfterReading)) {
-				XEvent next_event;
-				XPeekEvent(linux_context.display, &next_event);
-				// X11 generates keyrelease and a keypress events continuously while the key is held down.
-				// Detect this case and skip those events so that we only get a keypress and keyrelease when a key is
-				// actually pressed and released.
-				if (next_event.type == KeyPress && next_event.xkey.time == event.xkey.time && next_event.xkey.keycode == event.xkey.keycode) {
-					XNextEvent(linux_context.display, &event);
-					break;
-				}
-			}
-			release_button(event.xkey.keycode, &input->keyboard);
-		} break;
-		case ButtonPress: {
-				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > MOUSE_BUTTON_COUNT) {
-					break;
-				}
-				press_button(event.xbutton.button - 1, &input->mouse.buttons);
-		} break;
-		case ButtonRelease: {
-				if ((event.xbutton.button - 1) < 0 || (event.xbutton.button - 1) > MOUSE_BUTTON_COUNT) {
-					break;
-				}
-				release_button(event.xbutton.button - 1, &input->mouse.buttons);
-		} break;
-		case ConfigureNotify: {
-			XConfigureEvent xce = event.xconfigure;
-			// This event type is generated for a variety of happenings, so check whether the window has been resized.
-			if ((u32)xce.width != window_pixel_width || (u32)xce.height != window_pixel_height) {
-			/*
-				window_pixel_width         = (u32)xce.width;
-				window_pixel_height        = (u32)xce.height;
-				window_scaled_meter_width  = window_pixel_width * scaled_meters_per_pixel;
-				window_scaled_meter_height = window_pixel_height * scaled_meters_per_pixel;
-
-				render_resize_window();
-			*/
-			}
-		} break;
-		case FocusOut: {
-			// @TODO: Clear all keyboard state on focus out. Our 'down' state isn't valid anymore because we won't get
-			// the releases.
-			//in->mouse = platform_clear_mouse(in->mouse); // Clear residual mouse motion so we don't keep using it in calculations.
-		} break;
-		case FocusIn: {
-			//platform_get_mouse_position(&in->mouse.screen_x, &in->mouse.screen_y, &in->mouse.window_x, &in->mouse.window_y, &in->mouse.delta_screen_x, &in->mouse.delta_screen_y);
-			//in->mouse.spatial = platform_pull_mouse_spatial(in->mouse.spatial); // Reset mouse position so the view doesn't "jump" when we regain focus.
-		} break;
-		}
-	}
-
-	//update_mouse_position(&input->mouse);
-#endif
-	XEvent ev;
-	XGenericEventCookie *cookie = &ev.xcookie; // hacks!
-	XIDeviceEvent *devev;
-
-	XFlush(linux_context.display);
-	while (XPending(linux_context.display)) {
-		XNextEvent(linux_context.display, &ev);
-		if (!XGetEventData(linux_context.display, cookie)) { // extended event
+		if (!XGetEventData(linux_context.display, cookie)
+		 || cookie->type != GenericEvent
+		 || cookie->extension != linux_context.xinput_opcode) {
 			continue;
 		}
-		// check if this belongs to XInput
-		if(cookie->type == GenericEvent && cookie->extension == linux_context.xinput_opcode)
-		{
-			static int last = -1;
 
-			devev = (XIDeviceEvent *)cookie->data;
-			switch(devev->evtype) {
-			case XI_RawMotion: {
-			   static Time prev_time = 0;
-			   static double prev_rel_coords[2];
-				const XIRawEvent *rawev = (const XIRawEvent*)cookie->data;
-				/*
-				const double *dd = rawev->raw_values;
-				int v1 = (int) *dd;
-				dd++;
-				int v2 = (int) *dd;
-				double relative_coords[2] = {v1, v2};
-				*/
+		raw_event = (XIRawEvent *)cookie->data;
 
-
-				double relative_coords[2];
-            parse_valuators(rawev->raw_values,rawev->valuators.mask,
-                            rawev->valuators.mask_len,relative_coords,2);
-
-				if ((rawev->time == prev_time) && (relative_coords[0] == prev_rel_coords[0]) && (relative_coords[1] == prev_rel_coords[1])) {
-					//break;
-				}
-				prev_rel_coords[0] = relative_coords[0];
-				prev_rel_coords[1] = relative_coords[1];
-				prev_time = rawev->time;
-				printf("%g %g\n", rawev->raw_values[0], rawev->raw_values[1]);
-			} break;
+		switch(raw_event->evtype) {
+		case XI_RawMotion: {
+			// @TODO: Check XIMaskIsSet(re->valuators.mask, 0) for x and XIMaskIsSet(re->valuators.mask, 1) for y.
+			input->mouse.raw_delta_x += raw_event->raw_values[0];
+			input->mouse.raw_delta_y -= raw_event->raw_values[1];
+		} break;
+		case XI_RawKeyPress: {
+			press_button(raw_event->detail, &input->keyboard);
+		} break;
+		case XI_RawKeyRelease: {
+			release_button(raw_event->detail, &input->keyboard);
+		} break;
+		case XI_RawButtonPress: {
+			auto button_index = (event.xbutton.button - 1);
+			if (button_index > MOUSE_BUTTON_COUNT) {
+				break;
 			}
+			press_button(button_index, &input->mouse.buttons);
+		} break;
+		case XI_RawButtonRelease: {
+			auto button_index = (event.xbutton.button - 1);
+			if (button_index > MOUSE_BUTTON_COUNT) {
+				break;
+			}
+			release_button(button_index, &input->mouse.buttons);
+		} break;
+		case XI_FocusIn: {
+		} break;
+		case XI_FocusOut: {
+		} break;
 		}
 	}
 }
@@ -873,6 +722,7 @@ void *load_shared_library_function(Library_Handle library, const char *function_
 	if (!function) {
 		_abort("Failed to load shared library function %s", function_name);
 	}
+	return function;
 }
 
 // @TODO: Handle modes.
@@ -933,8 +783,28 @@ File_Offset seek_file(File_Handle file_handle, File_Offset offset, File_Seek_Rel
 	if (result == (off_t)-1) {
 		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", get_platform_error());
 	}
-
 	return result;
+}
+
+void capture_cursor() {
+	XDefineCursor(linux_context.display, linux_context.window, linux_context.blank_cursor);
+	XGrabPointer(linux_context.display, linux_context.window, True, 0, GrabModeAsync, GrabModeAsync, None, linux_context.blank_cursor, CurrentTime);
+}
+
+void uncapture_cursor() {
+	XUndefineCursor(linux_context.display, linux_context.window);
+	XUngrabPointer(linux_context.display, CurrentTime);
+}
+
+Platform_Time get_current_platform_time() {
+	Platform_Time time;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &time);
+	return time;
+}
+
+// Time in milliseconds.
+s64 platform_time_difference(Platform_Time start, Platform_Time end, u32 resolution) {
+	return (end.tv_nsec - start.tv_nsec) / resolution;
 }
 
 #if 0

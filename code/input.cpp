@@ -1,5 +1,7 @@
+#define MAX_SENSITIVITY 1.0f
+
 void initialize_input(Game_State *game_state) {
-	game_state->input.mouse.sensitivity = 1.0f;
+	game_state->input.mouse.sensitivity = 0.2 * MAX_SENSITIVITY;
 	get_mouse_xy(&game_state->input.mouse.x, &game_state->input.mouse.y);
 }
 
@@ -13,9 +15,6 @@ template <u32 T>
 void release_button(u32 index, IO_Buttons<T> *buttons) {
 	buttons->released[index] = buttons->down[index];
 	buttons->down[index] = false;
-	//db.released = db.down;
-	//db.down = false;
-	//return db;
 }
 
 template <u32 T>
@@ -62,6 +61,9 @@ void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
 
 		memset(&input->keyboard.pressed, 0, sizeof(u8) * MAX_SCANCODES);
 		memset(&input->keyboard.released, 0, sizeof(u8) * MAX_SCANCODES);
+
+		input->mouse.raw_delta_x = 0;
+		input->mouse.raw_delta_y = 0;
 	}
 
 	handle_platform_events(input, execution_status);
@@ -75,5 +77,16 @@ void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
 
 		input->mouse.delta_x = input->mouse.x - old_x;
 		input->mouse.delta_y = input->mouse.y - old_y;
+	}
+
+	if (key_pressed(ESCAPE_KEY, input)) {
+		static bool b = true;
+		if (b) {
+			capture_cursor();
+			b = false;
+		} else {
+			uncapture_cursor();
+			b = true;
+		}
 	}
 }

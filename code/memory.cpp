@@ -211,6 +211,8 @@ void initialize_memory(Game_State *game_state) {
 	memory_block_free_head = NULL;
 
 	game_state->frame_arena = make_memory_arena();
+	game_state->assets.arena = make_memory_arena();
+	game_state->permanant_arena = make_memory_arena();
 }
 
 #if 0
@@ -298,7 +300,9 @@ s32 round_up(f32 f) {
 	return (f > 0.0f) ? (s32)(f + 1.0f) : (s32)(f - 1.0f);
 }
 
-#define allocate_array(arena, type, count) (type *)memory_arena_allocate(arena, sizeof(type) * count)
+// @TODO: Align allocated memory?
+#define allocate_array(arena, type, count) (type *)memory_arena_allocate(arena, sizeof(type) * (count))
+#define allocate_struct(arena, type) (type *)memory_arena_allocate(arena, sizeof(type))
 
 void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	void *result = (char *)arena->active_block + sizeof(Block_Header) + arena->active_block->bytes_used;

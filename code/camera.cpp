@@ -31,9 +31,9 @@ V3 calculate_camera_forward(f32 pitch, f32 yaw) {
 }
 
 void update_camera(Camera *camera, Game_Input *input) {
-	if (input->mouse.delta_x != 0 || input->mouse.delta_y != 0) {
-		camera->yaw += -input->mouse.delta_x * input->mouse.sensitivity;
-		camera->pitch += input->mouse.delta_y * input->mouse.sensitivity;
+	if (input->mouse.raw_delta_x != 0 || input->mouse.raw_delta_y != 0) {
+		camera->yaw += -input->mouse.raw_delta_x * input->mouse.sensitivity;
+		camera->pitch += input->mouse.raw_delta_y * input->mouse.sensitivity;
 		if (camera->pitch > 89.0f) {
 			camera->pitch = 89.0f;
 		}

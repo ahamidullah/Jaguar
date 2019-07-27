@@ -2,8 +2,26 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#define DEFAULT_DIFFUSE_COLOR V3{1.0f, 0.08f, 0.58f}
+#define DEFAULT_SPECULAR_COLOR V3{1.0f, 1.0f, 1.0f}
+
+#define INVALID_ASSET_ID ((Asset_ID)-1)
+
+Asset_ID get_texture(const char *path) {
+	s32 texture_width, texture_height, texture_channels;
+	auto pixels = stbi_load(path, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
+	assert(pixels);
+
+	load_vulkan_texture(pixels, texture_width, texture_height);
+	do_ds();
+
+	free(pixels);
+
+	return (Asset_ID)0;
+}
+
 // @TODO: WRITE A BLENDER EXPORTER!!!!!!!!!!!!!!!!!!
-void load_model(Model_Asset *model, const char *path) {
+void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena *thread_local_arena) {
 	const aiScene* assimp_scene = aiImportFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
@@ -14,7 +32,151 @@ void load_model(Model_Asset *model, const char *path) {
 		num_joints += assimp_scene->mMeshes[i]->mNumBones;
 	}
 
-	//auto model_directory = get_directory(path);
+	u32 mesh_count = assimp_scene->mNumMeshes;
+
+	u32 vertex_count = 0;
+	u32 index_count = 0;
+	for (s32 i = 0; i < mesh_count; i++) {
+		vertex_count += assimp_scene->mMeshes[i]->mNumVertices;
+		index_count += assimp_scene->mMeshes[i]->mNumFaces * 3;
+	}
+
+	auto model = allocate_struct(&assets->arena, Model_Asset); // @TODO: Threading. Lock asset memory arena?
+	model->mesh_count = mesh_count;
+	model->meshes = allocate_array(&assets->arena, Mesh_Asset, model->mesh_count);
+	auto vertices = allocate_array(&assets->arena, Vertex, vertex_count);
+	auto indices = allocate_array(&assets->arena, u32, index_count);
+
+	assets->lookup[id] = model;
+
+	auto model_directory = get_directory(path, thread_local_arena);
+
+	u32 vertex_offset = 0;
+	u32 index_offset = 0;
+
+	for (s32 i = 0; i < mesh_count; i++) {
+		auto assimp_mesh = assimp_scene->mMeshes[i];
+		assert(assimp_mesh->HasPositions() && assimp_mesh->HasNormals() && assimp_mesh->HasFaces());
+
+		model->meshes[i].vertex_count = assimp_mesh->mNumVertices;
+		model->meshes[i].vertices = &vertices[vertex_offset];
+
+		for (s32 j = 0; j < model->meshes[i].vertex_count; j++) {
+			auto v = &model->meshes[i].vertices[j];
+
+			v->position[0] = assimp_mesh->mVertices[j].x;
+			v->position[1] = assimp_mesh->mVertices[j].y;
+			v->position[2] = assimp_mesh->mVertices[j].z;
+
+			v->normal[0] = assimp_mesh->mNormals[j].x;
+			v->normal[1] = assimp_mesh->mNormals[j].y;
+			v->normal[2] = assimp_mesh->mNormals[j].z;
+
+			v->color[0] = 1.0f;
+			v->color[1] = 0.0f;
+			v->color[2] = 0.0f;
+			/*
+			v->color[0] = assimp_mesh->mColors[j]->r;
+			v->color[1] = assimp_mesh->mColors[j]->g;
+			v->color[2] = assimp_mesh->mColors[j]->b;
+			*/
+
+			if (assimp_mesh->mTextureCoords[0]) {
+				v->uv[0] = assimp_mesh->mTextureCoords[0][j].x;
+				v->uv[1] = assimp_mesh->mTextureCoords[0][j].y;
+			} else {
+				v->uv[0] = -1;
+				v->uv[1] = -1;
+			}
+		}
+
+		vertex_offset += model->meshes[i].vertex_count;
+
+		model->meshes[i].index_count = 3 * assimp_mesh->mNumFaces;
+		model->meshes[i].indices = &indices[index_offset];
+
+		for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
+			auto assimp_face = assimp_mesh->mFaces[j];
+
+			assert(assimp_face.mNumIndices == 3);
+
+			model->meshes[i].indices[(3 * j) + 0] = assimp_face.mIndices[0];
+			model->meshes[i].indices[(3 * j) + 1] = assimp_face.mIndices[1];
+			model->meshes[i].indices[(3 * j) + 2] = assimp_face.mIndices[2];
+		}
+
+		aiString material_name;
+		aiMaterial* assimp_material = assimp_scene->mMaterials[assimp_mesh->mMaterialIndex];
+		assert(assimp_material->Get(AI_MATKEY_NAME, material_name) == aiReturn_SUCCESS);
+		s32 material_id = -1;
+
+		for (s32 j = 0; j < assets->material_count; j++) {
+			if (assets->materials[j].name == material_name) {
+				material_id = j;
+				break;
+			}
+		}
+
+		if (material_id == -1) {
+			// New material.
+			assets->material_count += 1;
+			assert(assets->material_count < MAX_MATERIAL_COUNT);
+			material_id = assets->material_count;
+
+			auto material = &assets->materials[material_id];
+			material->name = material_name;
+
+			aiString diffuse_path, normal_path, specular_path;
+			if (assimp_material->GetTexture(aiTextureType_DIFFUSE, 0, &diffuse_path) == aiReturn_SUCCESS) {
+				material->shader = TEXTURED_STATIC_SHADER;
+				auto texture_path = join_paths(model_directory, diffuse_path.C_Str(), thread_local_arena);
+				material->diffuse_map = get_texture(texture_path);
+			} else {
+				material->shader = UNTEXTURED_STATIC_SHADER;
+				material->diffuse_map = INVALID_ASSET_ID;
+			}
+
+			if (assimp_material->GetTexture(aiTextureType_SPECULAR, 0, &specular_path) == aiReturn_SUCCESS) {
+				material->specular_map = get_texture(specular_path.C_Str());
+			} else {
+				material->specular_map = INVALID_ASSET_ID;
+			}
+			
+			if (assimp_material->GetTexture(aiTextureType_NORMALS, 0, &normal_path) == aiReturn_SUCCESS) {
+				material->normal_map = get_texture(normal_path.C_Str());
+			} else {
+				material->normal_map = INVALID_ASSET_ID;
+			}
+
+			aiColor3D diffuse_color, specular_color;
+			if (assimp_material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color) == aiReturn_SUCCESS) {
+				material->diffuse_color = {diffuse_color.r, diffuse_color.g, diffuse_color.b};
+			} else {
+				material->diffuse_color = DEFAULT_DIFFUSE_COLOR;
+			}
+			if (assimp_material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color) == aiReturn_SUCCESS) {
+				material->diffuse_color = {diffuse_color.r, diffuse_color.g, diffuse_color.b};
+			} else {
+				material->diffuse_color = DEFAULT_SPECULAR_COLOR;
+			}
+		}
+	}
+
+	transfer_model_data_to_gpu(model);
+#if 0
+		if (assimp_mesh->mTextureCoords[0]) {
+			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
+			aiReturn has_diffuse = mat->GetTexture(aiTextureType_DIFFUSE, 0, &diffuse_path);
+			if (has_diffuse == aiReturn_SUCCESS) {
+				auto texture_path = join_paths(model_directory, diffuse_path.C_Str());
+				mesh->texture_id = load_texture(texture_path);
+			} else {
+				asset->material = UNTEXTURED_MATERIAL;
+			}
+		}
+#endif
+
+#if 0
 
 	//glUseProgram(animated_mesh_shader);
 
@@ -51,9 +213,9 @@ void load_model(Model_Asset *model, const char *path) {
 				v->position[2] = assimp_mesh->mVertices[j].z;
 
 				if (assimp_mesh->mNormals) {
-					v->color[0] = assimp_mesh->mNormals[j].x;
-					v->color[1] = assimp_mesh->mNormals[j].y;
-					v->color[2] = assimp_mesh->mNormals[j].z;
+					v->normal[0] = assimp_mesh->mNormals[j].x;
+					v->normal[1] = assimp_mesh->mNormals[j].y;
+					v->normal[2] = assimp_mesh->mNormals[j].z;
 				}
 				if (assimp_mesh->mTextureCoords[0]) {
 					v->uv[0] = assimp_mesh->mTextureCoords[0][j].x;
@@ -79,7 +241,7 @@ void load_model(Model_Asset *model, const char *path) {
 					vulkan_context.indices[(3 * j) + k] = assimp_face.mIndices[k];
 				}
 			}
-
+#endif
 			//glGenBuffers(1, &mesh->ebo);
 			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
 			//glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->index_count, index_buffer.data, GL_DYNAMIC_DRAW);
@@ -106,8 +268,8 @@ void load_model(Model_Asset *model, const char *path) {
 			glEnableVertexAttribArray(1);
 			glEnableVertexAttribArray(2);
 			*/
-		}
 		/*
+		}
 	} else {
 		skeletons_.lookup[id] = skeletons_.instances.count;
 
@@ -280,4 +442,9 @@ void load_model(Model_Asset *model, const char *path) {
 		}
 	}
 	*/
+}
+
+void initialize_assets(Game_State *game_state) {
+	const char *path = "data/male2.fbx";
+	load_model(path, GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
 }

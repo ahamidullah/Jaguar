@@ -344,6 +344,7 @@ M4 look_at(V3 position, V3 target, V3 world_up) {
 	return view_matrix(position, forward, side, up);
 }
 
+/*
 Quaternion operator*(Quaternion q1, Quaternion q2) {
 	return {
 		q1.w * q2.x + q2.w * q1.x + q1.y * q2.z - q2.y * q1.z,
@@ -425,3 +426,4 @@ Quaternion lerp(Quaternion a, Quaternion b, f32 t) {
 
 	return result;
 }
+*/

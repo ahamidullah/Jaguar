@@ -1,4 +1,4 @@
-#include <assimp/cimport.h>
+//#include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
@@ -13,7 +13,6 @@ Asset_ID get_texture(const char *path) {
 	assert(pixels);
 
 	load_vulkan_texture(pixels, texture_width, texture_height);
-	do_ds();
 
 	free(pixels);
 
@@ -447,4 +446,5 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 void initialize_assets(Game_State *game_state) {
 	const char *path = "data/male2.fbx";
 	load_model(path, GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
+	//load_model(path, GUY2_ASSET, &game_state->assets, &game_state->frame_arena);
 }

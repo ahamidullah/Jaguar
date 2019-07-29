@@ -17,7 +17,7 @@ DEBUG=true
 
 #COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -ffast-math -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include"
 
-COMPILER_FLAGS="-DDEBUG -std=c++17 -g -O0 -ffast-math -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include -Wall -Wextra -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 -Wundef -Werror -Wno-unused -Wno-sign-compare"
+COMPILER_FLAGS="-DDEBUG -std=c++11 -g -O0 -ffast-math -fno-exceptions -fno-threadsafe-statics -Idependencies/vulkan/1.1.106.0/include -Wall -Wextra -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 -Wundef -Werror -Wno-unused -Wno-sign-compare"
 
 if [ DEVELOPMENT ]; then
 	COMPILER_FLAGS+=" -DDEVELOPMENT -I/usr/include/freetype2"

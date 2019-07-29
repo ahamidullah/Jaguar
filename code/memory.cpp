@@ -189,6 +189,7 @@ Memory_Arena make_memory_arena() {
 
 void clear_memory_arena(Memory_Arena *arena) {
 	arena->active_block = arena->base_block;
+	arena->active_block->bytes_used = 0;
 }
 
 void free_memory_block(Block_Header *block) {

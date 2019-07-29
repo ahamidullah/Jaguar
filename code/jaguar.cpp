@@ -19,7 +19,7 @@
 #include "math.cpp"
 #include "library.cpp"
 #include "vulkan.cpp"
-#include "asset.cpp"
+#include "assets.cpp"
 #include "input.cpp"
 #include "camera.cpp"
 
@@ -38,7 +38,7 @@ void application_entry() {
 	initialize_input(&game_state);
 	initialize_camera(&game_state.camera, {2, 2, 2}, {1, 1, 1}, 1);
 
-	build_vulkan_command_buffers(&game_state.assets);
+	//build_vulkan_command_buffers(&game_state.assets);
 
 	while (game_state.execution_status != GAME_EXITING) {
 		update(&game_state);

@@ -253,15 +253,8 @@ struct Vertex {
 	V3 normal;
 };
 
+// @TODO: Move vertex and index data into the model asset.
 struct Mesh_Asset {
-/*
-	u32 vao;
-	u32 vbo;
-	u32 ebo;
-	u32 index_count;
-	u32 texture_id;
-*/
-	//Material_Type material_type;
 	Material_ID material_id;
 
 	Vertex *vertices;
@@ -271,15 +264,30 @@ struct Mesh_Asset {
 	u32 index_count;
 };
 
+// @TODO: Move vertex and index data into the model asset.
 struct Model_Asset {
 	u32 mesh_count;
 	Mesh_Asset *meshes;
-	//std::vector<Mesh> meshes; // @TODO
+
+	u32 vertex_count;
+	u32 vertex_gpu_memory_offset;
+};
+
+struct Transform {
+	V3 translation;
+	Quaternion rotation;
+	V3 scale;
 };
 
 struct Model_Instance {
+	Transform transform;
 	u32 mesh_count;
-	Mesh_Asset *meshes;
+	Material_ID *material_ids;
+	u32 vertex_gpu_memory_offset;
+	u32 vertex_count;
+	u32 first_index;
+	u32 *index_counts;
+	u32 uniform_offset;
 };
 
 struct Skeleton_Joint_Pose {
@@ -297,7 +305,7 @@ struct Skeleton_Joint_Skinning_Info {
 // @TODO: We could store animation transforms as 4x3 matrix, maybe?
 struct Skeleton_Asset {
 	u8 joint_count;
-	const char *joint_names; // @TODO: Get rid of this aiString.
+	const char *joint_names; // @TODO: Get rid of joint names?
 	Skeleton_Joint_Skinning_Info *joint_skinning_info;
 	u8 *joint_parent_indices;
 	M4 *joint_inverse_rest_pose;
@@ -366,20 +374,16 @@ struct Material {
 	Asset_ID normal_map;
 };
 
-// @TODO: Calculate based on available memory?
 #define MAX_LOADED_ASSET_COUNT 1000
 
 struct Game_Assets {
-	Memory_Arena arena;
-
 	Material materials[MAX_MATERIAL_COUNT];
 	s32 material_count;
 
-	Asset_Info<Animation_Asset, Animation_Instance> animations;
-	Asset_Info<Model_Asset, Model_Instance> models;
-
-	void *lookup[MAX_LOADED_ASSET_COUNT];
+	void *lookup[MAX_LOADED_ASSET_COUNT]; // @TODO: Use a hash table.
 };
+
+#define MAX_MODEL_INSTANCES 1000
 
 struct Game_State {
 	Game_Execution_Status execution_status;
@@ -387,6 +391,8 @@ struct Game_State {
 	Game_Assets assets;
 	Camera camera;
 
+	Model_Instance model_instances[MAX_MODEL_INSTANCES];
+	u32 model_instance_count;
+
 	Memory_Arena frame_arena;
-	Memory_Arena permanant_arena;
 };

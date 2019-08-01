@@ -212,8 +212,8 @@ void initialize_memory(Game_State *game_state) {
 	memory_block_free_head = NULL;
 
 	game_state->frame_arena = make_memory_arena();
-	game_state->assets.arena = make_memory_arena();
-	game_state->permanant_arena = make_memory_arena();
+	//game_state->assets.arena = make_memory_arena();
+	//game_state->permanant_arena = make_memory_arena();
 }
 
 #if 0

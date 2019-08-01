@@ -40,11 +40,11 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		index_count += assimp_scene->mMeshes[i]->mNumFaces * 3;
 	}
 
-	auto model = allocate_struct(&assets->arena, Model_Asset); // @TODO: Threading. Lock asset memory arena?
+	auto model = (Model_Asset *)malloc(sizeof(Model_Asset));//allocate_struct(&assets->arena, Model_Asset); // @TODO: Threading. Lock asset memory arena?
 	model->mesh_count = mesh_count;
-	model->meshes = allocate_array(&assets->arena, Mesh_Asset, model->mesh_count);
-	auto vertices = allocate_array(&assets->arena, Vertex, vertex_count);
-	auto indices = allocate_array(&assets->arena, u32, index_count);
+	model->meshes = (Mesh_Asset *)malloc(sizeof(Mesh_Asset) * model->mesh_count);//allocate_array(&assets->arena, Mesh_Asset, model->mesh_count);
+	auto vertices = (Vertex *)malloc(sizeof(Vertex) * vertex_count);//allocate_array(&assets->arena, Vertex, vertex_count);
+	auto indices = (u32 *)malloc(sizeof(u32) * index_count);//allocate_array(&assets->arena, u32, index_count);
 
 	assets->lookup[id] = model;
 
@@ -161,7 +161,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		}
 	}
 
-	transfer_model_data_to_gpu(model);
+	model->vertex_gpu_memory_offset = transfer_model_data_to_gpu(model);
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
@@ -443,8 +443,29 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 	*/
 }
 
+void create_model_instance(Game_State *game_state, Asset_ID id, Transform transform) {
+	auto asset = (Model_Asset *)game_state->assets.lookup[id];
+	auto instance = &game_state->model_instances[game_state->model_instance_count];
+	instance->transform = transform;
+	instance->mesh_count = asset->mesh_count;
+	instance->material_ids = NULL; // @TODO
+	instance->vertex_gpu_memory_offset = 0; // @TODO
+	instance->first_index = asset->meshes[0].indices[0]; // @TODO
+	instance->index_counts = (u32 *)malloc(sizeof(u32) * asset->mesh_count);
+	for (s32 i = 0; i < asset->mesh_count; i++) {
+		instance->index_counts[i] = asset->meshes[i].index_count;
+	}
+	//instance->uniform_offset = game_state->model_instance_count * sizeof(Dynamic_Scene_UBO); // @TODO
+
+	game_state->model_instance_count += 1;
+}
+
 void initialize_assets(Game_State *game_state) {
 	const char *path = "data/male2.fbx";
 	load_model(path, GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
-	//load_model(path, GUY2_ASSET, &game_state->assets, &game_state->frame_arena);
+	load_model(path, GUY2_ASSET, &game_state->assets, &game_state->frame_arena);
+	Transform t = {};
+	create_model_instance(game_state, GUY1_ASSET, t);
+	t.translation = {10.0f, 0.0, 0.0f};
+	create_model_instance(game_state, GUY2_ASSET, t);
 }

@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <execinfo.h>
 
 #include <string.h>
 
@@ -327,11 +328,12 @@ s32 main(s32, char **) {
 
 	// Initialize XInput2.
 	{
-		s32 event, error, major_version, minor_version;
+		s32 event, error;
 		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &event, &error)) {
 			_abort("The X server does not support the XInput extension");
 		}
 
+		s32 major_version = 2, minor_version = 0;
 		XIQueryVersion(linux_context.display, &major_version, &minor_version);
 		if (major_version < 2) {
 			_abort("XInput version 2.0 or greater is required: version %d.%d is available", major_version, minor_version);
@@ -805,6 +807,24 @@ Platform_Time get_current_platform_time() {
 // Time in milliseconds.
 s64 platform_time_difference(Platform_Time start, Platform_Time end, u32 resolution) {
 	return (end.tv_nsec - start.tv_nsec) / resolution;
+}
+
+void print_stacktrace() {
+	debug_print("Stack trace:\n");
+	const u32 address_buffer_size = 100;
+	void *addresses[address_buffer_size];
+	s32 address_count = backtrace(addresses, address_buffer_size);
+	if (address_count == address_buffer_size) {
+		debug_print("Stack trace is probably truncated.\n");
+	}
+	auto function_names = backtrace_symbols(addresses, address_count);
+	if (!function_names) {
+		debug_print("Failed to get function names");
+		return;
+	}
+	for (s32 i = 0; i < address_count; i++) {
+		debug_print("\t%s\n", function_names[i]);
+	}
 }
 
 #if 0

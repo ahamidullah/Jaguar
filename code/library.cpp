@@ -11,12 +11,15 @@ void log_print_actual(Log_Type, const char *file_name, int line, const char *fun
 void _abort_actual(const char *file_name, s32 line, const char *function_name, const char *format, ...) {
 	va_list arguments;
 	va_start(arguments, format);
-	debug_print("###########################################################################\n");
+	debug_print("###########################################################################\n\n");
 	debug_print("[PROGRAM ABORT]\n");
 	debug_print("%s: %s: %d:\n", file_name, function_name, line);
 	debug_print(format, arguments);
+	debug_print("\n\n");
+	print_stacktrace();
 	debug_print("\n###########################################################################\n");
 	va_end(arguments);
+
 #ifdef DEBUG
 	assert(0);
 #else

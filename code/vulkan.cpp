@@ -1,7 +1,3 @@
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h>
@@ -24,6 +20,20 @@
 #define SHADOW_MAP_COLOR_FORMAT VK_FORMAT_R8G8B8A8_UNORM
 #define SHADOW_MAP_FILTER VK_FILTER_LINEAR
 
+#define VULKAN_GPU_ALLOCATION_SIZE MEGABYTE(100)
+#define VULKAN_SHARED_ALLOCATION_SIZE MEGABYTE(100)
+#define VULKAN_IMAGE_ALLOCATION_SIZE MEGABYTE(100)
+
+#define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
+#define VULKAN_INDEX_MEMORY_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .25))
+
+#define VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET (0)
+#define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
+
+#define VULKAN_MAX_TEXTURE_COUNT (100)
+
 struct Shader_Module {
 	VkShaderModule module;
 	VkShaderStageFlagBits stage;
@@ -40,17 +50,14 @@ struct Framebuffer_Attachment {
 	VkDeviceMemory memory;
 };
 
-#define VULKAN_GPU_ALLOCATION_SIZE MEGABYTE(100)
-#define VULKAN_SHARED_ALLOCATION_SIZE MEGABYTE(100)
-#define VULKAN_IMAGE_ALLOCATION_SIZE MEGABYTE(100)
+struct GPU_Textures {
+	VkImage images[VULKAN_MAX_TEXTURE_COUNT];
+	VkImageView image_views[VULKAN_MAX_TEXTURE_COUNT];
+	u32 image_memory_offsets[VULKAN_MAX_TEXTURE_COUNT];
+	u32 count;
+};
 
-#define VULKAN_VERTEX_INDEX_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .75))
-#define VULKAN_UNIFORM_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .25))
-
-#define VULKAN_VERTEX_INDEX_SEGMENT_OFFSET (0)
-#define VULKAN_UNIFORM_SEGMENT_OFFSET (VULKAN_VERTEX_INDEX_SEGMENT_OFFSET + VULKAN_VERTEX_INDEX_SEGMENT_SIZE)
-
-#define VULKAN_MAX_TEXTURE_COUNT (100)
+typedef u32 Texture_ID;
 
 struct Vulkan_Context {
 	VkDebugUtilsMessengerEXT debug_messenger;
@@ -87,10 +94,14 @@ struct Vulkan_Context {
 	VkSemaphore              render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
 	VkFence                  inFlightFences[MAX_FRAMES_IN_FLIGHT];
 	u32                      currentFrame;
-	VkImage textureImage;
+
+	GPU_Textures textures;
+	//VkImage textureImage;
 	//VkDeviceMemory textureImageMemory;
-	VkImageView textureImageView;
+	//VkImageView textureImageView;
+
 	VkSampler textureSampler;
+
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
@@ -99,7 +110,12 @@ struct Vulkan_Context {
 	VkDeviceMemory gpu_memory;
 	VkDeviceMemory image_memory;
 
-	u32 image_memory_offset;
+	u32 image_memory_bytes_used;
+	u32 vertex_memory_bytes_used;
+	u32 index_memory_bytes_used;
+	u32 staging_memory_bytes_used;
+
+	//u32 vertex_memory_segment_offset;
 
 	VkBuffer gpu_buffer;
 	VkBuffer staging_buffer;
@@ -108,8 +124,8 @@ struct Vulkan_Context {
 	VkDeviceMemory vertexBufferMemory;
 
 	//VkDescriptorImageInfo image_infos[VULKAN_MAX_TEXTURE_COUNT];
-	VkImageView texture_image_views[VULKAN_MAX_TEXTURE_COUNT];
-	u32 texture_count;
+	//VkImageView texture_image_views[VULKAN_MAX_TEXTURE_COUNT];
+	//u32 texture_count;
 
 	struct {
 		VkDescriptorSet shadow_map;
@@ -140,13 +156,29 @@ struct Vulkan_Context {
 		VkSampler shadow_map_depth;
 	} samplers;
 
-	u32 vertex_count;
-	u32 index_count;
-	u32 vertex_index_offset;
+	//u32 vertex_count;
+	//u32 index_count;
+	//u32 vertex_index_offset;
 	VkDeviceSize minimum_uniform_buffer_offset_alignment;
 
 	Shaders shaders[SHADER_COUNT];
+
+	M4 scene_projection;
 } vulkan_context;
+
+struct UBO {
+};
+
+#define TEST_INSTANCES 10
+
+struct Dynamic_Scene_UBO {
+	M4 world_to_clip_space;
+	M4 world_to_shadow_map_clip_space;
+} dynamic_scene_ubo[TEST_INSTANCES];
+
+struct Shadow_Map_UBO {
+	alignas(16) M4 world_to_clip_space;
+} shadow_map_ubo;
 
 #define VK_CHECK(x)\
 	do {\
@@ -409,7 +441,7 @@ void allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_
 
 	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
 
-	VK_CHECK(vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory)); // @TODO: Custom allocator.
+	VK_CHECK(vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory));
 }
 
 void create_vulkan_pipelines(const char *vertex_shader_path, const char *fragment_shader_path, VkPipeline *pipeline) {
@@ -741,7 +773,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 
 		VkPushConstantRange push_constant_range = {};
 		push_constant_range.offset = 0;
-		push_constant_range.size = sizeof(s32);
+		push_constant_range.size = sizeof(s32) * 2;
 		push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		// Use pipeline layout to specify uniform layout.
@@ -980,115 +1012,115 @@ void create_vulkan_command_buffers() {
 	VK_CHECK(vkAllocateCommandBuffers(vulkan_context.device, &command_buffer_allocate_info, vulkan_context.command_buffers));
 }
 
-void build_vulkan_command_buffers(Game_Assets *assets, u32 i) {
-	vkResetCommandBuffer(vulkan_context.command_buffers[i], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+void build_vulkan_command_buffers(Model_Instance *model_instances, u32 model_instance_count, u32 image_index) {
+	vkResetCommandBuffer(vulkan_context.command_buffers[image_index], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
 
-	VkClearValue clear_color = {0.5f, 0.5f, 0.5f, 1.0f};
+	VkClearValue clear_color = {0.04f, 0.19f, 0.34f, 1.0f};
 	VkClearValue clear_depth_stencil = {1.0f, 0.0f};
 	VkClearValue clear_values[] = {
 		clear_color,
 		clear_depth_stencil,
 	};
-
 	VkBuffer vertex_buffers[] = {vulkan_context.gpu_buffer};
 	VkDeviceSize offsets[] = {0};
 
-	// Fill command buffers.
-	//for (u32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
-		VkCommandBufferBeginInfo command_buffer_begin_info = {};
-		command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		VK_CHECK(vkBeginCommandBuffer(vulkan_context.command_buffers[i], &command_buffer_begin_info));
+	VkCommandBufferBeginInfo command_buffer_begin_info = {};
+	command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+	VK_CHECK(vkBeginCommandBuffer(vulkan_context.command_buffers[image_index], &command_buffer_begin_info));
 
-		// Shadow map.
-		{
-			VkRenderPassBeginInfo render_pass_begin_info = {};
-			render_pass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			render_pass_begin_info.renderPass = vulkan_context.render_passes.shadow_map;
-			render_pass_begin_info.framebuffer = vulkan_context.xframebuffers.shadow_map;
-			render_pass_begin_info.renderArea.extent.width = SHADOW_MAP_WIDTH;
-			render_pass_begin_info.renderArea.extent.height = SHADOW_MAP_HEIGHT;
-			render_pass_begin_info.clearValueCount = 1;
-			render_pass_begin_info.pClearValues = &clear_depth_stencil;
+	// Shadow map.
+	{
+		VkRenderPassBeginInfo render_pass_begin_info = {};
+		render_pass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		render_pass_begin_info.renderPass = vulkan_context.render_passes.shadow_map;
+		render_pass_begin_info.framebuffer = vulkan_context.xframebuffers.shadow_map;
+		render_pass_begin_info.renderArea.extent.width = SHADOW_MAP_WIDTH;
+		render_pass_begin_info.renderArea.extent.height = SHADOW_MAP_HEIGHT;
+		render_pass_begin_info.clearValueCount = 1;
+		render_pass_begin_info.pClearValues = &clear_depth_stencil;
+		vkCmdBeginRenderPass(vulkan_context.command_buffers[image_index], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-			vkCmdBeginRenderPass(vulkan_context.command_buffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+		VkViewport viewport = {};
+		viewport.x        = 0.0f;
+		viewport.y        = 0.0f;
+		viewport.width    = (f32)SHADOW_MAP_WIDTH;
+		viewport.height   = (f32)SHADOW_MAP_HEIGHT;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(vulkan_context.command_buffers[image_index], 0, 1, &viewport);
 
-			VkViewport viewport = {};
-			viewport.x        = 0.0f;
-			viewport.y        = 0.0f;
-			viewport.width    = (f32)SHADOW_MAP_WIDTH;
-			viewport.height   = (f32)SHADOW_MAP_HEIGHT;
-			viewport.minDepth = 0.0f;
-			viewport.maxDepth = 1.0f;
-			vkCmdSetViewport(vulkan_context.command_buffers[i], 0, 1, &viewport);
+		VkRect2D scissor = {};
+		scissor.offset = {0, 0};
+		scissor.extent = {SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT};
+		vkCmdSetScissor(vulkan_context.command_buffers[image_index], 0, 1, &scissor);
+		// Set depth bias, AKA polygon offset. Required to avoid shadow mapping artifacts.
+		vkCmdSetDepthBias(vulkan_context.command_buffers[image_index], CONSTANT_DEPTH_BIAS, 0.0f, SLOPE_DEPTH_BIAS);
+		vkCmdBindPipeline(vulkan_context.command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.shadow_map_static);
+		vkCmdBindVertexBuffers(vulkan_context.command_buffers[image_index], 0, 1, vertex_buffers, offsets);
+		vkCmdBindIndexBuffer(vulkan_context.command_buffers[image_index], vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
 
-			VkRect2D scissor = {};
-			scissor.offset = {0, 0};
-			scissor.extent = {SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT};
-			vkCmdSetScissor(vulkan_context.command_buffers[i], 0, 1, &scissor);
-
-			// Set depth bias, AKA polygon offset. Required to avoid shadow mapping artifacts.
-			vkCmdSetDepthBias(vulkan_context.command_buffers[i], CONSTANT_DEPTH_BIAS, 0.0f, SLOPE_DEPTH_BIAS);
-
-			vkCmdBindPipeline(vulkan_context.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.shadow_map_static);
-
-			u32 dynamic_offset = 0;
-			vkCmdBindDescriptorSets(vulkan_context.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.shadow_map, 0, 1, &vulkan_context.xdescriptor_sets.shadow_map, 1, &dynamic_offset);
-
-			vkCmdBindVertexBuffers(vulkan_context.command_buffers[i], 0, 1, vertex_buffers, offsets);
-			vkCmdBindIndexBuffer(vulkan_context.command_buffers[i], vulkan_context.gpu_buffer, ((Model_Asset *)assets->lookup[0])->meshes[0].vertex_count * sizeof(Vertex), VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(vulkan_context.command_buffers[i], ((Model_Asset *)assets->lookup[0])->meshes[0].index_count, 1, 0, 0, 0);
-
-			vkCmdEndRenderPass(vulkan_context.command_buffers[i]);
-		}
-//////////////////////////////////////////
-
-		// Scene.
-		{
-			VkRenderPassBeginInfo render_pass_begin_info = {};
-			render_pass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			render_pass_begin_info.renderPass        = vulkan_context.render_pass;
-			render_pass_begin_info.framebuffer       = vulkan_context.framebuffers[i];
-			render_pass_begin_info.renderArea.offset = {0, 0};
-			render_pass_begin_info.renderArea.extent = vulkan_context.swapchain_image_extent;
-			render_pass_begin_info.clearValueCount   = ARRAY_COUNT(clear_values);
-			render_pass_begin_info.pClearValues      = clear_values;
-
-			vkCmdBeginRenderPass(vulkan_context.command_buffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
-			VkViewport viewport = {};
-			viewport.x        = 0.0f;
-			viewport.y        = 0.0f;
-			viewport.width    = (f32)vulkan_context.swapchain_image_extent.width;
-			viewport.height   = (f32)vulkan_context.swapchain_image_extent.height;
-			viewport.minDepth = 0.0f;
-			viewport.maxDepth = 1.0f;
-			vkCmdSetViewport(vulkan_context.command_buffers[i], 0, 1, &viewport);
-
-			VkRect2D scissor = {};
-			scissor.offset = {0, 0};
-			scissor.extent = {vulkan_context.swapchain_image_extent.width, vulkan_context.swapchain_image_extent.height};
-			vkCmdSetScissor(vulkan_context.command_buffers[i], 0, 1, &scissor);
-
-			vkCmdBindPipeline(vulkan_context.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.textured_static);
-
-			s32 push_constant = 0;
-			vkCmdPushConstants(vulkan_context.command_buffers[i], vulkan_context.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(s32), (void *)&push_constant);
-
-			// @TODO: Use a single buffer with offsets.
-			vkCmdBindVertexBuffers(vulkan_context.command_buffers[i], 0, 1, vertex_buffers, offsets);
-			vkCmdBindIndexBuffer(vulkan_context.command_buffers[i], vulkan_context.gpu_buffer, ((Model_Asset *)assets->lookup[0])->meshes[0].vertex_count * sizeof(Vertex), VK_INDEX_TYPE_UINT32);
-			u32 dynamic_offset = 0;
-			vkCmdBindDescriptorSets(vulkan_context.command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, 0, 1, &vulkan_context.descriptor_sets[i], 1, &dynamic_offset);
-
-			//vkCmdDraw(vulkan_context.command_buffers[i], ARRAY_COUNT(vertices), 1, 0, 0);
-			vkCmdDrawIndexed(vulkan_context.command_buffers[i], ((Model_Asset *)assets->lookup[0])->meshes[0].index_count, 1, 0, 0, 0);
-
-			vkCmdEndRenderPass(vulkan_context.command_buffers[i]);
+		for (u32 i = 0; i < model_instance_count; i++) {
+			for (u32 j = 0; j < model_instances[i].mesh_count; j++) {
+				u32 dynamic_offset = i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+				vkCmdBindDescriptorSets(vulkan_context.command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.shadow_map, 0, 1, &vulkan_context.xdescriptor_sets.shadow_map, 1, &dynamic_offset);
+				vkCmdDrawIndexed(vulkan_context.command_buffers[image_index], model_instances[i].index_counts[j], 1, model_instances[i].first_index, model_instances[i].vertex_gpu_memory_offset, 0);
+			}
 		}
 
-		VK_CHECK(vkEndCommandBuffer(vulkan_context.command_buffers[i]));
-	//}
+		vkCmdEndRenderPass(vulkan_context.command_buffers[image_index]);
+	}
+
+	// Scene.
+	{
+		VkRenderPassBeginInfo render_pass_begin_info = {};
+		render_pass_begin_info.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		render_pass_begin_info.renderPass        = vulkan_context.render_pass;
+		render_pass_begin_info.framebuffer       = vulkan_context.framebuffers[image_index];
+		render_pass_begin_info.renderArea.offset = {0, 0};
+		render_pass_begin_info.renderArea.extent = vulkan_context.swapchain_image_extent;
+		render_pass_begin_info.clearValueCount   = ARRAY_COUNT(clear_values);
+		render_pass_begin_info.pClearValues      = clear_values;
+
+		vkCmdBeginRenderPass(vulkan_context.command_buffers[image_index], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		VkViewport viewport = {};
+		viewport.x        = 0.0f;
+		viewport.y        = 0.0f;
+		viewport.width    = (f32)vulkan_context.swapchain_image_extent.width;
+		viewport.height   = (f32)vulkan_context.swapchain_image_extent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(vulkan_context.command_buffers[image_index], 0, 1, &viewport);
+
+		VkRect2D scissor = {};
+		scissor.offset = {0, 0};
+		scissor.extent = {vulkan_context.swapchain_image_extent.width, vulkan_context.swapchain_image_extent.height};
+		vkCmdSetScissor(vulkan_context.command_buffers[image_index], 0, 1, &scissor);
+		vkCmdBindPipeline(vulkan_context.command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.textured_static);
+		// @TODO: Use a single buffer with offsets.
+		vkCmdBindVertexBuffers(vulkan_context.command_buffers[image_index], 0, 1, vertex_buffers, offsets);
+		vkCmdBindIndexBuffer(vulkan_context.command_buffers[image_index], vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
+
+		u32 total_mesh_count = 0;
+		for (u32 i = 0; i < model_instance_count; i++) {
+			for (u32 j = 0; j < model_instances[i].mesh_count; j++) {
+				// @TODO: Get the texture index from the material?
+				s32 push_constant = 0;
+				vkCmdPushConstants(vulkan_context.command_buffers[image_index], vulkan_context.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, total_mesh_count * sizeof(u32), sizeof(s32), (void *)&push_constant);
+				total_mesh_count += 1;
+
+				u32 dynamic_offset = i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+				vkCmdBindDescriptorSets(vulkan_context.command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, 0, 1, &vulkan_context.descriptor_sets[image_index], 1, &dynamic_offset);
+				vkCmdDrawIndexed(vulkan_context.command_buffers[image_index], model_instances[i].index_counts[j], 1, model_instances[i].first_index, 0, 0);
+				//vkCmdDrawIndexed(vulkan_context.command_buffers[i], ((Model_Asset *)assets->lookup[0])->meshes[0].index_count, 1, 0, 0, 0);
+			}
+		}
+
+		vkCmdEndRenderPass(vulkan_context.command_buffers[image_index]);
+	}
+
+	VK_CHECK(vkEndCommandBuffer(vulkan_context.command_buffers[image_index]));
 }
 
 void create_vulkan_buffer(VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags desired_memory_properties) {
@@ -1107,7 +1139,17 @@ void create_vulkan_buffer(VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize
 	VK_CHECK(vkBindBufferMemory(vulkan_context.device, *buffer, *memory, 0));
 }
 
-void copy_vulkan_buffer(VkBuffer source, VkBuffer destination, VkDeviceSize size) {
+void stage_vulkan_data(void *data, u32 size) {
+	void *shared_memory;
+	// @TODO: Keep shared memory mapped permanantly?
+	VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, vulkan_context.staging_memory_bytes_used, VK_WHOLE_SIZE, 0, &shared_memory));
+	memcpy((char *)shared_memory + vulkan_context.staging_memory_bytes_used, data, size);
+	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
+	vulkan_context.staging_memory_bytes_used += size;
+}
+
+void transfer_staged_vulkan_data(u32 offset) {
+	// @TODO: Try to create a reusable command buffer for copying?
     VkCommandBufferAllocateInfo allocate_info = {};
     allocate_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocate_info.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1122,72 +1164,96 @@ void copy_vulkan_buffer(VkBuffer source, VkBuffer destination, VkDeviceSize size
 	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 	vkBeginCommandBuffer(command_buffer, &begin_info);
-	VkBufferCopy copyRegion = {};
-	copyRegion.srcOffset = 0; // Optional
-	copyRegion.dstOffset = 0; // Optional
-	copyRegion.size = size;
-	vkCmdCopyBuffer(command_buffer, source, destination, 1, &copyRegion);
+	VkBufferCopy copy_region = {};
+	copy_region.srcOffset = 0;
+	copy_region.dstOffset = offset;
+	copy_region.size      = vulkan_context.staging_memory_bytes_used;
+	vkCmdCopyBuffer(command_buffer, vulkan_context.staging_buffer, vulkan_context.gpu_buffer, 1, &copy_region);
 	vkEndCommandBuffer(command_buffer);
-	VkSubmitInfo submitInfo = {};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &command_buffer;
 
-	vkQueueSubmit(vulkan_context.graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
+	VkSubmitInfo submit_info = {};
+	submit_info.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount = 1;
+	submit_info.pCommandBuffers    = &command_buffer;
+
+	vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+	vkQueueWaitIdle(vulkan_context.graphics_queue); // @TODO: Use a fence?
+	vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
+
+	vulkan_context.staging_memory_bytes_used = 0;
+}
+
+void copy_vulkan_buffer(VkBuffer source, VkBuffer destination, VkDeviceSize size, u32 source_offset, u32 destination_offset) {
+	// @TODO: Try to create a reusable command buffer for copying?
+    VkCommandBufferAllocateInfo allocate_info = {};
+    allocate_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocate_info.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocate_info.commandPool        = vulkan_context.command_pool;
+    allocate_info.commandBufferCount = 1;
+
+    VkCommandBuffer command_buffer;
+    vkAllocateCommandBuffers(vulkan_context.device, &allocate_info, &command_buffer);
+
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(command_buffer, &begin_info);
+	VkBufferCopy copy_region = {};
+	copy_region.srcOffset = source_offset;
+	copy_region.dstOffset = destination_offset;
+	copy_region.size      = size;
+	vkCmdCopyBuffer(command_buffer, source, destination, 1, &copy_region);
+	vkEndCommandBuffer(command_buffer);
+
+	VkSubmitInfo submit_info = {};
+	submit_info.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount = 1;
+	submit_info.pCommandBuffers    = &command_buffer;
+
+	vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
 	vkQueueWaitIdle(vulkan_context.graphics_queue); // @TODO: Use a fence?
 	vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
 }
 
-struct UBO {
-};
+void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
-#define TEST_INSTANCES 10
+	VkBufferCopy copyRegion = {};
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-struct Dynamic_Scene_UBO {
-	M4 world_to_clip_space;
-	M4 world_to_shadow_map_clip_space;
-} dynamic_scene_ubo[TEST_INSTANCES];
+	endSingleTimeCommands(commandBuffer);
+}
 
-struct {
-	alignas(16) M4 world_to_clip_space;
-} shadow_map_ubo;
+void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 1;
+	region.imageOffset = {0, 0, 0};
+	region.imageExtent = {
+		width,
+		height,
+		1
+	};
 
-        VkBufferCopy copyRegion = {};
-        copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        endSingleTimeCommands(commandBuffer);
-    }
-
-    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
-
-        VkBufferImageCopy region = {};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = {0, 0, 0};
-        region.imageExtent = {
-            width,
-            height,
-            1
-        };
-
-        vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-        endSingleTimeCommands(commandBuffer);
-    }
+	endSingleTimeCommands(commandBuffer);
+}
 
 void load_model(Model_Asset *model, const char *path);
 
 void load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height) {
+	Texture_ID id = vulkan_context.textures.count;
+
 	VkDeviceSize imageSize = texture_width * texture_height * 4;
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
@@ -1197,75 +1263,79 @@ void load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height) {
 	memcpy(data, pixels, static_cast<size_t>(imageSize));
 	vkUnmapMemory(vulkan_context.device, stagingBufferMemory);
 
-	VkImageCreateInfo imageInfo = {};
-	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.extent.width = static_cast<uint32_t>(texture_width);
-	imageInfo.extent.height = static_cast<uint32_t>(texture_height);
-	imageInfo.extent.depth = 1;
-	imageInfo.mipLevels = 1;
-	imageInfo.arrayLayers = 1;
-	imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	VK_CHECK(vkCreateImage(vulkan_context.device, &imageInfo, NULL, &vulkan_context.textureImage));
+	VkImageCreateInfo image_create_info = {};
+	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_create_info.imageType = VK_IMAGE_TYPE_2D;
+	image_create_info.extent.width = static_cast<uint32_t>(texture_width);
+	image_create_info.extent.height = static_cast<uint32_t>(texture_height);
+	image_create_info.extent.depth = 1;
+	image_create_info.mipLevels = 1;
+	image_create_info.arrayLayers = 1;
+	image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	VK_CHECK(vkCreateImage(vulkan_context.device, &image_create_info, NULL, &vulkan_context.textures.images[id]));
+	auto image = vulkan_context.textures.images[id];
 
-	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(vulkan_context.device, vulkan_context.textureImage, &memRequirements);
+	VkMemoryRequirements memory_requirements;
+	vkGetImageMemoryRequirements(vulkan_context.device, image, &memory_requirements);
+	u32 image_size = memory_requirements.size;
+	u32 memory_offset = align_to(vulkan_context.image_memory_bytes_used, memory_requirements.alignment);
+	vulkan_context.image_memory_bytes_used += memory_offset + image_size;
 
-	//allocate_vulkan_memory(&vulkan_context.textureImageMemory, memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	u32 image_size = memRequirements.size;
-	u32 memory_offset = align_to(vulkan_context.image_memory_offset, memRequirements.alignment);
-	vulkan_context.image_memory_offset += memory_offset + image_size;
-
-	vkBindImageMemory(vulkan_context.device, vulkan_context.textureImage, vulkan_context.image_memory, memory_offset);
-	transitionImageLayout(vulkan_context.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	copyBufferToImage(stagingBuffer, vulkan_context.textureImage, static_cast<uint32_t>(texture_width), static_cast<uint32_t>(texture_height));
-	transitionImageLayout(vulkan_context.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkBindImageMemory(vulkan_context.device, image, vulkan_context.image_memory, memory_offset);
+	transitionImageLayout(image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	copyBufferToImage(stagingBuffer, image, static_cast<uint32_t>(texture_width), static_cast<uint32_t>(texture_height));
+	transitionImageLayout(image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	vkDestroyBuffer(vulkan_context.device, stagingBuffer, NULL);
 	vkFreeMemory(vulkan_context.device, stagingBufferMemory, NULL);
 
-	VkImageViewCreateInfo viewInfo = {};
-	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	viewInfo.image = vulkan_context.textureImage;
-	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	viewInfo.subresourceRange.baseMipLevel = 0;
-	viewInfo.subresourceRange.levelCount = 1;
-	viewInfo.subresourceRange.baseArrayLayer = 0;
-	viewInfo.subresourceRange.layerCount = 1;
-	VK_CHECK(vkCreateImageView(vulkan_context.device, &viewInfo, NULL, &vulkan_context.textureImageView));
+	VkImageViewCreateInfo image_view_create_info = {};
+	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	image_view_create_info.image = image;
+	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	image_view_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_view_create_info.subresourceRange.baseMipLevel = 0;
+	image_view_create_info.subresourceRange.levelCount = 1;
+	image_view_create_info.subresourceRange.baseArrayLayer = 0;
+	image_view_create_info.subresourceRange.layerCount = 1;
+	VK_CHECK(vkCreateImageView(vulkan_context.device, &image_view_create_info, NULL, &vulkan_context.textures.image_views[id]));
 
-	vulkan_context.texture_image_views[vulkan_context.texture_count] = vulkan_context.textureImageView;
-	vulkan_context.texture_count += 1;
+	vulkan_context.textures.count += 1;
+
+	//vulkan_context.texture_image_views[vulkan_context.texture_count] = vulkan_context.textureImageView;
 }
 
-void transfer_model_data_to_gpu(Model_Asset *model) {
-	auto total_data_size = 0;
+u32 transfer_model_data_to_gpu(Model_Asset *model) {
+	// @TODO: Multithreaded asset load?
 
+	auto total_vertices_size = 0;
 	for (s32 i = 0; i < model->mesh_count; i++) {
-		auto vertex_size = model->meshes[i].vertex_count * sizeof(Vertex);
-		auto index_size = model->meshes[i].index_count * sizeof(u32);
-		auto data_size = vertex_size + index_size;
-
-		void *data;
-		VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, vulkan_context.vertex_index_offset, data_size, 0, &data));
-		memcpy(data, model->meshes[i].vertices, vertex_size);
-		memcpy(((char *)data) + vertex_size, model->meshes[i].indices, index_size);
-		vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
-
-		vulkan_context.vertex_index_offset += data_size;
-		total_data_size += data_size;
+		auto vertices_size = model->meshes[i].vertex_count * sizeof(Vertex);
+		stage_vulkan_data(model->meshes[i].vertices, vertices_size);
+		total_vertices_size += vertices_size;
 	}
+	transfer_staged_vulkan_data(VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + vulkan_context.vertex_memory_bytes_used);
+	auto vertex_memory_start = vulkan_context.vertex_memory_bytes_used;
+	vulkan_context.vertex_memory_bytes_used += total_vertices_size;
+	assert(vulkan_context.vertex_memory_bytes_used < VULKAN_VERTEX_MEMORY_SEGMENT_SIZE);
 
-	// @TODO: Batch copies?
-	copy_vulkan_buffer(vulkan_context.staging_buffer, vulkan_context.gpu_buffer, total_data_size);
+	auto total_indices_size = 0;
+	for (s32 i = 0; i < model->mesh_count; i++) {
+		auto indices_size = model->meshes[i].index_count * sizeof(u32);
+		stage_vulkan_data(model->meshes[i].indices, indices_size);
+		total_indices_size += indices_size;
+	}
+	transfer_staged_vulkan_data(VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + vulkan_context.index_memory_bytes_used);
+	vulkan_context.index_memory_bytes_used += total_indices_size;
+	assert(vulkan_context.index_memory_bytes_used < VULKAN_INDEX_MEMORY_SEGMENT_SIZE);
+
+	return vertex_memory_start;
 }
 
 void do_ds() {
@@ -1685,7 +1755,7 @@ void initialize_renderer(Game_State *game_state) {
 
 		for (s32 i = 0; i < ARRAY_COUNT(requests); i++) {
 			requests[i].shaders->module_count = requests[i].shader_module_count;
-			requests[i].shaders->modules = allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
+			requests[i].shaders->modules = (Shader_Module *)malloc(sizeof(Shader_Module) * requests[i].shader_module_count);//allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
 
 			for (s32 j = 0; j < requests[i].shader_module_count; j++) {
 				// @TODO: Subarena.
@@ -1935,7 +2005,7 @@ void initialize_renderer(Game_State *game_state) {
 		VK_CHECK(vkCreateDescriptorPool(vulkan_context.device, &pool_info, NULL, &vulkan_context.descriptor_pool));
 	}
 
-	ubo_offset = align_to(VULKAN_UNIFORM_SEGMENT_OFFSET, vulkan_context.minimum_uniform_buffer_offset_alignment);
+	ubo_offset = align_to(VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET, vulkan_context.minimum_uniform_buffer_offset_alignment);
 	sm_ubo_offset = align_to(ubo_offset + sizeof(UBO) * 3 + (256 * 3), vulkan_context.minimum_uniform_buffer_offset_alignment);
 	dubo_offset = align_to(sm_ubo_offset + sizeof(shadow_map_ubo), vulkan_context.minimum_uniform_buffer_offset_alignment);
 
@@ -2073,113 +2143,10 @@ void initialize_renderer(Game_State *game_state) {
 			vkUpdateDescriptorSets(vulkan_context.device, ARRAY_COUNT(descriptor_writes), descriptor_writes, 0, NULL);
 		}
 	}
-	//do_ds();
 
 	// @TODO: Try to use a seperate queue family for transfer operations so that it can be parallelized.
 
-#if 0
-	// Vertex buffers.
-	{
-		VkDeviceSize buffer_size = sizeof(vertices);
-		auto [ staging_buffer, staging_buffer_memory ] = make_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		void* data;
-		VK_DIE_IF_ERROR(vkMapMemory, vk_context.device, staging_buffer_memory, 0, buffer_size, 0, &data);
-		memcpy(data, vertices, (size_t)buffer_size);
-		vkUnmapMemory(vk_context.device, staging_buffer_memory);
-
-		auto res = make_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		vk_context.vertex_buffer = res.buffer;
-		vk_context.vertex_buffer_memory = res.buffer_memory;
-
-		copy_buffer(staging_buffer, vk_context.vertex_buffer, buffer_size);
-
-		vkDestroyBuffer(vk_context.device, staging_buffer, NULL);
-		vkFreeMemory(vk_context.device, staging_buffer_memory, NULL);
-	}
-
-	// Index buffers.
-	{
-		VkDeviceSize buffer_size = sizeof(indices[0]) * ARRAY_COUNT(indices);
-		auto [ staging_buffer, staging_buffer_memory ] = make_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		void* data;
-		VK_DIE_IF_ERROR(vkMapMemory, vk_context.device, staging_buffer_memory, 0, buffer_size, 0, &data);
-		memcpy(data, indices, (size_t)buffer_size);
-		vkUnmapMemory(vk_context.device, staging_buffer_memory);
-
-		auto res = make_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		vk_context.index_buffer = res.buffer;
-		vk_context.index_buffer_memory = res.buffer_memory;
-
-		copy_buffer(staging_buffer, vk_context.index_buffer, buffer_size);
-
-		vkDestroyBuffer(vk_context.device, staging_buffer, NULL);
-		vkFreeMemory(vk_context.device, staging_buffer_memory, NULL);
-	}
-
-	// Uniform buffers
-	{
-		VkDeviceSize buffer_size = sizeof(Uniform_Buffer_Object);
-		auto res = make_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		vk_context.uniform_buffer = res.buffer;
-		vk_context.uniform_buffer_memory = res.buffer_memory;
-	}
-
-	// Descriptor pool.
-	{
-		VkDescriptorPoolSize pool_size = {};
-		pool_size.type             =  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool_size.descriptorCount  =  1;
-
-		VkDescriptorPoolCreateInfo pool_info = {};
-		pool_info.sType          =  VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		pool_info.poolSizeCount  =  1;
-		pool_info.pPoolSizes     =  &pool_size;
-		pool_info.maxSets        =  1;
-
-		VK_DIE_IF_ERROR(vkCreateDescriptorPool, vk_context.device, &pool_info, NULL, &vk_context.descriptor_pool);
-	}
-
-	// Descriptor set.
-	{
-		VkDescriptorSetLayout layouts[] = {vk_context.descriptor_set_layout};
-		VkDescriptorSetAllocateInfo ai = {};
-		ai.sType               =  VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		ai.descriptorPool      =  vk_context.descriptor_pool;
-		ai.descriptorSetCount  =  1;
-		ai.pSetLayouts         =  layouts;
-		VK_DIE_IF_ERROR(vkAllocateDescriptorSets, vk_context.device, &ai, &vk_context.descriptor_set);
-
-		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer  =  vk_context.uniform_buffer;
-		bufferInfo.offset  =  0;
-		bufferInfo.range   =  sizeof(Uniform_Buffer_Object);
-
-		VkWriteDescriptorSet descriptorWrite = {};
-		descriptorWrite.sType            =  VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrite.dstSet           =  vk_context.descriptor_set;
-		descriptorWrite.dstBinding       =  0;
-		descriptorWrite.dstArrayElement  =  0;
-		descriptorWrite.descriptorType   =  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrite.descriptorCount  =  1;
-		descriptorWrite.pBufferInfo = &bufferInfo;
-		descriptorWrite.pImageInfo = NULL;
-		descriptorWrite.pTexelBufferView = NULL;
-
-		vkUpdateDescriptorSets(vk_context.device, 1, &descriptorWrite, 0, NULL);
-	}
-
-	vk_context.command_buffers = make_command_buffers(vk_context.swapchain_context, vk_context.device, vk_context.command_pool);
-
-	// Semaphore.
-	{
-		VkSemaphoreCreateInfo ci = {};
-		ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		VK_DIE_IF_ERROR(vkCreateSemaphore, vk_context.device, &ci, NULL, &vk_context.image_available_semaphore);
-		VK_DIE_IF_ERROR(vkCreateSemaphore, vk_context.device, &ci, NULL, &vk_context.render_finished_semaphore);
-	}
-#endif
+	vulkan_context.scene_projection = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height, 0.1f, 100.0f);
 }
 
 const M4 shadow_map_clip_space_bias = {
@@ -2196,7 +2163,7 @@ void update_texture_descriptor(Memory_Arena *arena, u32 swapchain_image_index) {
 	for (s32 i = 0; i < VULKAN_MAX_TEXTURE_COUNT; i++) {
 		//VkDescriptorImageInfo image_info = {};
 		image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_infos[i].imageView = vulkan_context.texture_image_views[0];
+		image_infos[i].imageView = vulkan_context.textures.image_views[0];
 		image_infos[i].sampler = NULL;
 	}
 
@@ -2217,7 +2184,30 @@ void update_texture_descriptor(Memory_Arena *arena, u32 swapchain_image_index) {
 	//}
 }
 
-#include <chrono>
+void update_uniform_buffers(Game_State *game_state, u32 image_index) {
+	shadow_map_ubo.world_to_clip_space = orthographic_projection(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 20.0f) * look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f}) * m4_identity();
+
+	UBO scene_ubo;
+
+	M4 model_matrix = m4_identity();
+	for (s32 i = 0; i < game_state->model_instance_count; i++) {
+		set_translation(&model_matrix, game_state->model_instances[i].transform.translation);
+		dynamic_scene_ubo[i].world_to_clip_space = vulkan_context.scene_projection * game_state->camera.view_matrix * model_matrix;
+		dynamic_scene_ubo[i].world_to_shadow_map_clip_space = shadow_map_clip_space_bias * shadow_map_ubo.world_to_clip_space * model_matrix;
+	}
+
+	stage_vulkan_data(&scene_ubo, sizeof(UBO));
+	transfer_staged_vulkan_data(align_to(ubo_offset + (sizeof(UBO) * image_index), vulkan_context.minimum_uniform_buffer_offset_alignment));
+
+	stage_vulkan_data(&shadow_map_ubo, sizeof(shadow_map_ubo));
+	transfer_staged_vulkan_data(sm_ubo_offset);
+
+	for (s32 i = 0; i < TEST_INSTANCES; i++) {
+		stage_vulkan_data(&dynamic_scene_ubo[i], sizeof(dynamic_scene_ubo[i]));
+		transfer_staged_vulkan_data(dubo_offset + i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment));
+	}
+}
+
 void render(Game_State *game_state) {
 	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], true, UINT64_MAX);
 	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
@@ -2226,19 +2216,21 @@ void render(Game_State *game_state) {
     VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &image_index));
 
     update_texture_descriptor(&game_state->frame_arena, image_index);
-    build_vulkan_command_buffers(&game_state->assets, image_index);
+    build_vulkan_command_buffers(game_state->model_instances, game_state->model_instance_count, image_index);
 
 	VkSemaphore wait_semaphores[] = {vulkan_context.image_available_semaphores[vulkan_context.currentFrame]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 	VkSemaphore signal_semaphores[] = {vulkan_context.render_finished_semaphores[vulkan_context.currentFrame]};
 
-	static auto startTime = std::chrono::high_resolution_clock::now();
-
-	auto currentTime = std::chrono::high_resolution_clock::now();
-	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
+	update_uniform_buffers(game_state, image_index);
+#if 0
 	auto model = m4_identity();
 	UBO scene_ubo;
+	dynamic_scene_ubo[0].world_to_clip_space = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height, 0.1f, 100.0f) * game_state->camera.view_matrix * model;
+	shadow_map_ubo.world_to_clip_space = orthographic_projection(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 20.0f) * look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f}) * m4_identity();
+	dynamic_scene_ubo[0].world_to_shadow_map_clip_space = shadow_map_clip_space_bias * shadow_map_ubo.world_to_clip_space * model;
+
+	//set_translation(&model, {0.0f, 0.0f, 0.0f});
 	//Dynamic_Scene_UBO dynamic_scene_ubo;
 	//ubo.model = m4_identity();//glm::transpose(glm::rotate(glm::mat4(1.0f), 0 * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)));
 	//ubo.view = glm::lookAt(glm::vec3(3.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -2247,17 +2239,14 @@ void render(Game_State *game_state) {
 	//ubo.view = game_state->camera.view_matrix;//(look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}));
 	//ubo.view = (look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}));
 	//ubo.projection = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height);
-	dynamic_scene_ubo[0].world_to_clip_space = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height) * game_state->camera.view_matrix * model;
 
 	//shadow_map_ubo.model = m4_identity();
 	//shadow_map_ubo.view = look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f});
-	shadow_map_ubo.world_to_clip_space = orthographic_projection(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 10.0f) * look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f}) * m4_identity();
 	//shadow_map_ubo.projection = perspective_projection(90.0f, 1.0f);
 
 	//ubo.light_model = shadow_map_ubo.model;
 	//ubo.light_view = shadow_map_ubo.view;
 	//ubo.light_projection = shadow_map_ubo.projection;
-	dynamic_scene_ubo[0].world_to_shadow_map_clip_space = shadow_map_clip_space_bias * shadow_map_ubo.world_to_clip_space * model;
 
 	void* data;
 	vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, align_to(ubo_offset + (sizeof(UBO) * image_index), vulkan_context.minimum_uniform_buffer_offset_alignment), sizeof(scene_ubo), 0, &data);
@@ -2304,6 +2293,7 @@ void render(Game_State *game_state) {
 		vkQueueWaitIdle(vulkan_context.graphics_queue); // @TODO: Use a fence?
 		vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
 	}
+#endif
 
 	VkSubmitInfo submit_info = {};
 	submit_info.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2365,9 +2355,9 @@ void cleanup_renderer() {
 	vkDestroySwapchainKHR(vulkan_context.device, vulkan_context.swapchain, NULL);
 
 	vkDestroySampler(vulkan_context.device, vulkan_context.textureSampler, NULL);
-	vkDestroyImageView(vulkan_context.device, vulkan_context.textureImageView, NULL);
+	//vkDestroyImageView(vulkan_context.device, vulkan_context.textureImageView, NULL);
 
-	vkDestroyImage(vulkan_context.device, vulkan_context.textureImage, NULL);
+	//vkDestroyImage(vulkan_context.device, vulkan_context.textureImage, NULL);
 	vkFreeMemory(vulkan_context.device, vulkan_context.image_memory, NULL);
 
 	vkDestroyDescriptorPool(vulkan_context.device, vulkan_context.descriptor_pool, NULL);

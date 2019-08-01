@@ -47,7 +47,7 @@ void main() {
 	fragment_normal = vertex_normal;
 	fragment_uv = vertex_uv;
 	//world_space_position =  vec3(ubo.model_transform * vec4(position, 1.0));
-	shadow_map_position =  dynamic_ubo.world_to_shadow_map_clip_space * vec4(position, 1.0);
+	shadow_map_position = dynamic_ubo.world_to_shadow_map_clip_space * vec4(position, 1.0);
 
 	//gl_Position = ubo.world_to_clip_space * vec4(position, 1.0);
 	gl_Position = dynamic_ubo.world_to_clip_space * vec4(position, 1.0);

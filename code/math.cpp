@@ -284,45 +284,44 @@ M4 transpose(M4 matrix) {
 }
 
 M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
-	f32 focal_length = 1 / tan(fovy / 2);
-
+	auto focal_length = 1.0f / tanf(DEGREES_TO_RADIANS(fovy) / 2.0f);
 	return {
-		focal_length, 0,                            0,                            0,
-		0,            -focal_length * aspect_ratio,  0,                            0,
-		0,            0,                           -(far + near) / (far - near), -(2.0f * far * near) / (far - near),
-		0,            0,                           -1.0f,                         0,
+		focal_length / aspect_ratio,   0.0f,           0.0f,                 0.0f,
+		0.0f,                         -focal_length,   0.0f,                 0.0f,
+		0.0f,                          0.0f,           far / (near - far),  -(far * near) / (far - near),
+		0.0f,                          0.0f,          -1.0f,                 0.0f,
 	};
 }
 
 // Assumes near is 0.01f and far is infinity.
 M4 perspective_projection(f32 fovy, f32 aspect_ratio) {
 	const f32 near = 0.01f;
-	f32 focal_length = 1 / tan(fovy / 2);
+	f32 focal_length = 1 / tan(DEGREES_TO_RADIANS(fovy) / 2);
 
 	return {
-		focal_length,  0,                            0,     0,
-		0,             -focal_length * aspect_ratio,  0,     0,
-		0,             0,                           -1.0f, -2.0f*near,
-		0,             0,                           -1.0f,  0,
+		focal_length,   0.0f,                          0.0f,   0.0f,
+		0.0f,          -focal_length * aspect_ratio,   0.0f,   0.0f,
+		0.0f,           0.0f,                         -1.0f,  -2.0f * near,
+		0.0f,           0.0f,                         -1.0f,   0.0f,
 	};
 }
 
 // Assumes near is -1.0f and far is 1.0f.
 M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top) {
 	return {
-		2.0f / (right - left),  0,                      0,      -(right + left) / (right - left),
-		0,                      2.0f / (top - bottom),  0,      -(top + bottom) / (top - bottom),
-		0,                      0,                      -1.0f,  0,
-		0,                      0,                      0,      1.0f,
+		2.0f / (right - left),   0.0f,                    0.0f,  -(right + left) / (right - left),
+		0.0f,                   -2.0f / (top - bottom),   0.0f,  -(top + bottom) / (top - bottom),
+		0.0f,                    0.0f,                   -1.0f,   0.0f,
+		0.0f,                    0.0f,                    0.0f,   1.0f,
 	};
 }
 
 M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
 	return {
-		2.0f / (right - left),  0,                      0,                     -(right + left) / (right - left),
-	    0,                      -2.0f / (top - bottom),  0,                     -(top + bottom) / (top - bottom),
-	    0,                      0,                      -1.0f / (far - near),  -near / (far - near),
-	    0,                      0,                      0,                     1.0f,
+		2.0f / (right - left),   0.0f,                    0.0f,                 -(right + left) / (right - left),
+	    0.0f,                   -2.0f / (top - bottom),   0.0f,                 -(top + bottom) / (top - bottom),
+	    0.0f,                    0.0f,                   -1.0f / (far - near),  -near / (far - near),
+	    0.0f,                    0.0f,                    0.0f,                  1.0f,
 	};
 }
 

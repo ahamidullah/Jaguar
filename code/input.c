@@ -1,39 +1,43 @@
 #define MAX_SENSITIVITY 1.0f
 
+IO_Buttons initialize_buttons(Memory_Arena *arena, u32 count) {
+	IO_Buttons result;
+	result.down = allocate_array(arena, u8, count);
+	result.pressed = allocate_array(arena, u8, count);
+	result.released = allocate_array(arena, u8, count);
+	return result;
+}
+
 void initialize_input(Game_State *game_state) {
+	game_state->input.keyboard = initialize_buttons(&game_state->permanent_arena, SCANCODE_COUNT);
+	game_state->input.mouse.buttons = initialize_buttons(&game_state->permanent_arena, MOUSE_BUTTON_COUNT);
 	game_state->input.mouse.sensitivity = 0.2 * MAX_SENSITIVITY;
 	get_mouse_xy(&game_state->input.mouse.x, &game_state->input.mouse.y);
 }
 
-template <u32 T>
-void press_button(u32 index, IO_Buttons<T> *buttons) {
+void press_button(u32 index, IO_Buttons *buttons) {
 	buttons->pressed[index] = !buttons->down[index];
-	buttons->down[index] = true;
+	buttons->down[index] = 1;
 }
 
-template <u32 T>
-void release_button(u32 index, IO_Buttons<T> *buttons) {
+void release_button(u32 index, IO_Buttons *buttons) {
 	buttons->released[index] = buttons->down[index];
-	buttons->down[index] = false;
+	buttons->down[index] = 0;
 }
 
-template <u32 T>
-u8 button_down(u32 index, IO_Buttons<T> *buttons) {
+u8 button_down(u32 index, IO_Buttons *buttons) {
 	return buttons->down[index];
 }
 
-template <u32 T>
-u8 button_up(u32 index, IO_Buttons<T> *buttons) {
+u8 button_up(u32 index, IO_Buttons *buttons) {
 	return !buttons->down[index];
 }
 
-template <u32 T>
-u8 button_pressed(u32 index, IO_Buttons<T> *buttons) {
+u8 button_pressed(u32 index, IO_Buttons *buttons) {
 	return buttons->pressed[index];
 }
 
-template <u32 T>
-u8 button_released(u32 index, IO_Buttons<T> *buttons) {
+u8 button_released(u32 index, IO_Buttons *buttons) {
 	return buttons->released[index];
 }
 
@@ -56,11 +60,11 @@ u8 key_released(Key_Symbol key_symbol, Game_Input *input) {
 void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
 	// Clear per-frame input.
 	{
-		memset(&input->mouse.buttons.pressed, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
-		memset(&input->mouse.buttons.released, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
+		memset(input->mouse.buttons.pressed, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
+		memset(input->mouse.buttons.released, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
 
-		memset(&input->keyboard.pressed, 0, sizeof(u8) * MAX_SCANCODES);
-		memset(&input->keyboard.released, 0, sizeof(u8) * MAX_SCANCODES);
+		memset(input->keyboard.pressed, 0, sizeof(u8) * SCANCODE_COUNT);
+		memset(input->keyboard.released, 0, sizeof(u8) * SCANCODE_COUNT);
 
 		input->mouse.raw_delta_x = 0;
 		input->mouse.raw_delta_y = 0;
@@ -80,13 +84,13 @@ void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
 	}
 
 	if (key_pressed(ESCAPE_KEY, input)) {
-		static bool b = true;
+		static u8 b = 1;
 		if (b) {
 			capture_cursor();
-			b = false;
+			b = 0;
 		} else {
 			uncapture_cursor();
-			b = true;
+			b = 1;
 		}
 	}
 }

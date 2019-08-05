@@ -1,9 +1,28 @@
+s32 format_string(char *buffer, const char *format, va_list arguments) {
+	return stbsp_vsprintf(buffer, format, arguments);
+}
+
+void debug_print_va_list(const char *format, va_list argument_list) {
+	char buffer[4096];
+	s32 bytes_written = format_string(buffer, format, argument_list);
+	write_file(STDOUT, bytes_written, buffer);
+}
+
+void debug_print(const char *format, ...) {
+	char buffer[4096];
+	va_list argument_list;
+	va_start(argument_list, format);
+	s32 bytes_written = format_string(buffer, format, argument_list);
+	write_file(STDOUT, bytes_written, buffer);
+	va_end(argument_list);
+}
+
 // @TODO: Handle log types.
-void log_print_actual(Log_Type, const char *file_name, int line, const char *function_name, const char *format, ...) {
+void log_print_actual(Log_Type log_type, const char *file_name, int line, const char *function_name, const char *format, ...) {
 	va_list arguments;
 	va_start(arguments, format);
 	debug_print("%s: %s: %d: ", file_name, function_name, line);
-	debug_print(format, arguments);
+	debug_print_va_list(format, arguments);
 	debug_print("\n");
 	va_end(arguments);
 }
@@ -14,7 +33,7 @@ void _abort_actual(const char *file_name, s32 line, const char *function_name, c
 	debug_print("###########################################################################\n\n");
 	debug_print("[PROGRAM ABORT]\n");
 	debug_print("%s: %s: %d:\n", file_name, function_name, line);
-	debug_print(format, arguments);
+	debug_print_va_list(format, arguments);
 	debug_print("\n\n");
 	print_stacktrace();
 	debug_print("\n###########################################################################\n");
@@ -36,55 +55,20 @@ u32 u32_min(u32 a, u32 b) {
 }
 
 String_Result read_entire_file(const char *path, Memory_Arena *arena) {
-	auto file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
+	File_Handle file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
 	if (file_handle == FILE_HANDLE_ERROR) {
-		return String_Result{NULL, 0};
+		return (String_Result){NULL, 0};
 	}
-	auto file_length = get_file_length(file_handle);
-	auto string_buffer = allocate_array(arena, char, (file_length+1));
-	auto read_result = read_file(file_handle, file_length, string_buffer);
+	File_Offset file_length = get_file_length(file_handle);
+	char *string_buffer = allocate_array(arena, char, (file_length+1));
+	u8 read_result = read_file(file_handle, file_length, string_buffer);
 	if (!read_result) {
-		return String_Result{NULL, 0};
+		return (String_Result){NULL, 0};
 	}
-
-	return String_Result{string_buffer, file_length};
-/*
-	auto file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
-	if (file_handle == FILE_HANDLE_ERROR) {
-		return STRING_ERROR;
-	}
-	auto file_length = seek_file(file_handle, 0, FILE_SEEK_END);
-	if (file_length == FILE_OFFSET_ERROR) {
-		return STRING_ERROR;
-	}
-	seek_file(fh, 0, FILE_SEEK_START);
-
-	auto string_buffer = allocate_array(arena, char, (file_length+1));
-	File_Offset total_bytes_read = 0, current_bytes_read = 0;
-	char *position = string_buffer;
-	// Read may return less bytes than requested, so we have to loop.
-	do {
-		current_bytes_read = read_file(file_handle, file_length - total_bytes_read, position);
-		total_bytes_read += current_bytes_read;
-		position += current_bytes_read;
-	} while (total_bytes_read < file_length && current_bytes_read != 0);
-	if (total_bytes_read != file_length) {
-		return STRING_ERROR;
-	}
-	string_buffer[file_length] = '\0';
-	close_file(file_handle);
-
-	return {string_buffer, file_length};
-*/
+	return (String_Result){string_buffer, file_length};
 }
 
-template <typename T>
-T &Static_Array<T>::operator[](s32 index) {
-	assert(index < capacity);
-	return data[index];
-}
-
-const char *first_occurrence_of(const char *s, char c) {
+const char *find_first_occurrence_of_character(const char *s, char c) {
 	while (*s && *s != c)
 		s++;
 	if (*s == c)
@@ -92,8 +76,19 @@ const char *first_occurrence_of(const char *s, char c) {
 	return NULL;
 }
 
+const char *find_last_occurrence_of_character(const char *string, char character) {
+	const char *occurrence = NULL;
+	while (*string) {
+		if (*string == character) {
+			occurrence = string;
+		}
+		string++;
+	}
+	return occurrence;
+}
+
 // "Naive" approach. We don't use this for anthing perf critical now.
-const char *first_occurrence_of(const char *s, const char *substring) {
+const char *find_substring(const char *s, const char *substring) {
 	while (*s) {
 		const char *subs = substring;
 		if (*s != *subs) {
@@ -119,7 +114,7 @@ size_t string_length(const char *s) {
 	return count;
 }
 
-void copy_string(char *destination, const char *source, size_t count) {
+void copy_string_range(char *destination, const char *source, size_t count) {
 	for (s32 i = 0; i < count && source[i]; i++) {
 		destination[i] = source[i];
 	}
@@ -188,100 +183,38 @@ s8 compare_strings(const char *a, const char *b) {
 	return -1;
 }
 
-size_t push_integer(s32 i, char *buf) {
-	size_t nbytes_writ = 0;
-	if (i < 0) {
-		buf[nbytes_writ++] = '-';
-		i = -i;
-	}
-	char *start = buf + nbytes_writ;
-	do {
-		char ascii = (i % 10) + 48;
-		buf[nbytes_writ++] = ascii;
-		i /= 10;
-	} while (i > 0);
-	char *end = buf + nbytes_writ - 1;
-	strrev(start, end);
-	return nbytes_writ;
-}
-
-// @TODO: Handle floating point!!!!!
-size_t format_string(const char *fmt, va_list arg_list, char *buf) {
-	assert(fmt);
-	size_t nbytes_writ = 0;
-	for (const char *at = fmt; *at; ++at) {
-		if (*at == '%') {
-			++at;
-			switch (*at) {
-			case 's': {
-				char *s = va_arg(arg_list, char *);
-				assert(s);
-				while (*s) buf[nbytes_writ++] = *s++;
-			} break;
-			case 'd': {
-				int i = va_arg(arg_list, int);
-				nbytes_writ += push_integer(i, buf + nbytes_writ);
-			} break;
-			case 'u': {
-				int i = va_arg(arg_list, unsigned);
-				nbytes_writ += push_integer(i, buf + nbytes_writ);
-			} break;
-			case 'c': {
-				buf[nbytes_writ++] = va_arg(arg_list, int);
-			} break;
-			case 'l': {
-				long l = va_arg(arg_list, long);
-				nbytes_writ += push_integer(l, buf + nbytes_writ);
-			} break;
-			default: {
-
-			} break;
-			}
-		} else {
-			buf[nbytes_writ++] = *at;
-		}
-	}
-	buf[nbytes_writ++] = '\0'; // NULL terminator.
-	return nbytes_writ;
-}
-
 u8 strings_subset_test(const char **set_a, s32 num_set_a_strings, const char **set_b, s32 num_set_b_strings) {
 	for (s32 i = 0; i < num_set_a_strings; i++) {
-		u8 found = false;
+		u8 found = 0;
 		for (s32 j = 0; j < num_set_b_strings; j++) {
 			if (compare_strings(set_a[i], set_b[j]) == 0) {
-				found = true;
+				found = 1;
 				break;
 			}
 		}
 		if (!found) {
-			return false;
+			return 0;
 		}
 	}
-
-	return true;
+	return 1;
 }
 
 const char *get_directory(const char *path, Memory_Arena *arena) {
-	auto slash = first_occurrence_of(path, '/');
+	const char *slash = find_last_occurrence_of_character(path, '/');
 	if (slash == NULL) {
 		return "";
-		//char *directory = allocate_array(string_length(path) + 1);
-		//return copy_string(directory, path);
 	}
-
-	auto directory_length = slash - path;
-	auto directory = allocate_array(arena, char, directory_length + 1);
-	copy_string(directory, path, directory_length);
+	size_t directory_length = slash - path;
+	char *directory = allocate_array(arena, char, directory_length + 1);
+	copy_string_range(directory, path, directory_length);
 	directory[directory_length] = '\0';
 	return directory;
 }
 
 char *join_paths(const char *path_1, const char *path_2, Memory_Arena *arena) {
-	auto path_1_length = string_length(path_1);
-	auto path_2_length = string_length(path_2);
-
-	auto result = allocate_array(arena, char, path_1_length + path_2_length + 2);
+	size_t path_1_length = string_length(path_1);
+	size_t path_2_length = string_length(path_2);
+	char *result = allocate_array(arena, char, path_1_length + path_2_length + 2);
 	copy_string(result, path_1);
 	result[path_1_length] = '/';
 	copy_string(result + path_1_length + 1, path_2);
@@ -289,19 +222,18 @@ char *join_paths(const char *path_1, const char *path_2, Memory_Arena *arena) {
 	return result;
 }
 
+/*
 #define TIMED_BLOCK(name) Block_Timer __block_timer__##__LINE__(#name)
 #define MAX_TIMER_NAME_LEN 256
 
 struct Block_Timer {
-	Block_Timer(const char *timer_name)
-	{
+	Block_Timer(const char *timer_name) {
 		//size_t name_len = _strlen(n);
 		//assert(name_len < MAX_TIMER_NAME_LEN);
 		copy_string(name, timer_name);
 		start = get_current_platform_time();
 	}
-	~Block_Timer()
-	{
+	~Block_Timer() {
 		Platform_Time end = get_current_platform_time();
 		unsigned ns_res=1, us_res=1000, ms_res=1000000;
 		long ns = platform_time_difference(start, end, ns_res);
@@ -313,41 +245,23 @@ struct Block_Timer {
 	Platform_Time start;
 	char name[MAX_TIMER_NAME_LEN];
 };
+*/
 
 void print_m4_actual(const char *name, M4 matrix) {
-	printf("%s:\n", name);
+	debug_print("%s:\n", name);
 	for (s32 i = 0; i < 4; i++) {
-		printf("%f %f %f %f\n", matrix.m[i][0], matrix.m[i][1], matrix.m[i][2], matrix.m[i][3]);
+		debug_print("%f %f %f %f\n", matrix.m[i][0], matrix.m[i][1], matrix.m[i][2], matrix.m[i][3]);
 	}
 }
 
-#if 0
-/*
-bool
-get_base_name(const char *path, char *name_buf)
-{
-	int begin = 0;
-	while(path[begin] && path[begin] != '/')
-		++begin;
-	if (!path[begin])
-		return false;
-	int end = ++begin;
-	while(path[end] && path[end] != '.')
-		++end;
-	strncpy(name_buf, path+begin, end-begin);
-	name_buf[end-begin] = '\0';
-	return true;
-}
-*/
-
-Color
-random_color()
-{
+V3 random_color() {
 	float r = rand() / (float)RAND_MAX;
 	float g = rand() / (float)RAND_MAX;
 	float b = rand() / (float)RAND_MAX;
-	return Color{r, g, b};
+	return (V3){r, g, b};
 }
+
+#if 0
 
 void
 timer_set(u32 wait_time, Timer *t)
@@ -384,18 +298,5 @@ timer_check_repeating(Timer *t)
 	}
 
 	return false;
-}
-
-template<typename T>
-void
-array_remove(Array<T> *a, size_t index)
-{
-	assert(index >= 0 && index < a->size);
-
-	for (u32 i = index + 1; i < a->size; ++i) {
-		a->data[i - 1] = a->data[i];
-	}
-
-	a->size -= 1;
 }
 #endif

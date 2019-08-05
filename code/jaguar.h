@@ -9,20 +9,18 @@ typedef int64_t  s64;
 typedef float    f32;
 typedef double   f64;
 
-s32 window_width, window_height;
-
-enum Game_Execution_Status {
+typedef enum Game_Execution_Status {
 	GAME_RUNNING,
 	GAME_PAUSED,
 	GAME_EXITING,
-};
+} Game_Execution_Status;
 
-enum Log_Type {
+typedef enum Log_Type {
 	STANDARD_LOG,
 	MINOR_ERROR_LOG,
 	MAJOR_ERROR_LOG,
 	CRITICAL_ERROR_LOG,
-};
+} Log_Type;
 
 #define INVALID_CODE_PATH assert(!"Invalid code path.");
 
@@ -34,23 +32,8 @@ enum Log_Type {
 
 #define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
 
-template <typename F>
-struct Scope_Exit {
-	Scope_Exit(F _f) : f(_f) {}
-	~Scope_Exit() { f(); }
-	F f;
-};
-
-template <typename F>
-Scope_Exit<F>
-make_scope_exit(F f)
-{
-	return Scope_Exit<F>(f);
-}
-
-#define DO_STRING_JOIN(arg1, arg2) arg1 ## arg2
-#define STRING_JOIN(arg1, arg2) DO_STRING_JOIN(arg1, arg2)
-#define DEFER(code) auto STRING_JOIN(scope_exit_, __LINE__) = make_scope_exit([=](){code;})
+#define SCANCODE_COUNT 256
+#define MOUSE_BUTTON_COUNT 3
 
 #define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
 #define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
@@ -63,80 +46,63 @@ void _abort_actual(const char *file, int line, const char *func, const char *fmt
 #define print_v2(v2) print_v2_actual(#v2, v2)
 #define print_m4(m4) print_m4_actual(#m4, m4)
 
-struct V2 {
+typedef struct V2 {
 	f32 x, y;
-	f32 &operator[](int i);
-};
+} V2;
 
-struct V2s {
+typedef struct V2s {
 	s32 x, y;
-};
+} V2s;
 
-struct V2u {
+typedef struct V2u {
 	u32 x, y;
-};
+} V2u;
 
-struct V3 {
+typedef struct V3 {
 	f32 x, y, z;
-	f32 operator[](int i) const;
-	f32 &operator[](int i);
-};
+} V3;
 
-struct V4 {
+typedef struct V4 {
 	f32 x, y, z, w;
-	f32 operator[](int i) const;
-	f32 &operator[](int i);
-};
+} V4;
 
-struct M3 {
-	V3 &operator[](s32 i);
-
+typedef struct M3 {
 	f32 m[3][3];
-};
+} M3;
 
-struct M4 {
-	V4 &operator[](s32 i);
-
+typedef struct M4 {
 	f32 m[4][4];
-};
+} M4;
 
-struct Quaternion {
+typedef struct Quaternion {
 	//Quaternion() {}
 	//Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
 	//Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
 	//Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
-	f32 x = 0.0f;
-	f32 y = 0.0f;
-	f32 z = 0.0f;
-	f32 w = 1.0f;
-};
+	f32 x, y, z, w;
+} Quaternion;
 
-template <u32 BUTTON_COUNT>
-struct IO_Buttons {
-	u8 down[BUTTON_COUNT];
-	u8 pressed[BUTTON_COUNT];
-	u8 released[BUTTON_COUNT];
-};
+typedef struct IO_Buttons {
+	u8 *down;
+	u8 *pressed;
+	u8 *released;
+} IO_Buttons;
 
-#define MOUSE_BUTTON_COUNT 3
-struct Mouse {
+typedef struct Mouse {
 	s32 wheel;
 	s32 x, y;
 	s32 delta_x, delta_y;
 	f32 raw_delta_x, raw_delta_y;
-	//V2 position;
-	//V2 delta_position;
 	f32 sensitivity;
-	IO_Buttons<MOUSE_BUTTON_COUNT> buttons;
-};
+	IO_Buttons buttons;
+} Mouse;
 
-#define MAX_SCANCODES 256
-struct Game_Input {
+typedef struct Game_Input {
 	Mouse mouse;
-	IO_Buttons<MAX_SCANCODES> keyboard;
-};
+	IO_Buttons keyboard;
+} Game_Input;
 
-struct Camera {
+typedef struct Camera {
 	M4 view_matrix;
 
 	V3 position;
@@ -147,24 +113,24 @@ struct Camera {
 	f32 yaw;
 	f32 pitch;
 	f32 speed;
-};
+} Camera;
 
-struct Read_File_Result {
+typedef struct Read_File_Result {
 	char *contents;
 	u8 error;
-};
+} Read_File_Result;
 
-struct Glyph_Info {
+typedef struct Glyph_Info {
 	u32 texture_id;
 	u32 width;
 	u32 height;
 	s32 x_bearing;
 	s32 y_bearing;
 	s64 advance;
-};
+} Glyph_Info;
 
 /*
-struct Font {
+typedef struct Font {
 	Glyph_Info glyph_info[256];
 
 	s32 height;
@@ -173,88 +139,63 @@ struct Font {
 };
 */
 
-template <typename T>
-struct Array {
-	s32 count;
-	s32 capacity;
-	T *data;
-
-	T &operator[](s32 i);
-};
-
-template <typename T>
-struct Static_Array {
-	s32 capacity;
-	T *data;
-
-	T &operator[](s32 i);
-};
-
-struct Chunk_Header {
+typedef struct Chunk_Header {
 	u8 *base_block;
 	u8 *block_frontier;
-	Chunk_Header *next_chunk;
-};
+	struct Chunk_Header *next_chunk;
+} Chunk_Header;
 
-struct Block_Header {
+typedef struct Block_Header {
 	size_t byte_capacity;
 	size_t bytes_used;
-	Block_Header *next_block;
-	Block_Header *previous_block;
-};
+	struct Block_Header *next_block;
+	struct Block_Header *previous_block;
+} Block_Header;
 
-struct Free_Entry {
+typedef struct Free_Entry {
 	size_t size;
-	Free_Entry *next;
-};
+	struct Free_Entry *next;
+} Free_Entry;
 
-struct Entry_Header {
+typedef struct Entry_Header {
 	size_t size;
 	char *next;
 	char *prev;
-};
+} Entry_Header;
 
 Block_Header *create_memory_block();
 
-struct Memory_Arena {
-	Free_Entry *entry_free_head = NULL;
-	char *last_entry = NULL;
-	Block_Header *base_block = NULL;
-	Block_Header *active_block = NULL;
-};
+typedef struct Memory_Arena {
+	Free_Entry *entry_free_head;
+	char *last_entry;
+	Block_Header *base_block;
+	Block_Header *active_block;
+} Memory_Arena;
 
-struct String_Result {
+typedef struct String_Result {
 	char *data;
 	u64 length; // @TODO: This really should be a File_Offset...
-};
+} String_Result;
 
 //@TODO: Change lookup to a hash table.
 //@TODO: Change lookup to a hash table.
 //@TODO: Change lookup to a hash table.
 //@TODO: Change lookup to a hash table.
-
-template <typename T, typename U>
-struct Asset_Info {
-	void *memory = NULL;
-	size_t size = 0;
-	u32 instance_count = 0;
-	U *instances = NULL;
-	u32 *instance_lookup = NULL;
-};
 
 typedef u32 Material_ID;
 
 #define MAX_MATERIAL_COUNT 100
 
-struct Vertex {
+typedef struct Vertex {
 	V3 position;
 	V3 color;
 	V2 uv;
 	V3 normal;
-};
+} Vertex;
 
+/*
 // @TODO: Move vertex and index data into the model asset.
-struct Mesh_Asset {
+typedef struct Mesh_Asset {
 	Material_ID material_id;
 
 	Vertex *vertices;
@@ -262,48 +203,67 @@ struct Mesh_Asset {
 
 	u32 *indices;
 	u32 index_count;
-};
+} Mesh_Asset;
+*/
 
-// @TODO: Move vertex and index data into the model asset.
-struct Model_Asset {
-	u32 mesh_count;
-	Mesh_Asset *meshes;
-
+typedef struct Model_Asset {
+	Vertex *vertices;
 	u32 vertex_count;
-	u32 vertex_gpu_memory_offset;
-};
 
-struct Transform {
+	u32 *indices;
+	u32 index_count;
+
+	u32 *mesh_index_counts;
+	u32 mesh_count;
+
+	u32 vertex_offset;
+	u32 first_index;
+} Model_Asset;
+
+typedef struct {
 	V3 translation;
 	Quaternion rotation;
 	V3 scale;
-};
+} Transform;
 
-struct Model_Instance {
-	Transform transform;
-	u32 mesh_count;
-	Material_ID *material_ids;
-	u32 vertex_gpu_memory_offset;
-	u32 vertex_count;
-	u32 first_index;
+typedef struct {
 	u32 *index_counts;
-	u32 uniform_offset;
-};
+	u32 mesh_count;
 
-struct Skeleton_Joint_Pose {
+	Transform transform;
+	u32 vertex_offset;
+	u32 first_index;
+} Model_Instance;
+
+/*
+typedef struct Model_Instance {
+	u32 mesh_count;
+	u32 *index_counts;
+
+	Transform transform;
+	u32 vertex_offset;
+	u32 first_index;
+
+	//u32 vertex_count;
+	//u32 uniform_offset;
+	//Material_ID *material_ids;
+} Model_Instance;
+*/
+
+typedef struct Skeleton_Joint_Pose {
 	Quaternion rotation;
 	V3 translation;
 	f32 scale;
-};
+} Skeleton_Joint_Pose;
 
-struct Skeleton_Joint_Skinning_Info {
+typedef struct Skeleton_Joint_Skinning_Info {
 	u32 vertex_influence_count;
 	u32 *vertices;
 	f32 *weights;
-};
+} Skeleton_Joint_Skinning_Info;
 
 // @TODO: We could store animation transforms as 4x3 matrix, maybe?
-struct Skeleton_Asset {
+typedef struct Skeleton_Asset {
 	u8 joint_count;
 	const char *joint_names; // @TODO: Get rid of joint names?
 	Skeleton_Joint_Skinning_Info *joint_skinning_info;
@@ -313,9 +273,9 @@ struct Skeleton_Asset {
 	u8 leaf_node_count;
 	u8 *leaf_node_parent_indices;
 	M4 *leaf_node_translations; // @TODO @Memory: Could probably just be a V3 translation?
-};
+} Skeleton_Asset;
 
-struct Skeleton_Instance {
+typedef struct {
 	Skeleton_Asset *asset;
 
 	u32 local_joint_pose_count;
@@ -323,14 +283,14 @@ struct Skeleton_Instance {
 
 	u32 global_joint_pose_count;
 	M4 *global_joint_poses; // Currently, this is parent * node_transform, but it should probably just be node_transform for blending purposes.
-};
+} Skeleton_Instance;
 
-struct Animation_Sample {
+typedef struct {
 	u32 joint_pose_count;
 	Skeleton_Joint_Pose *joint_poses;
-};
+} Animation_Sample;
 
-struct Animation_Asset {
+typedef struct {
 	Skeleton_Asset *skeleton;
 
 	u32 sample_count;
@@ -339,53 +299,61 @@ struct Animation_Asset {
 	f32 frame_count;
 	f32 frames_per_second;
 	s8 looped;
-};
+} Animation_Asset;
 
-struct Animation_Instance {
+typedef struct Animation_Instance {
 	Animation_Asset *asset;
 	f32 time;
 	u32 current_frame;
-};
+} Animation_Instance;
 
-enum Asset_ID {
+typedef enum Asset_ID {
 	GUY1_ASSET,
 	GUY2_ASSET,
-};
+	GUY3_ASSET,
+	GUN_ASSET,
+	NANOSUIT_ASSET,
+} Asset_ID;
 
-enum Shader_Type {
+typedef enum Shader_Type {
 	TEXTURED_STATIC_SHADER,
 	UNTEXTURED_STATIC_SHADER,
 	SHADOW_MAP_STATIC_SHADER,
 
 	SHADER_COUNT
-};
+} Shader_Type;
 
-#include <assimp/cimport.h>
-struct Material {
-	aiString name; // @TODO: Remove name member.
+typedef u32 Texture_ID;
 
+typedef struct Material {
 	Shader_Type shader;
 
 	V3 diffuse_color;
 	V3 specular_color;
 
-	Asset_ID diffuse_map;
-	Asset_ID specular_map;
-	Asset_ID normal_map;
-};
+	Texture_ID diffuse_map;
+	Texture_ID specular_map;
+	Texture_ID normal_map;
+} Material;
 
 #define MAX_LOADED_ASSET_COUNT 1000
 
-struct Game_Assets {
+typedef struct {
 	Material materials[MAX_MATERIAL_COUNT];
 	s32 material_count;
 
 	void *lookup[MAX_LOADED_ASSET_COUNT]; // @TODO: Use a hash table.
-};
+} Game_Assets;
+
+// Hash table.
+//typedef struct {
+	//Transform_Component *transform;
+	//Render_Component *render;
+//} Game_Components;
 
 #define MAX_MODEL_INSTANCES 1000
 
-struct Game_State {
+typedef struct Game_State {
 	Game_Execution_Status execution_status;
 	Game_Input input;
 	Game_Assets assets;
@@ -395,4 +363,5 @@ struct Game_State {
 	u32 model_instance_count;
 
 	Memory_Arena frame_arena;
-};
+	Memory_Arena permanent_arena;
+} Game_State;

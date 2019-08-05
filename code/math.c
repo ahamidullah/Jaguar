@@ -4,19 +4,20 @@
 #define DEGREES_TO_RADIANS(deg) ((deg) * MUL_DEGREES_TO_RADIANS)
 #define RADIANS_TO_DEGREES(rad) ((rad) * MUL_RADIANS_TO_DEGREES)
 
+u8 not_nan(V3 v) {
+	return v.x != NAN && v.y != NAN && v.z != NAN;
+}
+
+u8 not_zero(V3 v) {
+	return v.x != 0.0f || v.y != 0.0f || v.z != 0.0f;
+}
+
+/*
 V2 operator-(V2 a, V2 b) {
 	return {
 		a.x - b.x,
 		a.y - b.y,
 	};
-}
-
-bool not_nan(V3 v) {
-	return v.x != NAN && v.y != NAN && v.z != NAN;
-}
-
-bool not_zero(V3 v) {
-	return v.x != 0.0f || v.y != 0.0f || v.z != 0.0f;
 }
 
 u8 operator==(const V3 &a, const V3 &b) {
@@ -139,16 +140,18 @@ V3 &M3::operator[](int i) {
 V4 &M4::operator[](int i) {
 	return *(V4 *)m[i];
 }
+*/
 
 M4 m4_identity() {
-	return {
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f,
-	};
+	return (M4){{
+		{1.0f, 0.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f, 0.0f, 0.0f},
+		{0.0f, 0.0f, 1.0f, 0.0f},
+		{0.0f, 0.0f, 0.0f, 1.0f},
+	}};
 }
 
+/*
 M4 operator*(M4 a, M4 b) {
 	M4 result;
 	for (s32 i = 0; i < 4; i++) {
@@ -179,6 +182,7 @@ V4 operator*(M4 m, V4 v) {
 		v.x*m[3][0] + v.y*m[3][1] + v.z*m[3][2]  + v.w*m[3][3],
 	};
 }
+*/
 
 f32 length_squared(V3 v) {
 	return v.x*v.x + v.y*v.y + v.z*v.z;
@@ -188,8 +192,53 @@ f32 length(V3 v) {
 	return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
+V3 subtract_v3(V3 a, V3 b) {
+	return (V3){
+		a.x - b.x,
+		a.y - b.y,
+		a.z - b.z,
+	};
+}
+
+V3 add_v3(V3 a, V3 b) {
+	return (V3){
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z,
+	};
+}
+
+V3 multiply_f32_v3(f32 s, V3 v) {
+	return (V3){
+		s * v.x,
+		s * v.y,
+		s * v.z,
+	};
+}
+
+V3 divide_v3_f32(V3 v, f32 s) {
+	return (V3){
+		v.x / s,
+		v.y / s,
+		v.z / s,
+	};
+}
+
+M4 multiply_m4(M4 a, M4 b) {
+	M4 result;
+	for (s32 i = 0; i < 4; i++) {
+		for (s32 j = 0; j < 4; j++) {
+			result.m[i][j] = a.m[i][0] * b.m[0][j]
+			               + a.m[i][1] * b.m[1][j]
+			               + a.m[i][2] * b.m[2][j]
+			               + a.m[i][3] * b.m[3][j];
+		}
+	}
+	return result;
+}
+
 V3 normalize(V3 v) {
-	auto result = v / length(v);
+	V3 result = divide_v3_f32(v, length(v));
 	assert(not_nan(result));
 	return result;
 }
@@ -199,7 +248,7 @@ f32 dot_product(V3 a, V3 b) {
 }
 
 V3 cross_product(V3 a, V3 b) {
-	auto result = V3{
+	V3 result = (V3){
 		a.y*b.z - b.y*a.z,
 		a.z*b.x - b.z*a.x,
 		a.x*b.y - b.x*a.y,
@@ -208,6 +257,7 @@ V3 cross_product(V3 a, V3 b) {
 	return result;
 }
 
+/*
 M4 inverse(M4 m) {
 	const V3 *a = (V3 *)&m.m[0];
 	const V3 *b = (V3 *)&m.m[1];
@@ -243,102 +293,105 @@ M4 inverse(M4 m) {
 		r3.x, r3.y, r3.z, dot_product(*c, s),
 	};
 }
+*/
 
 void set_rotation(M4 *m, M3 rotation) {
-	(*m)[0][0] = rotation[0][0];
-	(*m)[0][1] = rotation[0][1];
-	(*m)[0][2] = rotation[0][2];
-	(*m)[1][0] = rotation[1][0];
-	(*m)[1][1] = rotation[1][1];
-	(*m)[1][2] = rotation[1][2];
-	(*m)[2][0] = rotation[2][0];
-	(*m)[2][1] = rotation[2][1];
-	(*m)[2][2] = rotation[2][2];
+	m->m[0][0] = rotation.m[0][0];
+	m->m[0][1] = rotation.m[0][1];
+	m->m[0][2] = rotation.m[0][2];
+	m->m[1][0] = rotation.m[1][0];
+	m->m[1][1] = rotation.m[1][1];
+	m->m[1][2] = rotation.m[1][2];
+	m->m[2][0] = rotation.m[2][0];
+	m->m[2][1] = rotation.m[2][1];
+	m->m[2][2] = rotation.m[2][2];
 }
 
 void set_translation(M4 *m, V3 translation) {
-	(*m)[0][3] = translation[0];
-	(*m)[1][3] = translation[1];
-	(*m)[2][3] = translation[2];
+	m->m[0][3] = translation.x;
+	m->m[1][3] = translation.y;
+	m->m[2][3] = translation.z;
 }
 
 void set_scale(M4 *m, V3 scale) {
 	for (s32 i = 0; i < 4; i++) {
-		(*m)[i][0] *= scale.x;
-		(*m)[i][1] *= scale.y;
-		(*m)[i][2] *= scale.z;
+		m->m[i][0] *= scale.x;
+		m->m[i][1] *= scale.y;
+		m->m[i][2] *= scale.z;
 	}
 }
 
 V3 get_translation(M4 m) {
-	return V3{ m[0][3], m[1][3], m[2][3] };
+	return (V3){m.m[0][3], m.m[1][3], m.m[2][3]};
 }
 
-M4 transpose(M4 matrix) {
-	return {
-		matrix[0][0], matrix[1][0], matrix[2][0], matrix[3][0],
-		matrix[0][1], matrix[1][1], matrix[2][1], matrix[3][1],
-		matrix[0][2], matrix[1][2], matrix[2][2], matrix[3][2],
-		matrix[0][3], matrix[1][3], matrix[2][3], matrix[3][3],
-	};
+M4 transpose(M4 m) {
+	return (M4){{
+		{m.m[0][0], m.m[1][0], m.m[2][0], m.m[3][0]},
+		{m.m[0][1], m.m[1][1], m.m[2][1], m.m[3][1]},
+		{m.m[0][2], m.m[1][2], m.m[2][2], m.m[3][2]},
+		{m.m[0][3], m.m[1][3], m.m[2][3], m.m[3][3]},
+	}};
 }
 
 M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
-	auto focal_length = 1.0f / tanf(DEGREES_TO_RADIANS(fovy) / 2.0f);
-	return {
-		focal_length / aspect_ratio,   0.0f,           0.0f,                 0.0f,
-		0.0f,                         -focal_length,   0.0f,                 0.0f,
-		0.0f,                          0.0f,           far / (near - far),  -(far * near) / (far - near),
-		0.0f,                          0.0f,          -1.0f,                 0.0f,
-	};
+	f32 focal_length = 1.0f / tanf(DEGREES_TO_RADIANS(fovy) / 2.0f);
+	return (M4){{
+		{focal_length / aspect_ratio,   0.0f,            0.0f,                 0.0f},
+		{0.0f,                          -focal_length,   0.0f,                 0.0f},
+		{0.0f,                          0.0f,            far / (near - far),   -(far * near) / (far - near)},
+		{0.0f,                          0.0f,            -1.0f,                0.0f},
+	}};
 }
 
 // Assumes near is 0.01f and far is infinity.
-M4 perspective_projection(f32 fovy, f32 aspect_ratio) {
+M4 infinite_perspective_projection(f32 fovy, f32 aspect_ratio) {
 	const f32 near = 0.01f;
 	f32 focal_length = 1 / tan(DEGREES_TO_RADIANS(fovy) / 2);
 
-	return {
-		focal_length,   0.0f,                          0.0f,   0.0f,
-		0.0f,          -focal_length * aspect_ratio,   0.0f,   0.0f,
-		0.0f,           0.0f,                         -1.0f,  -2.0f * near,
-		0.0f,           0.0f,                         -1.0f,   0.0f,
-	};
+	return (M4){{
+		{focal_length,   0.0f,                           0.0f,    0.0f},
+		{0.0f,           -focal_length * aspect_ratio,   0.0f,    0.0f},
+		{0.0f,           0.0f,                           -1.0f,   -2.0f * near},
+		{0.0f,           0.0f,                           -1.0f,   0.0f},
+	}};
 }
 
 // Assumes near is -1.0f and far is 1.0f.
+/*
 M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top) {
-	return {
-		2.0f / (right - left),   0.0f,                    0.0f,  -(right + left) / (right - left),
-		0.0f,                   -2.0f / (top - bottom),   0.0f,  -(top + bottom) / (top - bottom),
-		0.0f,                    0.0f,                   -1.0f,   0.0f,
-		0.0f,                    0.0f,                    0.0f,   1.0f,
-	};
+	return (M4){{
+		{2.0f / (right - left),   0.0f,                     0.0f,    -(right + left) / (right - left)},
+		{0.0f,                    -2.0f / (top - bottom),   0.0f,    -(top + bottom) / (top - bottom)},
+		{0.0f,                    0.0f,                     -1.0f,   0.0f},
+		{0.0f,                    0.0f,                     0.0f,    1.0f},
+	}};
 }
+*/
 
 M4 orthographic_projection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
-	return {
-		2.0f / (right - left),   0.0f,                    0.0f,                 -(right + left) / (right - left),
-	    0.0f,                   -2.0f / (top - bottom),   0.0f,                 -(top + bottom) / (top - bottom),
-	    0.0f,                    0.0f,                   -1.0f / (far - near),  -near / (far - near),
-	    0.0f,                    0.0f,                    0.0f,                  1.0f,
-	};
+	return (M4){{
+		{2.0f / (right - left),   0.0f,                     0.0f,                   -(right + left) / (right - left)},
+	    {0.0f,                    -2.0f / (top - bottom),   0.0f,                   -(top + bottom) / (top - bottom)},
+	    {0.0f,                    0.0f,                     -1.0f / (far - near),   -near / (far - near)},
+	    {0.0f,                    0.0f,                     0.0f,                   1.0f},
+	}};
 }
 
 M4 view_matrix(V3 position, V3 forward, V3 side, V3 up) {
-	return {
-		 side.x,     side.y,     side.z,    -dot_product(side, position),
-		 up.x,       up.y,       up.z,      -dot_product(up, position),
-		-forward.x, -forward.y, -forward.z,  dot_product(forward, position),
-		 0,          0,          0,          1.0f
-	};
+	return (M4){{
+		{side.x,       side.y,       side.z,       -dot_product(side, position)},
+		{up.x,         up.y,         up.z,         -dot_product(up, position)},
+		{-forward.x,   -forward.y,   -forward.z,   dot_product(forward, position)},
+		{0,            0,            0,            1.0f},
+	}};
 }
 
 M4 look_at(V3 position, V3 target, V3 world_up) {
 	// @TODO: Move this out to a create basis function.
-	auto forward = normalize(target - position);
-	auto side = normalize(cross_product(forward, world_up));
-	auto up = normalize(cross_product(side, forward));
+	V3 forward = normalize(subtract_v3(target, position));
+	V3 side = normalize(cross_product(forward, world_up));
+	V3 up = normalize(cross_product(side, forward));
 
 	return view_matrix(position, forward, side, up);
 }

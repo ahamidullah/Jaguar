@@ -22,8 +22,7 @@ void initialize_camera(Camera *camera, V3 position, V3 forward, f32 speed) {
 V3 calculate_camera_forward(f32 pitch, f32 yaw) {
 	f32 pitch_radians = DEGREES_TO_RADIANS(pitch);
 	f32 yaw_radians = DEGREES_TO_RADIANS(yaw);
-
-	return V3{
+	return (V3){
 		cos(pitch_radians) * cos(yaw_radians),
 		cos(pitch_radians) * sin(yaw_radians),
 		sin(pitch_radians),
@@ -44,9 +43,9 @@ void update_camera(Camera *camera, Game_Input *input) {
 	}
 
 	if (key_down(A_KEY, input)) {
-		camera->position -= camera->speed * camera->side;
+		camera->position = subtract_v3(camera->position, multiply_f32_v3(camera->speed, camera->side));
 	} else if (key_down(D_KEY, input)) {
-		camera->position += camera->speed * camera->side;
+		camera->position = add_v3(camera->position, multiply_f32_v3(camera->speed, camera->side));
 	}
 
 	if (key_down(Q_KEY, input)) {
@@ -56,9 +55,9 @@ void update_camera(Camera *camera, Game_Input *input) {
 	}
 
 	if (key_down(W_KEY, input)) {
-		camera->position += camera->speed * camera->forward;
+		camera->position = add_v3(camera->position, multiply_f32_v3(camera->speed, camera->forward));
 	} else if (key_down(S_KEY, input)) {
-		camera->position -= camera->speed * camera->forward;
+		camera->position = subtract_v3(camera->position, multiply_f32_v3(camera->speed, camera->forward));
 	}
 
 	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);

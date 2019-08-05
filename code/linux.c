@@ -21,8 +21,6 @@
 #include <errno.h>
 #include <execinfo.h>
 
-#include <string.h>
-
 #define STDOUT 1
 #define STDIN 0
 #define STDERR 2
@@ -40,7 +38,7 @@ void debug_print(const char *fmt, ...);
 		}\
 	} while(0)
 
-enum Key_Symbol {
+typedef enum Key_Symbol {
 	W_KEY = XK_w,
 	A_KEY = XK_a,
 	S_KEY = XK_s,
@@ -63,17 +61,23 @@ enum Key_Symbol {
 	LALT_KEY = XK_Alt_L,
 	RALT_KEY = XK_Alt_R,
 	ESCAPE_KEY = XK_Escape,
-};
+} Key_Symbol;
 
-enum Mouse_Button {
+typedef enum Mouse_Button {
 	MOUSE_BUTTON_LEFT = 0,
 	MOUSE_BUTTON_MIDDLE,
 	MOUSE_BUTTON_RIGHT,
-};
+} Mouse_Button;
+
+typedef enum File_Seek_Relative {
+	FILE_SEEK_START = SEEK_SET,
+	FILE_SEEK_CURRENT = SEEK_CUR,
+	FILE_SEEK_END = SEEK_END
+} File_Seek_Relative;
 
 typedef s32       File_Handle;
 typedef pthread_t Thread_Handle;
-typedef timespec  Platform_Time;
+typedef struct timespec  Platform_Time;
 typedef sem_t     Semaphore_Handle;
 typedef void *    Library_Handle;
 typedef u64       File_Offset;
@@ -81,19 +85,7 @@ typedef u64       File_Offset;
 File_Handle FILE_HANDLE_ERROR = -1;
 File_Offset FILE_OFFSET_ERROR = (File_Offset)-1;
 
-enum File_Seek_Relative {
-	FILE_SEEK_START = SEEK_SET,
-	FILE_SEEK_CURRENT = SEEK_CUR,
-	FILE_SEEK_END = SEEK_END
-};
-
-u32  window_pixel_width          =  0;
-u32  window_pixel_height         =  0;
-f32  window_scaled_meter_width   =  0;
-f32  window_scaled_meter_height  =  0;
-u32  pixels_per_meter            =  0;
-f32  meters_per_pixel            =  0;
-f32  scaled_meters_per_pixel     =  0;
+u32 window_width, window_height;
 
 // @TODO: Store colormap and free it on exit.
 // @TODO: Free blank_cursor.
@@ -107,13 +99,13 @@ struct Linux_Context {
 } linux_context;
 
 void platform_exit(int exit_code);
-bool platform_write_file(File_Handle fh, size_t n, const void *buf);
+u8 platform_write_file(File_Handle fh, size_t n, const void *buf);
 
 const char *get_platform_error() {
 	return strerror(errno);
 }
 
-s32 x11_error_handler(Display *, XErrorEvent *event) {
+s32 x11_error_handler(Display *display, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linux_context.display, event->error_code, buffer, sizeof(buffer));
 	_abort("X11 error: %s.", buffer);
@@ -121,162 +113,6 @@ s32 x11_error_handler(Display *, XErrorEvent *event) {
 }
 
 #if 0
-const char *first_occurrence_of(const char *s, char c);
-const char *first_occurrence_of(const char *s, const char *substring);
-size_t string_length(const char *s);
-
-s8 is_extension_supported(const char *extension_list, const char *extension) {
-	const char *start;
-	const char *where, *terminator;
-
-	// Extension names should not have spaces.
-	where = first_occurrence_of(extension, ' ');
-	if (where || *extension == '\0') {
-		return false;
-	}
-
-	for (start = extension_list;;) {
-		where = first_occurrence_of(start, extension);
-		if (!where) {
-			break;
-		}
-
-		terminator = where + string_length(extension);
-		if (where == start || *(where - 1) == ' ') {
-			if (*terminator == ' ' || *terminator == '\0') {
-				return true;
-			}
-		}
-		start = terminator;
-	}
-
-	return false;
-}
-
-typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
-glXCreateContextAttribsARBProc glXCreateContextAttribsARB = NULL;
-
-GLXContext create_opengl_context(Display *display, GLXDrawable drawable, s32 screen) {
-	s32 context_attributes[] = {
-		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 1,
-		GLX_CONTEXT_PROFILE_MASK_ARB,  GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
-		GLX_CONTEXT_FLAGS_ARB,         GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		None
-	};
-
-	s32 framebuffer_attributes[] = {
-		GLX_X_RENDERABLE, True,
-		GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
-		GLX_RENDER_TYPE, GLX_RGBA_BIT,
-		GLX_X_VISUAL_TYPE, GLX_TRUE_COLOR,
-		GLX_RED_SIZE, 8,
-		GLX_GREEN_SIZE, 8,
-		GLX_BLUE_SIZE, 8,
-		GLX_ALPHA_SIZE, 8,
-		GLX_DEPTH_SIZE, 24,
-		GLX_STENCIL_SIZE, 8,
-		GLX_DOUBLEBUFFER, True,
-		None
-	};
-
-	s32 framebuffer_config_count = 0;
-	GLXFBConfig *framebuffer_configs = glXChooseFBConfig(display, screen, framebuffer_attributes, &framebuffer_config_count);
-	if (framebuffer_configs == NULL || framebuffer_config_count == 0) {
-		_abort("Failed to retrieve frame buffer configurations");
-	}
-
-	s32 best_fbc = -1, best_num_samp = -1;
-	for (s32 i = 0; i < framebuffer_config_count; ++i) {
-		XVisualInfo *visual = glXGetVisualFromFBConfig(display, framebuffer_configs[i]);
-		if (visual) {
-			s32 sample_buffer, samples;
-			glXGetFBConfigAttrib(display, framebuffer_configs[i], GLX_SAMPLE_BUFFERS, &sample_buffer);
-			glXGetFBConfigAttrib(display, framebuffer_configs[i], GLX_SAMPLES, &samples);
-
-			if (best_fbc < 0 || (sample_buffer && samples > best_num_samp)) {
-				best_fbc = i, best_num_samp = samples;
-			}
-		}
-		XFree(visual);
-	}
-
-	if (best_fbc < 0) {
-		_abort("Failed to get a frame buffer");
-	}
-
-	auto selected_framebuffer_config = framebuffer_configs[0]; // @TEMP
-	XFree(framebuffer_configs);
-
-	int major_version, minor_version;
-	if (!glXQueryVersion(display, &major_version, &minor_version)) {
-		_abort("Unable to query GLX version");
-	}
-	if ((major_version == 1 && minor_version < 3) || major_version < 1) {
-		_abort("GLX version is too old");
-	}
-
-	const char *extensions = glXQueryExtensionsString(display, screen);
-	if (!is_extension_supported(extensions, "GLX_ARB_create_context")) {
-		_abort("OpenGL does not support glXCreateContextAttribsARB extension");
-	}
-
-	glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte *)"glXCreateContextAttribsARB");
-	if (!glXCreateContextAttribsARB) {
-		_abort("Could not load glXCreateContextAttribsARB()");
-	}
-
-	auto opengl_context = glXCreateContextAttribsARB(display, selected_framebuffer_config, 0, True, context_attributes);
-
-	XSync(display, False);
-	if (x11_error_occured || opengl_context == NULL) {
-		_abort("Failed to create OpenGL context");
-	}
-	if (glXMakeCurrent(display, drawable, opengl_context) == False) {
-		_abort("Could not call glXMakeCurrent on the main thread OpenGL context");
-	}
-
-	// Try to enable vsync.
-	if (is_extension_supported(extensions, "GLX_EXT_swap_control")) {
-		typedef int (*glXSwapIntervalEXTProc)(Display *, GLXDrawable, int);
-		glXSwapIntervalEXTProc glXSwapIntervalEXT = NULL;
-		glXSwapIntervalEXT = (glXSwapIntervalEXTProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalEXT");
-		if (glXSwapIntervalEXT) {
-			glXSwapIntervalEXT(glXGetCurrentDisplay(), glXGetCurrentDrawable(), 1);
-		} else {
-			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalEXT()");
-		}
-	} else if (is_extension_supported(extensions, "GLX_MESA_swap_control")) {
-		typedef int (*glXSwapIntervalMESAProc)(int);
-		glXSwapIntervalMESAProc glXSwapIntervalMESA = NULL;
-		glXSwapIntervalMESA = (glXSwapIntervalMESAProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalMESA");
-		if (glXSwapIntervalMESA) {
-			glXSwapIntervalMESA(1);
-		} else {
-			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalMESA()");
-		}
-	} else if (is_extension_supported(extensions, "GLX_SGI_swap_control")) {
-		typedef int (*glXSwapIntervalSGIProc)(int);
-		glXSwapIntervalSGIProc glXSwapIntervalSGI = NULL;
-		glXSwapIntervalSGI = (glXSwapIntervalSGIProc)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalSGI");
-		if (glXSwapIntervalSGI) {
-			glXSwapIntervalSGI(1);
-		} else {
-			log_print(CRITICAL_ERROR_LOG, "Could not load glXSwapIntervalSGI()");
-		}
-	}
-
-	return opengl_context;
-}
-#endif
-
-#if 0
-void render_init();
-void render_cleanup();
-void init_assets();
-void assets_load_all();
-void debug_init();
-
 // @TODO: Move job stuff to another file!
 #define MAX_JOBS 256
 #define NUM_JOB_THREADS 4
@@ -308,7 +144,7 @@ void platform_toggle_fullscreen();
 
 void application_entry();
 
-s32 main(s32, char **) {
+s32 main(s32 argc, char **argv) {
 	srand(time(0));
 
 	// Enable X11 multithreading.
@@ -323,8 +159,8 @@ s32 main(s32, char **) {
 		_abort("Failed to create display");
 	}
 
-	auto screen = XDefaultScreen(linux_context.display);
-	auto root_window = XRootWindow(linux_context.display, screen);
+	s32 screen = XDefaultScreen(linux_context.display);
+	Window root_window = XRootWindow(linux_context.display, screen);
 
 	// Initialize XInput2.
 	{
@@ -364,8 +200,8 @@ s32 main(s32, char **) {
 		visual_info_template.screen = screen;
 
 		s32 number_of_visuals;
-		auto visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
-		assert(visual_info->c_class == TrueColor);
+		XVisualInfo *visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
+		assert(visual_info->class == TrueColor);
 
 		XSetWindowAttributes window_attributes = {};
 		window_attributes.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone);
@@ -416,7 +252,7 @@ s32 main(s32, char **) {
 	{
 		s32 win_x, win_y;
 		u32 border_width, depth;
-		if (XGetGeometry(linux_context.display, linux_context.window, &root_window, &win_x, &win_y, &window_pixel_width, &window_pixel_height, &border_width, &depth) == 0) {
+		if (XGetGeometry(linux_context.display, linux_context.window, &root_window, &win_x, &win_y, &window_width, &window_height, &border_width, &depth) == 0) {
 			_abort("Failed to get the screen's geometry.");
 		}
 	}
@@ -425,45 +261,10 @@ s32 main(s32, char **) {
 	{
 		XColor xcolor;
 		static char cursor_pixels[] = {0x00};
-		auto pixmap = XCreateBitmapFromData(linux_context.display, linux_context.window, cursor_pixels, 1, 1);
+		Pixmap pixmap = XCreateBitmapFromData(linux_context.display, linux_context.window, cursor_pixels, 1, 1);
 		linux_context.blank_cursor = XCreatePixmapCursor(linux_context.display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
 		XFreePixmap(linux_context.display, pixmap);
 	}
-#if 0
-	// @TODO: Handle this stuff on resize too.
-	u32 reference_window_width  = 640;
-	u32 reference_window_height = 360;
-
-	u32 scale = u32_min(window_pixel_width / reference_window_width, window_pixel_height / reference_window_height);
-
-	pixels_per_meter        = 32;
-	meters_per_pixel        = 1.0f / pixels_per_meter;
-	scaled_meters_per_pixel = meters_per_pixel / scale;
-
-	window_scaled_meter_width  = window_pixel_width  * scaled_meters_per_pixel;
-	window_scaled_meter_height = window_pixel_height * scaled_meters_per_pixel;
-
-	printf("Pixels per meter: %u\n"
-	       "Meters per pixel: %.9g\n"
-	       "Scale: %u\n"
-	       "Scaled meters per pixel: %.9g\n"
-	       "Reference window: %u %u\n"
-	       "Window pixel: %u %u\n"
-	       "Window meter: %.9g %.9g\n\n",
-	       pixels_per_meter, meters_per_pixel, scale, scaled_meters_per_pixel, reference_window_width, reference_window_height, window_pixel_width, window_pixel_height, window_scaled_meter_width, window_scaled_meter_height);
-
-	linux_context.gl_context = platform_init_opengl_context();
-
-	init_assets();
-
-	for (u32 i = 0; i < NUM_JOB_THREADS; ++i) {
-		platform_create_thread(job_thread_start, &job_queue);
-	}
-
-	render_init();
-
-	debug_init();
-#endif
 
 	application_entry();
 
@@ -483,128 +284,19 @@ u32 key_symbol_to_scancode(Key_Symbol key_symbol) {
 	return scancode;
 }
 
-#if 0
-void input_key_down(Keyboard *, u32, Key_Symbol);
-
-u32 platform_keysym_to_scancode(Key_Symbol ks) {
-	u32 sc = XKeysymToKeycode(linux_context.display, ks);
-	assert(sc > 0);
-	return sc;
-}
-
-Key_Symbol platform_keycode_to_keysym(u32 keycode, s8 level) {
-	// @TODO: Use this?
-	/*
-	int keysyms_per_keycode_return;
-	KeySym *keysym = XGetKeyboardMapping(dpy,
-			xe->xkey.keycode,
-			1,
-			&keysyms_per_keycode_return);
-	XFree(keysym);
-	*/
-	KeySym keysym = NoSymbol;
-	#if 0
-	//unsigned int event_mask = ShiftMask | LockMask;
-	XkbDescPtr keyboard_map = XkbGetMap(linux_context.display, XkbAllClientInfoMask, XkbUseCoreKbd);
-	if (keyboard_map) {
-		//What is diff between XkbKeyGroupInfo and XkbKeyNumGroups?
-		unsigned char info = XkbKeyGroupInfo(keyboard_map, keycode);
-		unsigned int num_groups = XkbKeyNumGroups(keyboard_map, keycode);
-
-		//Get the group
-		unsigned int group = 0x00;
-		switch (XkbOutOfRangeGroupAction(info)) {
-			case XkbRedirectIntoRange: {
-							   /* If the RedirectIntoRange flag is set, the four least significant
-							    * bits of the groups wrap control specify the index of a group to
-							    * which all illegal groups correspond. If the specified group is
-							    * also out of range, all illegal groups map to Group1.
-							    */
-							   group = XkbOutOfRangeGroupInfo(info);
-							   if (group >= num_groups) group = 0;
-						   } break;
-			case XkbClampIntoRange: {
-							/* If the ClampIntoRange flag is set, out-of-range groups correspond
-							 * to the nearest legal group. Effective groups larger than the
-							 * highest supported group are mapped to the highest supported group;
-							 * effective groups less than Group1 are mapped to Group1 . For
-							 * example, a key with two groups of symbols uses Group2 type and
-							 * symbols if the global effective group is either Group3 or Group4.
-							 */
-							group = num_groups - 1;
-						} break;
-			case XkbWrapIntoRange: {
-						       /* If neither flag is set, group is wrapped into range using integer
-							* modulus. For example, a key with two groups of symbols for which
-							* groups wrap uses Group1 symbols if the global effective group is
-							* Group3 or Group2 symbols if the global effective group is Group4.
-							*/
-					       } // Fall-through.
-			default: {
-					 if (num_groups != 0) {
-						 group %= num_groups;
-					 }
-				 } break;
-		}
-
-		//int level = 
-
-		/*
-		   XkbKeyTypePtr key_type = XkbKeyKeyType(keyboard_map, keycode, group);
-		   unsigned int active_mods = event_mask & key_type->mods.mask;
-
-		   int level2 = 0;
-		   for (int i = 0; i < key_type->map_count; ++i) {
-		   if (key_type->map[i].active && key_type->map[i].mods.mask == active_mods) {
-		   level2 = key_type->map[i].level;
-		   }
-		   }
-
-		 */
-		//keysym = XkbKeySymEntry(keyboard_map, keycode, level, group);
-		//XkbFreeClientMap(keyboard_map, XkbAllClientInfoMask, true);
-		keysym = XkbKeycodeToKeysym(linux_context.display, keycode, group, level);
-	}
-	#endif
-
-	return (Key_Symbol)keysym;
-}
-
-#endif
-
 void get_mouse_xy(s32 *x, s32 *y) {
 	s32 screen_x, screen_y;
 	Window root, child;
 	u32 mouse_buttons;
 
 	XQueryPointer(linux_context.display, linux_context.window, &root, &child, &screen_x, &screen_y, x, y, &mouse_buttons);
-	*y = (window_pixel_height - *y); // Bottom left is zero for us, top left is zero for x11.
+	*y = (window_height - *y); // Bottom left is zero for us, top left is zero for x11.
 }
-
-
-#include <stdio.h>
 
 void render_resize_window();
-template <u32 T> void press_button(u32 index, IO_Buttons<T> *buttons);
-template <u32 T> void release_button(u32 index, IO_Buttons<T> *buttons);
+void press_button(u32 index, IO_Buttons *buttons);
+void release_button(u32 index, IO_Buttons *buttons);
 
-static void parse_valuators(const double *input_values,unsigned char *mask,int mask_len,
-                            double *output_values,int output_values_len) {
-    int i = 0,z = 0;
-    int top = mask_len * 8;
-    //if (top > MAX_AXIS)
-        //top = MAX_AXIS;
-
-    memset(output_values,0,output_values_len * sizeof(double));
-    for (; i < top && z < output_values_len; i++) {
-        if (XIMaskIsSet(mask, i)) {
-            const int value = (int) *input_values;
-            output_values[z] = value;
-            input_values++;
-        }
-        z++;
-    }
-}
 void handle_platform_events(Game_Input *input, Game_Execution_Status *execution_status) {
 	XEvent event;
 	XGenericEventCookie *cookie = &event.xcookie;
@@ -645,14 +337,14 @@ void handle_platform_events(Game_Input *input, Game_Execution_Status *execution_
 			release_button(raw_event->detail, &input->keyboard);
 		} break;
 		case XI_RawButtonPress: {
-			auto button_index = (event.xbutton.button - 1);
+			u32 button_index = (event.xbutton.button - 1);
 			if (button_index > MOUSE_BUTTON_COUNT) {
 				break;
 			}
 			press_button(button_index, &input->mouse.buttons);
 		} break;
 		case XI_RawButtonRelease: {
-			auto button_index = (event.xbutton.button - 1);
+			u32 button_index = (event.xbutton.button - 1);
 			if (button_index > MOUSE_BUTTON_COUNT) {
 				break;
 			}
@@ -666,41 +358,23 @@ void handle_platform_events(Game_Input *input, Game_Execution_Status *execution_
 	}
 }
 
-u8 write_file(File_Handle fh, size_t n, const void *buf) {
-	size_t tot_writ = 0;
-	ssize_t cur_writ = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
-	const char *pos = (char *)buf;
+u8 write_file(File_Handle file_handle, size_t count, const void *buffer) {
+	size_t total_bytes_written = 0;
+	ssize_t current_bytes_written = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
+	const char *position = (char *)buffer;
 
 	do {
-		cur_writ = write(fh, pos, (n - tot_writ));
-		tot_writ += cur_writ;
-		pos += cur_writ;
-	} while (tot_writ < n && cur_writ != 0);
+		current_bytes_written = write(file_handle, position, (count - total_bytes_written));
+		total_bytes_written += current_bytes_written;
+		position += current_bytes_written;
+	} while (total_bytes_written < count && current_bytes_written != 0);
 
-	if (tot_writ != n) {
+	if (total_bytes_written != count) {
 		// @TODO: Add file name to file handle.
 		log_print(MAJOR_ERROR_LOG, "Could not write to file: %s", get_platform_error());
-		return false;
+		return 0;
 	}
-
-	return true;
-}
-
-size_t format_string(const char *fmt, va_list arg_list, char *buf);
-
-void debug_print(const char *fmt, va_list args) {
-	char buf[4096];
-	size_t nbytes_writ = format_string(fmt, args, buf);
-	write_file(STDOUT, nbytes_writ, buf);
-}
-
-void debug_print(const char *fmt, ...) {
-	char buf[4096];
-	va_list arg_list;
-	va_start(arg_list, fmt);
-	size_t nbytes_writ = format_string(fmt, arg_list, buf);
-	write_file(STDOUT, nbytes_writ, buf);
-	va_end(arg_list);
+	return 1;
 }
 
 void *open_shared_library(const char *filename) {
@@ -708,7 +382,6 @@ void *open_shared_library(const char *filename) {
 	if (!library) {
 		_abort("Failed to load shared library: %s", dlerror());
 	}
-
 	return library;
 }
 
@@ -741,13 +414,11 @@ u8 close_file(File_Handle file_handle) {
 	s32 result = close(file_handle);
 	if (result == -1) {
 		log_print(MINOR_ERROR_LOG, "Could not close file: %s", get_platform_error());
-		return false;
+		return 0;
 	}
-	return true;
+	return 1;
 }
 
-//#include <errno.h>
-//#include <string.h>
 u8 read_file(File_Handle file_handle, size_t num_bytes_to_read, void *buffer) {
 	size_t total_bytes_read = 0;
 	ssize_t current_bytes_read = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
@@ -761,14 +432,14 @@ u8 read_file(File_Handle file_handle, size_t num_bytes_to_read, void *buffer) {
 
 	if (current_bytes_read == -1) {
 		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s", get_platform_error());
-		return false;
+		return 0;
 	} else if (total_bytes_read != num_bytes_to_read) {
 		// @TODO: Add file name to file handle.
 		log_print(MAJOR_ERROR_LOG, "Could only read %lu bytes, but %lu bytes were requested", total_bytes_read, num_bytes_to_read);
-		return false;
+		return 0;
 	}
 
-	return true;
+	return 1;
 }
 
 File_Offset get_file_length(File_Handle file_handle) {
@@ -817,7 +488,7 @@ void print_stacktrace() {
 	if (address_count == address_buffer_size) {
 		debug_print("Stack trace is probably truncated.\n");
 	}
-	auto function_names = backtrace_symbols(addresses, address_count);
+	char **function_names = backtrace_symbols(addresses, address_count);
 	if (!function_names) {
 		debug_print("Failed to get function names");
 		return;
@@ -827,17 +498,43 @@ void print_stacktrace() {
 	}
 }
 
-#if 0
-void
-platform_swap_buffers()
-{
-	glXSwapBuffers(linux_context.display, linux_context.window);
+#define MAP_ANONYMOUS 0x20
+
+void *acquire_platform_memory(size_t size) {
+	void *result = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (result == (void *)-1) {
+		_abort("Failed to get memory from platform: %s", get_platform_error());
+	}
+
+	return result;
 }
 
+void release_platform_memory(void *memory, size_t size) {
+	s32 return_code = munmap(memory, size);
+	if (return_code == -1) {
+		_abort("Failed to free memory: %s", get_platform_error());
+	}
+}
+
+void platform_toggle_fullscreen() {
+	XEvent event;
+	memset(&event, 0, sizeof(event));
+	event.xclient.type         = ClientMessage;
+	event.xclient.window       = linux_context.window;
+	event.xclient.message_type = XInternAtom(linux_context.display, "_NET_WM_STATE", True);
+	event.xclient.format       = 32;
+	event.xclient.data.l[0]    = 2;
+	event.xclient.data.l[1]    = XInternAtom(linux_context.display, "_NET_WM_STATE_FULLSCREEN", True);
+	event.xclient.data.l[2]    = 0;
+	event.xclient.data.l[3]    = 1;
+	event.xclient.data.l[4]    = 0;
+	XSendEvent(linux_context.display, DefaultRootWindow(linux_context.display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+}
+
+#if 0
 // 
 // @TODO: Signal IO errors.
 //
-
 
 char *
 platform_get_memory(size_t len)
@@ -869,8 +566,6 @@ platform_get_time()
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t);
 	return t;
 }
-
-#include <math.h>
 
 inline u32
 platform_get_time_ms()
@@ -1138,22 +833,4 @@ platform_get_semaphore_value(sem_t *s)
 	return v;
 }
 
-void
-platform_toggle_fullscreen()
-{
-	XEvent e;
-	memset(&e, 0, sizeof(e));
-
-	e.xclient.type         = ClientMessage;
-	e.xclient.window       = linux_context.window;
-	e.xclient.message_type = XInternAtom(linux_context.display, "_NET_WM_STATE", True);
-	e.xclient.format = 32;
-	e.xclient.data.l[0] = 2;
-	e.xclient.data.l[1] = XInternAtom(linux_context.display, "_NET_WM_STATE_FULLSCREEN", True);
-	e.xclient.data.l[2] = 0;
-	e.xclient.data.l[3] = 1;
-	e.xclient.data.l[4] = 0;
-
-	XSendEvent(linux_context.display, DefaultRootWindow(linux_context.display), False, SubstructureRedirectMask | SubstructureNotifyMask, &e);
-}
 #endif

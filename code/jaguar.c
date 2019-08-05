@@ -5,23 +5,28 @@
 
 // TEMPORARY. GET RID OF ME.
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 ////////////////////////////
 
 #ifdef DEBUG
-	const u8 debug = true;
+	const u8 debug = 1;
 #else
-	const u8 debug = false;
+	const u8 debug = 0;
 #endif
 
-#include "linux.cpp"
-#include "memory.cpp"
-#include "math.cpp"
-#include "library.cpp"
-#include "vulkan.cpp"
-#include "assets.cpp"
-#include "input.cpp"
-#include "camera.cpp"
+#include "linux.c"
+#include "memory.c"
+#include "math.c"
+#define STB_SPRINTF_IMPLEMENTATION
+#include "stb_sprintf.h"
+#include "library.c"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#include "vulkan.c"
+#include "assets.c"
+#include "input.c"
+#include "camera.c"
 
 void update(Game_State *game_state) {
 	update_input(&game_state->input, &game_state->execution_status);
@@ -29,16 +34,15 @@ void update(Game_State *game_state) {
 }
 
 void application_entry() {
-	Game_State game_state = {};
-	game_state.execution_status = GAME_RUNNING;
+	Game_State game_state = {
+		.execution_status = GAME_RUNNING,
+	};
 
 	initialize_memory(&game_state);
 	initialize_renderer(&game_state);
 	initialize_assets(&game_state);
 	initialize_input(&game_state);
-	initialize_camera(&game_state.camera, {2, 2, 2}, {1, 1, 1}, 1);
-
-	//build_vulkan_command_buffers(&game_state.assets);
+	initialize_camera(&game_state.camera, (V3){2, 2, 2}, (V3){1, 1, 1}, 1);
 
 	while (game_state.execution_status != GAME_EXITING) {
 		update(&game_state);

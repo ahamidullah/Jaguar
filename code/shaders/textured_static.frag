@@ -26,7 +26,7 @@ void main() {
 //uniform bool has_texture;
 layout(binding = 2) uniform sampler diffuse_sampler;
 layout(binding = 3) uniform sampler2D shadow_map_texture;
-layout(binding = 4) uniform texture2D textures[1000];
+layout(binding = 4) uniform texture2D textures[100];
 
 layout(push_constant) uniform PER_OBJECT {
 	int imgIdx;

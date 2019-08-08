@@ -1,0 +1,19 @@
+Stop using align_to so much.
+
+Reduce matrix multiplies?
+
+normal mapping
+
+parralax occulusion mapping
+
+get rid of library.c
+
+get rid of all of the memory mapping in vulkan.c
+
+reuse command buffers
+
+multithreading
+
+vkpipelinecache
+
+use per-thread vulkan pools

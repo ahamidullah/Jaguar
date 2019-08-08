@@ -1,3 +1,8 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Shared Declarations
+//
+
 typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -9,13 +14,13 @@ typedef int64_t  s64;
 typedef float    f32;
 typedef double   f64;
 
-typedef enum Game_Execution_Status {
+typedef enum {
 	GAME_RUNNING,
 	GAME_PAUSED,
 	GAME_EXITING,
 } Game_Execution_Status;
 
-typedef enum Log_Type {
+typedef enum {
 	STANDARD_LOG,
 	MINOR_ERROR_LOG,
 	MAJOR_ERROR_LOG,
@@ -41,54 +46,74 @@ typedef enum Log_Type {
 void log_print_actual(Log_Type , const char *file, int line, const char *func, const char *format, ...);
 void _abort_actual(const char *file, int line, const char *func, const char *fmt, ...);
 
-#define print_v4(v4) print_v4_actual(#v4, v4)
-#define print_v3(v3) print_v3_actual(#v3, v3)
+////////////////////////////////////////
+//
+// Math
+//
+
 #define print_v2(v2) print_v2_actual(#v2, v2)
+#define print_v3(v3) print_v3_actual(#v3, v3)
+#define print_v4(v4) print_v4_actual(#v4, v4)
 #define print_m4(m4) print_m4_actual(#m4, m4)
 
-typedef struct V2 {
+u32 u32_max(u32 a, u32 b) {
+	return a > b ? a : b;
+}
+
+u32 u32_min(u32 a, u32 b) {
+	return a < b ? a : b;
+}
+
+typedef struct {
 	f32 x, y;
 } V2;
 
-typedef struct V2s {
+typedef struct {
 	s32 x, y;
 } V2s;
 
-typedef struct V2u {
+typedef struct {
 	u32 x, y;
 } V2u;
 
-typedef struct V3 {
+typedef struct {
 	f32 x, y, z;
 } V3;
 
-typedef struct V4 {
+typedef struct {
 	f32 x, y, z, w;
 } V4;
 
-typedef struct M3 {
+typedef struct {
 	f32 m[3][3];
 } M3;
 
-typedef struct M4 {
+typedef struct {
 	f32 m[4][4];
 } M4;
 
-typedef struct Quaternion {
-	//Quaternion() {}
-	//Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
-	//Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
-	//Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
+typedef struct {
+	/*
+	Quaternion() {}
+	Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
+	Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
+	Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
+	*/
 	f32 x, y, z, w;
 } Quaternion;
 
-typedef struct IO_Buttons {
+////////////////////////////////////////
+//
+// Input
+//
+
+typedef struct {
 	u8 *down;
 	u8 *pressed;
 	u8 *released;
 } IO_Buttons;
 
-typedef struct Mouse {
+typedef struct {
 	s32 wheel;
 	s32 x, y;
 	s32 delta_x, delta_y;
@@ -97,12 +122,12 @@ typedef struct Mouse {
 	IO_Buttons buttons;
 } Mouse;
 
-typedef struct Game_Input {
+typedef struct {
 	Mouse mouse;
 	IO_Buttons keyboard;
 } Game_Input;
 
-typedef struct Camera {
+typedef struct {
 	M4 view_matrix;
 
 	V3 position;
@@ -115,12 +140,12 @@ typedef struct Camera {
 	f32 speed;
 } Camera;
 
-typedef struct Read_File_Result {
+typedef struct {
 	char *contents;
 	u8 error;
 } Read_File_Result;
 
-typedef struct Glyph_Info {
+typedef struct {
 	u32 texture_id;
 	u32 width;
 	u32 height;
@@ -138,6 +163,11 @@ typedef struct Font {
 	s32 descender;
 };
 */
+
+////////////////////////////////////////
+//
+// Memory
+//
 
 typedef struct Chunk_Header {
 	u8 *base_block;
@@ -157,7 +187,7 @@ typedef struct Free_Entry {
 	struct Free_Entry *next;
 } Free_Entry;
 
-typedef struct Entry_Header {
+typedef struct {
 	size_t size;
 	char *next;
 	char *prev;
@@ -165,14 +195,14 @@ typedef struct Entry_Header {
 
 Block_Header *create_memory_block();
 
-typedef struct Memory_Arena {
+typedef struct {
 	Free_Entry *entry_free_head;
 	char *last_entry;
 	Block_Header *base_block;
 	Block_Header *active_block;
 } Memory_Arena;
 
-typedef struct String_Result {
+typedef struct {
 	char *data;
 	u64 length; // @TODO: This really should be a File_Offset...
 } String_Result;
@@ -186,7 +216,7 @@ typedef u32 Material_ID;
 
 #define MAX_MATERIAL_COUNT 100
 
-typedef struct Vertex {
+typedef struct {
 	V3 position;
 	V3 color;
 	V2 uv;
@@ -206,18 +236,41 @@ typedef struct Mesh_Asset {
 } Mesh_Asset;
 */
 
-typedef struct Model_Asset {
+typedef u32 Texture_ID;
+
+typedef enum {
+	TEXTURED_STATIC_SHADER,
+	UNTEXTURED_STATIC_SHADER,
+	SHADOW_MAP_STATIC_SHADER,
+
+	SHADER_COUNT
+} Shader_Type;
+
+typedef struct {
+	Shader_Type shader;
+
+	V3 diffuse_color;
+	V3 specular_color;
+
+	Texture_ID diffuse_map;
+	Texture_ID specular_map;
+	Texture_ID normal_map;
+} Material;
+
+typedef struct {
 	Vertex *vertices;
 	u32 vertex_count;
 
 	u32 *indices;
 	u32 index_count;
 
+	Material *materials;
 	u32 *mesh_index_counts;
 	u32 mesh_count;
 
 	u32 vertex_offset;
 	u32 first_index;
+
 } Model_Asset;
 
 typedef struct {
@@ -227,28 +280,16 @@ typedef struct {
 } Transform;
 
 typedef struct {
-	u32 *index_counts;
-	u32 mesh_count;
+	u32 *mesh_index_counts;
 
-	Transform transform;
 	u32 vertex_offset;
 	u32 first_index;
-} Model_Instance;
+} Model;
 
-/*
-typedef struct Model_Instance {
-	u32 mesh_count;
-	u32 *index_counts;
-
-	Transform transform;
-	u32 vertex_offset;
-	u32 first_index;
-
-	//u32 vertex_count;
-	//u32 uniform_offset;
-	//Material_ID *material_ids;
-} Model_Instance;
-*/
+////////////////////////////////////////
+//
+// Animation
+//
 
 typedef struct Skeleton_Joint_Pose {
 	Quaternion rotation;
@@ -301,13 +342,13 @@ typedef struct {
 	s8 looped;
 } Animation_Asset;
 
-typedef struct Animation_Instance {
+typedef struct {
 	Animation_Asset *asset;
 	f32 time;
 	u32 current_frame;
 } Animation_Instance;
 
-typedef enum Asset_ID {
+typedef enum {
 	GUY1_ASSET,
 	GUY2_ASSET,
 	GUY3_ASSET,
@@ -315,52 +356,51 @@ typedef enum Asset_ID {
 	NANOSUIT_ASSET,
 } Asset_ID;
 
-typedef enum Shader_Type {
-	TEXTURED_STATIC_SHADER,
-	UNTEXTURED_STATIC_SHADER,
-	SHADOW_MAP_STATIC_SHADER,
-
-	SHADER_COUNT
-} Shader_Type;
-
-typedef u32 Texture_ID;
-
-typedef struct Material {
-	Shader_Type shader;
-
-	V3 diffuse_color;
-	V3 specular_color;
-
-	Texture_ID diffuse_map;
-	Texture_ID specular_map;
-	Texture_ID normal_map;
-} Material;
-
 #define MAX_LOADED_ASSET_COUNT 1000
+#define MAX_MODEL_INSTANCES 1000
 
 typedef struct {
-	Material materials[MAX_MATERIAL_COUNT];
-	s32 material_count;
-
 	void *lookup[MAX_LOADED_ASSET_COUNT]; // @TODO: Use a hash table.
 } Game_Assets;
 
+/*
 // Hash table.
-//typedef struct {
-	//Transform_Component *transform;
-	//Render_Component *render;
-//} Game_Components;
+typedef struct {
+	Transform_Component *transform;
+	Render_Component *render;
+	Material_Component *material;
+	Animation_Component *animation;
+} Game_Components;
 
-#define MAX_MODEL_INSTANCES 1000
+typedef struct {
+	u32 id_generator;
+	u32 *ids;
+	u32 id_count;
+} Game_Entities;
+*/
 
-typedef struct Game_State {
+// @TODO: Use sparse arrays to store entity attributes.
+typedef struct {
+	Transform *transforms;
+	u32 transform_count;
+
+	Model *models;
+	u32 *mesh_counts;
+	Transform *model_transforms;
+	Material **mesh_materials;
+	u32 model_count;
+
+	u32 *ids;
+	u32 id_count;
+} Game_Entities;
+
+typedef struct {
 	Game_Execution_Status execution_status;
 	Game_Input input;
 	Game_Assets assets;
-	Camera camera;
+	Game_Entities entities;
 
-	Model_Instance model_instances[MAX_MODEL_INSTANCES];
-	u32 model_instance_count;
+	Camera camera;
 
 	Memory_Arena frame_arena;
 	Memory_Arena permanent_arena;

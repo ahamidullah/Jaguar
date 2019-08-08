@@ -295,7 +295,7 @@ M4 inverse(M4 m) {
 }
 */
 
-void set_rotation(M4 *m, M3 rotation) {
+void set_matrix_rotation(M4 *m, M3 rotation) {
 	m->m[0][0] = rotation.m[0][0];
 	m->m[0][1] = rotation.m[0][1];
 	m->m[0][2] = rotation.m[0][2];
@@ -307,13 +307,13 @@ void set_rotation(M4 *m, M3 rotation) {
 	m->m[2][2] = rotation.m[2][2];
 }
 
-void set_translation(M4 *m, V3 translation) {
+void set_matrix_translation(M4 *m, V3 translation) {
 	m->m[0][3] = translation.x;
 	m->m[1][3] = translation.y;
 	m->m[2][3] = translation.z;
 }
 
-void set_scale(M4 *m, V3 scale) {
+void set_matrix_scale(M4 *m, V3 scale) {
 	for (s32 i = 0; i < 4; i++) {
 		m->m[i][0] *= scale.x;
 		m->m[i][1] *= scale.y;
@@ -321,11 +321,11 @@ void set_scale(M4 *m, V3 scale) {
 	}
 }
 
-V3 get_translation(M4 m) {
+V3 get_matrix_translation(M4 m) {
 	return (V3){m.m[0][3], m.m[1][3], m.m[2][3]};
 }
 
-M4 transpose(M4 m) {
+M4 transpose_matrix(M4 m) {
 	return (M4){{
 		{m.m[0][0], m.m[1][0], m.m[2][0], m.m[3][0]},
 		{m.m[0][1], m.m[1][1], m.m[2][1], m.m[3][1]},

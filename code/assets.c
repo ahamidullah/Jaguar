@@ -48,6 +48,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 	model->indices = malloc(sizeof(u32) * model->index_count);
 	model->mesh_count = mesh_count;
 	model->mesh_index_counts = malloc(sizeof(u32) * model->mesh_count);;
+	model->materials = malloc(sizeof(Material) * model->mesh_count);
 	assets->lookup[id] = model;
 
 	u32 mesh_vertex_offset = 0;
@@ -106,10 +107,10 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 
 		if (material_id == -1) {
 			// New material.
-			material_id = assets->material_count++;
-			assert(assets->material_count < MAX_MATERIAL_COUNT);
+			//material_id = assets->material_count++;
+			//assert(assets->material_count < MAX_MATERIAL_COUNT);
 
-			Material *material = &assets->materials[material_id];
+			Material *material = &model->materials[i];
 			//material->name = material_name;
 
 			struct aiString diffuse_path, normal_path, specular_path;
@@ -433,6 +434,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 }
 
 void create_model_instance(Game_State *game_state, Asset_ID id, Transform transform) {
+/*
 	Model_Asset *asset = game_state->assets.lookup[id];
 	Model_Instance *instance = &game_state->model_instances[game_state->model_instance_count];
 	instance->transform = transform;
@@ -446,6 +448,7 @@ void create_model_instance(Game_State *game_state, Asset_ID id, Transform transf
 		instance->index_counts[i] = asset->mesh_index_counts[i];
 	}
 	game_state->model_instance_count += 1;
+*/
 }
 
 void initialize_assets(Game_State *game_state) {
@@ -455,10 +458,12 @@ void initialize_assets(Game_State *game_state) {
 	load_model("data/models/nanosuit/nanosuit.obj", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena);
 	//load_model(path, GUY2_ASSET, &game_state->assets, &game_state->frame_arena);
 	//load_model(path, GUY3_ASSET, &game_state->assets, &game_state->frame_arena);
+	/*
 	Transform t = {};
 	create_model_instance(game_state, GUY1_ASSET, t);
 	t.translation = (V3){0.0f, -2.0, 0.0f};
 	//create_model_instance(game_state, GUY2_ASSET, t);
 	t.translation = (V3){0.0f, 10.0, 0.0f};
 	create_model_instance(game_state, NANOSUIT_ASSET, t);
+	*/
 }

@@ -476,8 +476,8 @@ Platform_Time get_current_platform_time() {
 }
 
 // Time in milliseconds.
-s64 platform_time_difference(Platform_Time start, Platform_Time end, u32 resolution) {
-	return (end.tv_nsec - start.tv_nsec) / resolution;
+f64 platform_time_difference(Platform_Time start, Platform_Time end) {
+	return ((end.tv_sec - start.tv_sec) * 1000.0) + ((end.tv_nsec - start.tv_nsec) / 1000000.0);
 }
 
 void print_stacktrace() {

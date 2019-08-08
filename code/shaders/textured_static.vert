@@ -10,7 +10,7 @@ layout(location = 1) out vec4 shadow_map_position;
 layout(location = 2) out vec2 fragment_uv;
 layout(location = 3) out vec3 fragment_normal;
 
-layout(binding = 0) uniform UniformBufferObject {
+layout(binding = 0, set = 1) uniform UniformBufferObject {
 	/*
 	   mat4 render_transorm;
 	   mat4 biased_shadow_map_transform;
@@ -28,7 +28,7 @@ layout(binding = 0) uniform UniformBufferObject {
 	layout(row_major) mat4 world_to_shadow_map_clip_space;
 } ubo;
 
-layout(binding = 1) uniform Dynamic_UBO {
+layout(binding = 1, set = 3) uniform Dynamic_UBO {
 	layout(row_major) mat4 world_to_clip_space;
 	layout(row_major) mat4 world_to_shadow_map_clip_space;
 } dynamic_ubo;

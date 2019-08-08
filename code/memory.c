@@ -109,3 +109,34 @@ void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	assert(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
 	return result;
 }
+
+
+// Only legal if source and destination are in the same array.
+void move_memory(void *destination, void *source, size_t len) {
+	char *s = (char *)source;
+	char *d = (char *)destination;
+	if (s < d) {
+		for (s += len, d += len; len; --len) {
+			*--d = *--s;
+		}
+	} else {
+		while (len--) {
+			*d++ = *s++;
+		}
+	}
+}
+
+void copy_memory(void *destination, const void *source, size_t count) {
+	const char *s = (const char *)source;
+	char *d = (char *)destination;
+	for (size_t i = 0; i < count; ++i) {
+		d[i] = s[i];
+	}
+}
+
+void set_memory(void *destination, char set_to, size_t count) {
+	char *d = (char *)destination;
+	for (size_t i = 0; i < count; ++i) {
+		d[i] = set_to;
+	}
+}

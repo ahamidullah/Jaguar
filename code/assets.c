@@ -41,15 +41,15 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		index_count += assimp_scene->mMeshes[i]->mNumFaces * 3;
 	}
 
-	Model_Asset *model = malloc(sizeof(Model_Asset));
-	model->vertex_count = vertex_count;
-	model->vertices = malloc(sizeof(Vertex) * model->vertex_count);
-	model->index_count = index_count;
-	model->indices = malloc(sizeof(u32) * model->index_count);
-	model->mesh_count = mesh_count;
-	model->mesh_index_counts = malloc(sizeof(u32) * model->mesh_count);;
-	model->materials = malloc(sizeof(Material) * model->mesh_count);
-	assets->lookup[id] = model;
+	Loaded_Mesh *mesh = malloc(sizeof(Loaded_Mesh));
+	mesh->vertex_count = vertex_count;
+	mesh->vertices = malloc(sizeof(Vertex) * mesh->vertex_count);
+	mesh->index_count = index_count;
+	mesh->indices = malloc(sizeof(u32) * mesh->index_count);
+	mesh->submesh_count = mesh_count;
+	mesh->submesh_index_counts = malloc(sizeof(u32) * mesh->submesh_count);;
+	mesh->materials = malloc(sizeof(Material) * mesh->submesh_count);
+	assets->lookup[id] = mesh;
 
 	u32 mesh_vertex_offset = 0;
 	u32 mesh_index_offset = 0;
@@ -61,7 +61,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		//model->meshes[i].vertices = &vertices[mesh_vertex_offset];
 
 		for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
-			Vertex *v = &model->vertices[mesh_vertex_offset + j];
+			Vertex *v = &mesh->vertices[mesh_vertex_offset + j];
 
 			v->position.x = assimp_mesh->mVertices[j].x;
 			v->position.y = assimp_mesh->mVertices[j].y;
@@ -91,14 +91,14 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 
 		for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
 			assert(assimp_mesh->mFaces[j].mNumIndices == 3);
-			model->indices[mesh_index_offset + (3 * j) + 0] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[0];
-			model->indices[mesh_index_offset + (3 * j) + 1] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[1];
-			model->indices[mesh_index_offset + (3 * j) + 2] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[2];
+			mesh->indices[mesh_index_offset + (3 * j) + 0] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[0];
+			mesh->indices[mesh_index_offset + (3 * j) + 1] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[1];
+			mesh->indices[mesh_index_offset + (3 * j) + 2] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[2];
 		}
-		model->mesh_index_counts[i] = 3 * assimp_mesh->mNumFaces;
+		mesh->submesh_index_counts[i] = 3 * assimp_mesh->mNumFaces;
 
 		mesh_vertex_offset += assimp_mesh->mNumVertices;
-		mesh_index_offset += model->mesh_index_counts[i];
+		mesh_index_offset += mesh->submesh_index_counts[i];
 
 		struct aiMaterial* assimp_material = assimp_scene->mMaterials[assimp_mesh->mMaterialIndex];
 		s32 material_id = -1;
@@ -110,7 +110,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 			//material_id = assets->material_count++;
 			//assert(assets->material_count < MAX_MATERIAL_COUNT);
 
-			Material *material = &model->materials[i];
+			Material *material = &mesh->materials[i];
 			//material->name = material_name;
 
 			struct aiString diffuse_path, normal_path, specular_path;
@@ -151,7 +151,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		}
 	}
 
-	transfer_model_data_to_gpu(model, &model->vertex_offset, &model->first_index);
+	transfer_model_data_to_gpu(mesh, &mesh->vertex_offset, &mesh->first_index);
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.

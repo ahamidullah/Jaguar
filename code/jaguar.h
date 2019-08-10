@@ -212,31 +212,18 @@ typedef struct {
 //@TODO: Change lookup to a hash table.
 //@TODO: Change lookup to a hash table.
 
-typedef u32 Material_ID;
-
-#define MAX_MATERIAL_COUNT 100
-
 typedef struct {
-	V3 position;
-	V3 color;
-	V2 uv;
-	V3 normal;
-} Vertex;
+	V3 translation;
+	Quaternion rotation;
+	V3 scale;
+} Transform;
 
-/*
-// @TODO: Move vertex and index data into the model asset.
-typedef struct Mesh_Asset {
-	Material_ID material_id;
+////////////////////////////////////////
+//
+// Material
+//
 
-	Vertex *vertices;
-	u32 vertex_count;
-
-	u32 *indices;
-	u32 index_count;
-} Mesh_Asset;
-*/
-
-typedef u32 Texture_ID;
+typedef u32 Material_ID;
 
 typedef enum {
 	TEXTURED_STATIC_SHADER,
@@ -245,6 +232,8 @@ typedef enum {
 
 	SHADER_COUNT
 } Shader_Type;
+
+typedef u32 Texture_ID;
 
 typedef struct {
 	Shader_Type shader;
@@ -257,7 +246,19 @@ typedef struct {
 	Texture_ID normal_map;
 } Material;
 
-typedef struct {
+////////////////////////////////////////
+//
+// Mesh
+//
+
+typedef struct Vertex {
+	V3 position;
+	V3 color;
+	V2 uv;
+	V3 normal;
+} Vertex;
+
+typedef struct Loaded_Mesh {
 	Vertex *vertices;
 	u32 vertex_count;
 
@@ -265,26 +266,19 @@ typedef struct {
 	u32 index_count;
 
 	Material *materials;
-	u32 *mesh_index_counts;
-	u32 mesh_count;
+	u32 *submesh_index_counts;
+	u32 submesh_count;
 
 	u32 vertex_offset;
 	u32 first_index;
+} Loaded_Mesh;
 
-} Model_Asset;
-
-typedef struct {
-	V3 translation;
-	Quaternion rotation;
-	V3 scale;
-} Transform;
-
-typedef struct {
-	u32 *mesh_index_counts;
+typedef struct Mesh {
+	u32 *submesh_index_counts;
 
 	u32 vertex_offset;
 	u32 first_index;
-} Model;
+} Mesh;
 
 ////////////////////////////////////////
 //
@@ -316,7 +310,7 @@ typedef struct Skeleton_Asset {
 	M4 *leaf_node_translations; // @TODO @Memory: Could probably just be a V3 translation?
 } Skeleton_Asset;
 
-typedef struct {
+typedef struct Skeleton_Instance {
 	Skeleton_Asset *asset;
 
 	u32 local_joint_pose_count;
@@ -348,7 +342,12 @@ typedef struct {
 	u32 current_frame;
 } Animation_Instance;
 
-typedef enum {
+////////////////////////////////////////
+//
+// Game Data
+//
+
+typedef enum Asset_ID {
 	GUY1_ASSET,
 	GUY2_ASSET,
 	GUY3_ASSET,
@@ -357,44 +356,27 @@ typedef enum {
 } Asset_ID;
 
 #define MAX_LOADED_ASSET_COUNT 1000
-#define MAX_MODEL_INSTANCES 1000
-
-typedef struct {
+typedef struct Game_Assets {
 	void *lookup[MAX_LOADED_ASSET_COUNT]; // @TODO: Use a hash table.
 } Game_Assets;
 
-/*
-// Hash table.
-typedef struct {
-	Transform_Component *transform;
-	Render_Component *render;
-	Material_Component *material;
-	Animation_Component *animation;
-} Game_Components;
-
-typedef struct {
-	u32 id_generator;
-	u32 *ids;
-	u32 id_count;
-} Game_Entities;
-*/
-
 // @TODO: Use sparse arrays to store entity attributes.
-typedef struct {
+typedef struct Game_Entities {
 	Transform *transforms;
 	u32 transform_count;
 
-	Model *models;
-	u32 *mesh_counts;
-	Transform *model_transforms;
-	Material **mesh_materials;
-	u32 model_count;
+	Mesh *meshes;
+	Transform *mesh_transforms;
+	Material **submesh_materials;
+	u32 *submesh_uniform_block_indices;
+	u32 *submesh_counts;
+	u32 mesh_count;
 
 	u32 *ids;
 	u32 id_count;
 } Game_Entities;
 
-typedef struct {
+typedef struct Game_State {
 	Game_Execution_Status execution_status;
 	Game_Input input;
 	Game_Assets assets;

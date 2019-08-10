@@ -14,28 +14,31 @@ void set_entity_transform(Game_Entities *entities, Entity_ID entity_id, Transfor
 }
 
 void set_entity_model(Game_Entities *entities, Entity_ID entity_id, Game_Assets *assets, Asset_ID asset_id, Transform transform) {
-	Model_Asset *asset = assets->lookup[asset_id];
-	Model *model = &entities->models[entity_id];
-	model->mesh_index_counts = asset->mesh_index_counts;
-	model->vertex_offset = asset->vertex_offset;
-	model->first_index = asset->first_index;
+	Loaded_Mesh *asset = assets->lookup[asset_id];
+	Mesh *mesh = &entities->meshes[entity_id];
+	mesh->submesh_index_counts = asset->submesh_index_counts;
+	mesh->vertex_offset = asset->vertex_offset;
+	mesh->first_index = asset->first_index;
 
-	entities->mesh_materials[entity_id] = asset->materials;
+	entities->submesh_materials[entity_id] = asset->materials;
 
-	entities->model_transforms[entity_id] = transform;
+	entities->mesh_transforms[entity_id] = transform;
 
-	entities->mesh_counts[entity_id] = asset->mesh_count;
+	//entities->submesh_uniform_block_indices[entity_id] = asset->submesh_uniform_block_indices;
 
-	entities->model_count++;
+	entities->submesh_counts[entity_id] = asset->submesh_count;
+
+	entities->mesh_count++;
 }
 
 void initialize_entities(Game_Entities *entities, Game_Assets *assets) {
 	entities->ids = malloc(sizeof(Entity_ID) * 10000);
 	entities->transforms = malloc(sizeof(Transform) * 10000);
-	entities->models = malloc(sizeof(Model) * 10000);
-	entities->mesh_counts = malloc(sizeof(u32) * 10000);
-	entities->model_transforms = malloc(sizeof(Transform) * 10000);
-	entities->mesh_materials = malloc(sizeof(Material *) * 10000);
+	entities->meshes = malloc(sizeof(Mesh) * 10000);
+	entities->submesh_counts = malloc(sizeof(u32) * 10000);
+	entities->submesh_uniform_block_indices = malloc(sizeof(u32) * 10000);
+	entities->mesh_transforms = malloc(sizeof(Transform) * 10000);
+	entities->submesh_materials = malloc(sizeof(Material *) * 10000);
 
 	guy_id = create_entity(entities);
 	Transform t = {};

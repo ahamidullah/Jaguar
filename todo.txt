@@ -17,3 +17,5 @@ multithreading
 vkpipelinecache
 
 use per-thread vulkan pools
+
+vulkan startup logging output

@@ -4,6 +4,10 @@
 #define DEGREES_TO_RADIANS(deg) ((deg) * MUL_DEGREES_TO_RADIANS)
 #define RADIANS_TO_DEGREES(rad) ((rad) * MUL_RADIANS_TO_DEGREES)
 
+u32 divide_and_round_up(u32 a, u32 b) {
+	return (a + (b - 1)) / b;
+}
+
 u8 not_nan(V3 v) {
 	return v.x != NAN && v.y != NAN && v.z != NAN;
 }

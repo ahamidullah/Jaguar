@@ -40,13 +40,13 @@ void initialize_entities(Game_Entities *entities, Game_Assets *assets) {
 	entities->mesh_transforms = malloc(sizeof(Transform) * 10000);
 	entities->submesh_materials = malloc(sizeof(Material *) * 10000);
 
-	guy_id = create_entity(entities);
-	Transform t = {};
-	set_entity_transform(entities, guy_id, t);
-	set_entity_model(entities, guy_id, assets, GUY1_ASSET, t);
+	//guy_id = create_entity(entities);
+	//Transform t = {};
+	//set_entity_transform(entities, guy_id, t);
+	//set_entity_model(entities, guy_id, assets, GUY1_ASSET, t);
 
 	nanosuit_id = create_entity(entities);
-	t.translation = (V3){5.0f, 0.0f, 0.0f};
-	set_entity_transform(entities, guy_id, t);
+	Transform t = {.translation = {0.0f, 0.0f, 0.0f}};
+	set_entity_transform(entities, nanosuit_id, t);
 	set_entity_model(entities, nanosuit_id, assets, NANOSUIT_ASSET, t);
 }

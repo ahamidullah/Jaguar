@@ -6,8 +6,6 @@
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-#define INVALID_ASSET_ID ((Asset_ID)-1)
-
 Texture_ID load_texture(const char *path, Game_Assets *assets) {
 	s32 texture_width, texture_height, texture_channels;
 	printf("%s\n", path);
@@ -22,7 +20,7 @@ Texture_ID load_texture(const char *path, Game_Assets *assets) {
 void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena *thread_local_arena) {
 	const char *model_directory = get_directory(path, thread_local_arena);
 
-	const struct aiScene* assimp_scene = aiImportFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_RemoveRedundantMaterials);
+	const struct aiScene* assimp_scene = aiImportFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
 	}
@@ -57,9 +55,6 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		struct aiMesh *assimp_mesh = assimp_scene->mMeshes[i];
 		assert(assimp_mesh->mVertices && assimp_mesh->mNormals && (assimp_mesh->mFaces && assimp_mesh->mNumFaces > 0));
 
-		//model->meshes[i].vertex_count = assimp_mesh->mNumVertices;
-		//model->meshes[i].vertices = &vertices[mesh_vertex_offset];
-
 		for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
 			Vertex *v = &mesh->vertices[mesh_vertex_offset + j];
 
@@ -74,11 +69,10 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 			v->color.x = 1.0f;
 			v->color.y = 0.0f;
 			v->color.z = 0.0f;
-			/*
-			v->color[0] = assimp_mesh->mColors[j]->r;
-			v->color[1] = assimp_mesh->mColors[j]->g;
-			v->color[2] = assimp_mesh->mColors[j]->b;
-			*/
+
+			v->tangent.x = assimp_mesh->mTangents[j].x;
+			v->tangent.y = assimp_mesh->mTangents[j].y;
+			v->tangent.z = assimp_mesh->mTangents[j].z;
 
 			if (assimp_mesh->mTextureCoords[0]) {
 				v->uv.x = assimp_mesh->mTextureCoords[0][j].x;
@@ -106,37 +100,38 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		// @TODO: Some way to share materials between different meshes.
 
 		if (material_id == -1) {
-			// New material.
-			//material_id = assets->material_count++;
-			//assert(assets->material_count < MAX_MATERIAL_COUNT);
-
 			Material *material = &mesh->materials[i];
-			//material->name = material_name;
-
-			struct aiString diffuse_path, normal_path, specular_path;
+			material->albedo_map = load_texture("data/materials/rusted_iron/albedo.png", assets);
+			material->real_normal_map = load_texture("data/models/anvil/Normal.png", assets);
+			material->normal_map = load_texture("data/materials/rusted_iron/normal.png", assets);
+			material->roughness_map = load_texture("data/materials/rusted_iron/roughness.png", assets);
+			material->metallic_map = load_texture("data/materials/rusted_iron/metalness.png", assets);
+			material->ao_map = load_texture("data/materials/rusted_iron/ao.png", assets);
+#if 0
+			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
 				material->shader = TEXTURED_STATIC_SHADER;
 				const char *texture_path = join_paths(model_directory, diffuse_path.data, thread_local_arena);
 				material->diffuse_map = load_texture(texture_path, assets);
 			} else {
 				material->shader = UNTEXTURED_STATIC_SHADER;
-				material->diffuse_map = INVALID_ASSET_ID;
+				material->diffuse_map = INVALID_ID;
 			}
-
+			struct aiString specular_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_SPECULAR, 0, &specular_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
 				const char *texture_path = join_paths(model_directory, specular_path.data, thread_local_arena);
 				//material->specular_map = load_texture(texture_path, assets);
 			} else {
-				material->specular_map = INVALID_ASSET_ID;
+				material->specular_map = INVALID_ID;
 			}
-			
-			if (aiGetMaterialTexture(assimp_material, aiTextureType_NORMALS, 0, &normal_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
-				const char *texture_path = join_paths(model_directory, normal_path.data, thread_local_arena);
-				//material->normal_map = load_texture(texture_path, assets);
-			} else {
-				material->normal_map = INVALID_ASSET_ID;
-			}
-
+			struct aiString normal_path;
+			//if (aiGetMaterialTexture(assimp_material, aiTextureType_NORMALS, 0, &normal_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
+				//assert(0);
+				const char *texture_path = join_paths(model_directory, "Normal.png", thread_local_arena);
+				material->normal_map = load_texture(texture_path, assets);
+			//} else {
+				//material->normal_map = INVALID_ID;
+			//}
 			struct aiColor4D diffuse_color, specular_color;
 			if (aiGetMaterialColor(assimp_material, AI_MATKEY_COLOR_DIFFUSE, &diffuse_color) == aiReturn_SUCCESS) {
 				material->diffuse_color = (V3){diffuse_color.r, diffuse_color.g, diffuse_color.b};
@@ -148,6 +143,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 			} else {
 				material->diffuse_color = DEFAULT_SPECULAR_COLOR;
 			}
+#endif
 		}
 	}
 
@@ -433,37 +429,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 	*/
 }
 
-void create_model_instance(Game_State *game_state, Asset_ID id, Transform transform) {
-/*
-	Model_Asset *asset = game_state->assets.lookup[id];
-	Model_Instance *instance = &game_state->model_instances[game_state->model_instance_count];
-	instance->transform = transform;
-	instance->mesh_count = asset->mesh_count;
-	//instance->material_ids = NULL; // @TODO
-	//instance->vertex_gpu_memory_offset = asset->vertex_gpu_memory_offset; // @TODO
-	instance->vertex_offset = asset->vertex_offset;
-	instance->first_index = asset->first_index; // @TODO WRONG
-	instance->index_counts = malloc(sizeof(u32) * asset->mesh_count);
-	for (s32 i = 0; i < asset->mesh_count; i++) {
-		instance->index_counts[i] = asset->mesh_index_counts[i];
-	}
-	game_state->model_instance_count += 1;
-*/
-}
-
 void initialize_assets(Game_State *game_state) {
-	const char *path = "data/male2.fbx";
-	load_model(path, GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
-	//load_model("data/models/gun/Handgun_Packed.fbx", GUN_ASSET, &game_state->assets, &game_state->frame_arena);
-	load_model("data/models/nanosuit/nanosuit.obj", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena);
-	//load_model(path, GUY2_ASSET, &game_state->assets, &game_state->frame_arena);
-	//load_model(path, GUY3_ASSET, &game_state->assets, &game_state->frame_arena);
-	/*
-	Transform t = {};
-	create_model_instance(game_state, GUY1_ASSET, t);
-	t.translation = (V3){0.0f, -2.0, 0.0f};
-	//create_model_instance(game_state, GUY2_ASSET, t);
-	t.translation = (V3){0.0f, 10.0, 0.0f};
-	create_model_instance(game_state, NANOSUIT_ASSET, t);
-	*/
+	//load_model("data/male2.fbx", GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
+	load_model("data/models/anvil/anvil.fbx", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena);
 }

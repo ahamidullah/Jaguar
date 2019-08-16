@@ -49,6 +49,10 @@ void print_m4_actual(const char *name, M4 matrix) {
 	}
 }
 
+void print_v3_actual(const char *name, V3 vector) {
+	debug_print("%s: %f %f %f\n", name, vector.x, vector.y, vector.z);
+}
+
 // @TODO: Move me.
 V3 random_color() {
 	float r = rand() / (float)RAND_MAX;

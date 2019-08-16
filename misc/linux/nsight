@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -e
+
+pushd . >& /dev/null
+
+cd ~/nvidia/NVIDIA-Nsight-Graphics-2019.4/host/linux-desktop-nomad-x64
+./nv-nsight-gfx
+
+popd >& /dev/null

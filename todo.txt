@@ -1,12 +1,8 @@
-Stop using align_to so much.
-
 Reduce matrix multiplies?
 
 normal mapping
 
 parralax occulusion mapping
-
-get rid of library.c
 
 get rid of all of the memory mapping in vulkan.c
 
@@ -19,3 +15,56 @@ vkpipelinecache
 use per-thread vulkan pools
 
 vulkan startup logging output
+
+Much more robust mesh rendering.
+	- Meshes without diffuse/specular/normal maps.
+
+Actual material system.
+
+Color lighting.
+
+Make asset/entity loading more robust.
+
+Handle shader permutations.
+	- Normals
+	- Color
+	- Albedo
+	- Specular
+	- Animation
+	- Shadows
+
+grant-schmidt
+
+gamma correction
+
+HDR
+
+Get rid of malloc.
+
+console
+
+config file
+
+environment mapping
+
+basic reflections
+
+basic animations
+
+animation blending
+
+IK
+
+add basic sound
+
+add basic pbr
+
+add multiscattering brdf
+
+experiment with different diffuse/specular brdfs
+
+DONE #############################################################################################################################
+get rid of library.c
+
+Stop using align_to so much.
+

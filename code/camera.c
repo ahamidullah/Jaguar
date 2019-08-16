@@ -8,14 +8,10 @@ void create_camera_basis(Camera *camera, V3 forward) {
 
 void initialize_camera(Camera *camera, V3 position, V3 forward, f32 speed) {
 	camera->speed = speed;
-
 	camera->position = position;
-
 	create_camera_basis(camera, forward);
-
 	camera->yaw = 0.0f;
 	camera->pitch = 0.0f;
-
 	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);
 }
 

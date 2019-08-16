@@ -224,6 +224,8 @@ typedef struct {
 //
 
 typedef u32 Material_ID;
+typedef u32 Texture_ID;
+#define INVALID_ID ((u32)-1)
 
 typedef enum {
 	TEXTURED_STATIC_SHADER,
@@ -233,17 +235,18 @@ typedef enum {
 	SHADER_COUNT
 } Shader_Type;
 
-typedef u32 Texture_ID;
-
 typedef struct {
 	Shader_Type shader;
 
 	V3 diffuse_color;
 	V3 specular_color;
 
-	Texture_ID diffuse_map;
-	Texture_ID specular_map;
+	Texture_ID real_normal_map;
+	Texture_ID albedo_map;
 	Texture_ID normal_map;
+	Texture_ID roughness_map;
+	Texture_ID metallic_map;
+	Texture_ID ao_map;
 } Material;
 
 ////////////////////////////////////////
@@ -256,6 +259,7 @@ typedef struct Vertex {
 	V3 color;
 	V2 uv;
 	V3 normal;
+	V3 tangent;
 } Vertex;
 
 typedef struct Loaded_Mesh {

@@ -31,8 +31,8 @@ if [ DEVELOPMENT ]; then
 	LINKER_FLAGS+=""
 fi
 
-"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/textured_static.vert -o $BUILD_DIRECTORY/textured_static_vertex.spirv
-"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/textured_static.frag -o $BUILD_DIRECTORY/textured_static_fragment.spirv
+"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/pbr.vert -o $BUILD_DIRECTORY/pbr_vertex.spirv
+"$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/pbr.frag -o $BUILD_DIRECTORY/pbr_fragment.spirv
 
 "$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/shadow_map_static.vert -o $BUILD_DIRECTORY/shadow_map_static_vertex.spirv
 "$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/shadow_map_static.frag -o $BUILD_DIRECTORY/shadow_map_static_fragment.spirv

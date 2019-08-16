@@ -13,13 +13,13 @@
 #define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
 // Slope depth bias factor is applied depending on the polygon's slope.
 #define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
-#define SHADOW_MAP_DEPTH_FORMAT VK_FORMAT_D16_UNORM
-#define SHADOW_MAP_COLOR_FORMAT VK_FORMAT_R8G8B8A8_UNORM
-#define SHADOW_MAP_FILTER VK_FILTER_LINEAR
+#define SHADOW_MAP_DEPTH_FORMAT     VK_FORMAT_D16_UNORM
+#define SHADOW_MAP_COLOR_FORMAT     VK_FORMAT_R8G8B8A8_UNORM
+#define SHADOW_MAP_FILTER           VK_FILTER_LINEAR
 
 #define VULKAN_GPU_ALLOCATION_SIZE    MEGABYTE(100)
 #define VULKAN_SHARED_ALLOCATION_SIZE MEGABYTE(100)
-#define VULKAN_IMAGE_ALLOCATION_SIZE  MEGABYTE(100)
+#define VULKAN_IMAGE_ALLOCATION_SIZE  MEGABYTE(200)
 
 #define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE  ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
 #define VULKAN_INDEX_MEMORY_SEGMENT_SIZE   ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
@@ -29,7 +29,7 @@
 #define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET   (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
 #define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
 
-#define VULKAN_MAX_TEXTURE_COUNT (100)
+#define VULKAN_MAX_TEXTURE_COUNT 100
 
 #define SCENE_SAMPLER_DESCRIPTOR_SET 0
 #define SCENE_UNIFORM_DESCRIPTOR_SET 1
@@ -39,28 +39,37 @@
 #define SHADOW_MAP_UNIFORM_DESCRIPTOR_SET 0
 
 typedef struct {
-	VkShaderModule module;
+	VkShaderModule        module;
 	VkShaderStageFlagBits stage;
 } Shader_Module;
 
 typedef struct {
-	u32 module_count;
+	u32            module_count;
 	Shader_Module *modules;
 } Shaders;
 
 typedef struct {
-	VkImage image;
-	VkImageView image_view;
+	VkImage        image;
+	VkImageView    image_view;
 	VkDeviceMemory memory;
 } Framebuffer_Attachment;
 
 typedef struct {
-	VkImage images[VULKAN_MAX_TEXTURE_COUNT];
+	VkImage     images[VULKAN_MAX_TEXTURE_COUNT];
 	VkImageView image_views[VULKAN_MAX_TEXTURE_COUNT];
-	u32 image_memory_offsets[VULKAN_MAX_TEXTURE_COUNT];
-	Texture_ID id_generator;
-	u32 count;
+	u32         image_memory_offsets[VULKAN_MAX_TEXTURE_COUNT];
+	Texture_ID  id_generator;
+	u32         count;
 } GPU_Textures;
+
+typedef struct {
+	s32 normal_map;
+	s32 material_albedo_map;
+	s32 material_normal_map;
+	s32 material_metallic_map;
+	s32 material_roughness_map;
+	s32 material_ao_map;
+} Push_Constants;
 
 struct Vulkan_Context {
 	VkDebugUtilsMessengerEXT debug_messenger;
@@ -80,52 +89,42 @@ struct Vulkan_Context {
 	VkImageView              swapchain_image_views[3];
 	VkFramebuffer            framebuffers[3];
 	VkRenderPass             render_pass;
-	//VkPipeline               pipeline;
 	VkPipelineLayout         pipeline_layout;
-	//VkDescriptorSetLayout    descriptor_set_layout;
 	VkDescriptorPool         descriptor_pool;
-	//Descriptor_Sets          descriptor_sets[3];
 	VkCommandPool            command_pool;
 	VkCommandBuffer          command_buffers[3];
-	//VkBuffer                 vertex_buffer;
-	//VkDeviceMemory           vertex_buffer_memory;
-	//VkBuffer                 index_buffer;
-	//VkDeviceMemory           index_buffer_memory;
-	//VkBuffer                 uniform_buffers[3];
-	//VkDeviceMemory           uniform_buffers_memory[3];
 	VkSemaphore              image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
 	VkSemaphore              render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
 	VkFence                  inFlightFences[MAX_FRAMES_IN_FLIGHT];
 	u32                      currentFrame;
-
-	GPU_Textures textures;
-	//VkImage textureImage;
-	//VkDeviceMemory textureImageMemory;
-	//VkImageView textureImageView;
-
-	VkSampler textureSampler;
-
-	VkImage depthImage;
-	VkDeviceMemory depthImageMemory;
-	VkImageView depthImageView;
-
-	VkDeviceMemory shared_memory;
-	VkDeviceMemory gpu_memory;
-	VkDeviceMemory image_memory;
-
-	u32 image_memory_bytes_used;
-	u32 vertex_memory_bytes_used;
-	u32 index_memory_bytes_used;
-	u32 staging_memory_bytes_used;
-
-	u32 vertex_count;
-	u32 index_count;
-
-	VkBuffer gpu_buffer;
-	VkBuffer staging_buffer;
-
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMemory;
+	GPU_Textures             textures;
+	VkSampler                textureSampler;
+	VkImage                  depthImage;
+	VkDeviceMemory           depthImageMemory;
+	VkImageView              depthImageView;
+	VkDeviceMemory           shared_memory;
+	VkDeviceMemory           gpu_memory;
+	VkDeviceMemory           image_memory;
+	u32                      image_memory_bytes_used;
+	u32                      vertex_memory_bytes_used;
+	u32                      index_memory_bytes_used;
+	u32                      staging_memory_bytes_used;
+	u32                      vertex_count;
+	u32                      index_count;
+	VkBuffer                 gpu_buffer;
+	VkBuffer                 staging_buffer;
+	VkDeviceSize             minimum_uniform_buffer_offset_alignment;
+	VkDeviceSize             maximum_uniform_buffer_range;
+	u32                      scene_uniform_buffer_offset;
+	u32                      scene_dynamic_uniform_buffers_offset;
+	u32                      shadow_map_uniform_buffer_offset;
+	u32                      aligned_scene_uniform_buffer_object_size;
+	u32                      aligned_scene_dynamic_uniform_buffer_object_size;
+	u32                      aligned_shadow_map_uniform_buffer_object_size;
+	u32                      scene_dynamic_uniform_buffer_count;
+	u32                      scene_dynamic_uniform_memory_size;
+	Shaders                  shaders[SHADER_COUNT];
+	M4                       scene_projection;
 
 	struct {
 		struct {
@@ -152,8 +151,6 @@ struct Vulkan_Context {
 		} shadow_map;
 	} descriptor_set_layouts;
 
-	u32 scene_matrix_descriptor_set_count;
-
 	struct {
 		VkPipelineLayout shadow_map;
 	} pipeline_layouts;
@@ -178,29 +175,21 @@ struct Vulkan_Context {
 	struct {
 		VkSampler shadow_map_depth;
 	} samplers;
-
-	//u32 vertex_count;
-	//u32 index_count;
-	//u32 vertex_index_offset;
-	VkDeviceSize minimum_uniform_buffer_offset_alignment;
-	VkDeviceSize maximum_uniform_buffer_range;
-
-	Shaders shaders[SHADER_COUNT];
-
-	M4 scene_projection;
 } vulkan_context;
 
-typedef struct {
-	M4 test;
-} UBO;
+typedef struct Scene_UBO {
+	V3 camera_position;
+} Scene_UBO;
 
-#define TEST_INSTANCES 100
+// @TODO: Fix name.
+#define TEST_INSTANCES 5
 
 #define alignas(x)
 
 typedef struct {
-	M4 world_to_clip_space;
-	M4 world_to_shadow_map_clip_space;
+	alignas(16) M4 model_to_world_space;
+	alignas(16) M4 world_to_clip_space;
+	alignas(16) M4 world_to_shadow_map_clip_space;
 } Dynamic_Scene_UBO;
 
 Dynamic_Scene_UBO dynamic_scene_ubo[TEST_INSTANCES];
@@ -302,7 +291,6 @@ const char *vk_result_to_string(VkResult result) {
 		case (VK_ERROR_INVALID_DEVICE_ADDRESS_EXT):
 			return "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT";
 	}
-
 	return "Unknown VkResult Code";
 }
 
@@ -391,7 +379,7 @@ void endSingleTimeCommands(VkCommandBuffer commandBuffer) {
 }
 
 void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-			VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+	VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
 	VkImageMemoryBarrier barrier = {};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -476,10 +464,7 @@ void allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_
 	VK_CHECK(vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory));
 }
 
-void create_vulkan_pipelines(const char *vertex_shader_path, const char *fragment_shader_path, VkPipeline *pipeline) {
-}
-
-typedef struct Create_Graphics_Pipeline_Request {
+typedef struct {
 	VkPipeline *pipeline;
 	VkPipelineLayout pipeline_layout;
 	VkRenderPass render_pass;
@@ -497,30 +482,25 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			vulkan_context.swapchain_image_extent.width  = u32_max(surface_capabilities.minImageExtent.width, u32_min(surface_capabilities.maxImageExtent.width, window_width));
 			vulkan_context.swapchain_image_extent.height = u32_max(surface_capabilities.minImageExtent.height, u32_min(surface_capabilities.maxImageExtent.height, window_height));
 		}
-		//debug_print("\tSwap extent %u x %u\n", sc.extent.width, sc.extent.height);
-
 		u32 num_requested_swapchain_images = surface_capabilities.minImageCount + 1;
 		if (surface_capabilities.maxImageCount > 0 && num_requested_swapchain_images > surface_capabilities.maxImageCount) {
 			num_requested_swapchain_images = surface_capabilities.maxImageCount;
 		}
-		//debug_print("\tMax swap images: %u\n\tMin swap images: %u\n", surface_capabilities.maxImageCount, surface_capabilities.minImageCount);
-		//debug_print("\tRequested swap image count: %u\n", num_requested_swapchain_images);
-
-		VkSwapchainCreateInfoKHR swapchain_create_info = {};
-		swapchain_create_info.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		swapchain_create_info.surface          = vulkan_context.surface;
-		swapchain_create_info.minImageCount    = num_requested_swapchain_images;
-		swapchain_create_info.imageFormat      = vulkan_context.surface_format.format;
-		swapchain_create_info.imageColorSpace  = vulkan_context.surface_format.colorSpace;
-		swapchain_create_info.imageExtent      = vulkan_context.swapchain_image_extent;
-		swapchain_create_info.imageArrayLayers = 1;
-		swapchain_create_info.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		swapchain_create_info.preTransform     = surface_capabilities.currentTransform;
-		swapchain_create_info.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchain_create_info.presentMode      = vulkan_context.present_mode;
-		swapchain_create_info.clipped          = 1;
-		swapchain_create_info.oldSwapchain     = NULL;
-
+		VkSwapchainCreateInfoKHR swapchain_create_info = {
+			.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+			.surface          = vulkan_context.surface,
+			.minImageCount    = num_requested_swapchain_images,
+			.imageFormat      = vulkan_context.surface_format.format,
+			.imageColorSpace  = vulkan_context.surface_format.colorSpace,
+			.imageExtent      = vulkan_context.swapchain_image_extent,
+			.imageArrayLayers = 1,
+			.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			.preTransform     = surface_capabilities.currentTransform,
+			.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+			.presentMode      = vulkan_context.present_mode,
+			.clipped          = 1,
+			.oldSwapchain     = NULL,
+		};
 		if (vulkan_context.graphics_queue_family != vulkan_context.present_queue_family) {
 			u32 queue_family_indices[] = { vulkan_context.graphics_queue_family, vulkan_context.present_queue_family };
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
@@ -529,280 +509,252 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		} else {
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE;
 		}
-
 		VK_CHECK(vkCreateSwapchainKHR(vulkan_context.device, &swapchain_create_info, NULL, &vulkan_context.swapchain));
 	}
 
 	// Swapchain images.
 	{
-		//u32 num_swapchain_images = 0;
 		VK_CHECK(vkGetSwapchainImagesKHR(vulkan_context.device, vulkan_context.swapchain, &vulkan_context.num_swapchain_images, NULL));
 		VkImage *swapchain_images = allocate_array(arena, VkImage, vulkan_context.num_swapchain_images);
 		VK_CHECK(vkGetSwapchainImagesKHR(vulkan_context.device, vulkan_context.swapchain, &vulkan_context.num_swapchain_images, swapchain_images));
-
-		//debug_print("\tCreated swap image count: %u\n", num_swapchain_images);
-
-		//Array<VkImageView> swapchain_image_views{num_created_swap_images};
-		//swapchain_context->image_views.resize(num_swapchain_images);
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
-			VkImageViewCreateInfo image_view_create_info = {};
-			image_view_create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			image_view_create_info.image                           = swapchain_images[i];
-			image_view_create_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-			image_view_create_info.format                          = vulkan_context.surface_format.format;
-			image_view_create_info.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-			image_view_create_info.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-			image_view_create_info.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-			image_view_create_info.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-			image_view_create_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-			image_view_create_info.subresourceRange.baseMipLevel   = 0;
-			image_view_create_info.subresourceRange.levelCount     = 1;
-			image_view_create_info.subresourceRange.baseArrayLayer = 0;
-			image_view_create_info.subresourceRange.layerCount     = 1;
+			VkImageViewCreateInfo image_view_create_info = {
+				.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.image                           = swapchain_images[i],
+				.viewType                        = VK_IMAGE_VIEW_TYPE_2D,
+				.format                          = vulkan_context.surface_format.format,
+				.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+				.subresourceRange.baseMipLevel   = 0,
+				.subresourceRange.levelCount     = 1,
+				.subresourceRange.baseArrayLayer = 0,
+				.subresourceRange.layerCount     = 1,
+			};
 			VK_CHECK(vkCreateImageView(vulkan_context.device, &image_view_create_info, NULL, &vulkan_context.swapchain_image_views[i]));
 		}
 	}
 
 	// Render pass.
 	{
-		VkAttachmentDescription attachment_description = {};
-		attachment_description.format         = SHADOW_MAP_DEPTH_FORMAT;
-		attachment_description.samples        = VK_SAMPLE_COUNT_1_BIT;
-		attachment_description.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		attachment_description.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-		attachment_description.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		attachment_description.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-		attachment_description.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-		VkAttachmentReference depth_attachment_reference = {};
-		depth_attachment_reference.attachment = 0;
-		depth_attachment_reference.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		VkSubpassDescription subpass_description = {};
-		subpass_description.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass_description.colorAttachmentCount    = 0;
-		subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
-
-		VkSubpassDependency subpass_dependencies[2];
-
-		subpass_dependencies[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
-		subpass_dependencies[0].dstSubpass      = 0;
-		subpass_dependencies[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		subpass_dependencies[0].dstStageMask    = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		subpass_dependencies[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
-		subpass_dependencies[0].dstAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		subpass_dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-		subpass_dependencies[1].srcSubpass      = 0;
-		subpass_dependencies[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
-		subpass_dependencies[1].srcStageMask    = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		subpass_dependencies[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		subpass_dependencies[1].srcAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		subpass_dependencies[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
-		subpass_dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-		VkRenderPassCreateInfo render_pass_create_info = {};
-		render_pass_create_info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		render_pass_create_info.attachmentCount = 1;
-		render_pass_create_info.pAttachments    = &attachment_description;
-		render_pass_create_info.subpassCount    = 1;
-		render_pass_create_info.pSubpasses      = &subpass_description;
-		render_pass_create_info.dependencyCount = ARRAY_COUNT(subpass_dependencies);
-		render_pass_create_info.pDependencies   = subpass_dependencies;
-
+		VkSubpassDependency subpass_dependencies[] = {
+			{
+				.srcSubpass      = VK_SUBPASS_EXTERNAL,
+				.dstSubpass      = 0,
+				.srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				.dstStageMask    = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+				.srcAccessMask   = VK_ACCESS_SHADER_READ_BIT,
+				.dstAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+				.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+			},
+			{
+				.srcSubpass      = 0,
+				.dstSubpass      = VK_SUBPASS_EXTERNAL,
+				.srcStageMask    = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+				.dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				.srcAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+				.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT,
+				.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+			}
+		};
+		VkRenderPassCreateInfo render_pass_create_info = {
+			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = 1,
+			.pAttachments    = &(VkAttachmentDescription){
+				.format         = SHADOW_MAP_DEPTH_FORMAT,
+				.samples        = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+				.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+			},
+			.subpassCount    = 1,
+			.pSubpasses      = &(VkSubpassDescription){
+				.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS,
+				.colorAttachmentCount    = 0,
+				.pDepthStencilAttachment = &(VkAttachmentReference){
+					.attachment = 0,
+					.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				},
+			},
+			.dependencyCount = ARRAY_COUNT(subpass_dependencies),
+			.pDependencies   = subpass_dependencies,
+		};
 		VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_passes.shadow_map));
 	}
 
 	{
-		VkAttachmentDescription color_attachment = {};
-		color_attachment.format         = vulkan_context.surface_format.format;
-		color_attachment.samples        = VK_SAMPLE_COUNT_1_BIT;
-		color_attachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		color_attachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-		color_attachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		color_attachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-		color_attachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-		VkAttachmentDescription depthAttachment = {};
-		depthAttachment.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
-		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
 		VkAttachmentDescription attachments[] = {
-			color_attachment,
-			depthAttachment,
+			{
+				.format         = vulkan_context.surface_format.format,
+				.samples        = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
+				.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			},
+			{
+				.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
+				.samples = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			},
 		};
-
-		VkAttachmentReference color_attachment_reference = {};
-		color_attachment_reference.attachment = 0;
-		color_attachment_reference.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-		VkAttachmentReference depthAttachmentRef = {};
-		depthAttachmentRef.attachment = 1;
-		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		VkSubpassDescription subpass_description = {};
-		subpass_description.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass_description.colorAttachmentCount    = 1;
-		subpass_description.pColorAttachments       = &color_attachment_reference;
-		subpass_description.pDepthStencilAttachment = &depthAttachmentRef;
-
-		VkSubpassDependency subpass_dependency = {};
-		subpass_dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-		subpass_dependency.dstSubpass    = 0;
-		subpass_dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		subpass_dependency.srcAccessMask = 0;
-		subpass_dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-		VkRenderPassCreateInfo render_pass_create_info = {};
-		render_pass_create_info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		render_pass_create_info.attachmentCount = ARRAY_COUNT(attachments);
-		render_pass_create_info.pAttachments    = attachments;
-		render_pass_create_info.subpassCount    = 1;
-		render_pass_create_info.pSubpasses      = &subpass_description;
-		render_pass_create_info.dependencyCount = 1;
-		render_pass_create_info.pDependencies   = &subpass_dependency;
-
+		VkRenderPassCreateInfo render_pass_create_info = {
+			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = ARRAY_COUNT(attachments),
+			.pAttachments    = attachments,
+			.subpassCount    = 1,
+			.pSubpasses      = &(VkSubpassDescription){
+				.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS,
+				.colorAttachmentCount = 1,
+				.pColorAttachments    = &(VkAttachmentReference){
+					.attachment = 0,
+					.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				},
+				.pDepthStencilAttachment = &(VkAttachmentReference){
+					.attachment = 1,
+					.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				},
+			},
+			.dependencyCount = 1,
+			.pDependencies   = &(VkSubpassDependency){
+				.srcSubpass    = VK_SUBPASS_EXTERNAL,
+				.dstSubpass    = 0,
+				.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.srcAccessMask = 0,
+				.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			},
+		};
 		VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_pass));
 	}
 
 	// Pipelines.
 	{
-		// @TODO: Add depth bias to shadow map pipeline dynamic state.
-		VkDynamicState dynamic_states[] = {
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR,
-			VK_DYNAMIC_STATE_DEPTH_BIAS,
-		};
-
-		VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {};
-		dynamic_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamic_state_create_info.dynamicStateCount = ARRAY_COUNT(dynamic_states);
-		dynamic_state_create_info.pDynamicStates = dynamic_states;
-
-		VkVertexInputBindingDescription vertex_input_binding_description = {};
-		vertex_input_binding_description.binding   = 0;
-		vertex_input_binding_description.stride    = sizeof(Vertex);
-		vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-		VkVertexInputAttributeDescription position_attribute_description;
-		position_attribute_description.binding  = 0;
-		position_attribute_description.location = 0;
-		position_attribute_description.format   = VK_FORMAT_R32G32B32_SFLOAT;
-		position_attribute_description.offset   = offsetof(Vertex, position);
-
-		VkVertexInputAttributeDescription color_attribute_description;
-		color_attribute_description.binding  = 0;
-		color_attribute_description.location = 1;
-		color_attribute_description.format   = VK_FORMAT_R32G32B32_SFLOAT;
-		color_attribute_description.offset   = offsetof(Vertex, color);
-
-		VkVertexInputAttributeDescription uv_attribute_description;
-		uv_attribute_description.binding  = 0;
-		uv_attribute_description.location = 2;
-		uv_attribute_description.format   = VK_FORMAT_R32G32_SFLOAT;
-		uv_attribute_description.offset   = offsetof(Vertex, uv);
-
-		VkVertexInputAttributeDescription normal_attribute_description;
-		normal_attribute_description.binding  = 0;
-		normal_attribute_description.location = 3;
-		normal_attribute_description.format   = VK_FORMAT_R32G32B32_SFLOAT;
-		normal_attribute_description.offset   = offsetof(Vertex, normal);
-
 		VkVertexInputAttributeDescription vertex_input_attribute_descriptions[] = {
-			position_attribute_description,
-			color_attribute_description,
-			uv_attribute_description,
-			normal_attribute_description,
+			{
+				.binding  = 0,
+				.location = 0,
+				.format   = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset   = offsetof(Vertex, position),
+			},
+			{
+				.binding  = 0,
+				.location = 1,
+				.format   = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset   = offsetof(Vertex, color),
+			},
+			{
+				.binding  = 0,
+				.location = 2,
+				.format   = VK_FORMAT_R32G32_SFLOAT,
+				.offset   = offsetof(Vertex, uv),
+			},
+			{
+				.binding  = 0,
+				.location = 3,
+				.format   = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset   = offsetof(Vertex, normal),
+			},
+			// @TODO: Load the bitangents from Assimp rather than calculating them in the shader.
+			{
+				.binding  = 0,
+				.location = 4,
+				.format   = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset   = offsetof(Vertex, tangent),
+			},
 		};
-
 		// @TODO: Fix shadow map vertex input attributes (only needs position).
-		VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
-		vertex_input_state_create_info.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertex_input_state_create_info.vertexBindingDescriptionCount   = 1;
-		vertex_input_state_create_info.pVertexBindingDescriptions      = &vertex_input_binding_description;
-		vertex_input_state_create_info.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions);
-		vertex_input_state_create_info.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions;
-
-		VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {};
-		input_assembly_create_info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		input_assembly_create_info.topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		input_assembly_create_info.primitiveRestartEnable = VK_FALSE;
-
-		VkViewport viewport = {};
-		viewport.x        = 0.0f;
-		viewport.y        = 0.0f;
-		viewport.width    = (f32)vulkan_context.swapchain_image_extent.width;
-		viewport.height   = (f32)vulkan_context.swapchain_image_extent.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-
-		VkRect2D scissor = {};
-		scissor.offset = (VkOffset2D){0, 0};
-		scissor.extent = vulkan_context.swapchain_image_extent;
-
-		VkPipelineViewportStateCreateInfo viewport_state_create_info = {};
-		viewport_state_create_info.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		viewport_state_create_info.viewportCount = 1;
-		viewport_state_create_info.pViewports    = &viewport;
-		viewport_state_create_info.scissorCount  = 1;
-		viewport_state_create_info.pScissors     = &scissor;
-
-		VkPipelineRasterizationStateCreateInfo rasterization_state_create_info = {};
-		rasterization_state_create_info.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		rasterization_state_create_info.depthClampEnable        = VK_FALSE;
-		rasterization_state_create_info.rasterizerDiscardEnable = VK_FALSE;
-		rasterization_state_create_info.polygonMode             = VK_POLYGON_MODE_FILL;
-		rasterization_state_create_info.lineWidth               = 1.0f;
-		rasterization_state_create_info.cullMode                = VK_CULL_MODE_BACK_BIT;
-		rasterization_state_create_info.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterization_state_create_info.depthBiasEnable         = VK_FALSE;
-
-		VkPipelineMultisampleStateCreateInfo multisample_state_create_info = {};
-		multisample_state_create_info.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		multisample_state_create_info.sampleShadingEnable   = VK_FALSE;
-		multisample_state_create_info.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT;
-		//multisample_state_create_info.minSampleShading      = 1.0f;
-		//multisample_state_create_info.alphaToCoverageEnable = VK_FALSE;
-		//multisample_state_create_info.alphaToOneEnable      = VK_FALSE;
-
-		VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info = {};
-		depth_stencil_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-		depth_stencil_state_create_info.depthTestEnable = VK_TRUE;
-		depth_stencil_state_create_info.depthWriteEnable = VK_TRUE;
-		depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS;
-		depth_stencil_state_create_info.depthBoundsTestEnable = VK_FALSE;
-		depth_stencil_state_create_info.stencilTestEnable = VK_FALSE;
-
-		VkPipelineColorBlendAttachmentState color_blend_attachment_state = {};
-		color_blend_attachment_state.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-		color_blend_attachment_state.blendEnable         = VK_FALSE;
-		//color_blend_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		//color_blend_attachment_state.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-		//color_blend_attachment_state.colorBlendOp        = VK_BLEND_OP_ADD;
-		//color_blend_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		//color_blend_attachment_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-		//color_blend_attachment_state.alphaBlendOp        = VK_BLEND_OP_ADD;
-
-		VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {};
-		color_blend_state_create_info.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		color_blend_state_create_info.logicOpEnable     = VK_FALSE;
-		color_blend_state_create_info.logicOp           = VK_LOGIC_OP_COPY;
-		color_blend_state_create_info.attachmentCount   = 1;
-		color_blend_state_create_info.pAttachments      = &color_blend_attachment_state;
-		color_blend_state_create_info.blendConstants[0] = 0.0f;
-		color_blend_state_create_info.blendConstants[1] = 0.0f;
-		color_blend_state_create_info.blendConstants[2] = 0.0f;
-		color_blend_state_create_info.blendConstants[3] = 0.0f;
-
+		VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
+			.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.vertexBindingDescriptionCount   = 1,
+			.pVertexBindingDescriptions      = &(VkVertexInputBindingDescription){
+				.binding   = 0,
+				.stride    = sizeof(Vertex),
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+			},
+			.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+			.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
+		};
+		VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {
+			.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE,
+		};
+		VkViewport viewport = {
+			.x        = 0.0f,
+			.y        = 0.0f,
+			.width    = (f32)vulkan_context.swapchain_image_extent.width,
+			.height   = (f32)vulkan_context.swapchain_image_extent.height,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f,
+		};
+		VkRect2D scissor = {
+			.offset = {0, 0},
+			.extent = vulkan_context.swapchain_image_extent,
+		};
+		VkPipelineViewportStateCreateInfo viewport_state_create_info = {
+			.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = 1,
+			.pViewports    = &viewport,
+			.scissorCount  = 1,
+			.pScissors     = &scissor,
+		};
+		VkPipelineRasterizationStateCreateInfo rasterization_state_create_info = {
+			.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.depthClampEnable        = VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode             = VK_POLYGON_MODE_FILL,
+			.lineWidth               = 1.0f,
+			.cullMode                = VK_CULL_MODE_BACK_BIT,
+			.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+			.depthBiasEnable         = VK_FALSE,
+		};
+		VkPipelineMultisampleStateCreateInfo multisample_state_create_info = {
+			.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.sampleShadingEnable   = VK_FALSE,
+			.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT,
+		};
+		VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info = {
+			.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			.depthTestEnable       = VK_TRUE,
+			.depthWriteEnable      = VK_TRUE,
+			.depthCompareOp        = VK_COMPARE_OP_LESS,
+			.depthBoundsTestEnable = VK_FALSE,
+			.stencilTestEnable     = VK_FALSE,
+		};
+		VkPipelineColorBlendAttachmentState color_blend_attachment_state = {
+			.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+			.blendEnable         = VK_FALSE,
+			.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.colorBlendOp        = VK_BLEND_OP_ADD,
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.alphaBlendOp        = VK_BLEND_OP_ADD,
+		};
+		VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {
+			.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.logicOpEnable     = VK_FALSE,
+			.logicOp           = VK_LOGIC_OP_COPY,
+			.attachmentCount   = 1,
+			.pAttachments      = &color_blend_attachment_state,
+			.blendConstants[0] = 0.0f,
+			.blendConstants[1] = 0.0f,
+			.blendConstants[2] = 0.0f,
+			.blendConstants[3] = 0.0f,
+		};
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -811,7 +763,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 				.pushConstantRangeCount = 1,
 				.pPushConstantRanges    = &(VkPushConstantRange){
 					.offset = 0,
-					.size = sizeof(s32),
+					.size = sizeof(Push_Constants),
 					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 				},
 			};
@@ -825,20 +777,29 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.shadow_map));
 		}
-
+		// @TODO: Get rid of this!
 		Create_Graphics_Pipeline_Request requests[] = {
 			{&vulkan_context.pipelines.textured_static, vulkan_context.pipeline_layout, vulkan_context.render_pass, &vulkan_context.shaders[TEXTURED_STATIC_SHADER]},
 			{&vulkan_context.pipelines.shadow_map_static, vulkan_context.pipeline_layouts.shadow_map, vulkan_context.render_passes.shadow_map, &vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER]},
 		};
-
 		u32 pipeline_count = ARRAY_COUNT(requests);
 
 		// @TODO: Subarena.
 		VkGraphicsPipelineCreateInfo *graphics_pipeline_create_infos = allocate_array(arena, VkGraphicsPipelineCreateInfo, pipeline_count);
 
+		// @TODO: Add depth bias to shadow map pipeline dynamic state.
+		VkDynamicState dynamic_states[] = {
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR,
+			VK_DYNAMIC_STATE_DEPTH_BIAS,
+		};
+		VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+			.pDynamicStates = dynamic_states,
+		};
 		for (s32 i = 0; i < pipeline_count; i++) {
 			VkPipelineShaderStageCreateInfo *shader_stage_create_infos = allocate_array(arena, VkPipelineShaderStageCreateInfo, requests[i].shaders->module_count);
-
 			for (s32 j = 0; j < requests[i].shaders->module_count; j++) {
 				shader_stage_create_infos[j].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				shader_stage_create_infos[j].stage  = requests[i].shaders->modules[j].stage;
@@ -899,54 +860,48 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 
 			VK_CHECK(vkCreateGraphicsPipelines(vulkan_context.device, NULL, 1, &graphics_pipeline_create_infos[i], NULL, requests[i].pipeline));
 		}
-
-		//VkPipeline pipelines[pipeline_count];
-
-		//for (s32 i = 0; i < pipeline_count; i++) {
-			//*requests[i].pipeline = pipelines[i];
-		//}
 	}
 
 	// Depth image.
 	{
 		// @TODO: Check to make sure the physical device supports the depth image format. Have fallback formats?
+		VkImageCreateInfo image_create_info = {
+			.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.imageType     = VK_IMAGE_TYPE_2D,
+			.extent.width  = vulkan_context.swapchain_image_extent.width,
+			.extent.height = vulkan_context.swapchain_image_extent.height,
+			.extent.depth  = 1,
+			.mipLevels     = 1,
+			.arrayLayers   = 1,
+			.format        = VK_FORMAT_D32_SFLOAT_S8_UINT,
+			.tiling        = VK_IMAGE_TILING_OPTIMAL,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			.sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+			.samples       = VK_SAMPLE_COUNT_1_BIT,
+		};
+		VK_CHECK(vkCreateImage(vulkan_context.device, &image_create_info, NULL, &vulkan_context.depthImage));
 
-		VkImageCreateInfo imageInfo = {};
-		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.extent.width = vulkan_context.swapchain_image_extent.width;
-		imageInfo.extent.height = vulkan_context.swapchain_image_extent.height;
-		imageInfo.extent.depth = 1;
-		imageInfo.mipLevels = 1;
-		imageInfo.arrayLayers = 1;
-		imageInfo.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
-		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		VK_CHECK(vkCreateImage(vulkan_context.device, &imageInfo, NULL, &vulkan_context.depthImage));
-
-		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(vulkan_context.device, vulkan_context.depthImage, &memRequirements);
-
-		allocate_vulkan_memory(&vulkan_context.depthImageMemory, memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VkMemoryRequirements image_memory_requirements;
+		vkGetImageMemoryRequirements(vulkan_context.device, vulkan_context.depthImage, &image_memory_requirements);
+		allocate_vulkan_memory(&vulkan_context.depthImageMemory, image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		vkBindImageMemory(vulkan_context.device, vulkan_context.depthImage, vulkan_context.depthImageMemory, 0);
 
-		VkImageViewCreateInfo image_view_create_info = {};
-		image_view_create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		image_view_create_info.image                           = vulkan_context.depthImage;
-		image_view_create_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-		image_view_create_info.format                          = VK_FORMAT_D32_SFLOAT_S8_UINT;
-		image_view_create_info.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-		image_view_create_info.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-		image_view_create_info.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-		image_view_create_info.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-		image_view_create_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
-		image_view_create_info.subresourceRange.baseMipLevel   = 0;
-		image_view_create_info.subresourceRange.levelCount     = 1;
-		image_view_create_info.subresourceRange.baseArrayLayer = 0;
-		image_view_create_info.subresourceRange.layerCount     = 1;
+		VkImageViewCreateInfo image_view_create_info = {
+			.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image                           = vulkan_context.depthImage,
+			.viewType                        = VK_IMAGE_VIEW_TYPE_2D,
+			.format                          = VK_FORMAT_D32_SFLOAT_S8_UINT,
+			.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+			.subresourceRange.baseMipLevel   = 0,
+			.subresourceRange.levelCount     = 1,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount     = 1,
+		};
 		VK_CHECK(vkCreateImageView(vulkan_context.device, &image_view_create_info, NULL, &vulkan_context.depthImageView));
 
 		transitionImageLayout(vulkan_context.depthImage, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -959,36 +914,34 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 				vulkan_context.swapchain_image_views[i],
 				vulkan_context.depthImageView,
 			};
-
-			VkFramebufferCreateInfo framebuffer_create_info = {};
-			framebuffer_create_info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebuffer_create_info.renderPass      = vulkan_context.render_pass;
-			framebuffer_create_info.attachmentCount = ARRAY_COUNT(attachments);
-			framebuffer_create_info.pAttachments    = attachments;
-			framebuffer_create_info.width           = vulkan_context.swapchain_image_extent.width;
-			framebuffer_create_info.height          = vulkan_context.swapchain_image_extent.height;
-			framebuffer_create_info.layers          = 1;
-
+			VkFramebufferCreateInfo framebuffer_create_info = {
+				.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+				.renderPass      = vulkan_context.render_pass,
+				.attachmentCount = ARRAY_COUNT(attachments),
+				.pAttachments    = attachments,
+				.width           = vulkan_context.swapchain_image_extent.width,
+				.height          = vulkan_context.swapchain_image_extent.height,
+				.layers          = 1,
+			};
 			VK_CHECK(vkCreateFramebuffer(vulkan_context.device, &framebuffer_create_info, NULL, &vulkan_context.framebuffers[i]));
 		}
 	}
 
 	{
-		VkFormat fbColorFormat = SHADOW_MAP_COLOR_FORMAT;
-
 		// For shadow mapping we only need a depth attachment
-		VkImageCreateInfo image = {};
-		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image.imageType = VK_IMAGE_TYPE_2D;
-		image.extent.width = SHADOW_MAP_WIDTH;
-		image.extent.height = SHADOW_MAP_HEIGHT;
-		image.extent.depth = 1;
-		image.mipLevels = 1;
-		image.arrayLayers = 1;
-		image.samples = VK_SAMPLE_COUNT_1_BIT;
-		image.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image.format = SHADOW_MAP_DEPTH_FORMAT;																// Depth stencil attachment
-		image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;		// We will sample directly from the depth attachment for the shadow mapping
+		VkImageCreateInfo image = {
+			.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.imageType     = VK_IMAGE_TYPE_2D,
+			.extent.width  = SHADOW_MAP_WIDTH,
+			.extent.height = SHADOW_MAP_HEIGHT,
+			.extent.depth  = 1,
+			.mipLevels     = 1,
+			.arrayLayers   = 1,
+			.samples       = VK_SAMPLE_COUNT_1_BIT,
+			.tiling        = VK_IMAGE_TILING_OPTIMAL,
+			.format        = SHADOW_MAP_DEPTH_FORMAT,
+			.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		};
 		VK_CHECK(vkCreateImage(vulkan_context.device, &image, NULL, &vulkan_context.framebuffer_attachments.shadow_map_depth.image));
 
 		VkMemoryRequirements memReqs;
@@ -1041,8 +994,6 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 	}
 }
 
-u32 ubo_offset, sm_ubo_offset, dubo_offset;
-
 void create_vulkan_command_buffers() {
 	VkCommandBufferAllocateInfo command_buffer_allocate_info = {};
 	command_buffer_allocate_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1083,7 +1034,6 @@ void build_vulkan_command_buffer(Mesh *meshes, Material **materials, u32 *submes
 			.pClearValues             = &clear_depth_stencil,
 		};
 		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
 		VkViewport viewport = {
 			.x        = 0.0f,
 			.y        = 0.0f,
@@ -1093,28 +1043,23 @@ void build_vulkan_command_buffer(Mesh *meshes, Material **materials, u32 *submes
 			.maxDepth = 1.0f,
 		};
 		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
 		VkRect2D scissor = {
 			.offset = {0, 0},
 			.extent = {SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT},
 		};
 		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-		// Set depth bias, AKA polygon offset. Required to avoid shadow mapping artifacts.
-		vkCmdSetDepthBias(command_buffer, SHADOW_MAP_CONSTANT_DEPTH_BIAS, 0.0f, SHADOW_MAP_SLOPE_DEPTH_BIAS);
+		vkCmdSetDepthBias(command_buffer, SHADOW_MAP_CONSTANT_DEPTH_BIAS, 0.0f, SHADOW_MAP_SLOPE_DEPTH_BIAS); // Set depth bias, required to avoid shadow mapping artifacts.
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.shadow_map_static);
 		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
 		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
-
 		for (u32 i = 0; i < mesh_count; i++) {
-			u32 foo = 0;
-			//u32 dynamic_offset = i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+			u32 total_mesh_index_count = 0;
 			for (u32 j = 0; j < submesh_counts[i]; j++) {
 				vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.shadow_map, SHADOW_MAP_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets[swapchain_image_index].shadow_map.uniforms, 0, NULL);
-				vkCmdDrawIndexed(command_buffer, meshes[i].submesh_index_counts[j], 1, foo + meshes[i].first_index, meshes[i].vertex_offset, 0);
-				foo += meshes[i].submesh_index_counts[j];
+				vkCmdDrawIndexed(command_buffer, meshes[i].submesh_index_counts[j], 1, total_mesh_index_count + meshes[i].first_index, meshes[i].vertex_offset, 0);
+				total_mesh_index_count += meshes[i].submesh_index_counts[j];
 			}
 		}
-
 		vkCmdEndRenderPass(command_buffer);
 	}
 
@@ -1158,12 +1103,18 @@ void build_vulkan_command_buffer(Mesh *meshes, Material **materials, u32 *submes
 			u32 foo = 0;
 			for (u32 j = 0; j < submesh_counts[i]; j++) {
 				// @TODO: Get the texture index from the material?
-				s32 push_constant = materials[i][j].diffuse_map;
-				vkCmdPushConstants(command_buffer, vulkan_context.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(s32), (void *)&push_constant);
+				Push_Constants push_constants = {
+					.normal_map = materials[i][j].real_normal_map,
+					.material_albedo_map = materials[i][j].albedo_map,
+					.material_normal_map = materials[i][j].normal_map,
+					.material_metallic_map = materials[i][j].metallic_map,
+					.material_roughness_map = materials[i][j].roughness_map,
+					.material_ao_map = materials[i][j].ao_map,
+				};
+				vkCmdPushConstants(command_buffer, vulkan_context.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_constants), (void *)&push_constants);
 
 				u32 dynamic_offset = (i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment)) % vulkan_context.maximum_uniform_buffer_range; // WRONG
 				u32 asdf = (i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment)) / vulkan_context.maximum_uniform_buffer_range;
-				//debug_print("%u %u\n", dynamic_offset, asdf);
 				vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, 3, 1, &vulkan_context.descriptor_sets[swapchain_image_index].scene.matrices[asdf], 1, &dynamic_offset);
 				vkCmdDrawIndexed(command_buffer, meshes[i].submesh_index_counts[j], 1, foo + meshes[i].first_index, meshes[i].vertex_offset, 0);
 				foo += meshes[i].submesh_index_counts[j];
@@ -1207,32 +1158,33 @@ void transfer_staged_vulkan_data(u32 offset) {
 	assert(offset + vulkan_context.staging_memory_bytes_used < VULKAN_GPU_ALLOCATION_SIZE);
 
 	// @TODO: Try to create a reusable command buffer for copying?
-    VkCommandBufferAllocateInfo allocate_info = {};
-    allocate_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocate_info.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocate_info.commandPool        = vulkan_context.command_pool;
-    allocate_info.commandBufferCount = 1;
-
+    VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+		.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandPool        = vulkan_context.command_pool,
+		.commandBufferCount = 1,
+    };
     VkCommandBuffer command_buffer;
-    vkAllocateCommandBuffers(vulkan_context.device, &allocate_info, &command_buffer);
+    vkAllocateCommandBuffers(vulkan_context.device, &command_buffer_allocate_info, &command_buffer);
 
-	VkCommandBufferBeginInfo begin_info = {};
-	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	vkBeginCommandBuffer(command_buffer, &begin_info);
-	VkBufferCopy copy_region = {};
-	copy_region.srcOffset = 0;
-	copy_region.dstOffset = offset;
-	copy_region.size      = vulkan_context.staging_memory_bytes_used;
+	VkCommandBufferBeginInfo command_buffer_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+	VkBufferCopy copy_region = {
+		.srcOffset = 0,
+		.dstOffset = offset,
+		.size      = vulkan_context.staging_memory_bytes_used,
+	};
 	vkCmdCopyBuffer(command_buffer, vulkan_context.staging_buffer, vulkan_context.gpu_buffer, 1, &copy_region);
 	vkEndCommandBuffer(command_buffer);
 
-	VkSubmitInfo submit_info = {};
-	submit_info.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers    = &command_buffer;
-
+	VkSubmitInfo submit_info = {
+		.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers    = &command_buffer,
+	};
 	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
 	VK_CHECK(vkQueueWaitIdle(vulkan_context.graphics_queue)); // @TODO: Use a fence?
 	vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
@@ -1307,20 +1259,21 @@ void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t 
 Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height) {
 	Texture_ID id = vulkan_context.textures.id_generator++;
 
-	VkImageCreateInfo image_create_info = {};
-	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_create_info.imageType = VK_IMAGE_TYPE_2D;
-	image_create_info.extent.width = texture_width;
-	image_create_info.extent.height = texture_height;
-	image_create_info.extent.depth = 1;
-	image_create_info.mipLevels = 1;
-	image_create_info.arrayLayers = 1;
-	image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-	image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	VkImageCreateInfo image_create_info = {
+		.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType     = VK_IMAGE_TYPE_2D,
+		.extent.width  = texture_width,
+		.extent.height = texture_height,
+		.extent.depth  = 1,
+		.mipLevels     = 1,
+		.arrayLayers   = 1,
+		.format        = VK_FORMAT_R8G8B8A8_UNORM,
+		.tiling        = VK_IMAGE_TILING_OPTIMAL,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		.sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+		.samples       = VK_SAMPLE_COUNT_1_BIT,
+	};
 	VK_CHECK(vkCreateImage(vulkan_context.device, &image_create_info, NULL, &vulkan_context.textures.images[id]));
 	VkImage image = vulkan_context.textures.images[id];
 
@@ -1328,8 +1281,9 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 	vkGetImageMemoryRequirements(vulkan_context.device, image, &memory_requirements);
 	u32 image_size = memory_requirements.size;
 	u32 sneed = align_to(vulkan_context.image_memory_bytes_used + image_size, memory_requirements.alignment);
+	debug_print("ASD %u\n", image_size);
 	//debug_print("%u %u\n", alignment_offset, image_size);
-	assert(vulkan_context.image_memory_bytes_used < VULKAN_IMAGE_ALLOCATION_SIZE);
+	assert(vulkan_context.image_memory_bytes_used + image_size < VULKAN_IMAGE_ALLOCATION_SIZE);
 	//vulkan_context.image_memory_bytes_used += alignemnt_offset + image_size;
 
 	//VkDeviceSize image_size = texture_width * texture_height * 4;
@@ -1394,7 +1348,7 @@ void transfer_model_data_to_gpu(Loaded_Mesh *mesh, u32 *vertex_offset, u32 *firs
 	vulkan_context.index_count += mesh->index_count;
 }
 
-typedef struct Create_Shader_Request {
+typedef struct {
 	Shaders *shaders;
 	const char **paths;
 	u32 shader_module_count;
@@ -1402,29 +1356,23 @@ typedef struct Create_Shader_Request {
 
 // @TODO: Use a temporary arena.
 void initialize_renderer(Game_State *game_state) {
-	//load_model(NULL, "data/male2.fbx");
-
-	Library_Handle vulkan_library = open_shared_library("dependencies/vulkan/1.1.106.0/lib/libvulkan.so");
-	//if (SDL_Vulkan_LoadLibrary("dependencies/vulkan/1.1.106.0/lib/libvulkan.so")) {
-		//_abort("SDL could not load Vulkan library: %s", SDL_GetError());
-	//}
-
-	s32 num_required_device_extensions = 0;
+	s32 required_device_extension_count = 0;
 	const char *required_device_extensions[10]; // @TEMP
-	required_device_extensions[num_required_device_extensions++] = "VK_KHR_swapchain";
+	required_device_extensions[required_device_extension_count++] = "VK_KHR_swapchain";
 
-	s32 num_required_instance_layers = 0;
+	s32 required_instance_layer_count = 0;
 	const char *required_instance_layers[10]; // @TEMP
 
-	s32 num_required_instance_extensions = 0;
+	s32 required_instance_extension_count = 0;
 	const char *required_instance_extensions[10]; // @TEMP
-	required_instance_extensions[num_required_instance_extensions++] = "VK_KHR_surface";
-	required_instance_extensions[num_required_instance_extensions++] = "VK_KHR_xlib_surface";
-
+	required_instance_extensions[required_instance_extension_count++] = "VK_KHR_surface";
+	required_instance_extensions[required_instance_extension_count++] = "VK_KHR_xlib_surface";
 	if (debug) {
-		required_instance_extensions[num_required_instance_extensions++] = "VK_EXT_debug_utils";
-		required_instance_layers[num_required_instance_layers++] = "VK_LAYER_KHRONOS_validation";
+		required_instance_extensions[required_instance_extension_count++] = "VK_EXT_debug_utils";
+		required_instance_layers[required_instance_layer_count++]         = "VK_LAYER_KHRONOS_validation";
 	}
+
+	Library_Handle vulkan_library = open_shared_library("dependencies/vulkan/1.1.106.0/lib/libvulkan.so");
 
 #define VK_EXPORTED_FUNCTION(name)\
 	name = (PFN_##name)load_shared_library_function(vulkan_library, #name);\
@@ -1491,9 +1439,9 @@ void initialize_renderer(Game_State *game_state) {
 		VkInstanceCreateInfo instance_create_info = {};
 		instance_create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		instance_create_info.pApplicationInfo        = &application_info;
-		instance_create_info.enabledLayerCount       = num_required_instance_layers;
+		instance_create_info.enabledLayerCount       = required_instance_layer_count;
 		instance_create_info.ppEnabledLayerNames     = required_instance_layers;
-		instance_create_info.enabledExtensionCount   = num_required_instance_extensions;
+		instance_create_info.enabledExtensionCount   = required_instance_extension_count;
 		instance_create_info.ppEnabledExtensionNames = required_instance_extensions;
 		if (debug) {
 			instance_create_info.pNext = &debug_create_info;
@@ -1540,44 +1488,32 @@ void initialize_renderer(Game_State *game_state) {
 		if (num_physical_devices == 0) {
 			_abort("Could not find any physical devices.");
 		}
-		//debug_print("Found %u physical devices.\n", num_physical_devices);
 		VkPhysicalDevice physical_devices[10];// = allocate_array(&temporary_memory_arena, VkPhysicalDevice, num_physical_devices);
 		VK_CHECK(vkEnumeratePhysicalDevices(vulkan_context.instance, &num_physical_devices, physical_devices));
 
 		for (s32 i = 0; i < num_physical_devices; i++) {
 			VkPhysicalDeviceProperties physical_device_properties;
 			vkGetPhysicalDeviceProperties(physical_devices[i], &physical_device_properties);
-			//debug_print("\tDevice type = %s\n", vk_physical_device_type_to_string(physical_device_properties.deviceType));
 			VkPhysicalDeviceFeatures physical_device_features;
 			vkGetPhysicalDeviceFeatures(physical_devices[i], &physical_device_features);
-			//debug_print("\tHas geometry shader = %d\n", physical_device_features.geometryShader);
-			//if (physical_device_properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU || !physical_device_features.geometryShader) {
 			if (!physical_device_features.samplerAnisotropy || !physical_device_features.shaderSampledImageArrayDynamicIndexing) {
-				//debug_print("Skipping physical device because it is not a discrete gpu.\n");
 				continue;
 			}
 
 			u32 num_available_device_extensions = 0;
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, NULL));
-			//debug_print("\tNumber of available device extensions: %u\n", num_available_device_extensions);
 			VkExtensionProperties *available_device_extensions = allocate_array(&game_state->frame_arena, VkExtensionProperties, num_available_device_extensions);
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, available_device_extensions));
-
-			//if (!strings_subset_test(required_device_extensions, num_required_device_extensions, available_device_extensions, num_available_device_extensions)) {
-				//continue;
-			//}
 			u8 missing_required_device_extension = 0;
-			for (s32 j = 0; j < num_required_device_extensions; j++) {
+			for (s32 j = 0; j < required_device_extension_count; j++) {
 				u8 found = 0;
 				for (s32 k = 0; k < num_available_device_extensions; k++) {
-					//debug_print("\t\t%s\n", available_ext.extensionName);
 					if (compare_strings(available_device_extensions[k].extensionName, required_device_extensions[j]) == 0) {
 						found = 1;
 						break;
 					}
 				}
 				if (!found) {
-					//debug_print("\tCould not find required device extension '%s'.\n", required_ext);
 					missing_required_device_extension = 1;
 					break;
 				}
@@ -1594,49 +1530,39 @@ void initialize_renderer(Game_State *game_state) {
 			u32 num_available_present_modes = 0;
 			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[i], vulkan_context.surface, &num_available_present_modes, NULL));
 			if (num_available_surface_formats == 0 || num_available_present_modes == 0) {
-				//debug_print("\tSkipping physical device because no supported format or present mode for this surface.\n\t\num_available_surface_formats = %u\n\t\num_available_present_modes = %u\n", num_available_surface_formats, num_available_present_modes);
 				continue;
 			}
-			//debug_print("\tPhysical device is compatible with surface.\n");
 
 			// Select the best swap chain settings.
 			VkSurfaceFormatKHR *available_surface_formats = allocate_array(&game_state->frame_arena, VkSurfaceFormatKHR, num_available_surface_formats);
 			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[i], vulkan_context.surface, &num_available_surface_formats, available_surface_formats));
 			VkSurfaceFormatKHR surface_format = available_surface_formats[0];
-			//debug_print("\tAvailable surface formats (VkFormat, VkColorSpaceKHR):\n");
 			if (num_available_surface_formats == 1 && available_surface_formats[0].format == VK_FORMAT_UNDEFINED) {
 				// No preferred format, so we get to pick our own.
 				surface_format = (VkSurfaceFormatKHR){VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-				//debug_print("\t\tNo preferred format.\n");
 			} else {
 				for (s32 j = 0; j < num_available_surface_formats; j++) {
 					if (available_surface_formats[j].format == VK_FORMAT_B8G8R8A8_UNORM && available_surface_formats[j].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 						surface_format = available_surface_formats[j];
 						break;
 					}
-					//printf("\t\t%d, %d\n", asf.format, asf.colorSpace);
 				}
 			}
 
 			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 			VkPresentModeKHR *available_present_modes = allocate_array(&game_state->frame_arena, VkPresentModeKHR, num_available_present_modes);
 			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[i], vulkan_context.surface, &num_available_present_modes, available_present_modes));
-			//debug_print("\tAvailable present modes:\n");
 			for (s32 j = 0; j < num_available_present_modes; j++) {
 				if (available_present_modes[j] == VK_PRESENT_MODE_MAILBOX_KHR) {
 					present_mode = available_present_modes[j];
 					break;
 				}
-				//debug_print("\t\t%d\n", apm);
 			}
 
 			u32 num_queue_families = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, NULL);
 			VkQueueFamilyProperties *queue_families = allocate_array(&game_state->frame_arena, VkQueueFamilyProperties, num_queue_families);
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, queue_families);
-
-			//debug_print("\tFound %u queue families.\n", num_queue_families);
-
 			// @TODO: Search for an transfer exclusive queue VK_QUEUE_TRANSFER_BIT.
 			u32 graphics_queue_family = UINT32_MAX;
 			u32 present_queue_family = UINT32_MAX;
@@ -1650,21 +1576,14 @@ void initialize_renderer(Game_State *game_state) {
 						present_queue_family = j;
 					}
 					if (graphics_queue_family != UINT32_MAX && present_queue_family != UINT32_MAX) {
-						vulkan_context.physical_device = physical_devices[i];
-						vulkan_context.graphics_queue_family = graphics_queue_family;
-						vulkan_context.present_queue_family = present_queue_family;
-						vulkan_context.surface_format = surface_format;
-						vulkan_context.present_mode = present_mode;
-
-						//assert(physical_device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && physical_device_features.geometryShader);
-						//debug_print("\nSelected physical device %d.\n", query_count);
-						//debug_print("\tVkFormat: %d\n\tVkColorSpaceKHR %d\n", surface_format.format, surface_format.colorSpace);
-						//debug_print("\tVkPresentModeKHR %d\n", present_mode);
-
 						found_suitable_physical_device = 1;
-						vulkan_context.minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
-						vulkan_context.maximum_uniform_buffer_range = physical_device_properties.limits.maxUniformBufferRange;
-						vulkan_context.scene_matrix_descriptor_set_count = (VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE / vulkan_context.maximum_uniform_buffer_range);
+						vulkan_context.physical_device                                  = physical_devices[i];
+						vulkan_context.graphics_queue_family                            = graphics_queue_family;
+						vulkan_context.present_queue_family                             = present_queue_family;
+						vulkan_context.surface_format                                   = surface_format;
+						vulkan_context.present_mode                                     = present_mode;
+						vulkan_context.minimum_uniform_buffer_offset_alignment          = physical_device_properties.limits.minUniformBufferOffsetAlignment;
+						vulkan_context.maximum_uniform_buffer_range                     = physical_device_properties.limits.maxUniformBufferRange;
 						break;
 					}
 				}
@@ -1708,9 +1627,9 @@ void initialize_renderer(Game_State *game_state) {
 		device_create_info.pQueueCreateInfos = device_queue_create_info;
 		device_create_info.queueCreateInfoCount = num_unique_queue_families;
 		device_create_info.pEnabledFeatures = &physical_device_features;
-		device_create_info.enabledExtensionCount = num_required_device_extensions;
+		device_create_info.enabledExtensionCount = required_device_extension_count;
 		device_create_info.ppEnabledExtensionNames = required_device_extensions;
-		device_create_info.enabledLayerCount = num_required_instance_layers;
+		device_create_info.enabledLayerCount = required_instance_layer_count;
 		device_create_info.ppEnabledLayerNames = required_instance_layers;
 
 		VK_CHECK(vkCreateDevice(vulkan_context.physical_device, &device_create_info, NULL, &vulkan_context.device));
@@ -1849,7 +1768,7 @@ void initialize_renderer(Game_State *game_state) {
 
 	// Create shaders.
 	{
-		const char *textured_static_shaders[] = {"build/textured_static_vertex.spirv", "build/textured_static_fragment.spirv"};
+		const char *textured_static_shaders[] = {"build/pbr_vertex.spirv", "build/pbr_fragment.spirv"};
 		const char *shadow_map_static_shaders[] = {"build/shadow_map_static_vertex.spirv", "build/shadow_map_static_fragment.spirv"};
 
 		// @TODO: Generate shader table.
@@ -1881,11 +1800,6 @@ void initialize_renderer(Game_State *game_state) {
 				} else {
 					_abort("Unknown shader type: %s", requests[i].paths[j]);
 				}
-
-				//requests[i].create_info->sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-				//requests[i].create_info->stage  = stage;
-				//requests[i].create_info->module = requests[i].shaders->modules[j];
-				//requests[i].create_info->pName  = "main";
 			}
 		}
 	}
@@ -1928,33 +1842,40 @@ void initialize_renderer(Game_State *game_state) {
 
 	// Image memory.
 	{
-		VkMemoryRequirements memory_requirements;
-		memory_requirements.size = VULKAN_IMAGE_ALLOCATION_SIZE;
-		memory_requirements.alignment = 0;
-		memory_requirements.memoryTypeBits = 130; // @TODO: Some better way to get the memory type required for image memory?
+		VkMemoryRequirements memory_requirements = {
+			.size = VULKAN_IMAGE_ALLOCATION_SIZE,
+			.alignment = 0,
+			.memoryTypeBits = 130, // @TODO: Some better way to get the memory type required for image memory?
+		};
 		allocate_vulkan_memory(&vulkan_context.image_memory, memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	}
 
 	// Semaphore.
 	{
-		VkSemaphoreCreateInfo semaphore_create_info = {};
-		semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VkFenceCreateInfo fenceInfo = {};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
+		VkSemaphoreCreateInfo semaphore_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};
+        VkFenceCreateInfo fence_create_info = {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
         for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.image_available_semaphores[i]));
 			VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.render_finished_semaphores[i]));
-			VK_CHECK(vkCreateFence(vulkan_context.device, &fenceInfo, NULL, &vulkan_context.inFlightFences[i]));
+			VK_CHECK(vkCreateFence(vulkan_context.device, &fence_create_info, NULL, &vulkan_context.inFlightFences[i]));
         }
-        /*
-		VkSemaphoreCreateInfo semaphore_create_info = {};
-		semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.image_available_semaphore));
-		VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.render_finished_semaphore));
-		*/
+	}
+
+	// Uniform memory info.
+	{
+		vulkan_context.aligned_scene_uniform_buffer_object_size         = align_to(sizeof(Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size = align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.aligned_shadow_map_uniform_buffer_object_size    = align_to(sizeof(Shadow_Map_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.scene_uniform_buffer_offset                      = align_to(VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET, vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.scene_dynamic_uniform_buffers_offset             = vulkan_context.scene_uniform_buffer_offset + (vulkan_context.num_swapchain_images * vulkan_context.aligned_scene_uniform_buffer_object_size);
+		vulkan_context.shadow_map_uniform_buffer_offset                 = vulkan_context.scene_dynamic_uniform_buffers_offset + (TEST_INSTANCES * vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size);
+		vulkan_context.scene_dynamic_uniform_memory_size                = vulkan_context.shadow_map_uniform_buffer_offset - vulkan_context.scene_dynamic_uniform_buffers_offset;
+		vulkan_context.scene_dynamic_uniform_buffer_count               = divide_and_round_up(vulkan_context.scene_dynamic_uniform_memory_size, vulkan_context.maximum_uniform_buffer_range);
 	}
 
 	// Descriptor pool.
@@ -1967,7 +1888,7 @@ void initialize_renderer(Game_State *game_state) {
 			},
 			{
 				.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-				.descriptorCount = vulkan_context.scene_matrix_descriptor_set_count,
+				.descriptorCount = vulkan_context.scene_dynamic_uniform_buffer_count,
 			},
 			{
 				.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1978,14 +1899,10 @@ void initialize_renderer(Game_State *game_state) {
 			.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.poolSizeCount = ARRAY_COUNT(pool_sizes),
 			.pPoolSizes    = pool_sizes,
-			.maxSets       = vulkan_context.scene_matrix_descriptor_set_count * vulkan_context.num_swapchain_images + 60,
+			.maxSets       = vulkan_context.scene_dynamic_uniform_buffer_count * vulkan_context.num_swapchain_images + 60,
 		};
 		VK_CHECK(vkCreateDescriptorPool(vulkan_context.device, &pool_info, NULL, &vulkan_context.descriptor_pool));
 	}
-
-	ubo_offset = align_to(VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET, vulkan_context.minimum_uniform_buffer_offset_alignment);
-	sm_ubo_offset = align_to(ubo_offset + sizeof(UBO) * 3 + (256 * 3), vulkan_context.minimum_uniform_buffer_offset_alignment);
-	dubo_offset = align_to(sm_ubo_offset + sizeof(shadow_map_ubo), vulkan_context.minimum_uniform_buffer_offset_alignment);
 
 	VkSamplerCreateInfo samplerInfo = {};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -2015,8 +1932,8 @@ void initialize_renderer(Game_State *game_state) {
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
 			// We need a variable number of scene matrix descriptor sets because the matrix uniforms are stored in dynamic uniform buffers which have a maximum size.
 			// If we want to store more matrix data than the maximum size, we may need more than one desciptor set.
-			vulkan_context.descriptor_sets[i].scene.matrices = allocate_array(&game_state->permanent_arena, VkDescriptorSet, vulkan_context.scene_matrix_descriptor_set_count);
-			const u32 max_set_count = 100 + vulkan_context.scene_matrix_descriptor_set_count;
+			vulkan_context.descriptor_sets[i].scene.matrices = allocate_array(&game_state->permanent_arena, VkDescriptorSet, vulkan_context.scene_dynamic_uniform_buffer_count);
+			const u32 max_set_count = 100 + vulkan_context.scene_dynamic_uniform_buffer_count;
 			VkDescriptorSet **sets = allocate_array(&game_state->frame_arena, VkDescriptorSet *, max_set_count);
 			VkDescriptorSetLayout *layouts = allocate_array(&game_state->frame_arena, VkDescriptorSetLayout, max_set_count);
 			u32 set_count = 0, layout_count = 0;
@@ -2033,7 +1950,7 @@ void initialize_renderer(Game_State *game_state) {
 			sets[set_count++] = &vulkan_context.descriptor_sets[i].shadow_map.uniforms;
 			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.shadow_map.uniforms;
 
-			for (u32 j = 0; j < vulkan_context.scene_matrix_descriptor_set_count; j++) {
+			for (u32 j = 0; j < vulkan_context.scene_dynamic_uniform_buffer_count; j++) {
 				sets[set_count++] = &vulkan_context.descriptor_sets[i].scene.matrices[j];
 				layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene.matrices;
 			}
@@ -2049,32 +1966,10 @@ void initialize_renderer(Game_State *game_state) {
 			for (u32 j = 0; j < set_count; j++) {
 				*sets[j] = results[j];
 			}
-			/*
-			{
-				vulkan_context.descriptor_sets[i].scene.matrices = allocate_array(&game_state->permanent_arena, VkDescriptorSet, vulkan_context.scene_matrix_descriptor_set_count);
-				VkDescriptorSet **sets = allocate_array(&game_state->frame_arena, VkDescriptorSet *, vulkan_context.scene_matrix_descriptor_set_count);
-				VkDescriptorSetLayout *layouts = allocate_array(&game_state->frame_arena, VkDescriptorSetLayout, vulkan_context.scene_matrix_descriptor_set_count);
-				for (u32 j = 0; j < vulkan_context.scene_matrix_descriptor_set_count; j++) {
-					sets[j] = &vulkan_context.descriptor_sets[i].scene.matrices[j];
-					layouts[j] = vulkan_context.descriptor_set_layouts.scene.matrices;
-				}
-				VkDescriptorSet *results = allocate_array(&game_state->frame_arena, VkDescriptorSet, vulkan_context.scene_matrix_descriptor_set_count);
-				VkDescriptorSetAllocateInfo allocate_info = {
-					.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-					.descriptorPool     = vulkan_context.descriptor_pool,
-					.descriptorSetCount = vulkan_context.scene_matrix_descriptor_set_count,
-					.pSetLayouts        = layouts,
-				};
-				debug_print("YYYY %u\n", vulkan_context.scene_matrix_descriptor_set_count);
-				VK_CHECK(vkAllocateDescriptorSets(vulkan_context.device, &allocate_info, results));
-				for (u32 j = 0; j < vulkan_context.scene_matrix_descriptor_set_count; j++) {
-					*sets[j] = results[j];
-				}
-			}
-			*/
 		}
+
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
-			VkWriteDescriptorSet *descriptor_writes = allocate_array(&game_state->frame_arena, VkWriteDescriptorSet, 100 + vulkan_context.scene_matrix_descriptor_set_count);
+			VkWriteDescriptorSet *descriptor_writes = allocate_array(&game_state->frame_arena, VkWriteDescriptorSet, 100 + vulkan_context.scene_dynamic_uniform_buffer_count);
 			u32 write_count = 0;
 			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -2085,10 +1980,11 @@ void initialize_renderer(Game_State *game_state) {
 				.descriptorCount = 1,
 				.pBufferInfo     = &(VkDescriptorBufferInfo){
 					.buffer = vulkan_context.gpu_buffer,
-					.offset = align_to(ubo_offset + (sizeof(UBO) * i), vulkan_context.minimum_uniform_buffer_offset_alignment),
-					.range  = sizeof(UBO),
+					.offset = vulkan_context.scene_uniform_buffer_offset + (0 * vulkan_context.aligned_scene_uniform_buffer_object_size),//align_to(ubo_offset + (sizeof(UBO) * i), vulkan_context.minimum_uniform_buffer_offset_alignment),
+					.range  = sizeof(Scene_UBO),
 				},
 			};
+			debug_print("XXX: %u\n", vulkan_context.scene_uniform_buffer_offset);
 			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 				.dstSet          = vulkan_context.descriptor_sets[i].scene.samplers,
@@ -2122,17 +2018,18 @@ void initialize_renderer(Game_State *game_state) {
 				.descriptorCount = 1,
 				.pBufferInfo     = &(VkDescriptorBufferInfo){
 					.buffer = vulkan_context.gpu_buffer,
-					.offset = sm_ubo_offset,
-					.range  = sizeof(shadow_map_ubo),
+					.offset = vulkan_context.shadow_map_uniform_buffer_offset,
+					.range  = sizeof(Shadow_Map_UBO),
 				},
 			};
-			VkDescriptorBufferInfo *buffer_infos = allocate_array(&game_state->frame_arena, VkDescriptorBufferInfo, vulkan_context.scene_matrix_descriptor_set_count);
-			for (u32 j = 0; j < vulkan_context.scene_matrix_descriptor_set_count; j++) {
+			VkDescriptorBufferInfo *buffer_infos = allocate_array(&game_state->frame_arena, VkDescriptorBufferInfo, vulkan_context.scene_dynamic_uniform_buffer_count);
+			for (u32 j = 0; j < vulkan_context.scene_dynamic_uniform_buffer_count; j++) {
 				buffer_infos[j] = (VkDescriptorBufferInfo){
 					.buffer = vulkan_context.gpu_buffer,
-					.offset = dubo_offset + (j * vulkan_context.maximum_uniform_buffer_range),
+					.offset = vulkan_context.scene_dynamic_uniform_buffers_offset + (j * vulkan_context.maximum_uniform_buffer_range),
 					.range  = vulkan_context.maximum_uniform_buffer_range,
 				};
+				debug_print("XXX: %u\n", vulkan_context.scene_dynamic_uniform_buffers_offset);
 				descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 					.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet          = vulkan_context.descriptor_sets[i].scene.matrices[j],
@@ -2150,40 +2047,7 @@ void initialize_renderer(Game_State *game_state) {
 	vulkan_context.scene_projection = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height, 0.1f, 100.0f);
 }
 
-void update_vulkan_texture_descriptors(Material **mesh_materials, u32 *mesh_counts, u32 model_count, u32 swapchain_image_index, Memory_Arena *arena) {
-	// @TODO: Only upload these if they need to be updated.
-
-	// @TODO: Use a dummy texture for all descriptors not in use? All image_infos at index greater than vulkan_context.textures.count.
-	// @TODO: We should set all texture descriptors to a dummy texture on startup and then only update the ones that actually need to be updated!
-	VkDescriptorImageInfo *image_infos = allocate_array(arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURE_COUNT);
-	u32 total_mesh_count = 0;
-	for (u32 i = 0; i < model_count; i++) {
-		for (u32 j = 0; j < mesh_counts[i]; j++) {
-			image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[mesh_materials[i][j].diffuse_map];
-			image_infos[total_mesh_count].sampler     = NULL;
-			total_mesh_count++;
-		}
-	}
-	for (u32 i = total_mesh_count; i < VULKAN_MAX_TEXTURE_COUNT; i++) {
-		image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_infos[i].imageView   = vulkan_context.textures.image_views[0];
-		image_infos[i].sampler     = NULL;
-	}
-	VkWriteDescriptorSet textures_descriptor_write = {
-		.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstBinding      = 4,
-		.dstArrayElement = 0,
-		.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-		.descriptorCount = VULKAN_MAX_TEXTURE_COUNT,
-		.pBufferInfo     = 0,
-		.dstSet          = vulkan_context.descriptor_sets[swapchain_image_index].scene.images,
-		.pImageInfo      = image_infos,
-	};
-	vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
-}
-
-void update_vulkan_uniforms(Camera *camera, Transform *transforms, u32 transform_count, u32 swapchain_image_index) {
+void update_vulkan_uniforms(Camera *camera, Transform *mesh_transforms, u32 transform_count, u32 swapchain_image_index) {
 	// Shadow map.
 	{
 		M4 model = m4_identity();
@@ -2204,27 +2068,29 @@ void update_vulkan_uniforms(Camera *camera, Transform *transforms, u32 transform
 		M4 model = m4_identity();
 		M4 projection_view = multiply_m4(vulkan_context.scene_projection, camera->view_matrix);
 		for (s32 i = 0; i < transform_count; i++) {
-			set_matrix_translation(&model, transforms[i].translation);
-			dynamic_scene_ubo[i].world_to_clip_space =  multiply_m4(projection_view, model);
-			dynamic_scene_ubo[i].world_to_shadow_map_clip_space = multiply_m4(multiply_m4(shadow_map_clip_space_bias, shadow_map_ubo.world_to_clip_space), model);
+			set_matrix_translation(&model, mesh_transforms[i].translation);
+			dynamic_scene_ubo[i] = (Dynamic_Scene_UBO){
+				.model_to_world_space           = multiply_m4(projection_view, model),
+				.world_to_clip_space            = multiply_m4(projection_view, model),
+				.world_to_shadow_map_clip_space = multiply_m4(multiply_m4(shadow_map_clip_space_bias, shadow_map_ubo.world_to_clip_space), model),
+			};
 		}
 	}
 
-	UBO scene_ubo;
+	Scene_UBO scene_ubo = {
+		.camera_position = camera->position,
+	};
+	stage_vulkan_data(&scene_ubo, sizeof(scene_ubo));
+	transfer_staged_vulkan_data(vulkan_context.scene_uniform_buffer_offset);// + (swapchain_image_index * vulkan_context.aligned_scene_uniform_buffer_object_size));
 
-	stage_vulkan_data(&scene_ubo, sizeof(UBO));
-	u32 y = ubo_offset + swapchain_image_index * align_to(sizeof(UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
-	assert(y % vulkan_context.minimum_uniform_buffer_offset_alignment == 0);
-	transfer_staged_vulkan_data(ubo_offset + swapchain_image_index * align_to(sizeof(UBO), vulkan_context.minimum_uniform_buffer_offset_alignment));
-
-	stage_vulkan_data(&shadow_map_ubo, sizeof(shadow_map_ubo));
-	transfer_staged_vulkan_data(sm_ubo_offset);
+	stage_vulkan_data(&shadow_map_ubo, sizeof(Shadow_Map_UBO));
+	transfer_staged_vulkan_data(vulkan_context.shadow_map_uniform_buffer_offset);
 
 	for (s32 i = 0; i < TEST_INSTANCES; i++) {
 		stage_vulkan_data(&dynamic_scene_ubo[i], sizeof(dynamic_scene_ubo[i]));
-		u32 x = dubo_offset + i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
-		assert(x % vulkan_context.minimum_uniform_buffer_offset_alignment == 0);
-		transfer_staged_vulkan_data(dubo_offset + i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment));
+		//u32 x = dubo_offset + i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		//assert(x % vulkan_context.minimum_uniform_buffer_offset_alignment == 0);
+		transfer_staged_vulkan_data(vulkan_context.scene_dynamic_uniform_buffers_offset + (i * vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size));
 	}
 }
 
@@ -2235,9 +2101,70 @@ void render(Game_State *game_state) {
 	u32 swapchain_image_index;
 	VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &swapchain_image_index));
 
-	update_vulkan_texture_descriptors(game_state->entities.submesh_materials, game_state->entities.submesh_counts, game_state->entities.mesh_count, swapchain_image_index, &game_state->frame_arena);
-	build_vulkan_command_buffer(game_state->entities.meshes, game_state->entities.submesh_materials, game_state->entities.submesh_counts, game_state->entities.mesh_count, swapchain_image_index);
+	// Update texture descriptors.
+	{
+		// @TODO: Only upload these if they need to be updated.
+		// @TODO: Use a dummy texture for all descriptors not in use? All image_infos at index greater than vulkan_context.textures.count.
+		// @TODO: We should set all texture descriptors to a dummy texture on startup and then only update the ones that actually need to be updated!
+		////// What is the ordering constraint??????????????????????????????????????????????????????????????????????????????????????????
+		VkDescriptorImageInfo *image_infos = allocate_array(&game_state->frame_arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURE_COUNT);
+		u32 total_mesh_count = 0;
+		for (u32 i = 0; i < game_state->entities.mesh_count; i++) {
+			for (u32 j = 0; j < game_state->entities.submesh_counts[i]; j++) {
+				//if (game_state->entities.submesh_materials[i][j].diffuse_map != INVALID_ID) {
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].albedo_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+				//}
+
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].real_normal_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+
+				//if (game_state->entities.submesh_materials[i][j].normal_map != INVALID_ID) {
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].normal_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+				//}
+
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].roughness_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].metallic_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+
+					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].ao_map];
+					image_infos[total_mesh_count].sampler     = NULL;
+					total_mesh_count++;
+			}
+		}
+		for (u32 i = total_mesh_count; i < VULKAN_MAX_TEXTURE_COUNT; i++) {
+			image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			image_infos[i].imageView   = vulkan_context.textures.image_views[0];
+			image_infos[i].sampler     = NULL;
+		}
+		VkWriteDescriptorSet textures_descriptor_write = {
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstBinding      = 4,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			.descriptorCount = VULKAN_MAX_TEXTURE_COUNT,
+			.pBufferInfo     = 0,
+			.dstSet          = vulkan_context.descriptor_sets[swapchain_image_index].scene.images,
+			.pImageInfo      = image_infos,
+		};
+		vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
+	}
 	update_vulkan_uniforms(&game_state->camera, game_state->entities.mesh_transforms, game_state->entities.mesh_count, swapchain_image_index);
+	build_vulkan_command_buffer(game_state->entities.meshes, game_state->entities.submesh_materials, game_state->entities.submesh_counts, game_state->entities.mesh_count, swapchain_image_index);
 
 	VkSemaphore wait_semaphores[] = {vulkan_context.image_available_semaphores[vulkan_context.currentFrame]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -2327,120 +2254,3 @@ void cleanup_renderer() {
 
 	vkDestroyInstance(vulkan_context.instance, NULL); // On X11, the Vulkan instance must be destroyed after the display resources are destroyed.
 }
-
-/*
-void render(Game_State *game_state) {
-	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], 1, UINT64_MAX);
-	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
-
-    u32 swapchain_image_index;
-    VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &swapchain_image_index));
-
-    update_texture_descriptor(&game_state->assets, swapchain_image_index, &game_state->frame_arena);
-    build_vulkan_command_buffer(game_state, swapchain_image_index);
-
-	VkSemaphore wait_semaphores[] = {vulkan_context.image_available_semaphores[vulkan_context.currentFrame]};
-	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	VkSemaphore signal_semaphores[] = {vulkan_context.render_finished_semaphores[vulkan_context.currentFrame]};
-
-	update_uniform_buffers(game_state, swapchain_image_index);
-#if 0
-	auto model = m4_identity();
-	UBO scene_ubo;
-	dynamic_scene_ubo[0].world_to_clip_space = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height, 0.1f, 100.0f) * game_state->camera.view_matrix * model;
-	shadow_map_ubo.world_to_clip_space = orthographic_projection(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 20.0f) * look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f}) * m4_identity();
-	dynamic_scene_ubo[0].world_to_shadow_map_clip_space = shadow_map_clip_space_bias * shadow_map_ubo.world_to_clip_space * model;
-
-	//set_translation(&model, {0.0f, 0.0f, 0.0f});
-	//Dynamic_Scene_UBO dynamic_scene_ubo;
-	//ubo.model = m4_identity();//glm::transpose(glm::rotate(glm::mat4(1.0f), 0 * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)));
-	//ubo.view = glm::lookAt(glm::vec3(3.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	//ubo.projection = glm::perspective(glm::radians(45.0f), vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height,0.1f, 10.0f);
-
-	//ubo.view = game_state->camera.view_matrix;//(look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}));
-	//ubo.view = (look_at({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}));
-	//ubo.projection = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height);
-
-	//shadow_map_ubo.model = m4_identity();
-	//shadow_map_ubo.view = look_at(V3{2.0f, 2.0f, 2.0f}, V3{0.0f, 0.0f, 0.0f}, V3{0.0f, 0.0f, 1.0f});
-	//shadow_map_ubo.projection = perspective_projection(90.0f, 1.0f);
-
-	//ubo.light_model = shadow_map_ubo.model;
-	//ubo.light_view = shadow_map_ubo.view;
-	//ubo.light_projection = shadow_map_ubo.projection;
-
-	void* data;
-	vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, align_to(ubo_offset + (sizeof(UBO) * swapchain_image_index), vulkan_context.minimum_uniform_buffer_offset_alignment), sizeof(scene_ubo), 0, &data);
-	memcpy(data, &scene_ubo, sizeof(scene_ubo));
-	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
-
-	vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, sm_ubo_offset, sizeof(shadow_map_ubo), 0, &data);
-	memcpy(data, &shadow_map_ubo, sizeof(shadow_map_ubo));
-	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
-
-	vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, dubo_offset, sizeof(dynamic_scene_ubo), 0, &data);
-	memcpy(data, &dynamic_scene_ubo, sizeof(dynamic_scene_ubo));
-	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
-
-	{
-		VkCommandBufferAllocateInfo allocate_info = {};
-		allocate_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocate_info.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocate_info.commandPool        = vulkan_context.command_pool;
-		allocate_info.commandBufferCount = 1;
-
-		VkCommandBuffer command_buffer;
-		vkAllocateCommandBuffers(vulkan_context.device, &allocate_info, &command_buffer);
-
-		VkCommandBufferBeginInfo begin_info = {};
-		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-		vkBeginCommandBuffer(command_buffer, &begin_info);
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = ubo_offset; // Optional
-		copyRegion.dstOffset = ubo_offset; // Optional
-		//copyRegion.size = (sm_ubo_offset + sizeof(shadow_map_ubo)) - ubo_offset;
-		copyRegion.size = (dubo_offset + sizeof(dynamic_scene_ubo)) - ubo_offset;
-		//printf("copy %lu %lu %lu\n", VULKAN_GPU_ALLOCATION_SIZE, VULKAN_SHARED_ALLOCATION_SIZE, ubo_offset + copyRegion.size);
-		vkCmdCopyBuffer(command_buffer, vulkan_context.staging_buffer, vulkan_context.gpu_buffer, 1, &copyRegion);
-		vkEndCommandBuffer(command_buffer);
-		VkSubmitInfo submitInfo = {};
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &command_buffer;
-
-		vkQueueSubmit(vulkan_context.graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(vulkan_context.graphics_queue); // @TODO: Use a fence?
-		vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
-	}
-#endif
-
-	VkSubmitInfo submit_info = {};
-	submit_info.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.waitSemaphoreCount   = 1;
-	submit_info.pWaitSemaphores      = wait_semaphores;
-	submit_info.pWaitDstStageMask    = wait_stages;
-	submit_info.commandBufferCount   = 1;
-	submit_info.pCommandBuffers      = &vulkan_context.command_buffers[swapchain_image_index];
-	submit_info.signalSemaphoreCount = 1;
-	submit_info.pSignalSemaphores    = signal_semaphores;
-
-	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, vulkan_context.inFlightFences[vulkan_context.currentFrame]));
-
-	VkSwapchainKHR swapchains[] = {vulkan_context.swapchain};
-
-	VkPresentInfoKHR present_info = {};
-	present_info.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.waitSemaphoreCount = 1;
-	present_info.pWaitSemaphores    = signal_semaphores;
-	present_info.swapchainCount     = 1;
-	present_info.pSwapchains        = swapchains;
-	present_info.pImageIndices      = &swapchain_image_index;
-
-	VK_CHECK(vkQueuePresentKHR(vulkan_context.present_queue, &present_info));
-
-	vulkan_context.currentFrame = (vulkan_context.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-*/
-

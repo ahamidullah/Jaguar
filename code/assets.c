@@ -6,7 +6,7 @@
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-Texture_ID load_texture(const char *path, Game_Assets *assets) {
+Texture_ID load_texture(const char *path) {
 	s32 texture_width, texture_height, texture_channels;
 	printf("%s\n", path);
 	u8 *pixels = stbi_load(path, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
@@ -16,11 +16,30 @@ Texture_ID load_texture(const char *path, Game_Assets *assets) {
 	return id;
 }
 
-// @TODO: WRITE A BLENDER EXPORTER!!!!!!!!!!!!!!!!!!
-void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena *thread_local_arena) {
-	const char *model_directory = get_directory(path, thread_local_arena);
+// @TODO @PREPROCESSOR: Generate these.
+struct {
+	Asset_ID asset_id;
+	const char *filepath;
+} asset_id_to_filepath_map[] = {
+	{ANVIL_ASSET, "data/models/anvil"},
+	{GUY_ASSET, "data/models/guy"},
+};
 
-	const struct aiScene* assimp_scene = aiImportFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
+// @TODO: WRITE A BLENDER EXPORTER!!!!!!!!!!!!!!!!!!
+void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
+	const char *model_directory = NULL;
+	for (u32 i = 0; i < ARRAY_COUNT(asset_id_to_filepath_map); i++) {
+		if (asset_id_to_filepath_map[i].asset_id == asset_id) {
+			model_directory = asset_id_to_filepath_map[i].filepath;
+			break;
+		}
+	}
+	assert(model_directory);
+
+	const char *model_name = get_filename_from_path(model_directory, arena);
+
+	const char *fbx_filename = join_strings(model_name, ".fbx", arena);
+	const struct aiScene* assimp_scene = aiImportFile(join_paths(model_directory, fbx_filename, arena), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
 	}
@@ -39,7 +58,7 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		index_count += assimp_scene->mMeshes[i]->mNumFaces * 3;
 	}
 
-	Loaded_Mesh *mesh = malloc(sizeof(Loaded_Mesh));
+	Mesh_Asset *mesh = malloc(sizeof(Mesh_Asset));
 	mesh->vertex_count = vertex_count;
 	mesh->vertices = malloc(sizeof(Vertex) * mesh->vertex_count);
 	mesh->index_count = index_count;
@@ -47,33 +66,56 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 	mesh->submesh_count = mesh_count;
 	mesh->submesh_index_counts = malloc(sizeof(u32) * mesh->submesh_count);;
 	mesh->materials = malloc(sizeof(Material) * mesh->submesh_count);
-	assets->lookup[id] = mesh;
+	assets->lookup[asset_id] = mesh;
 
 	u32 mesh_vertex_offset = 0;
 	u32 mesh_index_offset = 0;
-	for (s32 i = 0; i < mesh_count; i++) {
+	u32 max_x_vertex = 0, max_y_vertex = 0, max_z_vertex = 0;
+	u32 min_x_vertex = 0, min_y_vertex = 0, min_z_vertex = 0;
+	for (u32 i = 0; i < mesh_count; i++) {
 		struct aiMesh *assimp_mesh = assimp_scene->mMeshes[i];
 		assert(assimp_mesh->mVertices && assimp_mesh->mNormals && (assimp_mesh->mFaces && assimp_mesh->mNumFaces > 0));
 
 		for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
 			Vertex *v = &mesh->vertices[mesh_vertex_offset + j];
-
-			v->position.x = assimp_mesh->mVertices[j].x;
-			v->position.y = assimp_mesh->mVertices[j].y;
-			v->position.z = assimp_mesh->mVertices[j].z;
-
-			v->normal.x = assimp_mesh->mNormals[j].x;
-			v->normal.y = assimp_mesh->mNormals[j].y;
-			v->normal.z = assimp_mesh->mNormals[j].z;
-
-			v->color.x = 1.0f;
-			v->color.y = 0.0f;
-			v->color.z = 0.0f;
-
-			v->tangent.x = assimp_mesh->mTangents[j].x;
-			v->tangent.y = assimp_mesh->mTangents[j].y;
-			v->tangent.z = assimp_mesh->mTangents[j].z;
-
+			v->position = (V3){
+				.x = assimp_mesh->mVertices[j].x,
+				.y = assimp_mesh->mVertices[j].y,
+				.z = assimp_mesh->mVertices[j].z,
+			};
+			if (v->position.x > assimp_mesh->mVertices[max_x_vertex].x) {
+				max_x_vertex = j;
+			}
+			if (v->position.y > assimp_mesh->mVertices[max_y_vertex].y) {
+				max_y_vertex = j;
+			}
+			if (v->position.z > assimp_mesh->mVertices[max_z_vertex].z) {
+				max_z_vertex = j;
+			}
+			if (v->position.x < assimp_mesh->mVertices[min_x_vertex].x) {
+				min_x_vertex = j;
+			}
+			if (v->position.y < assimp_mesh->mVertices[min_y_vertex].y) {
+				min_y_vertex = j;
+			}
+			if (v->position.z < assimp_mesh->mVertices[min_z_vertex].z) {
+				min_z_vertex = j;
+			}
+			v->normal = (V3){
+				.x = assimp_mesh->mNormals[j].x,
+				.y = assimp_mesh->mNormals[j].y,
+				.z = assimp_mesh->mNormals[j].z,
+			};
+			v->color = (V3){
+				1.0f,
+				0.0f,
+				0.0f,
+			};
+			v->tangent = (V3){
+				.x = assimp_mesh->mTangents[j].x,
+				.y = assimp_mesh->mTangents[j].y,
+				.z = assimp_mesh->mTangents[j].z,
+			};
 			if (assimp_mesh->mTextureCoords[0]) {
 				v->uv.x = assimp_mesh->mTextureCoords[0][j].x;
 				v->uv.y = assimp_mesh->mTextureCoords[0][j].y;
@@ -82,6 +124,37 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 				v->uv.y = -1;
 			}
 		}
+
+		// @TODO: Tighter bounding sphere calculation.
+		V3 bounding_box_center = {
+			(assimp_mesh->mVertices[max_x_vertex].x + assimp_mesh->mVertices[min_x_vertex].x) / 2.0f,
+			(assimp_mesh->mVertices[max_y_vertex].y + assimp_mesh->mVertices[min_y_vertex].y) / 2.0f,
+			(assimp_mesh->mVertices[max_z_vertex].z + assimp_mesh->mVertices[min_z_vertex].z) / 2.0f,
+		};
+		V3 max = {
+			assimp_mesh->mVertices[max_x_vertex].x,
+			assimp_mesh->mVertices[max_y_vertex].y,
+			assimp_mesh->mVertices[max_z_vertex].z,
+		};
+		V3 min = {
+			assimp_mesh->mVertices[min_x_vertex].x,
+			assimp_mesh->mVertices[min_y_vertex].y,
+			assimp_mesh->mVertices[min_z_vertex].z,
+		};
+		print_v3(max);
+		print_v3(min);
+		print_v3(bounding_box_center);
+		V3 bounding_box_max_corner = {
+			assimp_mesh->mVertices[max_x_vertex].x,
+			assimp_mesh->mVertices[max_y_vertex].y,
+			assimp_mesh->mVertices[max_z_vertex].z,
+		};
+		mesh->bounding_sphere = (Bounding_Sphere){
+			.center = bounding_box_center,
+			.radius = vector_length(subtract_v3(bounding_box_max_corner, bounding_box_center)),
+		};
+		print_v3(mesh->bounding_sphere.center);
+		print_f32(mesh->bounding_sphere.radius);
 
 		for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
 			assert(assimp_mesh->mFaces[j].mNumIndices == 3);
@@ -94,19 +167,12 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 		mesh_vertex_offset += assimp_mesh->mNumVertices;
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
-		struct aiMaterial* assimp_material = assimp_scene->mMaterials[assimp_mesh->mMaterialIndex];
-		s32 material_id = -1;
-
-		// @TODO: Some way to share materials between different meshes.
-
-		if (material_id == -1) {
-			Material *material = &mesh->materials[i];
-			material->albedo_map = load_texture("data/materials/rusted_iron/albedo.png", assets);
-			material->real_normal_map = load_texture("data/models/anvil/Normal.png", assets);
-			material->normal_map = load_texture("data/materials/rusted_iron/normal.png", assets);
-			material->roughness_map = load_texture("data/materials/rusted_iron/roughness.png", assets);
-			material->metallic_map = load_texture("data/materials/rusted_iron/metalness.png", assets);
-			material->ao_map = load_texture("data/materials/rusted_iron/ao.png", assets);
+		Material *material = &mesh->materials[i];
+		material->albedo_map = load_texture(join_paths(model_directory, "albedo.png", arena));
+		material->normal_map = load_texture(join_paths(model_directory, "normal.png", arena));
+		material->roughness_map = load_texture(join_paths(model_directory, "roughness.png", arena));
+		material->metallic_map = load_texture(join_paths(model_directory, "metallic.png", arena));
+		material->ambient_occlusion_map = load_texture(join_paths(model_directory, "ambient_occlusion.png", arena));
 #if 0
 			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
@@ -144,7 +210,6 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 				material->diffuse_color = DEFAULT_SPECULAR_COLOR;
 			}
 #endif
-		}
 	}
 
 	transfer_model_data_to_gpu(mesh, &mesh->vertex_offset, &mesh->first_index);
@@ -429,7 +494,14 @@ void load_model(const char *path, Asset_ID id, Game_Assets *assets, Memory_Arena
 	*/
 }
 
+Mesh_Asset *get_mesh_asset(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
+	if (assets->lookup[asset_id]) {
+		return assets->lookup[asset_id];
+	}
+	load_model(asset_id, assets, arena);
+	return assets->lookup[asset_id];
+}
+
 void initialize_assets(Game_State *game_state) {
-	//load_model("data/male2.fbx", GUY1_ASSET, &game_state->assets, &game_state->frame_arena);
-	load_model("data/models/anvil/anvil.fbx", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena);
+	//load_model("data/models/anvil", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena); // @TODO @SUBARENA
 }

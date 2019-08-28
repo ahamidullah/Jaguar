@@ -1,14 +1,47 @@
-Reduce matrix multiplies?
+// @TODO: Some kind of memory protection for the GPU buffer!
 
-normal mapping
+Load shaders at runtime.
+Generate descriptor sets / uniform structs / pipeline loading code / uniform update code (uniform vec3 foo, update_vulkan_uniform(generated_foo_info, &foo_data))?
+
+Shader permutations for missing maps.
+
+subarenas, fiber job system, multithreading
+
+text drawing
+
+cleanup pass
+
+basic animations
+blending animations
+IK
+particle system dynamics
+
+paralax occlusion mapping
+ambient occlusion
+gamma correction
+HDR
+tone mapping
+per-object motion blur
+
+occulsion culling
+
+preprocessor
+
+basic collision
+
+debug ui
+
+console
+
+add basic sound
+
+Reduce matrix multiplies?
 
 parralax occulusion mapping
 
 get rid of all of the memory mapping in vulkan.c
 
 reuse command buffers
-
-multithreading
 
 vkpipelinecache
 
@@ -18,8 +51,6 @@ vulkan startup logging output
 
 Much more robust mesh rendering.
 	- Meshes without diffuse/specular/normal maps.
-
-Actual material system.
 
 Color lighting.
 
@@ -35,13 +66,7 @@ Handle shader permutations.
 
 grant-schmidt
 
-gamma correction
-
-HDR
-
 Get rid of malloc.
-
-console
 
 config file
 
@@ -49,22 +74,29 @@ environment mapping
 
 basic reflections
 
-basic animations
-
 animation blending
-
-IK
-
-add basic sound
-
-add basic pbr
 
 add multiscattering brdf
 
 experiment with different diffuse/specular brdfs
+
+hotload shaders
+
+hotload materials
+
+hotload meshes
 
 DONE #############################################################################################################################
 get rid of library.c
 
 Stop using align_to so much.
 
+normal mapping
+
+add basic pbr
+
+frustum culling
+
+debug visuals: bounding sphere, frustum
+
+Combine shaders into one file.

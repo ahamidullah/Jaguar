@@ -12,7 +12,7 @@ void initialize_input(Game_State *game_state) {
 	game_state->input.keyboard = initialize_buttons(&game_state->permanent_arena, SCANCODE_COUNT);
 	game_state->input.mouse.buttons = initialize_buttons(&game_state->permanent_arena, MOUSE_BUTTON_COUNT);
 	game_state->input.mouse.sensitivity = 0.2 * MAX_SENSITIVITY;
-	get_mouse_xy(&game_state->input.mouse.x, &game_state->input.mouse.y);
+	get_mouse_position(&game_state->input.mouse.x, &game_state->input.mouse.y);
 }
 
 void press_button(u32 index, IO_Buttons *buttons) {
@@ -77,7 +77,7 @@ void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
 		s32 old_x = input->mouse.x;
 		s32 old_y = input->mouse.y;
 
-		get_mouse_xy(&input->mouse.x, &input->mouse.y);
+		get_mouse_position(&input->mouse.x, &input->mouse.y);
 
 		input->mouse.delta_x = input->mouse.x - old_x;
 		input->mouse.delta_y = input->mouse.y - old_y;

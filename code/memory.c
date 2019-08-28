@@ -106,10 +106,9 @@ void add_memory_arena_block(Memory_Arena *arena) {
 void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	void *result = (char *)arena->active_block + sizeof(Block_Header) + arena->active_block->bytes_used;
 	arena->active_block->bytes_used += size;
-	assert(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
+	ASSERT(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
 	return result;
 }
-
 
 // Only legal if source and destination are in the same array.
 void move_memory(void *destination, void *source, size_t len) {

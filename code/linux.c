@@ -20,6 +20,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <execinfo.h>
+#include <dirent.h>
 
 #define STDOUT 1
 #define STDIN 0
@@ -29,14 +30,20 @@
 #define EXIT_SUCCESS 0
 
 void debug_print(const char *fmt, ...);
+void print_stacktrace();
 
-#define assert(x)\
+#define ASSERT(x)\
 	do {\
 		if (!(x)) {\
 			debug_print("%s: %s: line %d: assertion failed '%s'\n", __FILE__, __func__, __LINE__, #x);\
+			print_stacktrace();\
 			raise(SIGILL);\
 		}\
 	} while(0)
+
+void signal_debug_breakpoint() {
+	raise(SIGTRAP);
+}
 
 typedef enum Key_Symbol {
 	W_KEY = XK_w,
@@ -86,6 +93,7 @@ File_Handle FILE_HANDLE_ERROR = -1;
 File_Offset FILE_OFFSET_ERROR = (File_Offset)-1;
 
 u32 window_width, window_height;
+//f32 aspect_ratio;
 
 // @TODO: Store colormap and free it on exit.
 // @TODO: Free blank_cursor.
@@ -162,25 +170,23 @@ s32 main(s32 argc, char **argv) {
 	s32 screen = XDefaultScreen(linux_context.display);
 	Window root_window = XRootWindow(linux_context.display, screen);
 
-	// Initialize XInput2.
+	// Initialize XInput2, which we require for raw input.
 	{
-		s32 event, error;
-		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &event, &error)) {
+		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &(s32){0}, &(s32){0})) {
 			_abort("The X server does not support the XInput extension");
 		}
-
+		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
 		s32 major_version = 2, minor_version = 0;
 		XIQueryVersion(linux_context.display, &major_version, &minor_version);
 		if (major_version < 2) {
 			_abort("XInput version 2.0 or greater is required: version %d.%d is available", major_version, minor_version);
 		}
-
-		XIEventMask event_mask;
-		u8 mask[3] = { 0,0,0 };
-		event_mask.deviceid = XIAllMasterDevices;
-		event_mask.mask_len = sizeof(mask);
-		event_mask.mask = mask;
-
+		u8 mask[] = {0, 0, 0};
+		XIEventMask event_mask = {
+			.deviceid = XIAllMasterDevices,
+			.mask_len = sizeof(mask),
+			.mask = mask,
+		};
 		XISetMask(mask, XI_RawMotion);
 		XISetMask(mask, XI_RawButtonPress);
 		XISetMask(mask, XI_RawButtonRelease);
@@ -188,7 +194,6 @@ s32 main(s32 argc, char **argv) {
 		XISetMask(mask, XI_RawKeyRelease);
 		XISetMask(mask, XI_FocusOut);
 		XISetMask(mask, XI_FocusIn);
-
 		if (XISelectEvents(linux_context.display, root_window, &event_mask, 1) != Success) {
 			_abort("Failed to select XInput events");
 		}
@@ -201,7 +206,7 @@ s32 main(s32 argc, char **argv) {
 
 		s32 number_of_visuals;
 		XVisualInfo *visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
-		assert(visual_info->class == TrueColor);
+		ASSERT(visual_info->class == TrueColor);
 
 		XSetWindowAttributes window_attributes = {};
 		window_attributes.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone);
@@ -255,6 +260,7 @@ s32 main(s32 argc, char **argv) {
 		if (XGetGeometry(linux_context.display, linux_context.window, &root_window, &win_x, &win_y, &window_width, &window_height, &border_width, &depth) == 0) {
 			_abort("Failed to get the screen's geometry.");
 		}
+		//aspect_ratio = ((f32)window_width / (f32)window_height);
 	}
 
 	// Create a blank cursor for when we want to hide the cursor.
@@ -280,15 +286,14 @@ void cleanup_platform_display() {
 
 u32 key_symbol_to_scancode(Key_Symbol key_symbol) {
 	u32 scancode = XKeysymToKeycode(linux_context.display, key_symbol);
-	assert(scancode > 0);
+	ASSERT(scancode > 0);
 	return scancode;
 }
 
-void get_mouse_xy(s32 *x, s32 *y) {
+void get_mouse_position(s32 *x, s32 *y) {
 	s32 screen_x, screen_y;
 	Window root, child;
 	u32 mouse_buttons;
-
 	XQueryPointer(linux_context.display, linux_context.window, &root, &child, &screen_x, &screen_y, x, y, &mouse_buttons);
 	*y = (window_height - *y); // Bottom left is zero for us, top left is zero for x11.
 }
@@ -459,6 +464,32 @@ File_Offset seek_file(File_Handle file_handle, File_Offset offset, File_Seek_Rel
 	return result;
 }
 
+typedef struct {
+	DIR *dir;
+	struct dirent *dirent;
+	char *filename;
+	u8 is_directory;
+} Directory_Iteration;
+
+u8 iterate_through_all_files_in_directory(const char *path, Directory_Iteration *context) {
+	if (!context->dir) { // First read.
+		context->dir = opendir(path);
+		if (!context->dir) {
+			log_print(MAJOR_ERROR_LOG, "Failed to open animation directory %s: %s\n", path, strerror(errno));
+			return 0;
+		}
+	}
+	while ((context->dirent = readdir(context->dir))) {
+		if (!strcmp(context->dirent->d_name, ".") || !strcmp(context->dirent->d_name, "..")) {
+			continue;
+		}
+		context->filename = context->dirent->d_name;
+		context->is_directory = (context->dirent->d_type == DT_DIR);
+		return 1;
+	}
+	return 0;
+}
+
 void capture_cursor() {
 	XDefineCursor(linux_context.display, linux_context.window, linux_context.blank_cursor);
 	XGrabPointer(linux_context.display, linux_context.window, True, 0, GrabModeAsync, GrabModeAsync, None, linux_context.blank_cursor, CurrentTime);
@@ -587,7 +618,7 @@ platform_get_time_us()
 inline long
 platform_time_diff(Time_Spec start, Time_Spec end, unsigned resolution)
 {
-	assert(0);
+	ASSERT(0);
 	return (end.tv_nsec - start.tv_nsec) / resolution;
 }
 

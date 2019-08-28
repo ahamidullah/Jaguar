@@ -1,8 +1,20 @@
 #version 420
+#extension GL_EXT_nonuniform_qualifier : enable
+
+struct Material {
+	uint albedo_map_texture_index;
+	uint normal_map_texture_index;
+	uint metallic_map_texture_index;
+	uint roughness_map_texture_index;
+	uint ao_map_texture_index;
+};
+
+// "Note that it is valid for multiple descriptor arrays in a shader to use the same set and binding number, as long as they are all compatible with the descriptor type in the pipeline layout. This means a single array binding in the descriptor set can serve multiple texture dimensionalities, or an array of buffer descriptors can be used with multiple different block layouts."
+layout(std140, binding = 5, set = 4) uniform Materials {
+	Material materials[100];
+};
 
 layout(push_constant) uniform PER_OBJECT {
-	//int diffuse_map_texture_index;
-	//int normal_map_texture_index;
 	int real_normal_map;
 	int albedo_map_texture_index;
 	int normal_map_texture_index;
@@ -13,14 +25,14 @@ layout(push_constant) uniform PER_OBJECT {
 
 layout(binding = 2, set = 0) uniform sampler diffuse_sampler;
 layout(binding = 3, set = 0) uniform sampler2D shadow_map_texture;
-layout(binding = 4, set = 2) uniform texture2D textures[100];
+layout(binding = 4, set = 2) uniform texture2D textures[];
 
 layout(location = 0) in vec3 fragment_tangent_space_position;
 layout(location = 1) in vec4 fragment_light_space_position;
 layout(location = 2) in vec2 fragment_uv;
 layout(location = 3) in vec3 light_tangent_space_direction;
 layout(location = 4) in vec3 fragment_normal;
-layout(location = 5) in vec3 lll;
+layout(location = 5) flat in uint fragment_material_id;
 layout(location = 6) in vec3 camera_tangent_space_position;
 
 layout(location = 0) out vec4 fragment_color;
@@ -85,18 +97,24 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
 	return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-void main()
-{
-    vec3 albedo     = pow(texture(sampler2D(textures[push_constants.albedo_map_texture_index], diffuse_sampler), fragment_uv).rgb, vec3(2.2));
-    vec3 normal     = texture(sampler2D(textures[push_constants.normal_map_texture_index], diffuse_sampler), fragment_uv).rgb;//getNormalFromNormalMap();
-	normal = normal * 2.0 - vec3(1.0, 1.0, 2.0);
-    float metallic  = texture(sampler2D(textures[push_constants.metallic_map_texture_index], diffuse_sampler), fragment_uv).r;
-    float roughness = texture(sampler2D(textures[push_constants.roughness_map_texture_index], diffuse_sampler), fragment_uv).r;
-    float ao        = texture(sampler2D(textures[push_constants.ao_map_texture_index], diffuse_sampler), fragment_uv).r;
+void main() {
+    //vec3 albedo     = pow(texture(sampler2D(textures[push_constants.albedo_map_texture_index], diffuse_sampler), fragment_uv).rgb, vec3(2.2));
+    //vec3 normal     = texture(sampler2D(textures[push_constants.normal_map_texture_index], diffuse_sampler), fragment_uv).rgb;//getNormalFromNormalMap();
+    //float metallic  = texture(sampler2D(textures[push_constants.metallic_map_texture_index], diffuse_sampler), fragment_uv).r;
+    //float roughness = texture(sampler2D(textures[push_constants.roughness_map_texture_index], diffuse_sampler), fragment_uv).r;
+    //float ao        = texture(sampler2D(textures[push_constants.ao_map_texture_index], diffuse_sampler), fragment_uv).r;
 
-	vec3 real_normal = texture(sampler2D(textures[push_constants.real_normal_map], diffuse_sampler), fragment_uv).rgb;
-	real_normal = real_normal * 2.0 - 1.0;
-	real_normal = (normalize(normal + real_normal));
+    vec3 albedo     = pow(texture(sampler2D(textures[materials[fragment_material_id].albedo_map_texture_index], diffuse_sampler), fragment_uv).rgb, vec3(2.2));
+    //vec3 normal     = texture(sampler2D(textures[materials[fragment_material_id].normal_map_texture_index], diffuse_sampler), fragment_uv).rgb;//getNormalFromNormalMap();
+    float metallic  = texture(sampler2D(textures[materials[fragment_material_id].metallic_map_texture_index], diffuse_sampler), fragment_uv).r;
+    float roughness = texture(sampler2D(textures[materials[fragment_material_id].roughness_map_texture_index], diffuse_sampler), fragment_uv).r;
+    float ao        = texture(sampler2D(textures[materials[fragment_material_id].ao_map_texture_index], diffuse_sampler), fragment_uv).r;
+
+	//normal = normal * 2.0 - vec3(1.0, 1.0, 2.0);
+
+	vec3 real_normal = texture(sampler2D(textures[materials[fragment_material_id].normal_map_texture_index], diffuse_sampler), fragment_uv).rgb;
+	real_normal = normalize(real_normal * 2.0 - 1.0);
+	//real_normal = (normalize(normal + real_normal));
 
 	vec3 N = real_normal;//normalize(fragment_normal);
 	vec3 V = normalize(camera_tangent_space_position - fragment_tangent_space_position);

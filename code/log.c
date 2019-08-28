@@ -26,20 +26,19 @@ void log_print_actual(Log_Type log_type, const char *file_name, int line, const 
 void _abort_actual(const char *file_name, s32 line, const char *function_name, const char *format, ...) {
 	va_list arguments;
 	va_start(arguments, format);
-	debug_print("###########################################################################\n\n");
+	debug_print("\n###########################################################################\n");
 	debug_print("[PROGRAM ABORT]\n");
 	debug_print("%s: %s: %d:\n", file_name, function_name, line);
 	debug_print_va_list(format, arguments);
-	debug_print("\n\n");
+	debug_print("\n");
 	print_stacktrace();
-	debug_print("\n###########################################################################\n");
+	debug_print("###########################################################################\n\n");
 	va_end(arguments);
 
 #ifdef DEBUG
-	assert(0);
-#else
-	_exit(1);
+	signal_debug_breakpoint();
 #endif
+	_exit(1);
 }
 
 void print_m4_actual(const char *name, M4 matrix) {
@@ -53,11 +52,6 @@ void print_v3_actual(const char *name, V3 vector) {
 	debug_print("%s: %f %f %f\n", name, vector.x, vector.y, vector.z);
 }
 
-// @TODO: Move me.
-V3 random_color() {
-	float r = rand() / (float)RAND_MAX;
-	float g = rand() / (float)RAND_MAX;
-	float b = rand() / (float)RAND_MAX;
-	return (V3){r, g, b};
+void print_f32_actual(const char *name, f32 number) {
+	debug_print("%s: %f\n", name, number);
 }
-

@@ -51,10 +51,11 @@ void _abort_actual(const char *file, int line, const char *func, const char *fmt
 // Math
 //
 
-#define print_v2(v2) print_v2_actual(#v2, v2)
-#define print_v3(v3) print_v3_actual(#v3, v3)
-#define print_v4(v4) print_v4_actual(#v4, v4)
-#define print_m4(m4) print_m4_actual(#m4, m4)
+#define print_f32(f) print_f32_actual(#f, (f))
+#define print_v2(v2) print_v2_actual(#v2, (v2))
+#define print_v3(v3) print_v3_actual(#v3, (v3))
+#define print_v4(v4) print_v4_actual(#v4, (v4))
+#define print_m4(m4) print_m4_actual(#m4, (m4))
 
 u32 u32_max(u32 a, u32 b) {
 	return a > b ? a : b;
@@ -135,6 +136,7 @@ typedef struct {
 	V3 side;
 	V3 up;
 
+	f32 field_of_view;
 	f32 yaw;
 	f32 pitch;
 	f32 speed;
@@ -215,7 +217,6 @@ typedef struct {
 typedef struct {
 	V3 translation;
 	Quaternion rotation;
-	V3 scale;
 } Transform;
 
 ////////////////////////////////////////
@@ -231,22 +232,27 @@ typedef enum {
 	TEXTURED_STATIC_SHADER,
 	UNTEXTURED_STATIC_SHADER,
 	SHADOW_MAP_STATIC_SHADER,
+	FLAT_COLOR_SHADER,
 
 	SHADER_COUNT
 } Shader_Type;
 
+// @TODO @PREPROCCESSOR: Generate Material_IDs.
+
 typedef struct {
 	Shader_Type shader;
-
-	V3 diffuse_color;
-	V3 specular_color;
-
-	Texture_ID real_normal_map;
-	Texture_ID albedo_map;
-	Texture_ID normal_map;
-	Texture_ID roughness_map;
-	Texture_ID metallic_map;
-	Texture_ID ao_map;
+	union {
+		struct {
+			Texture_ID albedo_map;
+			Texture_ID normal_map;
+			Texture_ID roughness_map;
+			Texture_ID metallic_map;
+			Texture_ID ambient_occlusion_map;
+		};
+		struct {
+			V4 flat_color;
+		};
+	};
 } Material;
 
 ////////////////////////////////////////
@@ -254,7 +260,7 @@ typedef struct {
 // Mesh
 //
 
-typedef struct Vertex {
+typedef struct {
 	V3 position;
 	V3 color;
 	V2 uv;
@@ -262,47 +268,66 @@ typedef struct Vertex {
 	V3 tangent;
 } Vertex;
 
-typedef struct Loaded_Mesh {
+typedef struct {
+	V3 position;
+} Vertex1P;
+
+typedef struct {
+	V3  center;
+	f32 radius;
+} Bounding_Sphere;
+
+typedef struct {
 	Vertex *vertices;
-	u32 vertex_count;
+	u32     vertex_count;
 
 	u32 *indices;
-	u32 index_count;
+	u32  index_count;
 
 	Material *materials;
-	u32 *submesh_index_counts;
+	u32      *submesh_index_counts;
+	u32       submesh_count;
+
+	u32 vertex_offset;
+	u32 first_index;
+
+	Bounding_Sphere bounding_sphere;
+} Mesh_Asset;
+
+typedef struct {
+	Transform transform;
+	Material *submesh_material_ids;
 	u32 submesh_count;
-
 	u32 vertex_offset;
 	u32 first_index;
-} Loaded_Mesh;
-
-typedef struct Mesh {
 	u32 *submesh_index_counts;
+} Mesh_Instance;
 
+typedef struct {
 	u32 vertex_offset;
 	u32 first_index;
-} Mesh;
+	u32 first_submesh_index;
+} Mesh_Render_Info;
 
 ////////////////////////////////////////
 //
 // Animation
 //
 
-typedef struct Skeleton_Joint_Pose {
+typedef struct {
 	Quaternion rotation;
 	V3 translation;
 	f32 scale;
 } Skeleton_Joint_Pose;
 
-typedef struct Skeleton_Joint_Skinning_Info {
+typedef struct {
 	u32 vertex_influence_count;
 	u32 *vertices;
 	f32 *weights;
 } Skeleton_Joint_Skinning_Info;
 
 // @TODO: We could store animation transforms as 4x3 matrix, maybe?
-typedef struct Skeleton_Asset {
+typedef struct {
 	u8 joint_count;
 	const char *joint_names; // @TODO: Get rid of joint names?
 	Skeleton_Joint_Skinning_Info *joint_skinning_info;
@@ -314,7 +339,7 @@ typedef struct Skeleton_Asset {
 	M4 *leaf_node_translations; // @TODO @Memory: Could probably just be a V3 translation?
 } Skeleton_Asset;
 
-typedef struct Skeleton_Instance {
+typedef struct {
 	Skeleton_Asset *asset;
 
 	u32 local_joint_pose_count;
@@ -351,36 +376,83 @@ typedef struct {
 // Game Data
 //
 
-typedef enum Asset_ID {
-	GUY1_ASSET,
+#define MAX_DEBUG_RENDER_OBJECTS  500
+#define MAX_ENTITY_MESHES         1000
+#define MAX_LOADED_ASSET_COUNT    1000
+
+typedef enum {
+	LINE_PRIMITIVE,
+} Render_Primitive;
+
+typedef struct {
+	u32              vertex_offset;
+	u32              first_index;
+	u32              index_count;
+	V4               color;
+	Render_Primitive render_primitive;
+} Debug_Render_Object;
+
+typedef struct {
+	M4  scene_projection;
+	f32 focal_length; // The distance between the camera position and the near render plane in world space.
+	f32 aspect_ratio; // Calculated from the render area dimensions, not the window dimensions.
+
+	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
+	u32                 debug_render_object_count;
+} Render_Context;
+
+typedef enum {
+	GUY_ASSET,
 	GUY2_ASSET,
 	GUY3_ASSET,
 	GUN_ASSET,
-	NANOSUIT_ASSET,
+	ANVIL_ASSET,
 } Asset_ID;
 
-#define MAX_LOADED_ASSET_COUNT 1000
-typedef struct Game_Assets {
+typedef struct {
 	void *lookup[MAX_LOADED_ASSET_COUNT]; // @TODO: Use a hash table.
+	//Material materials[MAX_MATERIALS];    // @TODO: This really should be the exact count of materials, we know how many there will be from the directory, just need to preprocess.
+	//u32 material_count;
+	//Texture *textures;
+	//Mesh_Asset *meshes;
 } Game_Assets;
 
+struct Submesh_Instance {
+	u32 vertex_offset;
+	u32 first_index;
+	u32 index_count;
+};
+
+typedef struct {
+	// @TODO: Store elements grouped spatially (BVH?) so that, after frustum culling, visible meshes are more likely to be contigous in memory.
+	u32              count;
+	Mesh_Instance    instances[MAX_ENTITY_MESHES];
+	Bounding_Sphere  bounding_spheres[MAX_ENTITY_MESHES];
+	// Per-mesh data
+	//Mesh_Render_Info render_info[MAX_ENITTY_MESHES];
+	//Transform        transforms[MAX_ENITTY_MESHES];
+	//Bounding_Sphere  bounding_spheres[MAX_ENITTY_MESHES];
+	//u32              submesh_counts[MAX_ENITTY_MESHES];
+	//u32              count;
+
+	// Per-submesh data
+	//u32      submesh_index_counts[MAX_ENITTY_SUBMESHES];
+	//Material submesh_materials[MAX_ENITTY_SUBMESHES];
+	//u32      submesh_count;
+} Entity_Meshes;
+
 // @TODO: Use sparse arrays to store entity attributes.
-typedef struct Game_Entities {
-	Transform *transforms;
-	u32 transform_count;
+typedef struct {
+	Transform transforms[100]; // @TODO
+	u32       transform_count;
 
-	Mesh *meshes;
-	Transform *mesh_transforms;
-	Material **submesh_materials;
-	u32 *submesh_uniform_block_indices;
-	u32 *submesh_counts;
-	u32 mesh_count;
+	Entity_Meshes meshes;
 
-	u32 *ids;
+	u32 ids[100]; // @TODO
 	u32 id_count;
 } Game_Entities;
 
-typedef struct Game_State {
+typedef struct {
 	Game_Execution_Status execution_status;
 	Game_Input input;
 	Game_Assets assets;

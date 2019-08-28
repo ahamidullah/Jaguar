@@ -6,3 +6,5 @@ export PATH=$PROJECT_DIRECTORY/misc/linux:$PROJECT_DIRECTORY/build:$PATH
 export VULKAN_SDK_PATH="$PROJECT_DIRECTORY/dependencies/vulkan/1.1.106.0"
 export VK_LAYER_PATH="$VULKAN_SDK_PATH/etc/explicit_layer.d"
 export LD_LIBRARY_PATH="$VULKAN_SDK_PATH/lib:${LD_LIBRARY_PATH:-}"
+
+alias build="/usr/bin/time --format='Build time: %es.' build.sh"

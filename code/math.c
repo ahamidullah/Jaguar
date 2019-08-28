@@ -16,6 +16,15 @@ u8 not_zero(V3 v) {
 	return v.x != 0.0f || v.y != 0.0f || v.z != 0.0f;
 }
 
+V4 v3_to_v4(V3 v3, f32 w) {
+	return (V4){
+		v3.x,
+		v3.y,
+		v3.z,
+		w,
+	};
+}
+
 /*
 V2 operator-(V2 a, V2 b) {
 	return {
@@ -81,7 +90,7 @@ V3 &operator-=(V3 &a, V3 b) {
 
 // @TODO: USE A SWITCH!
 f32 V3::operator[](int i) const {
-	assert(i >= 0 && i <= 2);
+	ASSERT(i >= 0 && i <= 2);
 	if (i == 0)  return x;
 	if (i == 1)  return y;
 	return z;
@@ -89,7 +98,7 @@ f32 V3::operator[](int i) const {
 
 // @TODO: USE A SWITCH!
 f32 &V3::operator[](int i) {
-	assert(i >= 0 && i <= 2);
+	ASSERT(i >= 0 && i <= 2);
 	if (i == 0)  return x;
 	if (i == 1)  return y;
 	return z;
@@ -97,7 +106,7 @@ f32 &V3::operator[](int i) {
 
 // @TODO: USE A SWITCH!
 f32 &V2::operator[](int i) {
-	assert(i >= 0 && i <= 1);
+	ASSERT(i >= 0 && i <= 1);
 	if (i == 0)  return x;
 	return y;
 }
@@ -121,7 +130,7 @@ V4 operator*(f32 s, V4 v) {
 
 // @TODO: USE A SWITCH!
 f32 V4::operator[](int i) const {
-	assert(i >= 0 && i <= 3);
+	ASSERT(i >= 0 && i <= 3);
 	if (i == 0)  return x;
 	if (i == 1)  return y;
 	if (i == 2)  return z;
@@ -130,7 +139,7 @@ f32 V4::operator[](int i) const {
 
 // @TODO: USE A SWITCH!
 f32 &V4::operator[](int i) {
-	assert(i >= 0 && i <= 3);
+	ASSERT(i >= 0 && i <= 3);
 	if (i == 0)  return x;
 	if (i == 1)  return y;
 	if (i == 2)  return z;
@@ -192,7 +201,7 @@ f32 length_squared(V3 v) {
 	return v.x*v.x + v.y*v.y + v.z*v.z;
 }
 
-f32 length(V3 v) {
+f32 vector_length(V3 v) {
 	return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
@@ -242,8 +251,8 @@ M4 multiply_m4(M4 a, M4 b) {
 }
 
 V3 normalize(V3 v) {
-	V3 result = divide_v3_f32(v, length(v));
-	assert(not_nan(result));
+	V3 result = divide_v3_f32(v, vector_length(v));
+	ASSERT(not_nan(result));
 	return result;
 }
 
@@ -257,7 +266,7 @@ V3 cross_product(V3 a, V3 b) {
 		a.z*b.x - b.z*a.x,
 		a.x*b.y - b.x*a.y,
 	};
-	assert(not_zero(result));
+	ASSERT(not_zero(result));
 	return result;
 }
 
@@ -339,7 +348,7 @@ M4 transpose_matrix(M4 m) {
 }
 
 M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
-	f32 focal_length = 1.0f / tanf(DEGREES_TO_RADIANS(fovy) / 2.0f);
+	f32 focal_length = 1.0f / tanf(fovy / 2.0f);
 	return (M4){{
 		{focal_length / aspect_ratio,   0.0f,            0.0f,                 0.0f},
 		{0.0f,                          -focal_length,   0.0f,                 0.0f},
@@ -351,7 +360,7 @@ M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
 // Assumes near is 0.01f and far is infinity.
 M4 infinite_perspective_projection(f32 fovy, f32 aspect_ratio) {
 	const f32 near = 0.01f;
-	f32 focal_length = 1 / tan(DEGREES_TO_RADIANS(fovy) / 2);
+	f32 focal_length = 1 / tan(fovy / 2);
 
 	return (M4){{
 		{focal_length,   0.0f,                           0.0f,    0.0f},

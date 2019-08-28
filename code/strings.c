@@ -87,6 +87,7 @@ s8 compare_strings(const char *a, const char *b) {
 	return -1;
 }
 
+/*
 u8 strings_subset_test(const char **set_a, s32 set_a_string_count, const char **set_b, s32 set_b_string_count) {
 	for (s32 i = 0; i < set_a_string_count; i++) {
 		u8 found = 0;
@@ -101,4 +102,14 @@ u8 strings_subset_test(const char **set_a, s32 set_a_string_count, const char **
 		}
 	}
 	return 1;
+}
+*/
+
+char *join_strings(const char *a, const char *b, Memory_Arena *arena) {
+	size_t a_length = string_length(a);
+	size_t b_length = string_length(b);
+	char *result = allocate_array(arena, char, a_length + b_length + 1);
+	copy_string(result, a);
+	copy_string(result + a_length, b);
+	return result;
 }

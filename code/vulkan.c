@@ -3,6 +3,19 @@
 #include <vulkan/vulkan_xlib.h>
 
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
+// @TODO: Some kind of memory protection for the GPU buffer!
+// @TODO: Better texture descriptor set update scheme.
+// @TODO: Move any uniform data that's updated per-frame to shared memory.
+// @TODO: Scene stuff should be pbr?
+// @TODO: Shouldn't per-swapchain resources actually be per-frame?
+// @TODO: Query available VRAM and allocate based on that.
+// @TODO: Switch to dynamic memory segments for vulkan GPU memory.
+//        If more VRAM becomes available while the game is running, the game should use it!
+// @TODO: Change 'model' to local? E.g. 'model_to_world_space' -> 'local_to_world_space'.
+// @TODO: Avoid VK_SHARING_MODE_CONCURRENT? "Go for VK_SHARING_MODE_EXCLUSIVE and do explicit queue family ownership barriers."
+// @TODO: Dedicated transfer queue.
+// @TODO: Experiment with HOST_CACHED memory?
+// @TODO: Keep memory mapped persistently.
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -17,26 +30,41 @@
 #define SHADOW_MAP_COLOR_FORMAT     VK_FORMAT_R8G8B8A8_UNORM
 #define SHADOW_MAP_FILTER           VK_FILTER_LINEAR
 
-#define VULKAN_GPU_ALLOCATION_SIZE    MEGABYTE(100)
-#define VULKAN_SHARED_ALLOCATION_SIZE MEGABYTE(100)
-#define VULKAN_IMAGE_ALLOCATION_SIZE  MEGABYTE(200)
+// GPU Memory
+#define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE   MEGABYTE(50)
+#define VULKAN_INDEX_MEMORY_SEGMENT_SIZE    MEGABYTE(50)
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE  MEGABYTE(50)
+#define VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_GPU_ALLOCATION_SIZE          (VULKAN_VERTEX_MEMORY_SEGMENT_SIZE + VULKAN_INDEX_MEMORY_SEGMENT_SIZE + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE + VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE)
 
-#define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE  ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
-#define VULKAN_INDEX_MEMORY_SEGMENT_SIZE   ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .37))
-#define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE ((u32)(VULKAN_GPU_ALLOCATION_SIZE * .25))
+// @TODO: Move per-frame uniforms to the shared memory segment?
+// Shared Memory
+#define VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE  MEGABYTE(50)
+#define VULKAN_STAGING_MEMORY_SEGMENT_SIZE      MEGABYTE(50)
+#define VULKAN_SHARED_ALLOCATION_SIZE           ((MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE) + (MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE) + VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
 
-#define VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET  0
-#define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET   (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
-#define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
+// Image Memory
+#define VULKAN_IMAGE_ALLOCATION_SIZE  MEGABYTE(400)
 
-#define VULKAN_MAX_TEXTURE_COUNT 100
+#define VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET   0
+#define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET    (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET  (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
+// ?
+#define VULKAN_INSTANCE_MEMORY_SEGMENT_OFFSET (VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE)
+#define VULKAN_STAGING_MEMORY_SEGMENT_OFFSET 0
+#define VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET (VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
+#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET (VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE))
 
-#define SCENE_SAMPLER_DESCRIPTOR_SET 0
-#define SCENE_UNIFORM_DESCRIPTOR_SET 1
-#define SCENE_IMAGE_DESCRIPTOR_SET   2
-#define SCENE_MATRIX_DESCRIPTOR_SET  3
+#define VULKAN_MAX_TEXTURES 100
+#define VULKAN_MAX_MATERIALS 100
 
-#define SHADOW_MAP_UNIFORM_DESCRIPTOR_SET 0
+#define VULKAN_VERTEX_BUFFER_BIND_ID 0
+#define VULKAN_INSTANCE_BUFFER_BIND_ID 1
+
+typedef struct {
+	u32 material_id;
+} Instance_Data;
 
 typedef struct {
 	VkShaderModule        module;
@@ -55,9 +83,9 @@ typedef struct {
 } Framebuffer_Attachment;
 
 typedef struct {
-	VkImage     images[VULKAN_MAX_TEXTURE_COUNT];
-	VkImageView image_views[VULKAN_MAX_TEXTURE_COUNT];
-	u32         image_memory_offsets[VULKAN_MAX_TEXTURE_COUNT];
+	VkImage     images[VULKAN_MAX_TEXTURES];
+	VkImageView image_views[VULKAN_MAX_TEXTURES];
+	u32         image_memory_offsets[VULKAN_MAX_TEXTURES];
 	Texture_ID  id_generator;
 	u32         count;
 } GPU_Textures;
@@ -70,6 +98,44 @@ typedef struct {
 	s32 material_roughness_map;
 	s32 material_ao_map;
 } Push_Constants;
+
+// @TODO: Should this be merged with the regular game material?
+typedef struct {
+	u32 albedo_map;
+	u32 normal_map;
+	u32 metallic_map;
+	u32 roughness_map;
+	u32 ambient_occlusion_map;
+	u32 padding[3];
+} Vulkan_Material;
+
+#define MAX_SHADER_MODULES 3
+
+typedef struct {
+	VkRenderPass     render_pass;
+	VkPipelineLayout pipeline_layout;
+	VkPipeline       pipeline;
+	struct {
+		VkShaderModule        module;
+		VkShaderStageFlagBits stage;
+	} modules[MAX_SHADER_MODULES];
+	u32 module_count;
+} Shader;
+
+enum {
+	SCENE_SAMPLER_DESCRIPTOR_SET = 0,
+	SCENE_UNIFORM_DESCRIPTOR_SET,
+	SCENE_TEXTURE_DESCRIPTOR_SET,
+	SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET,
+	SCENE_MATERIAL_DESCRIPTOR_SET,
+	SCENE_DESCRIPTOR_SET_TYPE_COUNT,
+
+	SHADOW_MAP_UNIFORM_DESCRIPTOR_SET = 0,
+	SHADOW_MAP_DESCRIPTOR_SET_TYPE_COUNT,
+
+	FLAT_COLOR_UNIFORM_DESCRIPTOR_SET = 0,
+	FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT,
+};
 
 struct Vulkan_Context {
 	VkDebugUtilsMessengerEXT debug_messenger;
@@ -109,59 +175,89 @@ struct Vulkan_Context {
 	u32                      vertex_memory_bytes_used;
 	u32                      index_memory_bytes_used;
 	u32                      staging_memory_bytes_used;
+	u32                      debug_vertex_memory_bytes_used; // @TODO: Frame?
+	u32                      debug_index_memory_bytes_used; // @TODO: Frame?
 	u32                      vertex_count;
 	u32                      index_count;
+	u32                      debug_vertex_count; // @TODO: Frame?
+	u32                      debug_index_count; // @TODO: Frame?
 	VkBuffer                 gpu_buffer;
 	VkBuffer                 staging_buffer;
-	VkDeviceSize             minimum_uniform_buffer_offset_alignment;
-	VkDeviceSize             maximum_uniform_buffer_range;
-	u32                      scene_uniform_buffer_offset;
-	u32                      scene_dynamic_uniform_buffers_offset;
-	u32                      shadow_map_uniform_buffer_offset;
-	u32                      aligned_scene_uniform_buffer_object_size;
-	u32                      aligned_scene_dynamic_uniform_buffer_object_size;
-	u32                      aligned_shadow_map_uniform_buffer_object_size;
-	u32                      scene_dynamic_uniform_buffer_count;
-	u32                      scene_dynamic_uniform_memory_size;
 	Shaders                  shaders[SHADER_COUNT];
-	M4                       scene_projection;
+	VkDeviceSize             minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
+	VkDeviceSize             maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
+
+	struct {
+		// @TODO: Move vertex, index, uniform starts/frontiers into here.
+		u32 instance_memory_segment;
+		u32 vertex_memory_segment;
+		u32 index_memory_segment;
+		u32 uniform_memory_segment;
+		struct {
+			u32 materials;
+			u32 uniform[3];
+			u32 dynamic_uniform[3];
+		} scene;
+		struct {
+			u32 uniform;
+		} shadow_map;
+		struct {
+			u32 uniform;
+		} flat_color;
+	} buffer_offsets;
+
+	struct {
+		// @TODO: Move vertex, index, uniform sizes into here.
+		u32 instance_memory_segment;
+		u32 vertex_memory_segment;
+		u32 index_memory_segment;
+		u32 uniform_memory_segment;
+		struct {
+			u32 aligned_ubo;
+			u32 aligned_dynamic_ubo;
+			u32 dynamic_uniform_buffer;
+		} scene;
+	} sizes;
+
+	struct {
+	} limits;
 
 	struct {
 		struct {
-			// @TODO: Maybe scene_images and scene_matrices should be per_frame?
-			VkDescriptorSet samplers;
-			VkDescriptorSet uniforms; // @TODO: Better name.
-			VkDescriptorSet images;
-			VkDescriptorSet *matrices;
+			VkDescriptorSet sampler;
+			VkDescriptorSet texture;
+			VkDescriptorSet uniform[3];
+			VkDescriptorSet dynamic_uniform[3];
+			VkDescriptorSet materials;
 		} scene;
 		struct {
-			VkDescriptorSet uniforms;
+			VkDescriptorSet uniform;
 		} shadow_map;
-	} descriptor_sets[3];
+		struct {
+			VkDescriptorSet uniform;
+		} flat_color;
+	} descriptor_sets;
 
 	struct {
-		struct {
-			VkDescriptorSetLayout samplers;
-			VkDescriptorSetLayout uniforms;
-			VkDescriptorSetLayout images;
-			VkDescriptorSetLayout matrices;
-		} scene;
-		struct {
-			VkDescriptorSetLayout uniforms;
-		} shadow_map;
+		VkDescriptorSetLayout scene[SCENE_DESCRIPTOR_SET_TYPE_COUNT];
+		VkDescriptorSetLayout shadow_map[SHADOW_MAP_DESCRIPTOR_SET_TYPE_COUNT];
+		VkDescriptorSetLayout flat_color[FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT];
 	} descriptor_set_layouts;
 
 	struct {
 		VkPipelineLayout shadow_map;
+		VkPipelineLayout flat_color;
 	} pipeline_layouts;
 
 	struct {
 		VkPipeline textured_static;
 		VkPipeline shadow_map_static;
+		VkPipeline flat_color;
 	} pipelines;
 
 	struct {
 		VkRenderPass shadow_map;
+		VkRenderPass flat_color;
 	} render_passes;
 
 	struct {
@@ -177,9 +273,14 @@ struct Vulkan_Context {
 	} samplers;
 } vulkan_context;
 
-typedef struct Scene_UBO {
+typedef struct {
 	V3 camera_position;
 } Scene_UBO;
+
+typedef struct {
+	V4 color;
+	M4 model_view_projection;
+} Flat_Color_UBO;
 
 // @TODO: Fix name.
 #define TEST_INSTANCES 5
@@ -309,19 +410,19 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT: {
 		log_type = STANDARD_LOG;
-		severity_string = "INFO";
+		severity_string = "Info";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: {
 		log_type = MINOR_ERROR_LOG;
-		severity_string = "WARNING";
+		severity_string = "Warning";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT: {
-		print_stacktrace();
 		log_type = CRITICAL_ERROR_LOG;
-		severity_string = "ERROR";
+		severity_string = "Error";
 	} break;
 	default: {
 		log_type = STANDARD_LOG;
+		severity_string = "Unknown";
 	};
 	}
 
@@ -442,14 +543,14 @@ void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
 }
 
 void allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags desired_memory_properties) {
-	VkMemoryAllocateInfo memory_allocate_info = {};
-	memory_allocate_info.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memory_allocate_info.allocationSize  = memory_requirements.size;
-
+	VkMemoryAllocateInfo memory_allocate_info = {
+		.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memory_requirements.size,
+	};
 	VkPhysicalDeviceMemoryProperties memory_properties;
 	vkGetPhysicalDeviceMemoryProperties(vulkan_context.physical_device, &memory_properties);
 	s32 selected_memory_type_index = -1;
-	for (s32 i = 0; i < memory_properties.memoryTypeCount; i++) {
+	for (u32 i = 0; i < memory_properties.memoryTypeCount; i++) {
 		if ((memory_requirements.memoryTypeBits & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & desired_memory_properties) == desired_memory_properties) {
 			selected_memory_type_index = i;
 			break;
@@ -458,18 +559,9 @@ void allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_
 	if (selected_memory_type_index < 0) {
 		_abort("Failed to find suitable GPU memory type");
 	}
-
 	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
-
 	VK_CHECK(vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory));
 }
-
-typedef struct {
-	VkPipeline *pipeline;
-	VkPipelineLayout pipeline_layout;
-	VkRenderPass render_pass;
-	Shaders *shaders;
-} Create_Graphics_Pipeline_Request;
 
 void create_vulkan_display_objects(Memory_Arena *arena) {
 	// Create swapchain.
@@ -600,14 +692,14 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 				.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			},
 			{
-				.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
-				.samples = VK_SAMPLE_COUNT_1_BIT,
-				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.format         = VK_FORMAT_D32_SFLOAT_S8_UINT,
+				.samples        = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 			},
 		};
 		VkRenderPassCreateInfo render_pass_create_info = {
@@ -638,55 +730,53 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			},
 		};
 		VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_pass));
+		//attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		//attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		//VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_passes.flat_color));
+	}
+
+	// Pipeline layouts.
+	{
+		{
+			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.scene),
+				.pSetLayouts            = vulkan_context.descriptor_set_layouts.scene,
+				.pushConstantRangeCount = 1,
+				.pPushConstantRanges    = &(VkPushConstantRange){
+					.offset = 0,
+					.size = sizeof(Push_Constants),
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+				},
+			};
+			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layout));
+		}
+		{
+			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.shadow_map),
+				.pSetLayouts            = vulkan_context.descriptor_set_layouts.shadow_map,
+			};
+			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.shadow_map));
+		}
+		{
+			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.flat_color),
+				.pSetLayouts            = vulkan_context.descriptor_set_layouts.flat_color,
+				.pushConstantRangeCount = 1,
+				.pPushConstantRanges    = &(VkPushConstantRange){
+					.offset = 0,
+					.size = sizeof(V4),
+					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+				},
+			};
+			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.flat_color));
+		}
 	}
 
 	// Pipelines.
 	{
-		VkVertexInputAttributeDescription vertex_input_attribute_descriptions[] = {
-			{
-				.binding  = 0,
-				.location = 0,
-				.format   = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset   = offsetof(Vertex, position),
-			},
-			{
-				.binding  = 0,
-				.location = 1,
-				.format   = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset   = offsetof(Vertex, color),
-			},
-			{
-				.binding  = 0,
-				.location = 2,
-				.format   = VK_FORMAT_R32G32_SFLOAT,
-				.offset   = offsetof(Vertex, uv),
-			},
-			{
-				.binding  = 0,
-				.location = 3,
-				.format   = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset   = offsetof(Vertex, normal),
-			},
-			// @TODO: Load the bitangents from Assimp rather than calculating them in the shader.
-			{
-				.binding  = 0,
-				.location = 4,
-				.format   = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset   = offsetof(Vertex, tangent),
-			},
-		};
-		// @TODO: Fix shadow map vertex input attributes (only needs position).
-		VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
-			.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount   = 1,
-			.pVertexBindingDescriptions      = &(VkVertexInputBindingDescription){
-				.binding   = 0,
-				.stride    = sizeof(Vertex),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-			},
-			.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
-			.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
-		};
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {
 			.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 			.topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -736,9 +826,11 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		};
 		VkPipelineColorBlendAttachmentState color_blend_attachment_state = {
 			.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-			.blendEnable         = VK_FALSE,
-			.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-			.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.blendEnable         = VK_TRUE,
+			.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			//.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+			//.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
 			.colorBlendOp        = VK_BLEND_OP_ADD,
 			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
 			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -755,110 +847,257 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			.blendConstants[2] = 0.0f,
 			.blendConstants[3] = 0.0f,
 		};
-		{
-			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = sizeof(vulkan_context.descriptor_set_layouts.scene) / sizeof(VkDescriptorSetLayout),
-				.pSetLayouts            = (VkDescriptorSetLayout *)&vulkan_context.descriptor_set_layouts.scene,
-				.pushConstantRangeCount = 1,
-				.pPushConstantRanges    = &(VkPushConstantRange){
-					.offset = 0,
-					.size = sizeof(Push_Constants),
-					.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-				},
-			};
-			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layout));
-		}
-		{
-			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = sizeof(vulkan_context.descriptor_set_layouts.shadow_map) / sizeof(VkDescriptorSetLayout),
-				.pSetLayouts            = (VkDescriptorSetLayout *)&vulkan_context.descriptor_set_layouts.shadow_map,
-			};
-			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.shadow_map));
-		}
+
+		/*
 		// @TODO: Get rid of this!
 		Create_Graphics_Pipeline_Request requests[] = {
 			{&vulkan_context.pipelines.textured_static, vulkan_context.pipeline_layout, vulkan_context.render_pass, &vulkan_context.shaders[TEXTURED_STATIC_SHADER]},
+			{&vulkan_context.pipelines.flat_color, vulkan_context.pipeline_layouts.flat_color, vulkan_context.render_passes.flat_color, &vulkan_context.shaders[FLAT_COLOR_SHADER]},
 			{&vulkan_context.pipelines.shadow_map_static, vulkan_context.pipeline_layouts.shadow_map, vulkan_context.render_passes.shadow_map, &vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER]},
 		};
 		u32 pipeline_count = ARRAY_COUNT(requests);
+		*/
 
-		// @TODO: Subarena.
-		VkGraphicsPipelineCreateInfo *graphics_pipeline_create_infos = allocate_array(arena, VkGraphicsPipelineCreateInfo, pipeline_count);
+		VkGraphicsPipelineCreateInfo requests[20]; // @TODO
+		VkPipeline *results[20]; // @TODO
+		u32 request_count = 0, result_count = 0;
 
-		// @TODO: Add depth bias to shadow map pipeline dynamic state.
-		VkDynamicState dynamic_states[] = {
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR,
-			VK_DYNAMIC_STATE_DEPTH_BIAS,
-		};
-		VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-			.dynamicStateCount = ARRAY_COUNT(dynamic_states),
-			.pDynamicStates = dynamic_states,
-		};
-		for (s32 i = 0; i < pipeline_count; i++) {
-			VkPipelineShaderStageCreateInfo *shader_stage_create_infos = allocate_array(arena, VkPipelineShaderStageCreateInfo, requests[i].shaders->module_count);
-			for (s32 j = 0; j < requests[i].shaders->module_count; j++) {
+		// PBR 
+		{
+			VkVertexInputAttributeDescription vertex_input_attribute_descriptions[] = {
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 0,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex, position),
+				},
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 1,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex, color),
+				},
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 2,
+					.format   = VK_FORMAT_R32G32_SFLOAT,
+					.offset   = offsetof(Vertex, uv),
+				},
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 3,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex, normal),
+				},
+				// @TODO: Load the bitangents from Assimp rather than calculating them in the shader.
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 4,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex, tangent),
+				},
+				{
+					.binding  = VULKAN_INSTANCE_BUFFER_BIND_ID,
+					.location = 5,
+					.format   = VK_FORMAT_R32_UINT,
+					.offset   = offsetof(Instance_Data, material_id),
+				},
+			};
+			VkVertexInputBindingDescription vertex_input_binding_descriptions[] = {
+					{
+						.binding   = VULKAN_VERTEX_BUFFER_BIND_ID,
+						.stride    = sizeof(Vertex),
+						.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+					},
+					{
+						.binding   = VULKAN_INSTANCE_BUFFER_BIND_ID,
+						.stride    = sizeof(Instance_Data),
+						.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
+					},
+			};
+			// @TODO: Fix shadow map vertex input attributes (only needs position).
+			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
+				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
+				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
+			};
+			VkDynamicState dynamic_states[] = {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
+			};
+			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+				.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.pDynamicStates    = dynamic_states,
+			};
+			//VkPipelineShaderStageCreateInfo *shader_stage_create_infos = allocate_array(arena, VkPipelineShaderStageCreateInfo, requests[i].shaders->module_count);
+			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
+			for (s32 j = 0; j < vulkan_context.shaders[TEXTURED_STATIC_SHADER].module_count; j++) {
 				shader_stage_create_infos[j].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-				shader_stage_create_infos[j].stage  = requests[i].shaders->modules[j].stage;
-				shader_stage_create_infos[j].module = requests[i].shaders->modules[j].module;
+				shader_stage_create_infos[j].stage  = vulkan_context.shaders[TEXTURED_STATIC_SHADER].modules[j].stage;
+				shader_stage_create_infos[j].module = vulkan_context.shaders[TEXTURED_STATIC_SHADER].modules[j].module;
 				shader_stage_create_infos[j].pName  = "main";
 			}
-		/*
-			VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info = {};
-			vertex_shader_stage_create_info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			vertex_shader_stage_create_info.stage  = VK_SHADER_STAGE_VERTEX_BIT;
-			vertex_shader_stage_create_info.module = vertex_shader_module;
-			vertex_shader_stage_create_info.pName  = "main";
+			VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {
+				.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+				.stageCount          = vulkan_context.shaders[TEXTURED_STATIC_SHADER].module_count,
+				.pStages             = shader_stage_create_infos,
+				.pVertexInputState   = &vertex_input_state_create_info,
+				.pInputAssemblyState = &input_assembly_create_info,
+				.pViewportState      = &viewport_state_create_info,
+				.pRasterizationState = &rasterization_state_create_info,
+				.pMultisampleState   = &multisample_state_create_info,
+				.pColorBlendState    = &color_blend_state_create_info,
+				.pDepthStencilState  = &depth_stencil_state_create_info,
+				.pDynamicState       = &dynamic_state_create_info,
+				.layout              = vulkan_context.pipeline_layout,
+				.renderPass          = vulkan_context.render_pass,
+				.subpass             = 0,
+				.basePipelineIndex   = -1,
+				.basePipelineHandle  = VK_NULL_HANDLE,
+			};
+			VK_CHECK(vkCreateGraphicsPipelines(vulkan_context.device, NULL, 1, &graphics_pipeline_create_info, NULL, &vulkan_context.pipelines.textured_static));
+		}
 
-			VkPipelineShaderStageCreateInfo fragment_shader_stage_create_info = {};
-			fragment_shader_stage_create_info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragment_shader_stage_create_info.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragment_shader_stage_create_info.module = fragment_shader_module;
-			fragment_shader_stage_create_info.pName  = "main";
-
-			VkPipelineShaderStageCreateInfo pipeline_shader_stage_create_info[] = {vertex_shader_stage_create_info, fragment_shader_stage_create_info};
-		*/
-			//VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {};
-
-			if (i == 0) {
-				dynamic_state_create_info.dynamicStateCount = 2;
+		// Shadow Map
+		{
+			VkVertexInputAttributeDescription vertex_input_attribute_descriptions[] = {
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 0,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex, position),
+				},
+			};
+			VkVertexInputBindingDescription vertex_input_binding_descriptions[] = {
+					{
+						.binding   = VULKAN_VERTEX_BUFFER_BIND_ID,
+						.stride    = sizeof(Vertex),
+						.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+					},
+			};
+			// @TODO: Fix shadow map vertex input attributes (only needs position).
+			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
+				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
+				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
+			};
+			VkDynamicState dynamic_states[] = {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
+				VK_DYNAMIC_STATE_DEPTH_BIAS,
+			};
+			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.pDynamicStates = dynamic_states,
+			};
+			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
+			for (s32 j = 0; j < vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER].module_count; j++) {
+				shader_stage_create_infos[j].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				shader_stage_create_infos[j].stage  = vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER].modules[j].stage;
+				shader_stage_create_infos[j].module = vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER].modules[j].module;
+				shader_stage_create_infos[j].pName  = "main";
 			}
 
-			if (i == 1) {
-				// No blend attachment states (no color attachments used)
-				color_blend_state_create_info.attachmentCount = 0;
-				// Cull front faces
-				depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-				// Enable depth bias
-				rasterization_state_create_info.depthBiasEnable = VK_TRUE;
-				// Add depth bias to dynamic state, so we can change it at runtime
-				dynamic_state_create_info.dynamicStateCount = 3;
-			}
-			graphics_pipeline_create_infos[i].sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-			graphics_pipeline_create_infos[i].stageCount          = requests[i].shaders->module_count;
-			graphics_pipeline_create_infos[i].pStages             = shader_stage_create_infos;
-			graphics_pipeline_create_infos[i].pVertexInputState   = &vertex_input_state_create_info;
-			graphics_pipeline_create_infos[i].pInputAssemblyState = &input_assembly_create_info;
-			graphics_pipeline_create_infos[i].pViewportState      = &viewport_state_create_info;
-			graphics_pipeline_create_infos[i].pRasterizationState = &rasterization_state_create_info;
-			graphics_pipeline_create_infos[i].pMultisampleState   = &multisample_state_create_info;
-			graphics_pipeline_create_infos[i].pColorBlendState    = &color_blend_state_create_info;
-			graphics_pipeline_create_infos[i].pDepthStencilState  = &depth_stencil_state_create_info;
-			graphics_pipeline_create_infos[i].pDynamicState       = &dynamic_state_create_info;
-			graphics_pipeline_create_infos[i].layout              = requests[i].pipeline_layout;
-			graphics_pipeline_create_infos[i].renderPass          = requests[i].render_pass;
-			graphics_pipeline_create_infos[i].subpass             = 0;
-			//graphics_pipeline_create_info.basePipelineIndex   = -1;
-			//graphics_pipeline_create_info.basePipelineHandle  = VK_NULL_HANDLE;
-			//graphics_pipeline_create_info.basePipelineIndex   = -1;
-			if (i == 1) {
-				graphics_pipeline_create_infos[i].stageCount = 1;
+			VkPipelineColorBlendStateCreateInfo shadow_map_color_blend_state_create_info = color_blend_state_create_info;
+			shadow_map_color_blend_state_create_info.attachmentCount = 0;
+
+			VkPipelineDepthStencilStateCreateInfo shadow_map_depth_stencil_state_create_info = depth_stencil_state_create_info;
+			shadow_map_depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+			VkPipelineRasterizationStateCreateInfo shadow_map_rasterization_state_create_info = rasterization_state_create_info;
+			shadow_map_rasterization_state_create_info.depthBiasEnable = VK_TRUE;
+
+			VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {
+				.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+				.stageCount          = 1,
+				.pStages             = shader_stage_create_infos,
+				.pVertexInputState   = &vertex_input_state_create_info,
+				.pInputAssemblyState = &input_assembly_create_info,
+				.pViewportState      = &viewport_state_create_info,
+				.pRasterizationState = &shadow_map_rasterization_state_create_info,
+				.pMultisampleState   = &multisample_state_create_info,
+				.pColorBlendState    = &shadow_map_color_blend_state_create_info,
+				.pDepthStencilState  = &shadow_map_depth_stencil_state_create_info,
+				.pDynamicState       = &dynamic_state_create_info,
+				.layout              = vulkan_context.pipeline_layouts.shadow_map,
+				.renderPass          = vulkan_context.render_passes.shadow_map,
+				.subpass             = 0,
+				.basePipelineIndex   = -1,
+				.basePipelineHandle  = VK_NULL_HANDLE,
+			};
+			VK_CHECK(vkCreateGraphicsPipelines(vulkan_context.device, NULL, 1, &graphics_pipeline_create_info, NULL, &vulkan_context.pipelines.shadow_map_static));
+		}
+
+		// Flat color
+		{
+			VkVertexInputAttributeDescription vertex_input_attribute_descriptions[] = {
+				{
+					.binding  = VULKAN_VERTEX_BUFFER_BIND_ID,
+					.location = 0,
+					.format   = VK_FORMAT_R32G32B32_SFLOAT,
+					.offset   = offsetof(Vertex1P, position),
+				},
+			};
+			VkVertexInputBindingDescription vertex_input_binding_descriptions[] = {
+					{
+						.binding   = VULKAN_VERTEX_BUFFER_BIND_ID,
+						.stride    = sizeof(Vertex1P),
+						.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+					},
+			};
+			// @TODO: Fix shadow map vertex input attributes (only needs position).
+			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
+				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
+				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
+			};
+			VkDynamicState dynamic_states[] = {
+				VK_DYNAMIC_STATE_VIEWPORT,
+				VK_DYNAMIC_STATE_SCISSOR,
+			};
+			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.pDynamicStates = dynamic_states,
+			};
+			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
+			for (s32 j = 0; j < vulkan_context.shaders[FLAT_COLOR_SHADER].module_count; j++) {
+				shader_stage_create_infos[j].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				shader_stage_create_infos[j].stage  = vulkan_context.shaders[FLAT_COLOR_SHADER].modules[j].stage;
+				shader_stage_create_infos[j].module = vulkan_context.shaders[FLAT_COLOR_SHADER].modules[j].module;
+				shader_stage_create_infos[j].pName  = "main";
 			}
 
-			VK_CHECK(vkCreateGraphicsPipelines(vulkan_context.device, NULL, 1, &graphics_pipeline_create_infos[i], NULL, requests[i].pipeline));
+			VkPipelineInputAssemblyStateCreateInfo flat_color_input_assembly_create_info = input_assembly_create_info;
+			flat_color_input_assembly_create_info.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+
+			VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {
+				.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+				.stageCount          = vulkan_context.shaders[FLAT_COLOR_SHADER].module_count,
+				.pStages             = shader_stage_create_infos,
+				.pVertexInputState   = &vertex_input_state_create_info,
+				.pInputAssemblyState = &flat_color_input_assembly_create_info,
+				.pViewportState      = &viewport_state_create_info,
+				.pRasterizationState = &rasterization_state_create_info,
+				.pMultisampleState   = &multisample_state_create_info,
+				.pColorBlendState    = &color_blend_state_create_info,
+				.pDepthStencilState  = &depth_stencil_state_create_info,
+				.pDynamicState       = &dynamic_state_create_info,
+				.layout              = vulkan_context.pipeline_layouts.flat_color,
+				.renderPass          = vulkan_context.render_pass,
+				.subpass             = 0,
+				.basePipelineIndex   = -1,
+				.basePipelineHandle  = VK_NULL_HANDLE,
+			};
+			VK_CHECK(vkCreateGraphicsPipelines(vulkan_context.device, NULL, 1, &graphics_pipeline_create_info, NULL, &vulkan_context.pipelines.flat_color));
 		}
 	}
 
@@ -1003,130 +1242,6 @@ void create_vulkan_command_buffers() {
 	VK_CHECK(vkAllocateCommandBuffers(vulkan_context.device, &command_buffer_allocate_info, vulkan_context.command_buffers));
 }
 
-void build_vulkan_command_buffer(Mesh *meshes, Material **materials, u32 *submesh_counts, u32 mesh_count, u32 swapchain_image_index) {
-	VkCommandBuffer command_buffer = vulkan_context.command_buffers[swapchain_image_index];
-	vkResetCommandBuffer(command_buffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-
-	VkClearValue clear_color = {{{0.04f, 0.19f, 0.34f, 1.0f}}};
-	VkClearValue clear_depth_stencil = {{{1.0f, 0.0f}}};
-	VkClearValue clear_values[] = {
-		clear_color,
-		clear_depth_stencil,
-	};
-	VkBuffer vertex_buffers[] = {vulkan_context.gpu_buffer};
-	VkDeviceSize offsets[] = {0};
-
-	VkCommandBufferBeginInfo command_buffer_begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-	};
-	VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
-
-	// Shadow map.
-	{
-		VkRenderPassBeginInfo render_pass_begin_info = {
-			.sType                    = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass               = vulkan_context.render_passes.shadow_map,
-			.framebuffer              = vulkan_context.xframebuffers.shadow_map,
-			.renderArea.extent.width  = SHADOW_MAP_WIDTH,
-			.renderArea.extent.height = SHADOW_MAP_HEIGHT,
-			.clearValueCount          = 1,
-			.pClearValues             = &clear_depth_stencil,
-		};
-		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-		VkViewport viewport = {
-			.x        = 0.0f,
-			.y        = 0.0f,
-			.width    = (f32)SHADOW_MAP_WIDTH,
-			.height   = (f32)SHADOW_MAP_HEIGHT,
-			.minDepth = 0.0f,
-			.maxDepth = 1.0f,
-		};
-		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-		VkRect2D scissor = {
-			.offset = {0, 0},
-			.extent = {SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT},
-		};
-		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-		vkCmdSetDepthBias(command_buffer, SHADOW_MAP_CONSTANT_DEPTH_BIAS, 0.0f, SHADOW_MAP_SLOPE_DEPTH_BIAS); // Set depth bias, required to avoid shadow mapping artifacts.
-		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.shadow_map_static);
-		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
-		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
-		for (u32 i = 0; i < mesh_count; i++) {
-			u32 total_mesh_index_count = 0;
-			for (u32 j = 0; j < submesh_counts[i]; j++) {
-				vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.shadow_map, SHADOW_MAP_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets[swapchain_image_index].shadow_map.uniforms, 0, NULL);
-				vkCmdDrawIndexed(command_buffer, meshes[i].submesh_index_counts[j], 1, total_mesh_index_count + meshes[i].first_index, meshes[i].vertex_offset, 0);
-				total_mesh_index_count += meshes[i].submesh_index_counts[j];
-			}
-		}
-		vkCmdEndRenderPass(command_buffer);
-	}
-
-	// Scene.
-	{
-		VkRenderPassBeginInfo render_pass_begin_info = {
-			.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass        = vulkan_context.render_pass,
-			.framebuffer       = vulkan_context.framebuffers[swapchain_image_index],
-			.renderArea.offset = {0, 0},
-			.renderArea.extent = vulkan_context.swapchain_image_extent,
-			.clearValueCount   = ARRAY_COUNT(clear_values),
-			.pClearValues      = clear_values,
-		};
-		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
-		VkViewport viewport = {
-			.x        = 0.0f,
-			.y        = 0.0f,
-			.width    = (f32)vulkan_context.swapchain_image_extent.width,
-			.height   = (f32)vulkan_context.swapchain_image_extent.height,
-			.minDepth = 0.0f,
-			.maxDepth = 1.0f,
-		};
-		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
-		VkRect2D scissor = {
-			.offset = {0, 0},
-			.extent = {vulkan_context.swapchain_image_extent.width, vulkan_context.swapchain_image_extent.height},
-		};
-		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.textured_static);
-		vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
-		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
-		// @TODO: Bind these all at the same time?
-		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets[swapchain_image_index].scene.uniforms, 0, NULL);
-		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_SAMPLER_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets[swapchain_image_index].scene.samplers, 0, NULL);
-		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_IMAGE_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets[swapchain_image_index].scene.images, 0, NULL);
-
-		for (u32 i = 0; i < mesh_count; i++) {
-			u32 foo = 0;
-			for (u32 j = 0; j < submesh_counts[i]; j++) {
-				// @TODO: Get the texture index from the material?
-				Push_Constants push_constants = {
-					.normal_map = materials[i][j].real_normal_map,
-					.material_albedo_map = materials[i][j].albedo_map,
-					.material_normal_map = materials[i][j].normal_map,
-					.material_metallic_map = materials[i][j].metallic_map,
-					.material_roughness_map = materials[i][j].roughness_map,
-					.material_ao_map = materials[i][j].ao_map,
-				};
-				vkCmdPushConstants(command_buffer, vulkan_context.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push_constants), (void *)&push_constants);
-
-				u32 dynamic_offset = (i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment)) % vulkan_context.maximum_uniform_buffer_range; // WRONG
-				u32 asdf = (i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment)) / vulkan_context.maximum_uniform_buffer_range;
-				vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, 3, 1, &vulkan_context.descriptor_sets[swapchain_image_index].scene.matrices[asdf], 1, &dynamic_offset);
-				vkCmdDrawIndexed(command_buffer, meshes[i].submesh_index_counts[j], 1, foo + meshes[i].first_index, meshes[i].vertex_offset, 0);
-				foo += meshes[i].submesh_index_counts[j];
-			}
-		}
-
-		vkCmdEndRenderPass(command_buffer);
-	}
-
-	VK_CHECK(vkEndCommandBuffer(command_buffer));
-}
-
 void create_vulkan_buffer(VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags desired_memory_properties) {
 	VkBufferCreateInfo buffer_create_info = {};
 	buffer_create_info.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1144,18 +1259,18 @@ void create_vulkan_buffer(VkBuffer *buffer, VkDeviceMemory *memory, VkDeviceSize
 }
 
 void stage_vulkan_data(void *data, u32 size) {
-	assert(vulkan_context.staging_memory_bytes_used + size < VULKAN_SHARED_ALLOCATION_SIZE);
+	ASSERT(vulkan_context.staging_memory_bytes_used + size < VULKAN_STAGING_MEMORY_SEGMENT_SIZE);
 
 	// @TODO: Keep shared memory mapped permanantly?
 	void *shared_memory;
-	VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, 0, VK_WHOLE_SIZE, 0, &shared_memory));
+	VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, 0, VULKAN_STAGING_MEMORY_SEGMENT_SIZE, 0, &shared_memory));
 	memcpy((char *)shared_memory + vulkan_context.staging_memory_bytes_used, data, size);
 	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
 	vulkan_context.staging_memory_bytes_used += size;
 }
 
 void transfer_staged_vulkan_data(u32 offset) {
-	assert(offset + vulkan_context.staging_memory_bytes_used < VULKAN_GPU_ALLOCATION_SIZE);
+	ASSERT(vulkan_context.staging_memory_bytes_used + offset < VULKAN_GPU_ALLOCATION_SIZE);
 
 	// @TODO: Try to create a reusable command buffer for copying?
     VkCommandBufferAllocateInfo command_buffer_allocate_info = {
@@ -1173,7 +1288,7 @@ void transfer_staged_vulkan_data(u32 offset) {
 	};
 	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
 	VkBufferCopy copy_region = {
-		.srcOffset = 0,
+		.srcOffset = VULKAN_STAGING_MEMORY_SEGMENT_OFFSET,
 		.dstOffset = offset,
 		.size      = vulkan_context.staging_memory_bytes_used,
 	};
@@ -1256,6 +1371,29 @@ void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t 
 	endSingleTimeCommands(commandBuffer);
 }
 
+void vulkan_push_debug_vertices(void *vertices, u32 vertex_count, u32 sizeof_vertex, u32 *indices, u32 index_count, u32 *vertex_offset, u32 *first_index) {
+	u32 indices_size = index_count * sizeof(u32);
+	u32 vertices_size = vertex_count * sizeof_vertex;
+
+	ASSERT(vulkan_context.debug_vertex_memory_bytes_used + vertices_size < VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE);
+	ASSERT(vulkan_context.debug_index_memory_bytes_used + indices_size < VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE);
+
+	void *shared_memory;
+	VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE), VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE, 0, &shared_memory));
+	memcpy((char *)shared_memory + vulkan_context.debug_vertex_memory_bytes_used, vertices, vertices_size);
+	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
+	*vertex_offset = vulkan_context.debug_vertex_count;
+	vulkan_context.debug_vertex_count += vertex_count;
+	vulkan_context.debug_vertex_memory_bytes_used += vertices_size;
+
+	VK_CHECK(vkMapMemory(vulkan_context.device, vulkan_context.shared_memory, VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE), VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE, 0, &shared_memory));
+	memcpy((char *)shared_memory + vulkan_context.debug_index_memory_bytes_used, indices, indices_size);
+	vkUnmapMemory(vulkan_context.device, vulkan_context.shared_memory);
+	*first_index = vulkan_context.debug_index_count;
+	vulkan_context.debug_index_count += index_count;
+	vulkan_context.debug_index_memory_bytes_used += indices_size;
+}
+
 Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height) {
 	Texture_ID id = vulkan_context.textures.id_generator++;
 
@@ -1283,7 +1421,7 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 	u32 sneed = align_to(vulkan_context.image_memory_bytes_used + image_size, memory_requirements.alignment);
 	debug_print("ASD %u\n", image_size);
 	//debug_print("%u %u\n", alignment_offset, image_size);
-	assert(vulkan_context.image_memory_bytes_used + image_size < VULKAN_IMAGE_ALLOCATION_SIZE);
+	ASSERT(vulkan_context.image_memory_bytes_used + image_size < VULKAN_IMAGE_ALLOCATION_SIZE);
 	//vulkan_context.image_memory_bytes_used += alignemnt_offset + image_size;
 
 	//VkDeviceSize image_size = texture_width * texture_height * 4;
@@ -1291,7 +1429,7 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 	VkDeviceMemory stagingBufferMemory;
 	create_vulkan_buffer(&stagingBuffer, &stagingBufferMemory, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	void* data;
-	vkMapMemory(vulkan_context.device, stagingBufferMemory, 0, image_size, 0, &data);
+	VK_CHECK(vkMapMemory(vulkan_context.device, stagingBufferMemory, 0, image_size, 0, &data));
 	memcpy(data, pixels, image_size);
 	vkUnmapMemory(vulkan_context.device, stagingBufferMemory);
 
@@ -1305,24 +1443,62 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 
 	vulkan_context.image_memory_bytes_used = sneed;
 
-	VkImageViewCreateInfo image_view_create_info = {};
-	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	image_view_create_info.image = image;
-	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	image_view_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
-	image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	image_view_create_info.subresourceRange.baseMipLevel = 0;
-	image_view_create_info.subresourceRange.levelCount = 1;
-	image_view_create_info.subresourceRange.baseArrayLayer = 0;
-	image_view_create_info.subresourceRange.layerCount = 1;
+	VkImageViewCreateInfo image_view_create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.baseMipLevel = 0,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1,
+	};
 	VK_CHECK(vkCreateImageView(vulkan_context.device, &image_view_create_info, NULL, &vulkan_context.textures.image_views[id]));
+
+	// Update texture descriptors.
+	{
+		// @TODO: Only upload these if they need to be updated.
+		// @TODO: Use a dummy texture for all descriptors not in use? All image_infos at index greater than vulkan_context.textures.count.
+		// @TODO: We should set all texture descriptors to a dummy texture on startup and then only update the ones that actually need to be updated!
+		//VkDescriptorImageInfo *image_infos = allocate_array(&game_state->frame_arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURES);
+		//u32 total_mesh_count = 0;
+		//for (u32 i = 0; i < game_state->entities.mesh_count; i++) {
+			//for (u32 j = 0; j < game_state->entities.submesh_counts[i]; j++) {
+		//image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		//image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[id];
+		//image_infos[total_mesh_count].sampler     = NULL;
+		//total_mesh_count++;
+			//}
+		//}
+		//for (u32 i = total_mesh_count; i < VULKAN_MAX_TEXTURES; i++) {
+			//image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			//image_infos[i].imageView   = vulkan_context.textures.image_views[0];
+			//image_infos[i].sampler     = NULL;
+		//}
+		VkWriteDescriptorSet textures_descriptor_write = {
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstBinding      = 4,
+			.dstArrayElement = vulkan_context.textures.count, // @TODO: Will need to change once we start unloading textures.
+			.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			.descriptorCount = 1,
+			.pBufferInfo     = 0,
+			.dstSet          = vulkan_context.descriptor_sets.scene.texture,
+			.pImageInfo      = &(VkDescriptorImageInfo){
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.imageView   = vulkan_context.textures.image_views[id],
+				.sampler     = NULL,
+			},
+		};
+		vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
+	}
 
 	vulkan_context.textures.count++;
 
 	return id;
 }
 
-void transfer_model_data_to_gpu(Loaded_Mesh *mesh, u32 *vertex_offset, u32 *first_index) {
+void transfer_model_data_to_gpu(Mesh_Asset *mesh, u32 *vertex_offset, u32 *first_index) {
 	// @TODO: Multithreaded asset load?
 
 	//u32 total_vertex_count = 0;
@@ -1332,7 +1508,7 @@ void transfer_model_data_to_gpu(Loaded_Mesh *mesh, u32 *vertex_offset, u32 *firs
 	//}
 	transfer_staged_vulkan_data(VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + vulkan_context.vertex_memory_bytes_used);
 	vulkan_context.vertex_memory_bytes_used += mesh->vertex_count * sizeof(Vertex);
-	assert(vulkan_context.vertex_memory_bytes_used < VULKAN_VERTEX_MEMORY_SEGMENT_SIZE);
+	ASSERT(vulkan_context.vertex_memory_bytes_used < VULKAN_VERTEX_MEMORY_SEGMENT_SIZE);
 	*vertex_offset = vulkan_context.vertex_count;
 	vulkan_context.vertex_count += mesh->vertex_count;
 
@@ -1344,9 +1520,11 @@ void transfer_model_data_to_gpu(Loaded_Mesh *mesh, u32 *vertex_offset, u32 *firs
 	//}
 	transfer_staged_vulkan_data(VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + vulkan_context.index_memory_bytes_used);
 	vulkan_context.index_memory_bytes_used += mesh->index_count * sizeof(u32);
-	assert(vulkan_context.index_memory_bytes_used < VULKAN_INDEX_MEMORY_SEGMENT_SIZE);
+	ASSERT(vulkan_context.index_memory_bytes_used < VULKAN_INDEX_MEMORY_SEGMENT_SIZE);
 	vulkan_context.index_count += mesh->index_count;
 }
+
+Texture_ID load_texture(const char *path);
 
 typedef struct {
 	Shaders *shaders;
@@ -1355,10 +1533,11 @@ typedef struct {
 } Create_Shader_Request;
 
 // @TODO: Use a temporary arena.
-void initialize_renderer(Game_State *game_state) {
+void initialize_vulkan(Memory_Arena *arena) {
 	s32 required_device_extension_count = 0;
 	const char *required_device_extensions[10]; // @TEMP
 	required_device_extensions[required_device_extension_count++] = "VK_KHR_swapchain";
+	required_device_extensions[required_device_extension_count++] = "VK_EXT_descriptor_indexing";
 
 	s32 required_instance_layer_count = 0;
 	const char *required_instance_layers[10]; // @TEMP
@@ -1422,7 +1601,7 @@ void initialize_renderer(Game_State *game_state) {
 		VkExtensionProperties *available_instance_extensions = (VkExtensionProperties *)malloc(sizeof(VkExtensionProperties) * num_available_instance_extensions); // @TEMP
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &num_available_instance_extensions, available_instance_extensions));
 
-		debug_print("Available Vulkan extensions:\n");
+		debug_print("Available Vulkan instance extensions:\n");
 		for (s32 i = 0; i < num_available_instance_extensions; i++) {
 			debug_print("\t%s\n", available_instance_extensions[i].extensionName);
 		}
@@ -1502,7 +1681,7 @@ void initialize_renderer(Game_State *game_state) {
 
 			u32 num_available_device_extensions = 0;
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, NULL));
-			VkExtensionProperties *available_device_extensions = allocate_array(&game_state->frame_arena, VkExtensionProperties, num_available_device_extensions);
+			VkExtensionProperties *available_device_extensions = allocate_array(arena, VkExtensionProperties, num_available_device_extensions);
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, available_device_extensions));
 			u8 missing_required_device_extension = 0;
 			for (s32 j = 0; j < required_device_extension_count; j++) {
@@ -1534,7 +1713,7 @@ void initialize_renderer(Game_State *game_state) {
 			}
 
 			// Select the best swap chain settings.
-			VkSurfaceFormatKHR *available_surface_formats = allocate_array(&game_state->frame_arena, VkSurfaceFormatKHR, num_available_surface_formats);
+			VkSurfaceFormatKHR *available_surface_formats = allocate_array(arena, VkSurfaceFormatKHR, num_available_surface_formats);
 			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[i], vulkan_context.surface, &num_available_surface_formats, available_surface_formats));
 			VkSurfaceFormatKHR surface_format = available_surface_formats[0];
 			if (num_available_surface_formats == 1 && available_surface_formats[0].format == VK_FORMAT_UNDEFINED) {
@@ -1549,8 +1728,13 @@ void initialize_renderer(Game_State *game_state) {
 				}
 			}
 
-			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-			VkPresentModeKHR *available_present_modes = allocate_array(&game_state->frame_arena, VkPresentModeKHR, num_available_present_modes);
+			// VK_PRESENT_MODE_IMMEDIATE_KHR is for applications that don't care about tearing, or have some way of synchronizing their rendering with the display.
+			// VK_PRESENT_MODE_MAILBOX_KHR may be useful for applications that generally render a new presentable image every refresh cycle, but are occasionally early.
+			// In this case, the application wants the new image to be displayed instead of the previously-queued-for-presentation image that has not yet been displayed.
+			// VK_PRESENT_MODE_FIFO_RELAXED_KHR is for applications that generally render a new presentable image every refresh cycle, but are occasionally late.
+			// In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be immediately displayed, even though that may mean some tearing.
+			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+			VkPresentModeKHR *available_present_modes = allocate_array(arena, VkPresentModeKHR, num_available_present_modes);
 			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[i], vulkan_context.surface, &num_available_present_modes, available_present_modes));
 			for (s32 j = 0; j < num_available_present_modes; j++) {
 				if (available_present_modes[j] == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -1561,7 +1745,7 @@ void initialize_renderer(Game_State *game_state) {
 
 			u32 num_queue_families = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, NULL);
-			VkQueueFamilyProperties *queue_families = allocate_array(&game_state->frame_arena, VkQueueFamilyProperties, num_queue_families);
+			VkQueueFamilyProperties *queue_families = allocate_array(arena, VkQueueFamilyProperties, num_queue_families);
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, queue_families);
 			// @TODO: Search for an transfer exclusive queue VK_QUEUE_TRANSFER_BIT.
 			u32 graphics_queue_family = UINT32_MAX;
@@ -1576,14 +1760,14 @@ void initialize_renderer(Game_State *game_state) {
 						present_queue_family = j;
 					}
 					if (graphics_queue_family != UINT32_MAX && present_queue_family != UINT32_MAX) {
-						found_suitable_physical_device = 1;
-						vulkan_context.physical_device                                  = physical_devices[i];
-						vulkan_context.graphics_queue_family                            = graphics_queue_family;
-						vulkan_context.present_queue_family                             = present_queue_family;
-						vulkan_context.surface_format                                   = surface_format;
-						vulkan_context.present_mode                                     = present_mode;
-						vulkan_context.minimum_uniform_buffer_offset_alignment          = physical_device_properties.limits.minUniformBufferOffsetAlignment;
-						vulkan_context.maximum_uniform_buffer_range                     = physical_device_properties.limits.maxUniformBufferRange;
+						found_suitable_physical_device                         = 1;
+						vulkan_context.physical_device                         = physical_devices[i];
+						vulkan_context.graphics_queue_family                   = graphics_queue_family;
+						vulkan_context.present_queue_family                    = present_queue_family;
+						vulkan_context.surface_format                          = surface_format;
+						vulkan_context.present_mode                            = present_mode;
+						vulkan_context.minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
+						vulkan_context.maximum_uniform_buffer_size             = physical_device_properties.limits.maxUniformBufferRange;
 						break;
 					}
 				}
@@ -1595,6 +1779,15 @@ void initialize_renderer(Game_State *game_state) {
 		if (!found_suitable_physical_device) {
 			_abort("Could not find suitable physical device.\n");
 		}
+
+		u32 available_device_extension_count = 0;
+		VK_CHECK(vkEnumerateDeviceExtensionProperties(vulkan_context.physical_device, NULL, &available_device_extension_count, NULL));
+		VkExtensionProperties *available_device_extensions = (VkExtensionProperties *)malloc(sizeof(VkExtensionProperties) * available_device_extension_count); // @TEMP
+		VK_CHECK(vkEnumerateDeviceExtensionProperties(vulkan_context.physical_device, NULL, &available_device_extension_count, available_device_extensions));
+		debug_print("Available Vulkan device extensions:\n");
+		for (s32 i = 0; i < available_device_extension_count; i++) {
+			debug_print("\t%s\n", available_device_extensions[i].extensionName);
+		}
 	}
 
 	// Create logical device.
@@ -1603,35 +1796,38 @@ void initialize_renderer(Game_State *game_state) {
 		if (vulkan_context.graphics_queue_family != vulkan_context.present_queue_family) {
 			num_unique_queue_families = 2;
 		}
-
 		f32 queue_priority = 1.0f;
-
-		VkDeviceQueueCreateInfo *device_queue_create_info = allocate_array(&game_state->frame_arena, VkDeviceQueueCreateInfo, num_unique_queue_families);
-		device_queue_create_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		device_queue_create_info[0].queueFamilyIndex = vulkan_context.graphics_queue_family;
-		device_queue_create_info[0].queueCount = 1;
-		device_queue_create_info[0].pQueuePriorities = &queue_priority;
-
+		VkDeviceQueueCreateInfo *device_queue_create_info = allocate_array(arena, VkDeviceQueueCreateInfo, num_unique_queue_families); // @TODO: Get rid of me.
+		device_queue_create_info[0] = (VkDeviceQueueCreateInfo){
+			.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			.queueFamilyIndex = vulkan_context.graphics_queue_family,
+			.queueCount       = 1,
+			.pQueuePriorities = &queue_priority,
+		};
 		if (vulkan_context.present_queue_family != vulkan_context.graphics_queue_family) {
-			device_queue_create_info[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			device_queue_create_info[1].queueFamilyIndex = vulkan_context.present_queue_family;
-			device_queue_create_info[1].queueCount = 1;
-			device_queue_create_info[1].pQueuePriorities = &queue_priority;
+			device_queue_create_info[1] = (VkDeviceQueueCreateInfo){
+				.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.queueFamilyIndex = vulkan_context.present_queue_family,
+				.queueCount       = 1,
+				.pQueuePriorities = &queue_priority,
+			};
 		}
-
-		VkPhysicalDeviceFeatures physical_device_features = {};
-		physical_device_features.samplerAnisotropy = VK_TRUE;
-
-		VkDeviceCreateInfo device_create_info = {};
-		device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		device_create_info.pQueueCreateInfos = device_queue_create_info;
-		device_create_info.queueCreateInfoCount = num_unique_queue_families;
-		device_create_info.pEnabledFeatures = &physical_device_features;
-		device_create_info.enabledExtensionCount = required_device_extension_count;
-		device_create_info.ppEnabledExtensionNames = required_device_extensions;
-		device_create_info.enabledLayerCount = required_instance_layer_count;
-		device_create_info.ppEnabledLayerNames = required_instance_layers;
-
+		VkDeviceCreateInfo device_create_info = {
+			.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pQueueCreateInfos       = device_queue_create_info,
+			.queueCreateInfoCount    = num_unique_queue_families,
+			.pEnabledFeatures        = &(VkPhysicalDeviceFeatures){
+				.samplerAnisotropy = VK_TRUE,
+			},
+			.enabledExtensionCount   = required_device_extension_count,
+			.ppEnabledExtensionNames = required_device_extensions,
+			.enabledLayerCount       = required_instance_layer_count,
+			.ppEnabledLayerNames     = required_instance_layers,
+			.pNext                   = &(VkPhysicalDeviceDescriptorIndexingFeaturesEXT){
+				.sType                  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+				.runtimeDescriptorArray = VK_TRUE,
+			},
+		};
 		VK_CHECK(vkCreateDevice(vulkan_context.physical_device, &device_create_info, NULL, &vulkan_context.device));
 	}
 
@@ -1657,14 +1853,21 @@ void initialize_renderer(Game_State *game_state) {
 
 	// Descriptor set layout.
 	{
-		VkDescriptorSetLayoutBinding ubo_layout_binding = {
+		VkDescriptorSetLayoutBinding uniform_buffer_layout_binding = {
 			.binding            = 0,
 			.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.descriptorCount    = 1,
 			.stageFlags         = VK_SHADER_STAGE_VERTEX_BIT,
 			.pImmutableSamplers = NULL,
 		};
-		VkDescriptorSetLayoutBinding dynamic_ubo_layout_binding = {
+		VkDescriptorSetLayoutBinding scene_material_layout_binding = {
+			.binding            = 5,
+			.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount    = 1,
+			.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.pImmutableSamplers = NULL,
+		};
+		VkDescriptorSetLayoutBinding dynamic_uniform_buffer_layout_binding = {
 			.binding            = 1,
 			.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 			.descriptorCount    = 1,
@@ -1688,7 +1891,7 @@ void initialize_renderer(Game_State *game_state) {
 		VkDescriptorSetLayoutBinding tex_sampler_layout_binding = {
 			.binding            = 4,
 			.descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-			.descriptorCount    = VULKAN_MAX_TEXTURE_COUNT,
+			.descriptorCount    = VULKAN_MAX_TEXTURES,
 			.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT,
 			.pImmutableSamplers = NULL,
 		};
@@ -1701,25 +1904,37 @@ void initialize_renderer(Game_State *game_state) {
 		};
 		{
 			VkDescriptorSetLayoutBinding bindings[] = {
-				ubo_layout_binding,
+				uniform_buffer_layout_binding,
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
+				.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene.uniforms));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_UNIFORM_DESCRIPTOR_SET]));
 		}
 		{
 			VkDescriptorSetLayoutBinding bindings[] = {
-				dynamic_ubo_layout_binding,
+				scene_material_layout_binding,
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene.matrices));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_MATERIAL_DESCRIPTOR_SET]));
+		}
+		{
+			VkDescriptorSetLayoutBinding bindings[] = {
+				dynamic_uniform_buffer_layout_binding,
+			};
+			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
+				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+				.bindingCount = ARRAY_COUNT(bindings),
+				.pBindings    = bindings,
+			};
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET]));
 		}
 		{
 			VkDescriptorSetLayoutBinding bindings[] = {
@@ -1731,7 +1946,7 @@ void initialize_renderer(Game_State *game_state) {
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene.samplers));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_SAMPLER_DESCRIPTOR_SET]));
 		}
 		{
 			VkDescriptorSetLayoutBinding bindings[] = {
@@ -1742,7 +1957,7 @@ void initialize_renderer(Game_State *game_state) {
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene.images));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_TEXTURE_DESCRIPTOR_SET]));
 		}
 		{
 			VkDescriptorSetLayoutBinding bindings[] = {
@@ -1753,7 +1968,18 @@ void initialize_renderer(Game_State *game_state) {
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.shadow_map.uniforms));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.shadow_map[SHADOW_MAP_UNIFORM_DESCRIPTOR_SET]));
+		}
+		{
+			VkDescriptorSetLayoutBinding bindings[] = {
+				uniform_buffer_layout_binding,
+			};
+			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
+				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+				.bindingCount = ARRAY_COUNT(bindings),
+				.pBindings    = bindings,
+			};
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UNIFORM_DESCRIPTOR_SET]));
 		}
 	}
 
@@ -1769,22 +1995,23 @@ void initialize_renderer(Game_State *game_state) {
 	// Create shaders.
 	{
 		const char *textured_static_shaders[] = {"build/pbr_vertex.spirv", "build/pbr_fragment.spirv"};
-		const char *shadow_map_static_shaders[] = {"build/shadow_map_static_vertex.spirv", "build/shadow_map_static_fragment.spirv"};
-
+		const char *shadow_map_static_shaders[] = {"build/shadow_map_vertex.spirv", "build/shadow_map_fragment.spirv"};
+		const char *flat_color_shaders[] = {"build/flat_color_vertex.spirv", "build/flat_color_fragment.spirv"};
 		// @TODO: Generate shader table.
 		Create_Shader_Request requests[] = {
 			{&vulkan_context.shaders[TEXTURED_STATIC_SHADER], textured_static_shaders, ARRAY_COUNT(textured_static_shaders)},
 			{&vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER], shadow_map_static_shaders, ARRAY_COUNT(shadow_map_static_shaders)},
+			{&vulkan_context.shaders[FLAT_COLOR_SHADER], flat_color_shaders, ARRAY_COUNT(flat_color_shaders)},
 		};
-
 		for (s32 i = 0; i < ARRAY_COUNT(requests); i++) {
+			assert(requests[i].shader_module_count < MAX_SHADER_MODULES);
 			requests[i].shaders->module_count = requests[i].shader_module_count;
-			requests[i].shaders->modules = (Shader_Module *)malloc(sizeof(Shader_Module) * requests[i].shader_module_count);//allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
+			requests[i].shaders->modules = (Shader_Module *)malloc(sizeof(Shader_Module) * requests[i].shader_module_count); // @TODO: allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
 
 			for (s32 j = 0; j < requests[i].shader_module_count; j++) {
 				// @TODO: Subarena.
-				String_Result spirv = read_entire_file(requests[i].paths[j], &game_state->frame_arena);
-				assert(spirv.data);
+				String_Result spirv = read_entire_file(requests[i].paths[j], arena);
+				ASSERT(spirv.data);
 
 				VkShaderModuleCreateInfo shader_module_create_info = {};
 				shader_module_create_info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1804,7 +2031,7 @@ void initialize_renderer(Game_State *game_state) {
 		}
 	}
 
-	create_vulkan_display_objects(&game_state->frame_arena);
+	create_vulkan_display_objects(arena);
 
 	// GPU vertex/index/uniform resources.
 	{
@@ -1868,14 +2095,18 @@ void initialize_renderer(Game_State *game_state) {
 
 	// Uniform memory info.
 	{
-		vulkan_context.aligned_scene_uniform_buffer_object_size         = align_to(sizeof(Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
-		vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size = align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
-		vulkan_context.aligned_shadow_map_uniform_buffer_object_size    = align_to(sizeof(Shadow_Map_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
-		vulkan_context.scene_uniform_buffer_offset                      = align_to(VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET, vulkan_context.minimum_uniform_buffer_offset_alignment);
-		vulkan_context.scene_dynamic_uniform_buffers_offset             = vulkan_context.scene_uniform_buffer_offset + (vulkan_context.num_swapchain_images * vulkan_context.aligned_scene_uniform_buffer_object_size);
-		vulkan_context.shadow_map_uniform_buffer_offset                 = vulkan_context.scene_dynamic_uniform_buffers_offset + (TEST_INSTANCES * vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size);
-		vulkan_context.scene_dynamic_uniform_memory_size                = vulkan_context.shadow_map_uniform_buffer_offset - vulkan_context.scene_dynamic_uniform_buffers_offset;
-		vulkan_context.scene_dynamic_uniform_buffer_count               = divide_and_round_up(vulkan_context.scene_dynamic_uniform_memory_size, vulkan_context.maximum_uniform_buffer_range);
+		vulkan_context.buffer_offsets.instance_memory_segment      = VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE;
+		vulkan_context.sizes.scene.aligned_dynamic_ubo             = align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.sizes.scene.dynamic_uniform_buffer          = (TEST_INSTANCES * vulkan_context.sizes.scene.aligned_dynamic_ubo);
+		u32 aligned_scene_uniform_buffer_object_size               = align_to(sizeof(Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		u32 total_scene_uniform_buffer_size                        = vulkan_context.num_swapchain_images * aligned_scene_uniform_buffer_object_size;
+		for (u32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
+			vulkan_context.buffer_offsets.scene.uniform[i]         = VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + (i * aligned_scene_uniform_buffer_object_size);
+			vulkan_context.buffer_offsets.scene.dynamic_uniform[i] = VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + total_scene_uniform_buffer_size + (i * vulkan_context.sizes.scene.dynamic_uniform_buffer);
+		}
+		vulkan_context.buffer_offsets.scene.materials    = VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + total_scene_uniform_buffer_size + (vulkan_context.num_swapchain_images * vulkan_context.sizes.scene.dynamic_uniform_buffer);
+		vulkan_context.buffer_offsets.shadow_map.uniform = align_to(vulkan_context.buffer_offsets.scene.materials + (VULKAN_MAX_MATERIALS * sizeof(Vulkan_Material)), vulkan_context.minimum_uniform_buffer_offset_alignment);
+		vulkan_context.buffer_offsets.flat_color.uniform = align_to(vulkan_context.buffer_offsets.shadow_map.uniform + sizeof(Shadow_Map_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
 	}
 
 	// Descriptor pool.
@@ -1888,7 +2119,7 @@ void initialize_renderer(Game_State *game_state) {
 			},
 			{
 				.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-				.descriptorCount = vulkan_context.scene_dynamic_uniform_buffer_count,
+				.descriptorCount = vulkan_context.num_swapchain_images + 60,
 			},
 			{
 				.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1899,7 +2130,8 @@ void initialize_renderer(Game_State *game_state) {
 			.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.poolSizeCount = ARRAY_COUNT(pool_sizes),
 			.pPoolSizes    = pool_sizes,
-			.maxSets       = vulkan_context.scene_dynamic_uniform_buffer_count * vulkan_context.num_swapchain_images + 60,
+			.maxSets       = vulkan_context.num_swapchain_images + 60,
+			.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
 		};
 		VK_CHECK(vkCreateDescriptorPool(vulkan_context.device, &pool_info, NULL, &vulkan_context.descriptor_pool));
 	}
@@ -1929,133 +2161,194 @@ void initialize_renderer(Game_State *game_state) {
 
 	// Descriptor set.
 	{
+		const u32 max_set_count = 100; // @TODO: Real value?
+		VkDescriptorSet **sets = allocate_array(arena, VkDescriptorSet *, max_set_count);
+		VkDescriptorSetLayout *layouts = allocate_array(arena, VkDescriptorSetLayout, max_set_count);
+		u32 set_count = 0, layout_count = 0;
+
+		sets[set_count++]       = &vulkan_context.descriptor_sets.scene.sampler;
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_SAMPLER_DESCRIPTOR_SET];
+
+		sets[set_count++]       = &vulkan_context.descriptor_sets.scene.texture;
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_TEXTURE_DESCRIPTOR_SET];
+
+		sets[set_count++]       = &vulkan_context.descriptor_sets.shadow_map.uniform;
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.shadow_map[SHADOW_MAP_UNIFORM_DESCRIPTOR_SET];
+
+		sets[set_count++]       = &vulkan_context.descriptor_sets.flat_color.uniform;
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UNIFORM_DESCRIPTOR_SET];
+
+		sets[set_count++]       = &vulkan_context.descriptor_sets.scene.materials;
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_MATERIAL_DESCRIPTOR_SET];
+
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
 			// We need a variable number of scene matrix descriptor sets because the matrix uniforms are stored in dynamic uniform buffers which have a maximum size.
 			// If we want to store more matrix data than the maximum size, we may need more than one desciptor set.
-			vulkan_context.descriptor_sets[i].scene.matrices = allocate_array(&game_state->permanent_arena, VkDescriptorSet, vulkan_context.scene_dynamic_uniform_buffer_count);
-			const u32 max_set_count = 100 + vulkan_context.scene_dynamic_uniform_buffer_count;
-			VkDescriptorSet **sets = allocate_array(&game_state->frame_arena, VkDescriptorSet *, max_set_count);
-			VkDescriptorSetLayout *layouts = allocate_array(&game_state->frame_arena, VkDescriptorSetLayout, max_set_count);
-			u32 set_count = 0, layout_count = 0;
+			//vulkan_context.descriptor_sets.scene.dynamic_uniform[i]                = allocate_array(&game_state->permanent_arena, VkDescriptorSet, vulkan_context.scene_dynamic_uniform_buffer_count);
+			//vulkan_context.descriptor_sets.scene.dynamic_uniform_buffer_offsets[i] = allocate_array(&game_state->permanent_arena, u32, vulkan_context.scene_dynamic_uniform_buffer_count);
 
-			sets[set_count++] = &vulkan_context.descriptor_sets[i].scene.samplers;
-			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene.samplers;
+			sets[set_count++]       = &vulkan_context.descriptor_sets.scene.uniform[i];
+			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_UNIFORM_DESCRIPTOR_SET];
 
-			sets[set_count++] = &vulkan_context.descriptor_sets[i].scene.uniforms;
-			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene.uniforms;
-
-			sets[set_count++] = &vulkan_context.descriptor_sets[i].scene.images;
-			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene.images;
-
-			sets[set_count++] = &vulkan_context.descriptor_sets[i].shadow_map.uniforms;
-			layouts[layout_count++] = vulkan_context.descriptor_set_layouts.shadow_map.uniforms;
-
-			for (u32 j = 0; j < vulkan_context.scene_dynamic_uniform_buffer_count; j++) {
-				sets[set_count++] = &vulkan_context.descriptor_sets[i].scene.matrices[j];
-				layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene.matrices;
-			}
-
-			VkDescriptorSet *results = allocate_array(&game_state->frame_arena, VkDescriptorSet, set_count);
-			VkDescriptorSetAllocateInfo allocate_info = {
-				.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-				.descriptorPool     = vulkan_context.descriptor_pool,
-				.descriptorSetCount = set_count,
-				.pSetLayouts        = layouts,
-			};
-			VK_CHECK(vkAllocateDescriptorSets(vulkan_context.device, &allocate_info, results));
-			for (u32 j = 0; j < set_count; j++) {
-				*sets[j] = results[j];
-			}
+			//for (u32 j = 0; j < vulkan_context.scene_dynamic_uniform_buffer_count; j++) {
+				sets[set_count++]       = &vulkan_context.descriptor_sets.scene.dynamic_uniform[i];
+				layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET];
+			//}
+		}
+		ASSERT(set_count < max_set_count);
+		VkDescriptorSet *results = allocate_array(arena, VkDescriptorSet, set_count);
+		VkDescriptorSetAllocateInfo allocate_info = {
+			.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool     = vulkan_context.descriptor_pool,
+			.descriptorSetCount = set_count,
+			.pSetLayouts        = layouts,
+		};
+		VK_CHECK(vkAllocateDescriptorSets(vulkan_context.device, &allocate_info, results));
+		for (u32 j = 0; j < set_count; j++) {
+			*sets[j] = results[j];
 		}
 
+		VkWriteDescriptorSet *descriptor_writes = allocate_array(arena, VkWriteDescriptorSet, max_set_count);
+		u32 write_count = 0;
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = vulkan_context.descriptor_sets.scene.materials,
+			.dstBinding      = 5,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo     = &(VkDescriptorBufferInfo){
+				.buffer = vulkan_context.gpu_buffer,
+				.offset = vulkan_context.buffer_offsets.scene.materials,
+				.range  = VULKAN_MAX_MATERIALS * sizeof(Vulkan_Material),
+			},
+		};
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = vulkan_context.descriptor_sets.scene.sampler,
+			.dstBinding      = 2,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.descriptorCount = 1,
+			.pImageInfo      = &(VkDescriptorImageInfo){
+				.sampler = vulkan_context.textureSampler,
+			},
+		};
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = vulkan_context.descriptor_sets.scene.sampler,
+			.dstBinding      = 3,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.pImageInfo      = &(VkDescriptorImageInfo){
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+				.imageView   = vulkan_context.framebuffer_attachments.shadow_map_depth.image_view,
+				.sampler     = vulkan_context.samplers.shadow_map_depth,
+			},
+		};
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = vulkan_context.descriptor_sets.shadow_map.uniform,
+			.dstBinding      = 0,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo     = &(VkDescriptorBufferInfo){
+				.buffer = vulkan_context.gpu_buffer,
+				.offset = vulkan_context.buffer_offsets.shadow_map.uniform,
+				.range  = sizeof(Shadow_Map_UBO),
+			},
+		};
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = vulkan_context.descriptor_sets.flat_color.uniform,
+			.dstBinding      = 0,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo     = &(VkDescriptorBufferInfo){
+				.buffer = vulkan_context.gpu_buffer,
+				.offset = vulkan_context.buffer_offsets.flat_color.uniform,
+				.range  = sizeof(Flat_Color_UBO),
+			},
+		};
+		// @TODO: Clean this up!
+		VkDescriptorBufferInfo *buffer_infos = allocate_array(arena, VkDescriptorBufferInfo, 2 * vulkan_context.num_swapchain_images);
+		u32 buffer_info_count = 0;
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
-			VkWriteDescriptorSet *descriptor_writes = allocate_array(&game_state->frame_arena, VkWriteDescriptorSet, 100 + vulkan_context.scene_dynamic_uniform_buffer_count);
-			u32 write_count = 0;
-			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
-				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet          = vulkan_context.descriptor_sets[i].scene.uniforms,
-				.dstBinding      = 0,
-				.dstArrayElement = 0,
-				.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = 1,
-				.pBufferInfo     = &(VkDescriptorBufferInfo){
-					.buffer = vulkan_context.gpu_buffer,
-					.offset = vulkan_context.scene_uniform_buffer_offset + (0 * vulkan_context.aligned_scene_uniform_buffer_object_size),//align_to(ubo_offset + (sizeof(UBO) * i), vulkan_context.minimum_uniform_buffer_offset_alignment),
+			buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
+				.buffer = vulkan_context.gpu_buffer,
+					.offset = vulkan_context.buffer_offsets.scene.uniform[i],
 					.range  = sizeof(Scene_UBO),
-				},
-			};
-			debug_print("XXX: %u\n", vulkan_context.scene_uniform_buffer_offset);
-			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
-				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet          = vulkan_context.descriptor_sets[i].scene.samplers,
-				.dstBinding      = 2,
-				.dstArrayElement = 0,
-				.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER,
-				.descriptorCount = 1,
-				.pImageInfo      = &(VkDescriptorImageInfo){
-					.sampler = vulkan_context.textureSampler,
-				},
 			};
 			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet          = vulkan_context.descriptor_sets[i].scene.samplers,
-				.dstBinding      = 3,
-				.dstArrayElement = 0,
-				.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 1,
-				.pImageInfo      = &(VkDescriptorImageInfo){
-					.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-					.imageView   = vulkan_context.framebuffer_attachments.shadow_map_depth.image_view,
-					.sampler     = vulkan_context.samplers.shadow_map_depth,
-				},
-			};
-			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
-				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet          = vulkan_context.descriptor_sets[i].shadow_map.uniforms,
+				.dstSet          = vulkan_context.descriptor_sets.scene.uniform[i],
 				.dstBinding      = 0,
 				.dstArrayElement = 0,
 				.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				.descriptorCount = 1,
-				.pBufferInfo     = &(VkDescriptorBufferInfo){
-					.buffer = vulkan_context.gpu_buffer,
-					.offset = vulkan_context.shadow_map_uniform_buffer_offset,
-					.range  = sizeof(Shadow_Map_UBO),
-				},
+				.pBufferInfo     = &buffer_infos[buffer_info_count],
 			};
-			VkDescriptorBufferInfo *buffer_infos = allocate_array(&game_state->frame_arena, VkDescriptorBufferInfo, vulkan_context.scene_dynamic_uniform_buffer_count);
-			for (u32 j = 0; j < vulkan_context.scene_dynamic_uniform_buffer_count; j++) {
-				buffer_infos[j] = (VkDescriptorBufferInfo){
-					.buffer = vulkan_context.gpu_buffer,
-					.offset = vulkan_context.scene_dynamic_uniform_buffers_offset + (j * vulkan_context.maximum_uniform_buffer_range),
-					.range  = vulkan_context.maximum_uniform_buffer_range,
-				};
-				debug_print("XXX: %u\n", vulkan_context.scene_dynamic_uniform_buffers_offset);
-				descriptor_writes[write_count++] = (VkWriteDescriptorSet){
-					.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet          = vulkan_context.descriptor_sets[i].scene.matrices[j],
-					.dstBinding      = 1,
-					.dstArrayElement = 0,
-					.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-					.descriptorCount = 1,
-					.pBufferInfo     = &buffer_infos[j],
-				};
-			}
-			vkUpdateDescriptorSets(vulkan_context.device, write_count, descriptor_writes, 0, NULL);
+			buffer_info_count++;
+			buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
+				.buffer = vulkan_context.gpu_buffer,
+				.offset = vulkan_context.buffer_offsets.scene.dynamic_uniform[i],
+				.range  = vulkan_context.sizes.scene.dynamic_uniform_buffer,
+			};
+			descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+				.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet          = vulkan_context.descriptor_sets.scene.dynamic_uniform[i],
+				.dstBinding      = 1,
+				.dstArrayElement = 0,
+				.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+				.descriptorCount = 1,
+				.pBufferInfo     = &buffer_infos[buffer_info_count],
+			};
+			buffer_info_count++;
 		}
+		vkUpdateDescriptorSets(vulkan_context.device, write_count, descriptor_writes, 0, NULL);
 	}
+
+	// Set the default texture.
+	{
+		load_texture("data/default_texture.png");
+		VkDescriptorImageInfo *image_infos = allocate_array(arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURES);
+		for (u32 i = 0; i < VULKAN_MAX_TEXTURES; i++) {
+			image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			image_infos[i].imageView   = vulkan_context.textures.image_views[0]; // @TODO: Use some kind of special "invalid" texture.
+			image_infos[i].sampler     = NULL;
+		}
+		VkWriteDescriptorSet textures_descriptor_write = {
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstBinding      = 4,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			.descriptorCount = VULKAN_MAX_TEXTURES,
+			.pBufferInfo     = 0,
+			.dstSet          = vulkan_context.descriptor_sets.scene.texture,
+			.pImageInfo      = image_infos,
+		};
+		vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
+	}
+
 	// @TODO: Try to use a seperate queue family for transfer operations so that it can be parallelized.
-	vulkan_context.scene_projection = perspective_projection(90.0f, vulkan_context.swapchain_image_extent.width / (float)vulkan_context.swapchain_image_extent.height, 0.1f, 100.0f);
 }
 
-void update_vulkan_uniforms(Camera *camera, Transform *mesh_transforms, u32 transform_count, u32 swapchain_image_index) {
+void update_vulkan_uniforms(M4 scene_projection, Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u32 visible_mesh_count, u32 swapchain_image_index) {
+	// @TODO: Does all of this need to happen every frame? Probably not!
 	// Shadow map.
 	{
 		M4 model = m4_identity();
 		M4 view = look_at((V3){2.0f, 2.0f, 2.0f}, (V3){0.0f, 0.0f, 0.0f}, (V3){0.0f, 0.0f, 1.0f});
 		M4 projection = orthographic_projection(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 20.0f);
-		M4 mvp = multiply_m4(multiply_m4(projection, view), model);
-		shadow_map_ubo.world_to_clip_space = mvp;
+		shadow_map_ubo.world_to_clip_space = multiply_m4(multiply_m4(projection, view), model);
+		stage_vulkan_data(&shadow_map_ubo, sizeof(Shadow_Map_UBO));
+		transfer_staged_vulkan_data(vulkan_context.buffer_offsets.shadow_map.uniform);
 	}
+
+	M4 scene_projection_view = multiply_m4(scene_projection, camera->view_matrix);
 
 	// Scene.
 	{
@@ -2066,12 +2359,11 @@ void update_vulkan_uniforms(Camera *camera, Transform *mesh_transforms, u32 tran
 			{0.0, 0.0, 0.0, 1.0},
 		}};
 		M4 model = m4_identity();
-		M4 projection_view = multiply_m4(vulkan_context.scene_projection, camera->view_matrix);
-		for (s32 i = 0; i < transform_count; i++) {
-			set_matrix_translation(&model, mesh_transforms[i].translation);
+		for (s32 i = 0; i < visible_mesh_count; i++) {
+			set_matrix_translation(&model, meshes[visible_meshes[i]].transform.translation);
 			dynamic_scene_ubo[i] = (Dynamic_Scene_UBO){
-				.model_to_world_space           = multiply_m4(projection_view, model),
-				.world_to_clip_space            = multiply_m4(projection_view, model),
+				.model_to_world_space           = multiply_m4(scene_projection_view, model),
+				.world_to_clip_space            = multiply_m4(scene_projection_view, model),
 				.world_to_shadow_map_clip_space = multiply_m4(multiply_m4(shadow_map_clip_space_bias, shadow_map_ubo.world_to_clip_space), model),
 			};
 		}
@@ -2081,90 +2373,204 @@ void update_vulkan_uniforms(Camera *camera, Transform *mesh_transforms, u32 tran
 		.camera_position = camera->position,
 	};
 	stage_vulkan_data(&scene_ubo, sizeof(scene_ubo));
-	transfer_staged_vulkan_data(vulkan_context.scene_uniform_buffer_offset);// + (swapchain_image_index * vulkan_context.aligned_scene_uniform_buffer_object_size));
+	transfer_staged_vulkan_data(vulkan_context.buffer_offsets.scene.uniform[swapchain_image_index]);
 
-	stage_vulkan_data(&shadow_map_ubo, sizeof(Shadow_Map_UBO));
-	transfer_staged_vulkan_data(vulkan_context.shadow_map_uniform_buffer_offset);
-
-	for (s32 i = 0; i < TEST_INSTANCES; i++) {
+	//for (s32 i = 0; i < TEST_INSTANCES; i++) {
+	for (u32 i = 0; i < visible_mesh_count; i++) {
 		stage_vulkan_data(&dynamic_scene_ubo[i], sizeof(dynamic_scene_ubo[i]));
+		transfer_staged_vulkan_data(vulkan_context.buffer_offsets.scene.dynamic_uniform[swapchain_image_index] + (i * vulkan_context.sizes.scene.aligned_dynamic_ubo));
+		//transfer_staged_vulkan_data(xxx + vulkan_context.scene_dynamic_uniform_buffer_offsets[vulkan_context.current_swapchain_image_index] + (i * vulkan_context.aligned_scene_uniform_buffer_object_size));
 		//u32 x = dubo_offset + i * align_to(sizeof(Dynamic_Scene_UBO), vulkan_context.minimum_uniform_buffer_offset_alignment);
 		//assert(x % vulkan_context.minimum_uniform_buffer_offset_alignment == 0);
-		transfer_staged_vulkan_data(vulkan_context.scene_dynamic_uniform_buffers_offset + (i * vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size));
+		//transfer_staged_vulkan_data(vulkan_context.scene_dynamic_uniform_buffer_offset + (i * vulkan_context.aligned_scene_dynamic_uniform_buffer_object_size));
 	}
+
+	// @TODO: Materials should be in a linear array.
+	// @TODO: Load all materials from directory on startup.
+	// @TODO: Only update materials when they need to be updated.
+	for (u32 i = 0; i < visible_mesh_count; i++) {
+		// WRONG!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! need a submesh index, not the mesh index
+		Vulkan_Material material = {
+			.albedo_map            = meshes[visible_meshes[i]].submesh_material_ids[0].albedo_map,
+			.normal_map            = meshes[visible_meshes[i]].submesh_material_ids[0].normal_map,
+			.metallic_map          = meshes[visible_meshes[i]].submesh_material_ids[0].metallic_map,
+			.roughness_map         = meshes[visible_meshes[i]].submesh_material_ids[0].roughness_map,
+			.ambient_occlusion_map = meshes[visible_meshes[i]].submesh_material_ids[0].ambient_occlusion_map,
+		};
+		stage_vulkan_data(&material, sizeof(material));
+		transfer_staged_vulkan_data(vulkan_context.buffer_offsets.scene.materials + (i * sizeof(Vulkan_Material)));
+	}
+
+	M4 m = m4_identity();
+	set_matrix_translation(&m, (V3){-0.398581, 0.000000, 1.266762});
+	Flat_Color_UBO ubo = {
+		.color = {1.0, 0.0f, 0.0f, 1.0f},
+		.model_view_projection = scene_projection_view,
+	};
+	stage_vulkan_data(&ubo, sizeof(ubo));
+	transfer_staged_vulkan_data(vulkan_context.buffer_offsets.flat_color.uniform);
 }
 
-void render(Game_State *game_state) {
-	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], 1, UINT64_MAX);
-	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
+void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32 visible_mesh_count, Render_Context *render_context, u32 swapchain_image_index) {
+	VkCommandBuffer command_buffer = vulkan_context.command_buffers[swapchain_image_index];
+	vkResetCommandBuffer(command_buffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
 
-	u32 swapchain_image_index;
-	VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &swapchain_image_index));
+	VkClearValue clear_color = {{{0.04f, 0.19f, 0.34f, 1.0f}}};
+	VkClearValue clear_depth_stencil = {{{1.0f, 0.0f}}};
+	VkClearValue clear_values[] = {
+		clear_color,
+		clear_depth_stencil,
+	};
+	VkBuffer vertex_buffers[] = {vulkan_context.gpu_buffer};
+	VkDeviceSize offsets[] = {0};
 
-	// Update texture descriptors.
+	VkCommandBufferBeginInfo command_buffer_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+	};
+	VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
+
+	/*
+	// Shadow map.
 	{
-		// @TODO: Only upload these if they need to be updated.
-		// @TODO: Use a dummy texture for all descriptors not in use? All image_infos at index greater than vulkan_context.textures.count.
-		// @TODO: We should set all texture descriptors to a dummy texture on startup and then only update the ones that actually need to be updated!
-		////// What is the ordering constraint??????????????????????????????????????????????????????????????????????????????????????????
-		VkDescriptorImageInfo *image_infos = allocate_array(&game_state->frame_arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURE_COUNT);
-		u32 total_mesh_count = 0;
-		for (u32 i = 0; i < game_state->entities.mesh_count; i++) {
-			for (u32 j = 0; j < game_state->entities.submesh_counts[i]; j++) {
-				//if (game_state->entities.submesh_materials[i][j].diffuse_map != INVALID_ID) {
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].albedo_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
-				//}
-
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].real_normal_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
-
-				//if (game_state->entities.submesh_materials[i][j].normal_map != INVALID_ID) {
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].normal_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
-				//}
-
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].roughness_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
-
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].metallic_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
-
-					image_infos[total_mesh_count].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_infos[total_mesh_count].imageView   = vulkan_context.textures.image_views[game_state->entities.submesh_materials[i][j].ao_map];
-					image_infos[total_mesh_count].sampler     = NULL;
-					total_mesh_count++;
+		VkRenderPassBeginInfo render_pass_begin_info = {
+			.sType                    = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass               = vulkan_context.render_passes.shadow_map,
+			.framebuffer              = vulkan_context.xframebuffers.shadow_map,
+			.renderArea.extent.width  = SHADOW_MAP_WIDTH,
+			.renderArea.extent.height = SHADOW_MAP_HEIGHT,
+			.clearValueCount          = 1,
+			.pClearValues             = &clear_depth_stencil,
+		};
+		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+		VkViewport viewport = {
+			.x        = 0.0f,
+			.y        = 0.0f,
+			.width    = (f32)SHADOW_MAP_WIDTH,
+			.height   = (f32)SHADOW_MAP_HEIGHT,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f,
+		};
+		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+		VkRect2D scissor = {
+			.offset = {0, 0},
+			.extent = {SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT},
+		};
+		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+		vkCmdSetDepthBias(command_buffer, SHADOW_MAP_CONSTANT_DEPTH_BIAS, 0.0f, SHADOW_MAP_SLOPE_DEPTH_BIAS); // Set depth bias, required to avoid shadow mapping artifacts.
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.shadow_map_static);
+		vkCmdBindVertexBuffers(command_buffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &vulkan_context.gpu_buffer, &(VkDeviceSize){0});
+		//vkCmdBindVertexBuffers(command_buffer, VULKAN_INSTANCE_BUFFER_BIND_ID, 1, &vulkan_context.gpu_buffer, &(VkDeviceSize){vulkan_context.buffer_offsets.instance_memory_segment});
+		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
+		for (u32 i = 0; i < visible_mesh_count; i++) {
+			u32 mesh_index = visible_meshes[i];
+			u32 total_mesh_index_count = 0;
+			for (u32 j = 0; j < submesh_counts[mesh_index]; j++) {
+				vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.shadow_map, SHADOW_MAP_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.shadow_map.uniform, 0, NULL);
+				vkCmdDrawIndexed(command_buffer, meshes[mesh_index].submesh_index_counts[j], 1, total_mesh_index_count + meshes[mesh_index].first_index, meshes[mesh_index].vertex_offset, 0);
+				total_mesh_index_count += meshes[mesh_index].submesh_index_counts[j];
 			}
 		}
-		for (u32 i = total_mesh_count; i < VULKAN_MAX_TEXTURE_COUNT; i++) {
-			image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_infos[i].imageView   = vulkan_context.textures.image_views[0];
-			image_infos[i].sampler     = NULL;
-		}
-		VkWriteDescriptorSet textures_descriptor_write = {
-			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstBinding      = 4,
-			.dstArrayElement = 0,
-			.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-			.descriptorCount = VULKAN_MAX_TEXTURE_COUNT,
-			.pBufferInfo     = 0,
-			.dstSet          = vulkan_context.descriptor_sets[swapchain_image_index].scene.images,
-			.pImageInfo      = image_infos,
-		};
-		vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
+		vkCmdEndRenderPass(command_buffer);
 	}
-	update_vulkan_uniforms(&game_state->camera, game_state->entities.mesh_transforms, game_state->entities.mesh_count, swapchain_image_index);
-	build_vulkan_command_buffer(game_state->entities.meshes, game_state->entities.submesh_materials, game_state->entities.submesh_counts, game_state->entities.mesh_count, swapchain_image_index);
+	*/
+
+	// Scene.
+	{
+		VkRenderPassBeginInfo render_pass_begin_info = {
+			.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass        = vulkan_context.render_pass,
+			.framebuffer       = vulkan_context.framebuffers[swapchain_image_index],
+			.renderArea.offset = {0, 0},
+			.renderArea.extent = vulkan_context.swapchain_image_extent,
+			.clearValueCount   = ARRAY_COUNT(clear_values),
+			.pClearValues      = clear_values,
+		};
+		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		VkViewport viewport = {
+			.x        = 0.0f,
+			.y        = 0.0f,
+			.width    = (f32)vulkan_context.swapchain_image_extent.width,
+			.height   = (f32)vulkan_context.swapchain_image_extent.height,
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f,
+		};
+		vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+
+		VkRect2D scissor = {
+			.offset = {0, 0},
+			.extent = {vulkan_context.swapchain_image_extent.width, vulkan_context.swapchain_image_extent.height},
+		};
+		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.textured_static);
+		vkCmdBindVertexBuffers(command_buffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, vertex_buffers, offsets);
+		vkCmdBindVertexBuffers(command_buffer, VULKAN_INSTANCE_BUFFER_BIND_ID, 1, &vulkan_context.gpu_buffer, &(VkDeviceSize){vulkan_context.buffer_offsets.instance_memory_segment});
+		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
+		// @TODO: Bind these all at the same time?
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.uniform[swapchain_image_index], 0, NULL);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_MATERIAL_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.materials, 0, NULL);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_SAMPLER_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.sampler, 0, NULL);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_TEXTURE_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.texture, 0, NULL);
+		for (u32 i = 0; i < visible_mesh_count; i++) {
+			u32 mesh_index = visible_meshes[i];
+			u32 total_mesh_index_count = 0;
+			for (u32 j = 0; j < meshes[mesh_index].submesh_count; j++) {
+				u32 offset_inside_dynamic_uniform_buffer = i * vulkan_context.sizes.scene.aligned_dynamic_ubo;
+				vkCmdBindDescriptorSets(command_buffer,
+				                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+				                        vulkan_context.pipeline_layout,
+				                        SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET,
+				                        1,
+				                        &vulkan_context.descriptor_sets.scene.dynamic_uniform[swapchain_image_index],
+				                        1,
+				                        &offset_inside_dynamic_uniform_buffer);
+				vkCmdDrawIndexed(command_buffer, meshes[mesh_index].submesh_index_counts[j], 1, total_mesh_index_count + meshes[mesh_index].first_index, meshes[mesh_index].vertex_offset, i);
+				total_mesh_index_count += meshes[mesh_index].submesh_index_counts[j];
+			}
+		}
+
+		for (u32 i = 0; i < render_context->debug_render_object_count; i++) {
+			V4 push_constant = render_context->debug_render_objects[i].color;
+			vkCmdPushConstants(command_buffer, vulkan_context.pipeline_layouts.flat_color, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(V4), (void *)&push_constant);
+			vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.flat_color);
+			VkDeviceSize offsetss[] = {VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE)};
+			vkCmdBindVertexBuffers(command_buffer, 0, 1, &vulkan_context.staging_buffer, offsetss);
+			vkCmdBindIndexBuffer(command_buffer, vulkan_context.staging_buffer, VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE), VK_INDEX_TYPE_UINT32);
+			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.flat_color, FLAT_COLOR_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.flat_color.uniform, 0, NULL);
+			vkCmdDrawIndexed(command_buffer, render_context->debug_render_objects[i].index_count, 1, render_context->debug_render_objects[i].first_index, render_context->debug_render_objects[i].vertex_offset, 0);
+			//vkCmdDraw(command_buffer, render_context->debug_render_objects[i].vertex_count, 1, total_vertex_count, 0);
+		}
+
+		vkCmdEndRenderPass(command_buffer);
+	}
+
+	VK_CHECK(vkEndCommandBuffer(command_buffer));
+}
+
+void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u32 visible_mesh_count, Render_Context *render_context) {
+	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], 1, UINT64_MAX);
+	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
+	u32 swapchain_image_index = 0;
+	VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &swapchain_image_index));
+
+	// Update instance data.
+	{
+		// @TODO: Transfer all of this data at one time.
+		// @TODO: Only update what needs to be updated.
+		// ????? WRONG
+		u32 offset_inside_instance_memory_segment = 0;
+		for (u32 i = 0; i < visible_mesh_count; i++) {
+			Instance_Data instance_data = {
+				.material_id = visible_meshes[i],
+			};
+			stage_vulkan_data(&instance_data, sizeof(instance_data));
+			transfer_staged_vulkan_data(vulkan_context.buffer_offsets.instance_memory_segment + offset_inside_instance_memory_segment);
+			offset_inside_instance_memory_segment += sizeof(Instance_Data);
+		}
+	}
+	update_vulkan_uniforms(render_context->scene_projection, camera, meshes, visible_meshes, visible_mesh_count, swapchain_image_index);
+	build_vulkan_command_buffer(meshes, visible_meshes, visible_mesh_count, render_context, swapchain_image_index);
 
 	VkSemaphore wait_semaphores[] = {vulkan_context.image_available_semaphores[vulkan_context.currentFrame]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -2172,12 +2578,12 @@ void render(Game_State *game_state) {
 
 	VkSubmitInfo submit_info = {
 		.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount   = 1,
+		.waitSemaphoreCount   = ARRAY_COUNT(wait_semaphores),
 		.pWaitSemaphores      = wait_semaphores,
 		.pWaitDstStageMask    = wait_stages,
 		.commandBufferCount   = 1,
 		.pCommandBuffers      = &vulkan_context.command_buffers[swapchain_image_index],
-		.signalSemaphoreCount = 1,
+		.signalSemaphoreCount = ARRAY_COUNT(signal_semaphores),
 		.pSignalSemaphores    = signal_semaphores,
 	};
 	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, vulkan_context.inFlightFences[vulkan_context.currentFrame]));
@@ -2185,15 +2591,20 @@ void render(Game_State *game_state) {
 	VkSwapchainKHR swapchains[] = {vulkan_context.swapchain};
 	VkPresentInfoKHR present_info = {
 		.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = 1,
+		.waitSemaphoreCount = ARRAY_COUNT(signal_semaphores),
 		.pWaitSemaphores    = signal_semaphores,
-		.swapchainCount     = 1,
+		.swapchainCount     = ARRAY_COUNT(swapchains),
 		.pSwapchains        = swapchains,
 		.pImageIndices      = &swapchain_image_index,
 	};
 	VK_CHECK(vkQueuePresentKHR(vulkan_context.present_queue, &present_info));
 
 	vulkan_context.currentFrame = (vulkan_context.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+	vulkan_context.debug_vertex_memory_bytes_used = 0;
+	vulkan_context.debug_index_memory_bytes_used = 0;
+	vulkan_context.debug_vertex_count = 0;
+	vulkan_context.debug_index_count = 0;
 }
 
 void cleanup_renderer() {
@@ -2241,7 +2652,8 @@ void cleanup_renderer() {
 	//vkFreeMemory(vulkan_context.device, vulkan_context.vertex_buffer_memory, NULL);
 
 	//vkDestroyBuffer(vulkan_context.device, vulkan_context.index_buffer, NULL);
-	//vkFreeMemory(vulkan_context.device, vulkan_context.index_buffer_memory, NULL);
+	vkFreeMemory(vulkan_context.device, vulkan_context.gpu_memory, NULL);
+	vkFreeMemory(vulkan_context.device, vulkan_context.shared_memory, NULL);
 
 	vkDestroyCommandPool(vulkan_context.device, vulkan_context.command_pool, NULL);
 
@@ -2254,3 +2666,16 @@ void cleanup_renderer() {
 
 	vkDestroyInstance(vulkan_context.instance, NULL); // On X11, the Vulkan instance must be destroyed after the display resources are destroyed.
 }
+
+u32 swapchain_image_width() {
+	return vulkan_context.swapchain_image_extent.width;
+}
+
+u32 swapchain_image_height() {
+	return vulkan_context.swapchain_image_extent.height;
+}
+
+u32 vulkan_debug_buffer_offset() {
+	return 0;
+}
+

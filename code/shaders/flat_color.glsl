@@ -2,14 +2,12 @@
 
 #ifdef VERTEX_SHADER
 
-layout(binding = 0, set = 0) uniform uniform_buffer_object {
+layout(std140, set = 0, binding = 0) uniform UBO {
 	vec4 color;
 	layout(row_major) mat4 model_view_projection;
 } ubo;
 
 layout (location = 0) in vec3 vertex_position;
-
-//layout (location = 0) out vec4 fragment_color;
 
 void main() {
 	//fragment_color = ubo.color;
@@ -21,8 +19,7 @@ void main() {
 
 #else
 
-//layout(location = 0) in vec4 fragment_color;
-layout(push_constant) uniform PER_OBJECT {
+layout(push_constant) uniform Push_Constants {
 	vec4 fragment_color;
 } push_constants;
 

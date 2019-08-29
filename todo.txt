@@ -86,6 +86,10 @@ hotload materials
 
 hotload meshes
 
+move all raw asset loading code and includes to debug only
+
+make sure game compiles without libc functions
+
 DONE #############################################################################################################################
 get rid of library.c
 

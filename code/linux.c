@@ -452,7 +452,6 @@ File_Offset get_file_length(File_Handle file_handle) {
 	if (fstat(file_handle, &stat) == 0) {
 		return (File_Offset)stat.st_size;
 	}
-
 	return FILE_OFFSET_ERROR; 
 }
 
@@ -465,17 +464,18 @@ File_Offset seek_file(File_Handle file_handle, File_Offset offset, File_Seek_Rel
 }
 
 typedef struct {
-	DIR *dir;
+	DIR           *dir;
 	struct dirent *dirent;
-	char *filename;
-	u8 is_directory;
+	char          *filename;
+	u8             is_directory;
 } Directory_Iteration;
 
+// @TODO: Get rid of strcmp.
 u8 iterate_through_all_files_in_directory(const char *path, Directory_Iteration *context) {
 	if (!context->dir) { // First read.
 		context->dir = opendir(path);
 		if (!context->dir) {
-			log_print(MAJOR_ERROR_LOG, "Failed to open animation directory %s: %s\n", path, strerror(errno));
+			log_print(MAJOR_ERROR_LOG, "Failed to open directory %s: %s\n", path, strerror(errno));
 			return 0;
 		}
 	}

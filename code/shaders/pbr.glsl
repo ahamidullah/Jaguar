@@ -16,7 +16,7 @@ layout (location = 1) in vec3 vertex_color; // @TODO: Get rid of vertex_color.
 layout (location = 2) in vec2 vertex_uv;
 layout (location = 3) in vec3 vertex_normal;
 layout (location = 4) in vec3 vertex_tangent;
-layout (location = 5) in uint material_id;
+layout (location = 5) in uint instance_material_id;
 
 layout(location = 0) out vec3 world_space_position;
 layout(location = 1) out vec4 shadow_map_fragment_clip_space_position;
@@ -37,7 +37,7 @@ void main() {
 	light_direction = TBN * directional_light_direction;//vec3(dynamic_ubo.model_to_world_space * vec4(vertex_position, 0.0));
 	//light_direction = directional_light_direction;//vec3(dynamic_ubo.model_to_world_space * vec4(vertex_position, 0.0));
 
-	fragment_material_id = material_id;
+	fragment_material_id = instance_material_id;
 	camera_position = TBN * ubo.camera_position;
 	world_space_position = TBN * vec3(dynamic_ubo.model_to_world_space * vec4(vertex_position, 0.0));
 	//lll = directional_light_direction;

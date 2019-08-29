@@ -2,6 +2,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h>
 
+#include "generated/vulkan.h"
+
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
 // @TODO: Some kind of memory protection for the GPU buffer!
 // @TODO: Better texture descriptor set update scheme.
@@ -133,8 +135,8 @@ enum {
 	SHADOW_MAP_UNIFORM_DESCRIPTOR_SET = 0,
 	SHADOW_MAP_DESCRIPTOR_SET_TYPE_COUNT,
 
-	FLAT_COLOR_UNIFORM_DESCRIPTOR_SET = 0,
-	FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT,
+	//FLAT_COLOR_UNIFORM_DESCRIPTOR_SET = 0,
+	//FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT,
 };
 
 struct Vulkan_Context {
@@ -277,10 +279,10 @@ typedef struct {
 	V3 camera_position;
 } Scene_UBO;
 
-typedef struct {
-	V4 color;
-	M4 model_view_projection;
-} Flat_Color_UBO;
+//typedef struct {
+	//V4 color;
+	//M4 model_view_projection;
+//} Flat_Color_UBO;
 
 // @TODO: Fix name.
 #define TEST_INSTANCES 5
@@ -1979,7 +1981,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 				.bindingCount = ARRAY_COUNT(bindings),
 				.pBindings    = bindings,
 			};
-			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UNIFORM_DESCRIPTOR_SET]));
+			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UBO_DESCRIPTOR_SET_NUMBER]));
 		}
 	}
 
@@ -2176,7 +2178,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.shadow_map[SHADOW_MAP_UNIFORM_DESCRIPTOR_SET];
 
 		sets[set_count++]       = &vulkan_context.descriptor_sets.flat_color.uniform;
-		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UNIFORM_DESCRIPTOR_SET];
+		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UBO_DESCRIPTOR_SET_NUMBER];
 
 		sets[set_count++]       = &vulkan_context.descriptor_sets.scene.materials;
 		layouts[layout_count++] = vulkan_context.descriptor_set_layouts.scene[SCENE_MATERIAL_DESCRIPTOR_SET];
@@ -2537,7 +2539,7 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 			VkDeviceSize offsetss[] = {VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE)};
 			vkCmdBindVertexBuffers(command_buffer, 0, 1, &vulkan_context.staging_buffer, offsetss);
 			vkCmdBindIndexBuffer(command_buffer, vulkan_context.staging_buffer, VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET + (vulkan_context.currentFrame * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE), VK_INDEX_TYPE_UINT32);
-			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.flat_color, FLAT_COLOR_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.flat_color.uniform, 0, NULL);
+			vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layouts.flat_color, FLAT_COLOR_UBO_DESCRIPTOR_SET_NUMBER, 1, &vulkan_context.descriptor_sets.flat_color.uniform, 0, NULL);
 			vkCmdDrawIndexed(command_buffer, render_context->debug_render_objects[i].index_count, 1, render_context->debug_render_objects[i].first_index, render_context->debug_render_objects[i].vertex_offset, 0);
 			//vkCmdDraw(command_buffer, render_context->debug_render_objects[i].vertex_count, 1, total_vertex_count, 0);
 		}

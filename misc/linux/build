@@ -1,0 +1,2 @@
+#!/bin/bash
+/usr/bin/time --format='Build time: %es.' build.sh

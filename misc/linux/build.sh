@@ -41,7 +41,10 @@ fi
 "$VULKAN_SDK_PATH"/bin/glslangValidator -V shaders/flat_color.glsl -DFRAGMENT_SHADER -S frag -o $BUILD_DIRECTORY/flat_color_fragment.spirv
 
 gcc $COMPILER_FLAGS preprocessor/preprocessor.c $LINKER_FLAGS -o $BUILD_DIRECTORY/preprocessor
+pushd . >& /dev/null
+cd $PROJECT_DIRECTORY
 $BUILD_DIRECTORY/preprocessor
+popd >& /dev/null
 
 gcc $COMPILER_FLAGS $PROJECT_NAME.c $LINKER_FLAGS -o $BUILD_DIRECTORY/$PROJECT_NAME
 

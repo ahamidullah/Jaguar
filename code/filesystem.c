@@ -12,7 +12,8 @@ String_Result read_entire_file(const char *path, Memory_Arena *arena) {
 	return (String_Result){string_buffer, file_length};
 }
 
-char *get_directory(const char *path, Memory_Arena *arena) {
+// get_directory_from_path returns all but the last component of the path.
+char *get_directory_from_path(const char *path, Memory_Arena *arena) {
 	const char *slash = find_last_occurrence_of_character(path, '/');
 	if (slash == NULL) {
 		return "";
@@ -37,7 +38,8 @@ char *get_filename_from_path(const char *path, Memory_Arena *arena) {
 	return result;
 }
 
-char *join_paths(const char *a, const char *b, Memory_Arena *arena) {
+// join_filepaths concatenates two strings and inserts a '/' between them.
+char *join_filepaths(const char *a, const char *b, Memory_Arena *arena) {
 	size_t a_length = string_length(a);
 	size_t b_length = string_length(b);
 	char *result = allocate_array(arena, char, a_length + b_length + 2);

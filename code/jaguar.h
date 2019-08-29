@@ -46,6 +46,11 @@ typedef enum {
 void log_print_actual(Log_Type , const char *file, int line, const char *func, const char *format, ...);
 void _abort_actual(const char *file, int line, const char *func, const char *fmt, ...);
 
+typedef struct {
+	char *data;
+	u32   length;
+} String;
+
 ////////////////////////////////////////
 //
 // Math

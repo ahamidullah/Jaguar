@@ -39,7 +39,7 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 	const char *model_name = get_filename_from_path(model_directory, arena);
 
 	const char *fbx_filename = join_strings(model_name, ".fbx", arena);
-	const struct aiScene* assimp_scene = aiImportFile(join_paths(model_directory, fbx_filename, arena), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
+	const struct aiScene* assimp_scene = aiImportFile(join_filepaths(model_directory, fbx_filename, arena), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
 	}
@@ -168,11 +168,11 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
 		Material *material = &mesh->materials[i];
-		material->albedo_map = load_texture(join_paths(model_directory, "albedo.png", arena));
-		material->normal_map = load_texture(join_paths(model_directory, "normal.png", arena));
-		material->roughness_map = load_texture(join_paths(model_directory, "roughness.png", arena));
-		material->metallic_map = load_texture(join_paths(model_directory, "metallic.png", arena));
-		material->ambient_occlusion_map = load_texture(join_paths(model_directory, "ambient_occlusion.png", arena));
+		material->albedo_map = load_texture(join_filepaths(model_directory, "albedo.png", arena));
+		material->normal_map = load_texture(join_filepaths(model_directory, "normal.png", arena));
+		material->roughness_map = load_texture(join_filepaths(model_directory, "roughness.png", arena));
+		material->metallic_map = load_texture(join_filepaths(model_directory, "metallic.png", arena));
+		material->ambient_occlusion_map = load_texture(join_filepaths(model_directory, "ambient_occlusion.png", arena));
 #if 0
 			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {

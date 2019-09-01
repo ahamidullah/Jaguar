@@ -47,7 +47,7 @@ void application_entry() {
 	initialize_assets(&game_state);
 	initialize_input(&game_state);
 	initialize_camera(&game_state.camera, (V3){2, 2, 2}, (V3){1, 1, 1}, 0.4f, DEGREES_TO_RADIANS(90.0f));
-	initialize_renderer(&game_state.camera, &game_state.frame_arena);
+	initialize_renderer(&game_state.camera, &game_state.permanent_arena, &game_state.frame_arena);
 	initialize_entities(&game_state.entities, &game_state.assets, &game_state.frame_arena);
 	clear_memory_arena(&game_state.frame_arena);
 

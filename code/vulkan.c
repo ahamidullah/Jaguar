@@ -18,6 +18,16 @@
 // @TODO: Dedicated transfer queue.
 // @TODO: Experiment with HOST_CACHED memory?
 // @TODO: Keep memory mapped persistently.
+// @TODO: Use a single allocation and sub-allocations for image memory.
+// @TODO: Different memory management system for shared allocations.
+//        Main vertex, index, image = dynamic allocator, device memory
+//        Uniforms = fixed size with offsets, device memory
+//        Staging = stack allocator, shared memory, per-stage lifetime
+//        Per-frame memory (debug/gui vertices/indices/uvs) = stack allocator, shared memory, per-frame lifetime
+//        (Pool of blocks for shared memory)
+// @TODO: GPU memory defragmenting.
+// @TODO: Debug clear freed memory?
+// @TODO: Debug memory protection?
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -31,6 +41,8 @@
 #define SHADOW_MAP_DEPTH_FORMAT     VK_FORMAT_D16_UNORM
 #define SHADOW_MAP_COLOR_FORMAT     VK_FORMAT_R8G8B8A8_UNORM
 #define SHADOW_MAP_FILTER           VK_FILTER_LINEAR
+
+#define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
 
 // GPU Memory
 #define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE   MEGABYTE(50)
@@ -139,55 +151,97 @@ enum {
 	//FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT,
 };
 
+#define VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK 512
+
+struct Vulkan_Memory_Block;
+
+typedef struct Vulkan_Memory_Allocation {
+	struct Vulkan_Memory_Block *block;
+	u32                         size;
+	void                       *mapped_pointer;
+	VkBuffer                    buffer;
+	u32                         offset;
+} Vulkan_Memory_Allocation;
+
+typedef struct Vulkan_Memory_Block {
+	VkDeviceMemory              device_memory;
+	VkBuffer                    buffer;
+	u32                         frontier;
+	u32                         freed_allocation_count;
+	u32                         freed_allocation_sizes[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32                         freed_allocation_offsets[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32                         active_allocation_count;
+	Vulkan_Memory_Allocation    active_allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	void                       *mapped_pointer;
+	struct Vulkan_Memory_Block *next;
+} Vulkan_Memory_Block;
+
+typedef struct {
+	Vulkan_Memory_Block *base_block;
+	Vulkan_Memory_Block *active_block;
+	VkMemoryRequirements memory_requirements;
+	VkBufferUsageFlags buffer_usage;
+	VkMemoryPropertyFlags memory_properties;
+} Vulkan_Dynamic_Memory_Allocator;
+
 struct Vulkan_Context {
-	VkDebugUtilsMessengerEXT debug_messenger;
-	VkInstance               instance;
-	VkPhysicalDevice         physical_device;
-	VkDevice                 device;
-	VkSurfaceKHR             surface;
-	VkSurfaceFormatKHR       surface_format;
-	VkPresentModeKHR         present_mode;
-	u32                      graphics_queue_family;
-	u32                      present_queue_family;
-	VkQueue                  graphics_queue;
-	VkQueue                  present_queue;
-	VkSwapchainKHR           swapchain;
-	VkExtent2D               swapchain_image_extent;
-	u32                      num_swapchain_images;
-	VkImageView              swapchain_image_views[3];
-	VkFramebuffer            framebuffers[3];
-	VkRenderPass             render_pass;
-	VkPipelineLayout         pipeline_layout;
-	VkDescriptorPool         descriptor_pool;
-	VkCommandPool            command_pool;
-	VkCommandBuffer          command_buffers[3];
-	VkSemaphore              image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore              render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
-	VkFence                  inFlightFences[MAX_FRAMES_IN_FLIGHT];
-	u32                      currentFrame;
-	GPU_Textures             textures;
-	VkSampler                textureSampler;
-	VkImage                  depthImage;
-	VkDeviceMemory           depthImageMemory;
-	VkImageView              depthImageView;
-	VkDeviceMemory           shared_memory;
-	VkDeviceMemory           gpu_memory;
-	VkDeviceMemory           image_memory;
-	u32                      image_memory_bytes_used;
-	u32                      vertex_memory_bytes_used;
-	u32                      index_memory_bytes_used;
-	u32                      staging_memory_bytes_used;
-	u32                      debug_vertex_memory_bytes_used; // @TODO: Frame?
-	u32                      debug_index_memory_bytes_used; // @TODO: Frame?
-	u32                      vertex_count;
-	u32                      index_count;
-	u32                      debug_vertex_count; // @TODO: Frame?
-	u32                      debug_index_count; // @TODO: Frame?
-	VkBuffer                 gpu_buffer;
-	VkBuffer                 staging_buffer;
-	Shaders                  shaders[SHADER_COUNT];
-	VkDeviceSize             minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
-	VkDeviceSize             maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
+	VkDebugUtilsMessengerEXT  debug_messenger;
+	VkInstance                instance;
+	VkPhysicalDevice          physical_device;
+	VkDevice                  device;
+	VkSurfaceKHR              surface;
+	VkSurfaceFormatKHR        surface_format;
+	VkPresentModeKHR          present_mode;
+	u32                       graphics_queue_family;
+	u32                       present_queue_family;
+	VkQueue                   graphics_queue;
+	VkQueue                   present_queue;
+	VkSwapchainKHR            swapchain;
+	VkExtent2D                swapchain_image_extent;
+	u32                       num_swapchain_images;
+	VkImageView               swapchain_image_views[3];
+	VkFramebuffer             framebuffers[3];
+	VkRenderPass              render_pass;
+	VkPipelineLayout          pipeline_layout;
+	VkDescriptorPool          descriptor_pool;
+	VkCommandPool             command_pool;
+	VkCommandBuffer           command_buffers[3];
+	VkSemaphore               image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore               render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkFence                   inFlightFences[MAX_FRAMES_IN_FLIGHT];
+	u32                       currentFrame;
+	GPU_Textures              textures;
+	VkSampler                 textureSampler;
+	VkImage                   depthImage;
+	VkDeviceMemory            depthImageMemory;
+	VkImageView               depthImageView;
+	VkDeviceMemory            shared_memory;
+	VkDeviceMemory            gpu_memory;
+	Vulkan_Dynamic_Memory_Allocator _gpu_memory;
+	Vulkan_Dynamic_Memory_Allocator _shared_memory;
+	//Vulkan_Memory_Block      *base_gpu_memory_block;
+	//Vulkan_Memory_Block      *base_shared_memory_block;
+	//Vulkan_Memory_Block      *active_gpu_memory_block;
+	//Vulkan_Memory_Block      *active_shared_memory_block;
+	//Vulkan_Memory_Block      *vertex_memory_blocks;
+	Vulkan_Memory_Block      *index_memory_blocks;
+	VkDeviceMemory            image_memory;
+	u32                       image_memory_bytes_used;
+	u32                       vertex_memory_bytes_used;
+	u32                       index_memory_bytes_used;
+	u32                       staging_memory_bytes_used;
+	u32                       debug_vertex_memory_bytes_used; // @TODO: Frame?
+	u32                       debug_index_memory_bytes_used; // @TODO: Frame?
+	u32                       vertex_count;
+	u32                       index_count;
+	u32                       debug_vertex_count; // @TODO: Frame?
+	u32                       debug_index_count; // @TODO: Frame?
+	VkBuffer                  gpu_buffer;
+	VkBuffer                  staging_buffer;
+	Shaders                   shaders[SHADER_COUNT];
+	VkDeviceSize              minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
+	VkDeviceSize              maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
+	Memory_Arena             *arena;
 
 	struct {
 		// @TODO: Move vertex, index, uniform starts/frontiers into here.
@@ -305,8 +359,8 @@ Shadow_Map_UBO shadow_map_ubo;
 
 #define VK_CHECK(x)\
 	do {\
-		VkResult result = (x);\
-		if (result != VK_SUCCESS) _abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(result));\
+		VkResult _result = (x);\
+		if (_result != VK_SUCCESS) _abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(_result));\
 	} while (0)
 
 #define VK_EXPORTED_FUNCTION(name)\
@@ -448,6 +502,229 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
     return 0;
 }
 
+////////////////////////////////////////
+//
+// Memory
+//
+
+u8 allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags desired_memory_properties) {
+	VkMemoryAllocateInfo memory_allocate_info = {
+		.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memory_requirements.size,
+	};
+	VkPhysicalDeviceMemoryProperties memory_properties;
+	vkGetPhysicalDeviceMemoryProperties(vulkan_context.physical_device, &memory_properties);
+	s32 selected_memory_type_index = -1;
+	for (u32 i = 0; i < memory_properties.memoryTypeCount; i++) {
+		if ((memory_requirements.memoryTypeBits & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & desired_memory_properties) == desired_memory_properties) {
+			selected_memory_type_index = i;
+			break;
+		}
+	}
+	if (selected_memory_type_index < 0) {
+		_abort("Failed to find suitable GPU memory type");
+	}
+	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
+	VkResult result = vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory);
+	if (result != VK_SUCCESS) {
+		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+			return 0;
+		}
+		VK_CHECK(result);
+	}
+	return 1;
+}
+
+u8 allocate_vulkan_memory_block(Vulkan_Dynamic_Memory_Allocator *allocator) { ///Vulkan_Memory_Block *block, VkBufferUsageFlags buffer_usage, VkMemoryPropertyFlags desired_memory_properties) {
+	Vulkan_Memory_Block *new_block = allocate_struct(vulkan_context.arena, Vulkan_Memory_Block);
+	VkBufferCreateInfo buffer_create_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = VULKAN_MEMORY_BLOCK_SIZE,
+		.usage = allocator->buffer_usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+	};
+	VK_CHECK(vkCreateBuffer(vulkan_context.device, &buffer_create_info, NULL, &new_block->buffer));
+	if (allocator->base_block) {
+		allocator->active_block->next = new_block;
+		allocator->active_block = new_block;
+	} else {
+		allocator->base_block = new_block;
+		allocator->active_block = allocator->base_block;
+		vkGetBufferMemoryRequirements(vulkan_context.device, new_block->buffer, &allocator->memory_requirements);
+	}
+	if (!allocate_vulkan_memory(&new_block->device_memory, allocator->memory_requirements, allocator->memory_properties)) {
+		return 0;
+	}
+	VK_CHECK(vkBindBufferMemory(vulkan_context.device, new_block->buffer, new_block->device_memory, 0));
+	if (allocator->memory_properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+		VK_CHECK(vkMapMemory(vulkan_context.device, new_block->device_memory, 0, VK_WHOLE_SIZE, 0, &new_block->mapped_pointer));
+	} else {
+		new_block->mapped_pointer = NULL;
+	}
+	new_block->frontier = 0;
+	new_block->freed_allocation_count = 0;
+	new_block->active_allocation_count = 0;
+	new_block->next = NULL;
+	return 1;
+}
+
+u8 initialize_vulkan_dynamic_memory_allocator(Vulkan_Dynamic_Memory_Allocator *allocator, VkBufferUsageFlags buffer_usage, VkMemoryPropertyFlags memory_properties) {
+	allocator->buffer_usage = buffer_usage;
+	allocator->memory_properties = memory_properties;
+	return allocate_vulkan_memory_block(allocator);
+}
+
+/*
+u32 try_to_allocate_vulkan_memory_blocks(u32 size) {
+	assert(size < VULKAN_MEMORY_CHUNK_SIZE);
+	u32 required_block_count = divide_and_round_up(size, VULKAN_MEMORY_BLOCK_SIZE);
+}
+
+u32 try_to_allocate_vulkan_gpu_memory_chunks(u32 count) {
+	if (!vulkan_context.base_gpu_memory_chunk) {
+		vulkan_context.base_gpu_memory_chunk = allocate_struct(vulkan_context.arena, Vulkan_Memory_Chunk);
+		vulkan_context.active_gpu_memory_chunk = vulkan_context.base_gpu_memory_chunk;
+	}
+	return try_to_allocate_vulkan_memory_chunk(&vulkan_context.active_gpu_memory_chunk, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+}
+
+u32 try_to_allocate_vulkan_shared_memory_chunk(u32 count) {
+	if (!vulkan_context.base_shared_memory_chunk) {
+		vulkan_context.base_shared_memory_chunk = allocate_struct(vulkan_context.arena, Vulkan_Memory_Chunk);
+		vulkan_context.active_shared_memory_chunk = vulkan_context.base_shared_memory_chunk;
+	}
+	return try_to_allocate_vulkan_memory_chunk(&vulkan_context.active_shared_memory_chunk, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+*/
+
+Vulkan_Memory_Allocation *acquire_vulkan_memory(Vulkan_Dynamic_Memory_Allocator *allocator, u32 size) {
+	for (u32 i = 0; i < allocator->active_block->freed_allocation_count; i++) {
+		// @TODO
+	}
+	Vulkan_Memory_Allocation *new_allocation = &allocator->active_block->active_allocations[allocator->active_block->active_allocation_count];
+	*new_allocation = (Vulkan_Memory_Allocation){
+		.block          = allocator->active_block,
+		.size           = size,
+		.mapped_pointer = allocator->active_block->mapped_pointer,
+		.buffer         = allocator->active_block->buffer,
+		.offset         = allocator->active_block->frontier,
+	};
+	allocator->active_block->active_allocation_count++;
+	ASSERT(allocator->active_block->active_allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
+	allocator->active_block->frontier += size;
+	ASSERT(allocator->active_block->frontier < VULKAN_MEMORY_BLOCK_SIZE);
+	return new_allocation;
+}
+
+void release_vulkan_memory(Vulkan_Memory_Allocation *memory) {
+	memory->block->freed_allocation_sizes[memory->block->freed_allocation_count] = memory->size;
+	memory->block->freed_allocation_offsets[memory->block->freed_allocation_count] = memory->offset;
+	memory->block->freed_allocation_count++;
+	memory->block->active_allocation_count--;
+	if (memory->block->active_allocation_count > 0) {
+		*memory = memory->block->active_allocations[memory->block->active_allocation_count];
+	}
+}
+
+Vulkan_Memory_Allocation *_stage_vulkan_data(void *data, u32 size) {
+	Vulkan_Memory_Allocation *memory = acquire_vulkan_memory(&vulkan_context._shared_memory, size);
+	if (!memory) {
+		assert(0); // @TODO
+	}
+	memcpy((char *)memory->mapped_pointer + memory->offset, data, size);
+	return memory;
+}
+
+Vulkan_Memory_Allocation *upload_vulkan_data(Vulkan_Memory_Allocation *staged_memory) {
+	Vulkan_Memory_Allocation *gpu_memory = acquire_vulkan_memory(&vulkan_context._gpu_memory, staged_memory->size);
+	if (!gpu_memory) {
+		ASSERT(0); // @TODO
+	}
+	// @TODO: Try to create a reusable command buffer for copying?
+    VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+		.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandPool        = vulkan_context.command_pool,
+		.commandBufferCount = 1,
+    };
+    VkCommandBuffer command_buffer;
+    vkAllocateCommandBuffers(vulkan_context.device, &command_buffer_allocate_info, &command_buffer);
+	VkCommandBufferBeginInfo command_buffer_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+	VkBufferCopy copy_region = {
+		.srcOffset = staged_memory->offset,
+		.dstOffset = gpu_memory->offset,
+		.size      = staged_memory->size,
+	};
+	vkCmdCopyBuffer(command_buffer, staged_memory->buffer, gpu_memory->buffer, 1, &copy_region);
+	vkEndCommandBuffer(command_buffer);
+	VkSubmitInfo submit_info = {
+		.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers    = &command_buffer,
+	};
+	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
+	VK_CHECK(vkQueueWaitIdle(vulkan_context.graphics_queue)); // @TODO: Use a fence?
+	vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
+	vulkan_context.staging_memory_bytes_used = 0;
+	return gpu_memory;
+}
+
+Vulkan_Memory_Allocation *stage_and_upload_data(void *data, u32 size) {
+	Vulkan_Memory_Allocation *staging_memory = _stage_vulkan_data(data, size);
+	Vulkan_Memory_Allocation *gpu_memory = upload_vulkan_data(staging_memory);
+	release_vulkan_memory(staging_memory);
+	return gpu_memory;
+
+	//vulkan_context.staging_memory_bytes_used += size;
+	//upload_vulkan_data(data, size, staging_memory);
+	/*
+	if (vulkan_context.active_gpu_memory_chunk.used_block_count + required_block_count > VULKAN_MEMORY_BLOCKS_PER_CHUNK) {
+		u32 number_of_unused_blocks_in_chunk = VULKAN_MEMORY_BLOCKS_PER_CHUNK - vulkan_context.active_gpu_memory_chunk.used_block_count;
+		u32 required_chunk_count = divide_and_round_up(required_block_count - number_of_unused_blocks_in_chunk, VULKAN_MEMORY_CHUNK_SIZE);
+		for (u32 i = 0; i < 
+	}
+	*/
+}
+
+void stage_vulkan_data(void *data, u32 size);
+void transfer_staged_vulkan_data(u32 offset);
+
+GPU_Mesh upload_mesh_to_gpu(Mesh_Asset *mesh, u32 *vertex_offset, u32 *first_index) {
+	// @TODO: Multithreaded asset load?
+
+	return (GPU_Mesh){
+		.vertices = stage_and_upload_data(mesh->vertices, mesh->vertex_count * sizeof(Vertex)),
+		.indices = stage_and_upload_data(mesh->indices, mesh->index_count * sizeof(u32)),
+	};
+
+	//u32 total_vertex_count = 0;
+	//for (s32 i = 0; i < model->mesh_count; i++) {
+		//stage_and_upload_vertex_data(mesh->vertices, mesh->vertex_count * sizeof(Vertex));
+		//stage_vulkan_data(mesh->vertices, mesh->vertex_count * sizeof(Vertex));
+		//total_vertex_count += model->meshes[i].vertex_count;
+	//}
+	//transfer_staged_vulkan_data(VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + vulkan_context.vertex_memory_bytes_used);
+	//vulkan_context.vertex_memory_bytes_used += mesh->vertex_count * sizeof(Vertex);
+	//ASSERT(vulkan_context.vertex_memory_bytes_used < VULKAN_VERTEX_MEMORY_SEGMENT_SIZE);
+	//*vertex_offset = vulkan_context.vertex_count;
+	//vulkan_context.vertex_count += mesh->vertex_count;
+
+	//*first_index = vulkan_context.index_count;
+	//u32 total_index_count = 0;
+	//for (s32 i = 0; i < model->mesh_count; i++) {
+		//stage_vulkan_data(mesh->indices, mesh->index_count * sizeof(u32));
+		//total_index_count += model->meshes[i].index_count;
+	//}
+	//transfer_staged_vulkan_data(VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + vulkan_context.index_memory_bytes_used);
+	//vulkan_context.index_memory_bytes_used += mesh->index_count * sizeof(u32);
+	//ASSERT(vulkan_context.index_memory_bytes_used < VULKAN_INDEX_MEMORY_SEGMENT_SIZE);
+	//vulkan_context.index_count += mesh->index_count;
+}
+
 VkCommandBuffer beginSingleTimeCommands() {
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -542,27 +819,6 @@ void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayo
 	);
 
 	endSingleTimeCommands(commandBuffer);
-}
-
-void allocate_vulkan_memory(VkDeviceMemory *memory, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags desired_memory_properties) {
-	VkMemoryAllocateInfo memory_allocate_info = {
-		.sType          = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = memory_requirements.size,
-	};
-	VkPhysicalDeviceMemoryProperties memory_properties;
-	vkGetPhysicalDeviceMemoryProperties(vulkan_context.physical_device, &memory_properties);
-	s32 selected_memory_type_index = -1;
-	for (u32 i = 0; i < memory_properties.memoryTypeCount; i++) {
-		if ((memory_requirements.memoryTypeBits & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & desired_memory_properties) == desired_memory_properties) {
-			selected_memory_type_index = i;
-			break;
-		}
-	}
-	if (selected_memory_type_index < 0) {
-		_abort("Failed to find suitable GPU memory type");
-	}
-	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
-	VK_CHECK(vkAllocateMemory(vulkan_context.device, &memory_allocate_info, NULL, memory));
 }
 
 void create_vulkan_display_objects(Memory_Arena *arena) {
@@ -1500,32 +1756,6 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 	return id;
 }
 
-void transfer_model_data_to_gpu(Mesh_Asset *mesh, u32 *vertex_offset, u32 *first_index) {
-	// @TODO: Multithreaded asset load?
-
-	//u32 total_vertex_count = 0;
-	//for (s32 i = 0; i < model->mesh_count; i++) {
-		stage_vulkan_data(mesh->vertices, mesh->vertex_count * sizeof(Vertex));
-		//total_vertex_count += model->meshes[i].vertex_count;
-	//}
-	transfer_staged_vulkan_data(VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + vulkan_context.vertex_memory_bytes_used);
-	vulkan_context.vertex_memory_bytes_used += mesh->vertex_count * sizeof(Vertex);
-	ASSERT(vulkan_context.vertex_memory_bytes_used < VULKAN_VERTEX_MEMORY_SEGMENT_SIZE);
-	*vertex_offset = vulkan_context.vertex_count;
-	vulkan_context.vertex_count += mesh->vertex_count;
-
-	*first_index = vulkan_context.index_count;
-	//u32 total_index_count = 0;
-	//for (s32 i = 0; i < model->mesh_count; i++) {
-		stage_vulkan_data(mesh->indices, mesh->index_count * sizeof(u32));
-		//total_index_count += model->meshes[i].index_count;
-	//}
-	transfer_staged_vulkan_data(VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + vulkan_context.index_memory_bytes_used);
-	vulkan_context.index_memory_bytes_used += mesh->index_count * sizeof(u32);
-	ASSERT(vulkan_context.index_memory_bytes_used < VULKAN_INDEX_MEMORY_SEGMENT_SIZE);
-	vulkan_context.index_count += mesh->index_count;
-}
-
 Texture_ID load_texture(const char *path);
 
 typedef struct {
@@ -1535,7 +1765,7 @@ typedef struct {
 } Create_Shader_Request;
 
 // @TODO: Use a temporary arena.
-void initialize_vulkan(Memory_Arena *arena) {
+void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_arena) {
 	s32 required_device_extension_count = 0;
 	const char *required_device_extensions[10]; // @TEMP
 	required_device_extensions[required_device_extension_count++] = "VK_KHR_swapchain";
@@ -1683,7 +1913,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 
 			u32 num_available_device_extensions = 0;
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, NULL));
-			VkExtensionProperties *available_device_extensions = allocate_array(arena, VkExtensionProperties, num_available_device_extensions);
+			VkExtensionProperties *available_device_extensions = allocate_array(temporary_arena, VkExtensionProperties, num_available_device_extensions);
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &num_available_device_extensions, available_device_extensions));
 			u8 missing_required_device_extension = 0;
 			for (s32 j = 0; j < required_device_extension_count; j++) {
@@ -1715,7 +1945,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			}
 
 			// Select the best swap chain settings.
-			VkSurfaceFormatKHR *available_surface_formats = allocate_array(arena, VkSurfaceFormatKHR, num_available_surface_formats);
+			VkSurfaceFormatKHR *available_surface_formats = allocate_array(temporary_arena, VkSurfaceFormatKHR, num_available_surface_formats);
 			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_devices[i], vulkan_context.surface, &num_available_surface_formats, available_surface_formats));
 			VkSurfaceFormatKHR surface_format = available_surface_formats[0];
 			if (num_available_surface_formats == 1 && available_surface_formats[0].format == VK_FORMAT_UNDEFINED) {
@@ -1736,7 +1966,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			// VK_PRESENT_MODE_FIFO_RELAXED_KHR is for applications that generally render a new presentable image every refresh cycle, but are occasionally late.
 			// In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be immediately displayed, even though that may mean some tearing.
 			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-			VkPresentModeKHR *available_present_modes = allocate_array(arena, VkPresentModeKHR, num_available_present_modes);
+			VkPresentModeKHR *available_present_modes = allocate_array(temporary_arena, VkPresentModeKHR, num_available_present_modes);
 			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_devices[i], vulkan_context.surface, &num_available_present_modes, available_present_modes));
 			for (s32 j = 0; j < num_available_present_modes; j++) {
 				if (available_present_modes[j] == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -1747,7 +1977,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 
 			u32 num_queue_families = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, NULL);
-			VkQueueFamilyProperties *queue_families = allocate_array(arena, VkQueueFamilyProperties, num_queue_families);
+			VkQueueFamilyProperties *queue_families = allocate_array(temporary_arena, VkQueueFamilyProperties, num_queue_families);
 			vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &num_queue_families, queue_families);
 			// @TODO: Search for an transfer exclusive queue VK_QUEUE_TRANSFER_BIT.
 			u32 graphics_queue_family = UINT32_MAX;
@@ -1799,7 +2029,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			num_unique_queue_families = 2;
 		}
 		f32 queue_priority = 1.0f;
-		VkDeviceQueueCreateInfo *device_queue_create_info = allocate_array(arena, VkDeviceQueueCreateInfo, num_unique_queue_families); // @TODO: Get rid of me.
+		VkDeviceQueueCreateInfo *device_queue_create_info = allocate_array(temporary_arena, VkDeviceQueueCreateInfo, num_unique_queue_families); // @TODO: Get rid of me.
 		device_queue_create_info[0] = (VkDeviceQueueCreateInfo){
 			.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
 			.queueFamilyIndex = vulkan_context.graphics_queue_family,
@@ -2012,7 +2242,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 
 			for (s32 j = 0; j < requests[i].shader_module_count; j++) {
 				// @TODO: Subarena.
-				String_Result spirv = read_entire_file(requests[i].paths[j], arena);
+				String_Result spirv = read_entire_file(requests[i].paths[j], temporary_arena);
 				ASSERT(spirv.data);
 
 				VkShaderModuleCreateInfo shader_module_create_info = {};
@@ -2033,7 +2263,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 		}
 	}
 
-	create_vulkan_display_objects(arena);
+	create_vulkan_display_objects(temporary_arena);
 
 	// GPU vertex/index/uniform resources.
 	{
@@ -2164,8 +2394,8 @@ void initialize_vulkan(Memory_Arena *arena) {
 	// Descriptor set.
 	{
 		const u32 max_set_count = 100; // @TODO: Real value?
-		VkDescriptorSet **sets = allocate_array(arena, VkDescriptorSet *, max_set_count);
-		VkDescriptorSetLayout *layouts = allocate_array(arena, VkDescriptorSetLayout, max_set_count);
+		VkDescriptorSet **sets = allocate_array(temporary_arena, VkDescriptorSet *, max_set_count);
+		VkDescriptorSetLayout *layouts = allocate_array(temporary_arena, VkDescriptorSetLayout, max_set_count);
 		u32 set_count = 0, layout_count = 0;
 
 		sets[set_count++]       = &vulkan_context.descriptor_sets.scene.sampler;
@@ -2198,7 +2428,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			//}
 		}
 		ASSERT(set_count < max_set_count);
-		VkDescriptorSet *results = allocate_array(arena, VkDescriptorSet, set_count);
+		VkDescriptorSet *results = allocate_array(temporary_arena, VkDescriptorSet, set_count);
 		VkDescriptorSetAllocateInfo allocate_info = {
 			.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 			.descriptorPool     = vulkan_context.descriptor_pool,
@@ -2210,7 +2440,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			*sets[j] = results[j];
 		}
 
-		VkWriteDescriptorSet *descriptor_writes = allocate_array(arena, VkWriteDescriptorSet, max_set_count);
+		VkWriteDescriptorSet *descriptor_writes = allocate_array(temporary_arena, VkWriteDescriptorSet, max_set_count);
 		u32 write_count = 0;
 		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -2276,7 +2506,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 			},
 		};
 		// @TODO: Clean this up!
-		VkDescriptorBufferInfo *buffer_infos = allocate_array(arena, VkDescriptorBufferInfo, 2 * vulkan_context.num_swapchain_images);
+		VkDescriptorBufferInfo *buffer_infos = allocate_array(temporary_arena, VkDescriptorBufferInfo, 2 * vulkan_context.num_swapchain_images);
 		u32 buffer_info_count = 0;
 		for (s32 i = 0; i < vulkan_context.num_swapchain_images; i++) {
 			buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
@@ -2316,7 +2546,7 @@ void initialize_vulkan(Memory_Arena *arena) {
 	// Set the default texture.
 	{
 		load_texture("data/default_texture.png");
-		VkDescriptorImageInfo *image_infos = allocate_array(arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURES);
+		VkDescriptorImageInfo *image_infos = allocate_array(temporary_arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURES);
 		for (u32 i = 0; i < VULKAN_MAX_TEXTURES; i++) {
 			image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			image_infos[i].imageView   = vulkan_context.textures.image_views[0]; // @TODO: Use some kind of special "invalid" texture.
@@ -2333,6 +2563,18 @@ void initialize_vulkan(Memory_Arena *arena) {
 			.pImageInfo      = image_infos,
 		};
 		vkUpdateDescriptorSets(vulkan_context.device, 1, &textures_descriptor_write, 0, NULL);
+	}
+
+	vulkan_context.arena = permanent_arena;
+
+	// @TODO: Try to allocate more than one chunk at startup? Would need to back off if it failed.
+	//vulkan_context.base_gpu_memory_chunk = allocate_struct(permanent_arena, Vulkan_Memory_Chunk);
+	if (!initialize_vulkan_dynamic_memory_allocator(&vulkan_context._gpu_memory, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+		_abort("Failed to initialize Vulkan GPU memory allocator: not enough memory for base memory block");
+	}
+	//vulkan_context.base_shared_memory_chunk = allocate_struct(permanent_arena, Vulkan_Memory_Chunk);
+	if (!initialize_vulkan_dynamic_memory_allocator(&vulkan_context._shared_memory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+		_abort("Failed to initialize Vulkan shared memory allocator: not enough memory for base memory block");
 	}
 
 	// @TODO: Try to use a seperate queue family for transfer operations so that it can be parallelized.
@@ -2506,9 +2748,8 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 		};
 		vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 		vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipelines.textured_static);
-		vkCmdBindVertexBuffers(command_buffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, vertex_buffers, offsets);
+		// @TODO: Combine these vkCmdBindVertexBuffers calls.
 		vkCmdBindVertexBuffers(command_buffer, VULKAN_INSTANCE_BUFFER_BIND_ID, 1, &vulkan_context.gpu_buffer, &(VkDeviceSize){vulkan_context.buffer_offsets.instance_memory_segment});
-		vkCmdBindIndexBuffer(command_buffer, vulkan_context.gpu_buffer, VULKAN_INDEX_MEMORY_SEGMENT_OFFSET, VK_INDEX_TYPE_UINT32);
 		// @TODO: Bind these all at the same time?
 		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_UNIFORM_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.uniform[swapchain_image_index], 0, NULL);
 		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_MATERIAL_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.materials, 0, NULL);
@@ -2516,6 +2757,8 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_context.pipeline_layout, SCENE_TEXTURE_DESCRIPTOR_SET, 1, &vulkan_context.descriptor_sets.scene.texture, 0, NULL);
 		for (u32 i = 0; i < visible_mesh_count; i++) {
 			u32 mesh_index = visible_meshes[i];
+			vkCmdBindVertexBuffers(command_buffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &meshes[mesh_index].gpu_mesh.vertices->buffer, (u64 *)&meshes[mesh_index].gpu_mesh.vertices->offset);
+			vkCmdBindIndexBuffer(command_buffer, meshes[mesh_index].gpu_mesh.indices->buffer, meshes[mesh_index].gpu_mesh.indices->offset, VK_INDEX_TYPE_UINT32);
 			u32 total_mesh_index_count = 0;
 			for (u32 j = 0; j < meshes[mesh_index].submesh_count; j++) {
 				u32 offset_inside_dynamic_uniform_buffer = i * vulkan_context.sizes.scene.aligned_dynamic_ubo;
@@ -2527,7 +2770,8 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 				                        &vulkan_context.descriptor_sets.scene.dynamic_uniform[swapchain_image_index],
 				                        1,
 				                        &offset_inside_dynamic_uniform_buffer);
-				vkCmdDrawIndexed(command_buffer, meshes[mesh_index].submesh_index_counts[j], 1, total_mesh_index_count + meshes[mesh_index].first_index, meshes[mesh_index].vertex_offset, i);
+				//vkCmdDrawIndexed(command_buffer, meshes[mesh_index].submesh_index_counts[j], 1, total_mesh_index_count + meshes[mesh_index].first_index, meshes[mesh_index].vertex_offset, i);
+				vkCmdDrawIndexed(command_buffer, meshes[mesh_index].submesh_index_counts[j], 1, total_mesh_index_count, 0, i);
 				total_mesh_index_count += meshes[mesh_index].submesh_index_counts[j];
 			}
 		}

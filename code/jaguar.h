@@ -265,6 +265,8 @@ typedef struct {
 // Mesh
 //
 
+#include "vulkan.h"
+
 typedef struct {
 	V3 position;
 	V3 color;
@@ -297,9 +299,12 @@ typedef struct {
 	u32 first_index;
 
 	Bounding_Sphere bounding_sphere;
+
+	GPU_Mesh gpu_mesh;
 } Mesh_Asset;
 
 typedef struct {
+	GPU_Mesh gpu_mesh;
 	Transform transform;
 	Material *submesh_material_ids;
 	u32 submesh_count;

@@ -212,7 +212,7 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 #endif
 	}
 
-	transfer_model_data_to_gpu(mesh, &mesh->vertex_offset, &mesh->first_index);
+	mesh->gpu_mesh = upload_mesh_to_gpu(mesh, &mesh->vertex_offset, &mesh->first_index);
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.

@@ -91,12 +91,13 @@ V3 random_color() {
 	return (V3){r, g, b};
 }
 
-void initialize_renderer(Camera *camera, Memory_Arena *arena) {
-	initialize_vulkan(arena);
+void initialize_renderer(Camera *camera, Memory_Arena *permanent_arena, Memory_Arena *temporary_arena) {
+	initialize_vulkan(permanent_arena, temporary_arena);
 	render_context.aspect_ratio = swapchain_image_width() / (f32)swapchain_image_height();
 	render_context.focal_length = 0.1f;
 	render_context.scene_projection = perspective_projection(camera->field_of_view, render_context.aspect_ratio, render_context.focal_length, 100.0f); // @TODO
 
+	// @TODO: Handpick these colors so they're visually distinct.
 	for (u32 i = 0; i < RANDOM_COLOR_TABLE_LENGTH; i++) {
 		random_color_table[i] = random_color();
 	}

@@ -35,6 +35,8 @@ console
 
 add basic sound
 
+redo memory arenas - get rid of the concept of blocks and chunks -- just bump a pointer
+
 Reduce matrix multiplies?
 
 parralax occulusion mapping

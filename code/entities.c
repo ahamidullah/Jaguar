@@ -22,6 +22,7 @@ void set_entity_model(Game_Entities *entities, Entity_ID entity_id, Game_Assets 
 		.vertex_offset        = asset->vertex_offset,
 		.first_index          = asset->first_index,
 		.submesh_index_counts = asset->submesh_index_counts,
+		.gpu_mesh             = asset->gpu_mesh,
 	};
 	entities->meshes.bounding_spheres[entity_id] = (Bounding_Sphere){
 		.center = add_v3(asset->bounding_sphere.center, transform.translation),

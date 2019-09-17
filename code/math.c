@@ -221,19 +221,11 @@ V3 add_v3(V3 a, V3 b) {
 	};
 }
 
-V3 multiply_f32_v3(f32 s, V3 v) {
+V3 scale_v3(f32 s, V3 v) {
 	return (V3){
 		s * v.x,
 		s * v.y,
 		s * v.z,
-	};
-}
-
-V3 divide_v3_f32(V3 v, f32 s) {
-	return (V3){
-		v.x / s,
-		v.y / s,
-		v.z / s,
 	};
 }
 
@@ -251,7 +243,7 @@ M4 multiply_m4(M4 a, M4 b) {
 }
 
 V3 normalize(V3 v) {
-	V3 result = divide_v3_f32(v, vector_length(v));
+	V3 result = scale_v3(1 / vector_length(v), v);
 	ASSERT(not_nan(result));
 	return result;
 }

@@ -1,51 +1,52 @@
 String_Result read_entire_file(const char *path, Memory_Arena *arena) {
-	File_Handle file_handle = open_file(path, O_RDONLY); // @TODO: Platform generic flags.
-	if (file_handle == FILE_HANDLE_ERROR) {
+	File file = platform_open_file(path, O_RDONLY); // @TODO: Platform generic flags.
+	if (file == FILE_HANDLE_ERROR) {
 		return (String_Result){NULL, 0};
 	}
-	File_Offset file_length = get_file_length(file_handle);
+	File_Offset file_length = platform_get_file_length(file);
 	char *string_buffer = allocate_array(arena, char, (file_length+1));
-	u8 read_result = read_file(file_handle, file_length, string_buffer);
+	u8 read_result = platform_read_file(file, file_length, string_buffer);
 	if (!read_result) {
 		return (String_Result){NULL, 0};
 	}
 	return (String_Result){string_buffer, file_length};
 }
 
-// get_directory_from_path returns all but the last component of the path.
-char *get_directory_from_path(const char *path, Memory_Arena *arena) {
-	const char *slash = find_last_occurrence_of_character(path, '/');
-	if (slash == NULL) {
-		return "";
+// Returns all but the last component of the path.
+String get_directory_from_path(String path, Memory_Arena *arena) {
+	u32 slash_index = find_last_occurrence_of_character(path, '/');
+	if (slash_index == U32_MAX) {
+		return S("");
 	}
-	size_t directory_length = slash - path;
-	char *directory = allocate_array(arena, char, directory_length + 1);
-	copy_string_range(directory, path, directory_length);
-	directory[directory_length] = '\0';
+	u32 directory_length = slash_index;
+	String directory = create_string(directory_length, arena);
+	append_string_range(&directory, path, 0, directory_length);
+	directory.data[directory_length] = '\0';
 	return directory;
 }
 
-// get_filename_from_path returns the last component of the path.
-char *get_filename_from_path(const char *path, Memory_Arena *arena) {
-	size_t path_length = string_length(path);
-	const char *slash = find_last_occurrence_of_character(path, '/');
-	if (slash == NULL) {
-		return "";
+// Returns the last component of the path.
+String get_filename_from_path(String path, Memory_Arena *arena) {
+	u32 slash_index = find_last_occurrence_of_character(path, '/');
+	if (slash_index == U32_MAX) {
+		return S("");
 	}
-	size_t result_length = (path + path_length) - (slash + 1) + 1;
-	char *result = allocate_array(arena, char, result_length);
-	copy_string(result, slash + 1);
-	return result;
+	u32 filename_length = path.length - (slash_index + 1);
+	String filename = create_string(filename_length, arena);
+	append_string_range(&filename, path, slash_index + 1, filename_length);
+	filename.data[filename_length] = '\0';
+	debug_print("GET %s %s %u %u %u\n", path.data, filename.data, path.length, filename.length, slash_index);
+	return filename;
 }
 
-// join_filepaths concatenates two strings and inserts a '/' between them.
-char *join_filepaths(const char *a, const char *b, Memory_Arena *arena) {
-	size_t a_length = string_length(a);
-	size_t b_length = string_length(b);
-	char *result = allocate_array(arena, char, a_length + b_length + 2);
-	copy_string(result, a);
-	result[a_length] = '/';
-	copy_string(result + a_length + 1, b);
-	result[a_length + b_length + 1] = '\0';
+// Concatenates two strings and inserts a '/' between them.
+String join_filepaths(String a, String b, Memory_Arena *arena) {
+	debug_print("%s %s %u %u\n", a.data, b.data, a.length, b.length);
+	u32 result_length = a.length + b.length + 1;
+	String result = create_string(result_length, arena);
+	append_string(&result, a);
+	append_string(&result, S("/"));
+	append_string(&result, b);
+	result.data[result_length - 1];
 	return result;
 }

@@ -41,9 +41,9 @@ void update_camera(Camera *camera, Game_Input *input) {
 	}
 
 	if (key_down(A_KEY, input)) {
-		camera->position = subtract_v3(camera->position, multiply_f32_v3(camera->speed, camera->side));
+		camera->position = subtract_v3(camera->position, scale_v3(camera->speed, camera->side));
 	} else if (key_down(D_KEY, input)) {
-		camera->position = add_v3(camera->position, multiply_f32_v3(camera->speed, camera->side));
+		camera->position = add_v3(camera->position, scale_v3(camera->speed, camera->side));
 	}
 
 	if (key_down(Q_KEY, input)) {
@@ -53,9 +53,9 @@ void update_camera(Camera *camera, Game_Input *input) {
 	}
 
 	if (key_down(W_KEY, input)) {
-		camera->position = add_v3(camera->position, multiply_f32_v3(camera->speed, camera->forward));
+		camera->position = add_v3(camera->position, scale_v3(camera->speed, camera->forward));
 	} else if (key_down(S_KEY, input)) {
-		camera->position = subtract_v3(camera->position, multiply_f32_v3(camera->speed, camera->forward));
+		camera->position = subtract_v3(camera->position, scale_v3(camera->speed, camera->forward));
 	}
 
 	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);

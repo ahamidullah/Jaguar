@@ -9,25 +9,8 @@ Chunk_Header *memory_chunks;
 Chunk_Header *active_memory_chunk;
 Block_Header *memory_block_free_head;
 
-void *get_platform_memory(size_t len) {
-	void *memory = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (memory == (void *)-1)
-		_abort("failed to get memory from platform.");
-	return memory;
-}
-
-void free_platform_memory(void *m, size_t len) {
-	s32 ret = munmap(m, len);
-	if (ret == -1)
-		_abort("failed to free memory.");
-}
-
-size_t get_platform_page_size() {
-	return sysconf(_SC_PAGESIZE);
-}
-
 Chunk_Header *make_memory_chunk() {
-	Chunk_Header *chunk = (Chunk_Header *)get_platform_memory(CHUNK_DATA_PLUS_HEADER_SIZE);
+	Chunk_Header *chunk = (Chunk_Header *)platform_allocate_memory(CHUNK_DATA_PLUS_HEADER_SIZE);
 	chunk->base_block = (u8 *)chunk;
 	chunk->block_frontier = (u8 *)chunk->base_block + sizeof(Chunk_Header);
 	chunk->next_chunk = NULL;
@@ -82,7 +65,7 @@ void free_memory_arena(Memory_Arena *arena) {
 }
 
 void initialize_memory(Game_State *game_state) {
-	platform_page_size = get_platform_page_size();
+	platform_page_size = platform_get_page_size();
 	memory_chunks = make_memory_chunk();
 	active_memory_chunk = memory_chunks;
 	memory_block_free_head = NULL;

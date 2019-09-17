@@ -6,11 +6,11 @@ typedef struct Performance_Timer {
 } Performance_Timer;
 
 void start_performance_timer(Performance_Timer *timer) {
-	timer->start = get_current_platform_time();
+	timer->start = platform_get_current_time();
 }
 
 void print_performance_timer(Performance_Timer *timer) {
-	Platform_Time end = get_current_platform_time();
+	Platform_Time end = platform_get_current_time();
 	timer->running_sum = timer->running_sum + platform_time_difference(timer->start, end);
 	debug_print("%s: %gams %gms\n", timer->name, timer->running_sum / timer->iteration, platform_time_difference(timer->start, end));
 	timer->iteration++;

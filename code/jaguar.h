@@ -1,24 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// Shared Declarations
-//
-
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int8_t   s8;
-typedef int16_t  s16;
-typedef int32_t  s32;
-typedef int64_t  s64;
-typedef float    f32;
-typedef double   f64;
-
-typedef enum {
-	GAME_RUNNING,
-	GAME_PAUSED,
-	GAME_EXITING,
-} Game_Execution_Status;
+void debug_print(const char *format, ...);
 
 typedef enum {
 	STANDARD_LOG,
@@ -27,33 +7,46 @@ typedef enum {
 	CRITICAL_ERROR_LOG,
 } Log_Type;
 
-#define INVALID_CODE_PATH assert(!"Invalid code path.");
-
-#define MILLISECONDS(t) (t * 1000)
-
-#define KILOBYTE(b) ((size_t)b*1024)
-#define MEGABYTE(b) (KILOBYTE(b)*1024)
-#define GIGABYTE(b) (MEGABYTE(b)*1024)
-
-#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
-
 #define SCANCODE_COUNT 256
 #define MOUSE_BUTTON_COUNT 3
-
-#define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
-#define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
 
 void log_print_actual(Log_Type , const char *file, int line, const char *func, const char *format, ...);
 void _abort_actual(const char *file, int line, const char *func, const char *fmt, ...);
 
 typedef struct {
 	char *data;
-	u32   length;
+	u32 length;
+	u32 capacity;
+	u8 is_constant;
 } String;
+
+typedef struct {
+	char *contents;
+	u8 error;
+} Read_File_Result;
+
+typedef struct {
+	u32 texture_id;
+	u32 width;
+	u32 height;
+	s32 x_bearing;
+	s32 y_bearing;
+	s64 advance;
+} Glyph_Info;
+
+/*
+typedef struct Font {
+	Glyph_Info glyph_info[256];
+
+	s32 height;
+	s32 ascender;
+	s32 descender;
+};
+*/
 
 ////////////////////////////////////////
 //
-// Math
+// Math.
 //
 
 #define print_f32(f) print_f32_actual(#f, (f))
@@ -107,69 +100,6 @@ typedef struct {
 	*/
 	f32 x, y, z, w;
 } Quaternion;
-
-////////////////////////////////////////
-//
-// Input
-//
-
-typedef struct {
-	u8 *down;
-	u8 *pressed;
-	u8 *released;
-} IO_Buttons;
-
-typedef struct {
-	s32 wheel;
-	s32 x, y;
-	s32 delta_x, delta_y;
-	f32 raw_delta_x, raw_delta_y;
-	f32 sensitivity;
-	IO_Buttons buttons;
-} Mouse;
-
-typedef struct {
-	Mouse mouse;
-	IO_Buttons keyboard;
-} Game_Input;
-
-typedef struct {
-	M4 view_matrix;
-
-	V3 position;
-	V3 forward;
-	V3 side;
-	V3 up;
-
-	f32 field_of_view;
-	f32 yaw;
-	f32 pitch;
-	f32 speed;
-} Camera;
-
-typedef struct {
-	char *contents;
-	u8 error;
-} Read_File_Result;
-
-typedef struct {
-	u32 texture_id;
-	u32 width;
-	u32 height;
-	s32 x_bearing;
-	s32 y_bearing;
-	s64 advance;
-} Glyph_Info;
-
-/*
-typedef struct Font {
-	Glyph_Info glyph_info[256];
-
-	s32 height;
-	s32 ascender;
-	s32 descender;
-};
-*/
 
 ////////////////////////////////////////
 //
@@ -386,6 +316,20 @@ typedef struct {
 // Game Data
 //
 
+typedef struct {
+	M4 view_matrix;
+
+	V3 position;
+	V3 forward;
+	V3 side;
+	V3 up;
+
+	f32 field_of_view;
+	f32 yaw;
+	f32 pitch;
+	f32 speed;
+} Camera;
+
 #define MAX_DEBUG_RENDER_OBJECTS  500
 #define MAX_ENTITY_MESHES         1000
 #define MAX_LOADED_ASSET_COUNT    1000
@@ -463,10 +407,27 @@ typedef struct {
 } Game_Entities;
 
 typedef struct {
+	u32 frame_number;
+	Memory_Arena arena;
+} Game_Frame;
+
+THREAD_LOCAL struct {
+} thread_local_game_state;
+
+typedef struct {
+} Game_Jobs;
+
+typedef struct {
+} Game_Render_Context;
+
+typedef struct {
 	Game_Execution_Status execution_status;
 	Game_Input input;
 	Game_Assets assets;
 	Game_Entities entities;
+	Game_Jobs jobs;
+	Game_Frame frame;
+	Game_Render_Context render_context;
 
 	Camera camera;
 

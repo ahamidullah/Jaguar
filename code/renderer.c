@@ -58,7 +58,7 @@ void draw_wire_sphere(V3 center, f32 radius, V4 color) {
 void frustum_cull_meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
 	f32 half_near_plane_height = render_context.focal_length * tan(camera->field_of_view / 2.0f);
 	f32 half_near_plane_width = render_context.focal_length * tan(camera->field_of_view / 2.0f) * render_context.aspect_ratio;
-	V3 center_of_near_plane = multiply_f32_v3(render_context.focal_length, camera->forward);
+	V3 center_of_near_plane = scale_v3(render_context.focal_length, camera->forward);
 	enum {
 		RIGHT,
 		LEFT,
@@ -67,10 +67,10 @@ void frustum_cull_meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres,
 		FRUSTUM_PLANE_COUNT,
 	};
 	V3 frustum_plane_normals[] = {
-		[RIGHT]  = cross_product(normalize(add_v3(center_of_near_plane, multiply_f32_v3(half_near_plane_width, camera->side))), camera->up),
-		[LEFT]   = cross_product(camera->up, normalize(subtract_v3(center_of_near_plane, multiply_f32_v3(half_near_plane_width, camera->side)))),
-		[TOP]    = cross_product(camera->side, normalize(add_v3(center_of_near_plane, multiply_f32_v3(half_near_plane_height, camera->up)))),
-		[BOTTOM] = cross_product(normalize(subtract_v3(center_of_near_plane, multiply_f32_v3(half_near_plane_height, camera->up))), camera->side),
+		[RIGHT]  = cross_product(normalize(add_v3(center_of_near_plane, scale_v3(half_near_plane_width, camera->side))), camera->up),
+		[LEFT]   = cross_product(camera->up, normalize(subtract_v3(center_of_near_plane, scale_v3(half_near_plane_width, camera->side)))),
+		[TOP]    = cross_product(camera->side, normalize(add_v3(center_of_near_plane, scale_v3(half_near_plane_height, camera->up)))),
+		[BOTTOM] = cross_product(normalize(subtract_v3(center_of_near_plane, scale_v3(half_near_plane_height, camera->up))), camera->side),
 	};
 	for (u32 i = 0; i < mesh_bounding_sphere_count; i++) {
 		draw_wire_sphere(mesh_bounding_spheres[i].center, mesh_bounding_spheres[i].radius, v3_to_v4(random_color_table[i % RANDOM_COLOR_TABLE_LENGTH], 1.0f));

@@ -1,9 +1,3 @@
-#define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h>
-
-#include "generated/vulkan.h"
-
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
 // @TODO: Some kind of memory protection for the GPU buffer!
 // @TODO: Better texture descriptor set update scheme.
@@ -28,6 +22,25 @@
 // @TODO: GPU memory defragmenting.
 // @TODO: Debug clear freed memory?
 // @TODO: Debug memory protection?
+// @TODO: Read image memory directly into GPU accessable memory.
+
+#include "vulkan_generated.h"
+
+#define VK_EXPORTED_FUNCTION(name)\
+	PFN_##name name = NULL;
+#define VK_GLOBAL_FUNCTION(name)\
+	PFN_##name name = NULL;
+#define VK_INSTANCE_FUNCTION(name)\
+	PFN_##name name = NULL;
+#define VK_DEVICE_FUNCTION(name)\
+	PFN_##name name = NULL;
+
+#include "vulkan_functions.h"
+
+#undef VK_EXPORTED_FUNCTION
+#undef VK_GLOBAL_FUNCTION
+#undef VK_INSTANCE_FUNCTION
+#undef VK_DEVICE_FUNCTION
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -38,32 +51,33 @@
 #define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
 // Slope depth bias factor is applied depending on the polygon's slope.
 #define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
-#define SHADOW_MAP_DEPTH_FORMAT     VK_FORMAT_D16_UNORM
-#define SHADOW_MAP_COLOR_FORMAT     VK_FORMAT_R8G8B8A8_UNORM
-#define SHADOW_MAP_FILTER           VK_FILTER_LINEAR
+#define SHADOW_MAP_DEPTH_FORMAT VK_FORMAT_D16_UNORM
+#define SHADOW_MAP_COLOR_FORMAT VK_FORMAT_R8G8B8A8_UNORM
+#define SHADOW_MAP_FILTER VK_FILTER_LINEAR
 
 #define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
 
 // GPU Memory
-#define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE   MEGABYTE(50)
-#define VULKAN_INDEX_MEMORY_SEGMENT_SIZE    MEGABYTE(50)
-#define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE  MEGABYTE(50)
+#define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_INDEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE MEGABYTE(50)
-#define VULKAN_GPU_ALLOCATION_SIZE          (VULKAN_VERTEX_MEMORY_SEGMENT_SIZE + VULKAN_INDEX_MEMORY_SEGMENT_SIZE + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE + VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE)
+#define VULKAN_GPU_ALLOCATION_SIZE (VULKAN_VERTEX_MEMORY_SEGMENT_SIZE + VULKAN_INDEX_MEMORY_SEGMENT_SIZE + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE + VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE)
 
 // @TODO: Move per-frame uniforms to the shared memory segment?
 // Shared Memory
 #define VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
-#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE  MEGABYTE(50)
-#define VULKAN_STAGING_MEMORY_SEGMENT_SIZE      MEGABYTE(50)
-#define VULKAN_SHARED_ALLOCATION_SIZE           ((MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE) + (MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE) + VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
+#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_STAGING_MEMORY_SEGMENT_SIZE MEGABYTE(50)
+#define VULKAN_STAGING_MEMORY_SIZE MEGABYTE(50)
+#define VULKAN_SHARED_ALLOCATION_SIZE ((MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE) + (MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE) + VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
 
 // Image Memory
-#define VULKAN_IMAGE_ALLOCATION_SIZE  MEGABYTE(400)
+#define VULKAN_IMAGE_ALLOCATION_SIZE MEGABYTE(400)
 
-#define VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET   0
-#define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET    (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
-#define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET  (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
+#define VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET 0
+#define VULKAN_INDEX_MEMORY_SEGMENT_OFFSET (VULKAN_VERTEX_MEMORY_SEGMENT_OFFSET + VULKAN_VERTEX_MEMORY_SEGMENT_SIZE)
+#define VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET (VULKAN_INDEX_MEMORY_SEGMENT_OFFSET + VULKAN_INDEX_MEMORY_SEGMENT_SIZE)
 // ?
 #define VULKAN_INSTANCE_MEMORY_SEGMENT_OFFSET (VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE)
 #define VULKAN_STAGING_MEMORY_SEGMENT_OFFSET 0
@@ -157,22 +171,22 @@ struct Vulkan_Memory_Block;
 
 typedef struct Vulkan_Memory_Allocation {
 	struct Vulkan_Memory_Block *block;
-	u32                         size;
-	void                       *mapped_pointer;
-	VkBuffer                    buffer;
-	u32                         offset;
+	u32 size;
+	void *mapped_pointer;
+	VkBuffer buffer;
+	u32 offset;
 } Vulkan_Memory_Allocation;
 
 typedef struct Vulkan_Memory_Block {
-	VkDeviceMemory              device_memory;
-	VkBuffer                    buffer;
-	u32                         frontier;
-	u32                         freed_allocation_count;
-	u32                         freed_allocation_sizes[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
-	u32                         freed_allocation_offsets[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
-	u32                         active_allocation_count;
-	Vulkan_Memory_Allocation    active_allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
-	void                       *mapped_pointer;
+	VkDeviceMemory device_memory;
+	VkBuffer buffer;
+	u32 frontier;
+	u32 freed_allocation_count;
+	u32 freed_allocation_sizes[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32 freed_allocation_offsets[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32 active_allocation_count;
+	Vulkan_Memory_Allocation active_allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	void *mapped_pointer;
 	struct Vulkan_Memory_Block *next;
 } Vulkan_Memory_Block;
 
@@ -219,12 +233,8 @@ struct Vulkan_Context {
 	VkDeviceMemory            gpu_memory;
 	Vulkan_Dynamic_Memory_Allocator _gpu_memory;
 	Vulkan_Dynamic_Memory_Allocator _shared_memory;
-	//Vulkan_Memory_Block      *base_gpu_memory_block;
-	//Vulkan_Memory_Block      *base_shared_memory_block;
-	//Vulkan_Memory_Block      *active_gpu_memory_block;
-	//Vulkan_Memory_Block      *active_shared_memory_block;
-	//Vulkan_Memory_Block      *vertex_memory_blocks;
-	Vulkan_Memory_Block      *index_memory_blocks;
+	Vulkan_Memory_Allocation *_staging_memory;
+	u32 _staging_memory_bytes_used;
 	VkDeviceMemory            image_memory;
 	u32                       image_memory_bytes_used;
 	u32                       vertex_memory_bytes_used;
@@ -363,22 +373,6 @@ Shadow_Map_UBO shadow_map_ubo;
 		if (_result != VK_SUCCESS) _abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(_result));\
 	} while (0)
 
-#define VK_EXPORTED_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_GLOBAL_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_INSTANCE_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_DEVICE_FUNCTION(name)\
-	PFN_##name name = NULL;
-
-#include "vulkan_functions.h"
-
-#undef VK_EXPORTED_FUNCTION
-#undef VK_GLOBAL_FUNCTION
-#undef VK_INSTANCE_FUNCTION
-#undef VK_DEVICE_FUNCTION
-
 const char *vk_result_to_string(VkResult result) {
 	switch(result) {
 		case (VK_SUCCESS):
@@ -498,7 +492,7 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
 	};
 	}
 
-	log_print(log_type, "%s: %s: %s", severity_string, type_string, callback_data->pMessage);
+	log_print(log_type, "%s: %s: %s\n", severity_string, type_string, callback_data->pMessage);
     return 0;
 }
 
@@ -626,17 +620,19 @@ void release_vulkan_memory(Vulkan_Memory_Allocation *memory) {
 	}
 }
 
-Vulkan_Memory_Allocation *_stage_vulkan_data(void *data, u32 size) {
-	Vulkan_Memory_Allocation *memory = acquire_vulkan_memory(&vulkan_context._shared_memory, size);
-	if (!memory) {
-		assert(0); // @TODO
-	}
-	memcpy((char *)memory->mapped_pointer + memory->offset, data, size);
-	return memory;
+void _stage_vulkan_data(void *data, u32 size) {
+	//Vulkan_Memory_Allocation *memory = acquire_vulkan_memory(&vulkan_context._shared_memory, size);
+	//if (!memory) {
+		//assert(0); // @TODO
+	//}
+
+	memcpy((char *)vulkan_context._staging_memory->mapped_pointer + vulkan_context._staging_memory_bytes_used, data, size);
+	vulkan_context._staging_memory_bytes_used += size;
+	ASSERT(vulkan_context._staging_memory_bytes_used < VULKAN_STAGING_MEMORY_SIZE);
 }
 
-Vulkan_Memory_Allocation *upload_vulkan_data(Vulkan_Memory_Allocation *staged_memory) {
-	Vulkan_Memory_Allocation *gpu_memory = acquire_vulkan_memory(&vulkan_context._gpu_memory, staged_memory->size);
+Vulkan_Memory_Allocation *upload_staged_vulkan_data() {
+	Vulkan_Memory_Allocation *gpu_memory = acquire_vulkan_memory(&vulkan_context._gpu_memory, vulkan_context._staging_memory_bytes_used);
 	if (!gpu_memory) {
 		ASSERT(0); // @TODO
 	}
@@ -655,11 +651,11 @@ Vulkan_Memory_Allocation *upload_vulkan_data(Vulkan_Memory_Allocation *staged_me
 	};
 	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
 	VkBufferCopy copy_region = {
-		.srcOffset = staged_memory->offset,
+		.srcOffset = vulkan_context._staging_memory->offset,
 		.dstOffset = gpu_memory->offset,
-		.size      = staged_memory->size,
+		.size      = vulkan_context._staging_memory_bytes_used,
 	};
-	vkCmdCopyBuffer(command_buffer, staged_memory->buffer, gpu_memory->buffer, 1, &copy_region);
+	vkCmdCopyBuffer(command_buffer, vulkan_context._staging_memory->buffer, gpu_memory->buffer, 1, &copy_region);
 	vkEndCommandBuffer(command_buffer);
 	VkSubmitInfo submit_info = {
 		.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -669,14 +665,15 @@ Vulkan_Memory_Allocation *upload_vulkan_data(Vulkan_Memory_Allocation *staged_me
 	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
 	VK_CHECK(vkQueueWaitIdle(vulkan_context.graphics_queue)); // @TODO: Use a fence?
 	vkFreeCommandBuffers(vulkan_context.device, vulkan_context.command_pool, 1, &command_buffer);
+	vulkan_context._staging_memory_bytes_used = 0;
 	vulkan_context.staging_memory_bytes_used = 0;
 	return gpu_memory;
 }
 
 Vulkan_Memory_Allocation *stage_and_upload_data(void *data, u32 size) {
-	Vulkan_Memory_Allocation *staging_memory = _stage_vulkan_data(data, size);
-	Vulkan_Memory_Allocation *gpu_memory = upload_vulkan_data(staging_memory);
-	release_vulkan_memory(staging_memory);
+	_stage_vulkan_data(data, size);
+	Vulkan_Memory_Allocation *gpu_memory = upload_staged_vulkan_data();
+	//release_vulkan_memory(staging_memory);
 	return gpu_memory;
 
 	//vulkan_context.staging_memory_bytes_used += size;
@@ -1756,7 +1753,7 @@ Texture_ID load_vulkan_texture(u8 *pixels, s32 texture_width, s32 texture_height
 	return id;
 }
 
-Texture_ID load_texture(const char *path);
+Texture_ID load_texture(String path);
 
 typedef struct {
 	Shaders *shaders;
@@ -1777,25 +1774,22 @@ void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_ar
 	s32 required_instance_extension_count = 0;
 	const char *required_instance_extensions[10]; // @TEMP
 	required_instance_extensions[required_instance_extension_count++] = "VK_KHR_surface";
-	required_instance_extensions[required_instance_extension_count++] = "VK_KHR_xlib_surface";
+	required_instance_extensions[required_instance_extension_count++] = platform_get_required_vulkan_surface_instance_extension();
 	if (debug) {
 		required_instance_extensions[required_instance_extension_count++] = "VK_EXT_debug_utils";
 		required_instance_layers[required_instance_layer_count++]         = "VK_LAYER_KHRONOS_validation";
 	}
 
-	Library_Handle vulkan_library = open_shared_library("dependencies/vulkan/1.1.106.0/lib/libvulkan.so");
-
+	Shared_Library vulkan_library = platform_open_shared_library("dependencies/vulkan/1.1.106.0/lib/libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name)\
-	name = (PFN_##name)load_shared_library_function(vulkan_library, #name);\
+	name = (PFN_##name)platform_load_shared_library_function(vulkan_library, #name);\
 	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_GLOBAL_FUNCTION(name)\
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name);\
 	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
-
 #include "vulkan_functions.h"
-
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -1878,6 +1872,7 @@ void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_ar
 		VK_CHECK(vkCreateDebugUtilsMessengerEXT(vulkan_context.instance, &debug_create_info, NULL, &vulkan_context.debug_messenger));
 	}
 
+	/*
 	// Create surface.
 	{
 		// @TODO: Make this platform generic.
@@ -1888,6 +1883,8 @@ void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_ar
 		surface_create_info.window = linux_context.window;
 		VK_CHECK(vkCreateXlibSurfaceKHR(vulkan_context.instance, &surface_create_info, NULL, &vulkan_context.surface));
 	}
+	*/
+	platform_create_vulkan_surface(vulkan_context.instance, &vulkan_context.surface);
 
 	// Select physical device.
 	// @TODO: Rank physical device and select the best one?
@@ -2545,7 +2542,7 @@ void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_ar
 
 	// Set the default texture.
 	{
-		load_texture("data/default_texture.png");
+		load_texture(S("data/default_texture.png"));
 		VkDescriptorImageInfo *image_infos = allocate_array(temporary_arena, VkDescriptorImageInfo, VULKAN_MAX_TEXTURES);
 		for (u32 i = 0; i < VULKAN_MAX_TEXTURES; i++) {
 			image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2575,6 +2572,9 @@ void initialize_vulkan(Memory_Arena *permanent_arena, Memory_Arena *temporary_ar
 	//vulkan_context.base_shared_memory_chunk = allocate_struct(permanent_arena, Vulkan_Memory_Chunk);
 	if (!initialize_vulkan_dynamic_memory_allocator(&vulkan_context._shared_memory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
 		_abort("Failed to initialize Vulkan shared memory allocator: not enough memory for base memory block");
+	}
+	if (!(vulkan_context._staging_memory = acquire_vulkan_memory(&vulkan_context._shared_memory, VULKAN_STAGING_MEMORY_SIZE))) {
+		_abort("Failed to allocate Vulkan staging memory");
 	}
 
 	// @TODO: Try to use a seperate queue family for transfer operations so that it can be parallelized.
@@ -2722,21 +2722,21 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 	// Scene.
 	{
 		VkRenderPassBeginInfo render_pass_begin_info = {
-			.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-			.renderPass        = vulkan_context.render_pass,
-			.framebuffer       = vulkan_context.framebuffers[swapchain_image_index],
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = vulkan_context.render_pass,
+			.framebuffer = vulkan_context.framebuffers[swapchain_image_index],
 			.renderArea.offset = {0, 0},
 			.renderArea.extent = vulkan_context.swapchain_image_extent,
-			.clearValueCount   = ARRAY_COUNT(clear_values),
-			.pClearValues      = clear_values,
+			.clearValueCount = ARRAY_COUNT(clear_values),
+			.pClearValues = clear_values,
 		};
 		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
 		VkViewport viewport = {
-			.x        = 0.0f,
-			.y        = 0.0f,
-			.width    = (f32)vulkan_context.swapchain_image_extent.width,
-			.height   = (f32)vulkan_context.swapchain_image_extent.height,
+			.x = 0.0f,
+			.y = 0.0f,
+			.width = (f32)vulkan_context.swapchain_image_extent.width,
+			.height = (f32)vulkan_context.swapchain_image_extent.height,
 			.minDepth = 0.0f,
 			.maxDepth = 1.0f,
 		};
@@ -2908,7 +2908,7 @@ void cleanup_renderer() {
 	vkDestroyDevice(vulkan_context.device, NULL);
 	vkDestroySurfaceKHR(vulkan_context.instance, vulkan_context.surface, NULL);
 
-	cleanup_platform_display();
+	platform_cleanup_display();
 
 	vkDestroyInstance(vulkan_context.instance, NULL); // On X11, the Vulkan instance must be destroyed after the display resources are destroyed.
 }

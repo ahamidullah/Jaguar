@@ -6,10 +6,10 @@
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-Texture_ID load_texture(const char *path) {
+Texture_ID load_texture(String path) {
 	s32 texture_width, texture_height, texture_channels;
-	printf("%s\n", path);
-	u8 *pixels = stbi_load(path, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
+	printf("%s\n", path.data);
+	u8 *pixels = stbi_load(path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
 	assert(pixels);
 	Texture_ID id = load_vulkan_texture(pixels, texture_width, texture_height);
 	free(pixels);
@@ -27,19 +27,20 @@ struct {
 
 // @TODO: WRITE A BLENDER EXPORTER!!!!!!!!!!!!!!!!!!
 void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
-	const char *model_directory = NULL;
+	String model_directory = {};
 	for (u32 i = 0; i < ARRAY_COUNT(asset_id_to_filepath_map); i++) {
 		if (asset_id_to_filepath_map[i].asset_id == asset_id) {
-			model_directory = asset_id_to_filepath_map[i].filepath;
+			model_directory = S(asset_id_to_filepath_map[i].filepath);
 			break;
 		}
 	}
-	assert(model_directory);
+	ASSERT(model_directory.data);
 
-	const char *model_name = get_filename_from_path(model_directory, arena);
+	String model_name = get_filename_from_path(model_directory, arena);
 
-	const char *fbx_filename = join_strings(model_name, ".fbx", arena);
-	const struct aiScene* assimp_scene = aiImportFile(join_filepaths(model_directory, fbx_filename, arena), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
+	String fbx_filename = join_strings(model_name, S(".fbx"), arena);
+	String fbx_filepath = join_filepaths(model_directory, fbx_filename, arena);
+	const struct aiScene* assimp_scene = aiImportFile(fbx_filepath.data, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
 	}
@@ -168,11 +169,11 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
 		Material *material = &mesh->materials[i];
-		material->albedo_map = load_texture(join_filepaths(model_directory, "albedo.png", arena));
-		material->normal_map = load_texture(join_filepaths(model_directory, "normal.png", arena));
-		material->roughness_map = load_texture(join_filepaths(model_directory, "roughness.png", arena));
-		material->metallic_map = load_texture(join_filepaths(model_directory, "metallic.png", arena));
-		material->ambient_occlusion_map = load_texture(join_filepaths(model_directory, "ambient_occlusion.png", arena));
+		material->albedo_map = load_texture(join_filepaths(model_directory, S("albedo.png"), arena));
+		material->normal_map = load_texture(join_filepaths(model_directory, S("normal.png"), arena));
+		material->roughness_map = load_texture(join_filepaths(model_directory, S("roughness.png"), arena));
+		material->metallic_map = load_texture(join_filepaths(model_directory, S("metallic.png"), arena));
+		material->ambient_occlusion_map = load_texture(join_filepaths(model_directory, S("ambient_occlusion.png"), arena));
 #if 0
 			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {

@@ -10,7 +10,7 @@ Chunk_Header *active_memory_chunk;
 Block_Header *memory_block_free_head;
 
 Chunk_Header *make_memory_chunk() {
-	Chunk_Header *chunk = (Chunk_Header *)platform_allocate_memory(CHUNK_DATA_PLUS_HEADER_SIZE);
+	Chunk_Header *chunk = (Chunk_Header *)Platform_Allocate_Memory(CHUNK_DATA_PLUS_HEADER_SIZE);
 	chunk->base_block = (u8 *)chunk;
 	chunk->block_frontier = (u8 *)chunk->base_block + sizeof(Chunk_Header);
 	chunk->next_chunk = NULL;
@@ -46,7 +46,7 @@ Memory_Arena make_memory_arena() {
 	return arena;
 }
 
-void clear_memory_arena(Memory_Arena *arena) {
+void Clear_Memory_Arena(Memory_Arena *arena) {
 	arena->active_block = arena->base_block;
 	arena->active_block->bytes_used = 0;
 }
@@ -64,8 +64,8 @@ void free_memory_arena(Memory_Arena *arena) {
 	//ma->base = ma->active_block = NULL;
 }
 
-void initialize_memory(Game_State *game_state) {
-	platform_page_size = platform_get_page_size();
+void Initialize_Memory(Game_State *game_state) {
+	platform_page_size = Platform_Get_Page_Size();
 	memory_chunks = make_memory_chunk();
 	active_memory_chunk = memory_chunks;
 	memory_block_free_head = NULL;
@@ -89,7 +89,7 @@ void add_memory_arena_block(Memory_Arena *arena) {
 void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	void *result = (char *)arena->active_block + sizeof(Block_Header) + arena->active_block->bytes_used;
 	arena->active_block->bytes_used += size;
-	ASSERT(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
+	Assert(arena->active_block->bytes_used < BLOCK_DATA_SIZE);
 	return result;
 }
 
@@ -108,14 +108,20 @@ void move_memory(void *destination, void *source, size_t len) {
 	}
 }
 
-void copy_memory(void *destination, const void *source, size_t count) {
+// @TODO: Use non-caching intrinsics?
+#include <string.h>
+void Copy_Memory(const void *source, void *destination, size_t size) {
+	memcpy(destination, source, size);
+/*
 	const char *s = (const char *)source;
 	char *d = (char *)destination;
 	for (size_t i = 0; i < count; ++i) {
 		d[i] = s[i];
 	}
+*/
 }
 
+// @TODO: Use non-caching intrinsics?
 void set_memory(void *destination, char set_to, size_t count) {
 	char *d = (char *)destination;
 	for (size_t i = 0; i < count; ++i) {

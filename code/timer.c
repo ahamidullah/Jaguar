@@ -5,14 +5,18 @@ typedef struct Performance_Timer {
 	const char *name;
 } Performance_Timer;
 
-void start_performance_timer(Performance_Timer *timer) {
-	timer->start = platform_get_current_time();
+#define Start_Performance_Timer(timer_name) Performance_Timer timer_##timer_name = {.name = #timer_name, .start = platform_get_current_time(), .iteration = 1}
+
+#define Print_Performance_Timer(timer_name) Print_Performance_Timer_Actual(&timer_##timer_name)
+
+void _Start_Performance_Timer(Performance_Timer *timer) {
+	timer->start = Platform_Get_Current_Time();
 }
 
-void print_performance_timer(Performance_Timer *timer) {
-	Platform_Time end = platform_get_current_time();
-	timer->running_sum = timer->running_sum + platform_time_difference(timer->start, end);
-	debug_print("%s: %gams %gms\n", timer->name, timer->running_sum / timer->iteration, platform_time_difference(timer->start, end));
+void Print_Performance_Timer_Actual(Performance_Timer *timer) {
+	Platform_Time end = Platform_Get_Current_Time();
+	timer->running_sum = timer->running_sum + Platform_Time_Difference(timer->start, end);
+	debug_print("%s: %gms, avg %gms\n", timer->name, Platform_Time_Difference(timer->start, end), timer->running_sum / timer->iteration);
 	timer->iteration++;
 }
 

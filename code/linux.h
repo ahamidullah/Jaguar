@@ -1,5 +1,5 @@
-#define EXIT_FAILURE 1
-#define EXIT_SUCCESS 0
+#define PROCESS_EXIT_FAILURE 1
+#define PROCESS_EXIT_SUCCESS 0
 
 #define STDOUT 1
 #define STDIN 0
@@ -10,16 +10,18 @@
 typedef struct {
 	ucontext_t context;
 	jmp_buf jump_buffer;
-} Fiber;
+} Platform_Fiber;
 
-typedef s32 File;
-typedef u64 File_Offset;
+typedef s32 Platform_File_Handle;
+typedef u64 Platform_File_Offset;
 typedef struct timespec Platform_Time;
-typedef void * Shared_Library;
-typedef pthread_t Thread;
-typedef void *(*Thread_Procedure)(void *);
-typedef void (*Fiber_Procedure)(void *);
-typedef sem_t Semaphore;
+typedef void *Platform_Dynamic_Library_Handle;
+typedef void *Platform_Dynamic_Library_Function;
+typedef pthread_t Platform_Thread_Handle;
+typedef void *(*Platform_Thread_Procedure)(void *);
+typedef void (*Platform_Fiber_Procedure)(void *);
+typedef sem_t Platform_Semaphore;
+typedef pthread_mutex_t Platform_Mutex;
 
 typedef enum {
 	W_KEY = XK_w,
@@ -44,111 +46,109 @@ typedef enum {
 	LALT_KEY = XK_Alt_L,
 	RALT_KEY = XK_Alt_R,
 	ESCAPE_KEY = XK_Escape,
-} Key_Symbol;
+} Platform_Key_Symbol;
 
 typedef enum {
 	MOUSE_BUTTON_LEFT = 0,
 	MOUSE_BUTTON_MIDDLE,
 	MOUSE_BUTTON_RIGHT,
-} Mouse_Button;
+} Platform_Mouse_Button;
 
 typedef enum {
 	FILE_SEEK_START = SEEK_SET,
 	FILE_SEEK_CURRENT = SEEK_CUR,
 	FILE_SEEK_END = SEEK_END
-} File_Seek_Relative;
+} Platform_File_Seek_Relative;
 
-File FILE_HANDLE_ERROR = -1;
-File_Offset FILE_OFFSET_ERROR = (File_Offset)-1;
+typedef enum Platform_Open_File_Flags {
+	OPEN_FILE_READ_ONLY = O_RDONLY,
+} Platform_Open_File_Flags;
 
-#ifdef DEBUG
-#define ASSERT(x)\
-	do {\
-		if (!(x)) {\
-			log_print(CRITICAL_ERROR_LOG, "%s: %s: line %d: assertion failed '%s'\n", __FILE__, __func__, __LINE__, #x);\
-			platform_print_stacktrace();\
-			raise(SIGILL);\
-		}\
-	} while(0)
-#else
-#define ASSERT(x)
-#endif
+Platform_File_Handle PLATFORM_FILE_HANDLE_ERROR = -1;
+Platform_File_Offset PLATFORM_FILE_OFFSET_ERROR = (Platform_File_Offset)-1;
 
 typedef struct {
 	DIR *dir;
 	struct dirent *dirent;
 	char *filename;
 	u8 is_directory;
-} Directory_Iteration;
+} Platform_Directory_Iteration;
 
 // Memory.
-void *platform_allocate_memory(size_t size);
-void platform_free_memory(void *memory, size_t size);
-size_t platform_get_page_size();
-void platform_print_stacktrace();
+void *Platform_Allocate_Memory(size_t size);
+void Platform_Free_Memory(void *memory, size_t size);
+size_t Platform_Get_Page_Size();
+void Platform_Print_Stacktrace();
+
+// Process.
+void Platform_Exit_Process(s32 return_code);
+void Platform_Signal_Debug_Breakpoint();
 
 // Input.
-void platform_get_mouse_position(s32 *x, s32 *y);
-u32 platform_key_symbol_to_scancode(Key_Symbol key_symbol);
+void Platform_Get_Mouse_Position(s32 *x, s32 *y);
+u32 Platform_Key_Symbol_To_Scancode(Platform_Key_Symbol key_symbol);
 
 // Filesystem.
-u8 platform_iterate_through_all_files_in_directory(const char *path, Directory_Iteration *context);
-File platform_open_file(const char *path, s32 flags);
-u8 platform_close_file(File file);
-u8 platform_read_file(File file, size_t num_bytes_to_read, void *buffer);
-File_Offset platform_get_file_length(File file);
-File_Offset platform_seek_file(File file, File_Offset offset, File_Seek_Relative relative);
-u8 platform_write_file(File file, size_t count, const void *buffer);
+u8 Platform_Iterate_Through_All_Files_In_Directory(const char *path, Platform_Directory_Iteration *context);
+Platform_File_Handle Platform_Open_File(const char *path, Platform_Open_File_Flags flags);
+u8 Platform_Close_File(Platform_File_Handle file);
+u8 Platform_Read_From_File(Platform_File_Handle file, size_t num_bytes_to_read, void *buffer);
+Platform_File_Offset Platform_Get_File_Length(Platform_File_Handle file);
+Platform_File_Offset Platform_Seek_In_File(Platform_File_Handle file, Platform_File_Offset offset, Platform_File_Seek_Relative relative);
+u8 Platform_Write_To_File(Platform_File_Handle file, size_t count, const void *buffer);
 
 // Window.
-void platform_toggle_fullscreen();
-void platform_capture_cursor();
-void platform_uncapture_cursor();
-void platform_cleanup_display();
+void Platform_Toggle_Fullscreen();
+void Platform_Capture_Cursor();
+void Platform_Uncapture_Cursor();
+void Platform_Cleanup_Display();
+void Platform_Handle_Window_Events(Game_Input *input, Game_Execution_Status *execution_status);
 
-// Shared libraries.
-Shared_Library platform_open_shared_library(const char *filename);
-void platform_close_shared_library(Shared_Library library);
-void *platform_load_shared_library_function(Shared_Library library, const char *function_name);
+// Dynamic libraries.
+Platform_Dynamic_Library_Handle Platform_Open_Dynamic_Library(const char *filename);
+void Platform_Close_Dynamic_Library(Platform_Dynamic_Library_Handle library);
+Platform_Dynamic_Library_Function Platform_Get_Dynamic_Library_Function(Platform_Dynamic_Library_Handle library, const char *function_name);
 
 // Time.
-Platform_Time platform_get_current_time();
-f64 platform_time_difference(Platform_Time start, Platform_Time end);
+Platform_Time Platform_Get_Current_Time();
+f64 Platform_Time_Difference(Platform_Time start, Platform_Time end);
 void Platform_Sleep(u32 milliseconds);
 
-// Events.
-void platform_handle_events(Game_Input *input, Game_Execution_Status *execution_status);
-void platform_signal_debug_breakpoint();
-
 // Vulkan.
-const char *platform_get_required_vulkan_surface_instance_extension();
-void platform_create_vulkan_surface(VkInstance instance, VkSurfaceKHR *surface);
+const char *Platform_Get_Required_Vulkan_Surface_Instance_Extension();
+void Platform_Create_Vulkan_Surface(VkInstance instance, VkSurfaceKHR *surface);
 
 // Errors.
-const char *platform_get_error();
+const char *Platform_Get_Error();
 
 // Threads.
 s32 Platform_Get_Processor_Count();
-Thread Platform_Create_Thread(Thread_Procedure procedure, void *parameter);
-void Platform_Set_Thread_Processor_Affinity(Thread thread, u32 cpu_index);
-Thread Platform_Get_Current_Thread();
+Platform_Thread_Handle Platform_Create_Thread(Platform_Thread_Procedure procedure, void *parameter);
+void Platform_Set_Thread_Processor_Affinity(Platform_Thread_Handle thread, u32 cpu_index);
+Platform_Thread_Handle Platform_Get_Current_Thread();
+u32 Platform_Get_Current_Thread_ID();
+void Platform_Create_Mutex(Platform_Mutex *mutex);
+void Platform_Lock_Mutex(Platform_Mutex *mutex);
+void Platform_Unlock_Mutex(Platform_Mutex *mutex);
 
 // Fibers.
-void Platform_Create_Fiber(Fiber *fiber, Fiber_Procedure procedure, void *parameter);
-void Platform_Switch_To_Fiber(Fiber *fiber);
-void Platform_Convert_Thread_To_Fiber(Fiber *fiber);
-Fiber *Platform_Get_Current_Fiber();
+void Platform_Create_Fiber(Platform_Fiber *fiber, Platform_Fiber_Procedure procedure, void *parameter);
+void Platform_Switch_To_Fiber(Platform_Fiber *fiber);
+void Platform_Convert_Thread_To_Fiber(Platform_Fiber *fiber);
+Platform_Fiber *Platform_Get_Current_Fiber();
 
 // Semaphores.
-Semaphore Platform_Create_Semaphore(u32 initial_value);
-void Platform_Post_Semaphore(sem_t *semaphore);
-void Platform_Wait_Semaphore(sem_t *semaphore);
-s32 Platform_Get_Semaphore_Value(sem_t *semaphore);
+Platform_Semaphore Platform_Create_Semaphore(u32 initial_value);
+void Platform_Post_Semaphore(Platform_Semaphore *semaphore);
+void Platform_Wait_Semaphore(Platform_Semaphore *semaphore);
+s32 Platform_Get_Semaphore_Value(Platform_Semaphore *semaphore);
 
 // Atomics.
 s32 Platform_Atomic_Add_S32(volatile s32 *operand, s32 addend);
 s64 platform_atomic_add_s64(volatile s64 *operand, s64 addend);
+s32 Platform_Atomic_Fetch_And_Add_S32(volatile s32 *operand, s32 addend);
+s32 Platform_Atomic_Fetch_And_Add_S64(volatile s64 *operand, s64 addend);
 s32 Platform_Compare_And_Swap_S32(volatile s32 *destination, s32 old_value, s32 new_value);
-s64 platform_compare_and_swap_s64(volatile s64 *destination, s64 old_value, s64 new_value);
+s64 Platform_Compare_And_Swap_S64(volatile s64 *destination, s64 old_value, s64 new_value);
 void *Platform_Compare_And_Swap_Pointers(void *volatile *target, void *old_value, void *new_value);
 void *Platform_Fetch_And_Set_Pointer(void *volatile *target, void *value);

@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <math.h>
 
 typedef uint8_t  u8;
@@ -23,6 +24,19 @@ typedef double   f64;
 #define MILLISECONDS(t) (t * 1000)
 
 #define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
+
+#ifdef DEBUG
+#define Assert(x) \
+	do { \
+		if (!(x)) { \
+			log_print(CRITICAL_ERROR_LOG, "%s: %s: line %d: assertion failed '%s'\n", __FILE__, __func__, __LINE__, #x); \
+			Platform_Print_Stacktrace(); \
+			Platform_Signal_Debug_Breakpoint(); \
+		} \
+	} while(0)
+#else
+#define Assert(x)
+#endif
 
 #define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
 #define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)

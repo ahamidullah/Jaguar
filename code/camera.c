@@ -6,15 +6,16 @@ void create_camera_basis(Camera *camera, V3 forward) {
 	camera->up = normalize(cross_product(camera->side, camera->forward));
 }
 
-void initialize_camera(Camera *camera, V3 position, V3 forward, f32 speed, f32 field_of_view) {
-	create_camera_basis(camera, forward);
-	camera->speed         = speed;
-	camera->position      = position;
-	camera->yaw           = 0.0f;
-	camera->pitch         = 0.0f;
-	camera->view_matrix   = view_matrix(camera->position, camera->forward, camera->side, camera->up);
-	camera->field_of_view = field_of_view;
-	//camera->focal_length  = focal_length;
+void Initialize_Camera(void *parameter) {//Camera *camera, V3 position, V3 forward, f32 speed, f32 field_of_view) {
+	Game_State *game_state = (Game_State *)parameter;
+	Camera *camera = &game_state->camera;
+	create_camera_basis(camera, (V3){1, 1, 1});
+	camera->speed = 0.4f;
+	camera->position = (V3){2, 2, 2};
+	camera->yaw = 0.0f;
+	camera->pitch = 0.0f;
+	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);
+	camera->field_of_view = DEGREES_TO_RADIANS(90.0f);
 }
 
 V3 calculate_camera_forward(f32 pitch, f32 yaw) {
@@ -39,24 +40,20 @@ void update_camera(Camera *camera, Game_Input *input) {
 		}
 		create_camera_basis(camera, calculate_camera_forward(camera->pitch, camera->yaw));
 	}
-
 	if (key_down(A_KEY, input)) {
 		camera->position = subtract_v3(camera->position, scale_v3(camera->speed, camera->side));
 	} else if (key_down(D_KEY, input)) {
 		camera->position = add_v3(camera->position, scale_v3(camera->speed, camera->side));
 	}
-
 	if (key_down(Q_KEY, input)) {
 		camera->position.z -= camera->speed;
 	} else if (key_down(E_KEY, input)) {
 		camera->position.z += camera->speed;
 	}
-
 	if (key_down(W_KEY, input)) {
 		camera->position = add_v3(camera->position, scale_v3(camera->speed, camera->forward));
 	} else if (key_down(S_KEY, input)) {
 		camera->position = subtract_v3(camera->position, scale_v3(camera->speed, camera->forward));
 	}
-
 	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);
 }

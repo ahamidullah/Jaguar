@@ -9,9 +9,11 @@
 #define ALSA_PCM_NEW_HW_PARAMS_API
 //#include <alsa/asoundlib.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <sched.h>
 #include <time.h>
 #include <pthread.h>
@@ -23,10 +25,8 @@
 #include <errno.h>
 #include <execinfo.h>
 #include <dirent.h>
-#define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h> 
 
+#include "vulkan.h"
 #include "linux.h"
 #include "jaguar.c"
 
@@ -40,26 +40,36 @@ struct {
 	Cursor blank_cursor;
 	char *fiber_stack_memory;
 	volatile s32 fiber_count;
+	size_t page_size;
 	//snd_pcm_t *pcm_handle;
 } linux_context;
 
 THREAD_LOCAL struct {
-	Fiber thread_fiber;
-	Fiber *active_fiber;
+	Platform_Fiber thread_fiber;
+	Platform_Fiber *active_fiber;
 } thread_local_linux_context;
+
+////////////////////////////////////////
+//
+// Process.
+//
+
+void Platform_Exit_Process(s32 return_code) {
+	exit(return_code);
+}
 
 ////////////////////////////////////////
 //
 // Input.
 //
 
-u32 platform_key_symbol_to_scancode(Key_Symbol key_symbol) {
+u32 Platform_Key_Symbol_To_Scancode(Platform_Key_Symbol key_symbol) {
 	u32 scancode = XKeysymToKeycode(linux_context.display, key_symbol);
-	ASSERT(scancode > 0);
+	Assert(scancode > 0);
 	return scancode;
 }
 
-void platform_get_mouse_position(s32 *x, s32 *y) {
+void Platform_Get_Mouse_Position(s32 *x, s32 *y) {
 	s32 screen_x, screen_y;
 	Window root, child;
 	u32 mouse_buttons;
@@ -69,10 +79,10 @@ void platform_get_mouse_position(s32 *x, s32 *y) {
 
 ////////////////////////////////////////
 //
-// Shared libraries.
+// Dynamic libraries.
 //
 
-Shared_Library platform_open_shared_library(const char *filename) {
+Platform_Dynamic_Library_Handle Platform_Open_Dynamic_Library(const char *filename) {
 	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
 	if (!library) {
 		_abort("Failed to load shared library: %s", dlerror());
@@ -80,14 +90,14 @@ Shared_Library platform_open_shared_library(const char *filename) {
 	return library;
 }
 
-void platform_close_shared_library(Shared_Library library) {
+void Platform_Close_Dynamic_Library(Platform_Dynamic_Library_Handle library) {
 	s32 error_code = dlclose(library);
 	if (error_code < 0) {
 		log_print(MINOR_ERROR_LOG, "Failed to close shared library: %s\n", dlerror());
 	}
 }
 
-void *platform_load_shared_library_function(Shared_Library library, const char *function_name) {
+Platform_Dynamic_Library_Function Platform_Get_Dynamic_Library_Function(Platform_Dynamic_Library_Handle library, const char *function_name) {
 	void *function = dlsym(library, function_name);
 	if (!function) {
 		_abort("Failed to load shared library function %s", function_name);
@@ -100,14 +110,14 @@ void *platform_load_shared_library_function(Shared_Library library, const char *
 // Time.
 //
 
-Platform_Time platform_get_current_time() {
+Platform_Time Platform_Get_Current_Time() {
 	Platform_Time time;
 	clock_gettime(CLOCK_MONOTONIC_RAW, &time);
 	return time;
 }
 
 // Time in milliseconds.
-f64 platform_time_difference(Platform_Time start, Platform_Time end) {
+f64 Platform_Time_Difference(Platform_Time start, Platform_Time end) {
 	return ((end.tv_sec - start.tv_sec) * 1000.0) + ((end.tv_nsec - start.tv_nsec) / 1000000.0);
 }
 
@@ -117,7 +127,7 @@ void Platform_Sleep(u32 milliseconds) {
 		.tv_nsec = (milliseconds % 1000) * 1000000,
 	};
 	if (nanosleep(&timespec, NULL)) {
-		log_print(MINOR_ERROR_LOG, "nanosleep() ended early: %s.", platform_get_error());
+		log_print(MINOR_ERROR_LOG, "nanosleep() ended early: %s.", Platform_Get_Error());
 	}
 }
 
@@ -127,37 +137,37 @@ void Platform_Sleep(u32 milliseconds) {
 //
 
 // @TODO: Handle modes.
-File platform_open_file(const char *path, s32 flags) {
-	File file_handle = open(path, flags, 0666);
+Platform_File_Handle Platform_Open_File(const char *path, Platform_Open_File_Flags flags) {
+	Platform_File_Handle file_handle = open(path, flags, 0666);
 	if (file_handle < 0) {
 		log_print(MAJOR_ERROR_LOG, "Could not open file: %s", path);
-		return FILE_HANDLE_ERROR;
+		return PLATFORM_FILE_HANDLE_ERROR;
 	}
 	return file_handle;
 }
 
-u8 platform_close_file(File file_handle) {
-	s32 result = close(file_handle);
+u8 Platform_Close_File(Platform_File_Handle file) {
+	s32 result = close(file);
 	if (result == -1) {
-		log_print(MINOR_ERROR_LOG, "Could not close file: %s", platform_get_error());
+		log_print(MINOR_ERROR_LOG, "Could not close file: %s", Platform_Get_Error());
 		return 0;
 	}
 	return 1;
 }
 
-u8 platform_read_file(File file_handle, size_t num_bytes_to_read, void *buffer) {
+u8 Platform_Read_From_File(Platform_File_Handle file, size_t num_bytes_to_read, void *buffer) {
 	size_t total_bytes_read = 0;
 	ssize_t current_bytes_read = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
 	char *position = (char *)buffer;
 
 	do {
-		current_bytes_read = read(file_handle, position, num_bytes_to_read - total_bytes_read);
+		current_bytes_read = read(file, position, num_bytes_to_read - total_bytes_read);
 		total_bytes_read += current_bytes_read;
 		position += current_bytes_read;
 	} while (total_bytes_read < num_bytes_to_read && current_bytes_read != 0 && current_bytes_read != -1);
 
 	if (current_bytes_read == -1) {
-		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s", platform_get_error());
+		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s", Platform_Get_Error());
 		return 0;
 	} else if (total_bytes_read != num_bytes_to_read) {
 		// @TODO: Add file name to file handle.
@@ -168,50 +178,49 @@ u8 platform_read_file(File file_handle, size_t num_bytes_to_read, void *buffer) 
 	return 1;
 }
 
-u8 platform_write_file(File file_handle, size_t count, const void *buffer) {
+u8 Platform_Write_To_File(Platform_File_Handle file, size_t count, const void *buffer) {
 	size_t total_bytes_written = 0;
 	ssize_t current_bytes_written = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
 	const char *position = (char *)buffer;
 	do {
-		current_bytes_written = write(file_handle, position, (count - total_bytes_written));
+		current_bytes_written = write(file, position, (count - total_bytes_written));
 		total_bytes_written += current_bytes_written;
 		position += current_bytes_written;
 	} while (total_bytes_written < count && current_bytes_written != 0);
 	if (total_bytes_written != count) {
 		// @TODO: Add file name to file handle.
-		log_print(MAJOR_ERROR_LOG, "Could not write to file: %s", platform_get_error());
+		log_print(MAJOR_ERROR_LOG, "Could not write to file: %s", Platform_Get_Error());
 		return 0;
 	}
 	return 1;
 }
 
-File_Offset platform_get_file_length(File file_handle) {
+Platform_File_Offset Platform_Get_File_Length(Platform_File_Handle file) {
 	struct stat stat; 
-	if (fstat(file_handle, &stat) == 0) {
-		return (File_Offset)stat.st_size;
+	if (fstat(file, &stat) == 0) {
+		return (Platform_File_Offset)stat.st_size;
 	}
-	return FILE_OFFSET_ERROR; 
+	return PLATFORM_FILE_OFFSET_ERROR; 
 }
 
-File_Offset platform_seek_file(File file_handle, File_Offset offset, File_Seek_Relative relative) {
-	off_t result = lseek(file_handle, offset, relative);
+Platform_File_Offset Platform_Seek_In_File(Platform_File_Handle file, Platform_File_Offset offset, Platform_File_Seek_Relative relative) {
+	off_t result = lseek(file, offset, relative);
 	if (result == (off_t)-1) {
-		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", platform_get_error());
+		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", Platform_Get_Error());
 	}
 	return result;
 }
 
-// @TODO: Get rid of strcmp.
-u8 platform_iterate_through_all_files_in_directory(const char *path, Directory_Iteration *context) {
+u8 Platform_Iterate_Through_All_Files_In_Directory(const char *path, Platform_Directory_Iteration *context) {
 	if (!context->dir) { // First read.
 		context->dir = opendir(path);
 		if (!context->dir) {
-			log_print(MAJOR_ERROR_LOG, "Failed to open directory %s: %s\n", path, platform_get_error());
+			log_print(MAJOR_ERROR_LOG, "Failed to open directory %s: %s\n", path, Platform_Get_Error());
 			return 0;
 		}
 	}
 	while ((context->dirent = readdir(context->dir))) {
-		if (!strcmp(context->dirent->d_name, ".") || !strcmp(context->dirent->d_name, "..")) {
+		if (!Compare_Strings(context->dirent->d_name, ".") || !Compare_Strings(context->dirent->d_name, "..")) {
 			continue;
 		}
 		context->filename = context->dirent->d_name;
@@ -226,7 +235,7 @@ u8 platform_iterate_through_all_files_in_directory(const char *path, Directory_I
 // Events.
 //
 
-void platform_handle_events(Game_Input *input, Game_Execution_Status *execution_status) {
+void Platform_Handle_Window_Events(Game_Input *input, Game_Execution_Status *execution_status) {
 	XEvent event;
 	XGenericEventCookie *cookie = &event.xcookie;
 	XIRawEvent *raw_event;
@@ -287,7 +296,7 @@ void platform_handle_events(Game_Input *input, Game_Execution_Status *execution_
 	}
 }
 
-void platform_signal_debug_breakpoint() {
+void Platform_Signal_Debug_Breakpoint() {
 	raise(SIGTRAP);
 }
 
@@ -296,7 +305,7 @@ void platform_signal_debug_breakpoint() {
 // Window.
 //
 
-void platform_toggle_fullscreen() {
+void Platform_Toggle_Fullscreen() {
 	XEvent event;
 	memset(&event, 0, sizeof(event));
 	event.xclient.type = ClientMessage;
@@ -311,17 +320,17 @@ void platform_toggle_fullscreen() {
 	XSendEvent(linux_context.display, DefaultRootWindow(linux_context.display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
 }
 
-void platform_capture_cursor() {
+void Platform_Capture_Cursor() {
 	XDefineCursor(linux_context.display, linux_context.window, linux_context.blank_cursor);
 	XGrabPointer(linux_context.display, linux_context.window, True, 0, GrabModeAsync, GrabModeAsync, None, linux_context.blank_cursor, CurrentTime);
 }
 
-void platform_uncapture_cursor() {
+void Platform_Uncapture_Cursor() {
 	XUndefineCursor(linux_context.display, linux_context.window);
 	XUngrabPointer(linux_context.display, CurrentTime);
 }
 
-void platform_cleanup_display() {
+void Platform_Cleanup_Display() {
 	XDestroyWindow(linux_context.display, linux_context.window);
 	XCloseDisplay(linux_context.display);
 }
@@ -333,25 +342,25 @@ void platform_cleanup_display() {
 
 #define MAP_ANONYMOUS 0x20
 
-void *platform_allocate_memory(size_t size) {
+void *Platform_Allocate_Memory(size_t size) {
 	void *memory = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (memory == (void *)-1) {
-		ASSERT(0); // @TODO
+		Assert(0); // @TODO
 	}
 	return memory;
 }
 
-void platform_free_memory(void *memory, size_t size) {
+void Platform_Free_Memory(void *memory, size_t size) {
 	if (munmap(memory, size) == -1) {
-		log_print(MINOR_ERROR_LOG, "Failed to free platform memory: %s\n", platform_get_error());
+		log_print(MINOR_ERROR_LOG, "Failed to free platform memory: %s\n", Platform_Get_Error());
 	}
 }
 
-size_t platform_get_page_size() {
-	return sysconf(_SC_PAGESIZE);
+size_t Platform_Get_Page_Size() {
+	return linux_context.page_size;
 }
 
-void platform_print_stacktrace() {
+void Platform_Print_Stacktrace() {
 	log_print(STANDARD_LOG, "Stack trace:\n");
 	const u32 address_buffer_size = 100;
 	void *addresses[address_buffer_size];
@@ -375,11 +384,11 @@ void platform_print_stacktrace() {
 // Vulkan.
 //
 
-const char *platform_get_required_vulkan_surface_instance_extension() {
+const char *Platform_Get_Required_Vulkan_Surface_Instance_Extension() {
 	return "VK_KHR_xlib_surface";
 }
 
-void platform_create_vulkan_surface(VkInstance instance, VkSurfaceKHR *surface) {
+void Platform_Create_Vulkan_Surface(VkInstance instance, VkSurfaceKHR *surface) {
 	VkXlibSurfaceCreateInfoKHR surface_create_info = {
 		.sType  = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
 		.dpy    = linux_context.display,
@@ -393,11 +402,11 @@ void platform_create_vulkan_surface(VkInstance instance, VkSurfaceKHR *surface) 
 // Errors.
 //
 
-const char *platform_get_error() {
+const char *Platform_Get_Error() {
 	return strerror(errno);
 }
 
-s32 x11_error_handler(Display *display, XErrorEvent *event) {
+s32 X11_Error_Handler(Display *display, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linux_context.display, event->error_code, buffer, sizeof(buffer));
 	_abort("X11 error: %s.", buffer);
@@ -417,11 +426,19 @@ s64 platform_atomic_add_s64(volatile s64 *operand, s64 addend) {
 	return __sync_add_and_fetch(operand, addend);
 }
 
+s32 Platform_Atomic_Fetch_And_Add_S32(volatile s32 *operand, s32 addend) {
+	return __sync_fetch_and_add(operand, addend);
+}
+
+s32 Platform_Atomic_Fetch_And_Add_S64(volatile s64 *operand, s64 addend) {
+	return __sync_fetch_and_add(operand, addend);
+}
+
 s32 Platform_Compare_And_Swap_S32(volatile s32 *destination, s32 old_value, s32 new_value) {
 	return __sync_val_compare_and_swap(destination, old_value, new_value);
 }
 
-s64 platform_compare_and_swap_s64(volatile s64 *destination, s64 old_value, s64 new_value) {
+s64 Platform_Compare_And_Swap_S64(volatile s64 *destination, s64 old_value, s64 new_value) {
 	return __sync_val_compare_and_swap(destination, old_value, new_value);
 }
 
@@ -442,29 +459,45 @@ s32 Platform_Get_Processor_Count() {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
-Thread Platform_Create_Thread(Thread_Procedure procedure, void *parameter) {
+Platform_Thread_Handle Platform_Create_Thread(Platform_Thread_Procedure procedure, void *parameter) {
 	pthread_attr_t attributes;
 	if (pthread_attr_init(&attributes)) {
-		_abort("Failed on pthread_attr_init(): %s", platform_get_error());
+		_abort("Failed on pthread_attr_init(): %s", Platform_Get_Error());
 	}
-	Thread thread;
+	Platform_Thread_Handle thread;
 	if (pthread_create(&thread, &attributes, procedure, parameter)) {
-		_abort("Failed on pthread_create(): %s", platform_get_error());
+		_abort("Failed on pthread_create(): %s", Platform_Get_Error());
 	}
 	return thread;
 }
 
-Thread Platform_Get_Current_Thread() {
+Platform_Thread_Handle Platform_Get_Current_Thread() {
 	return pthread_self();
 }
 
-void Platform_Set_Thread_Processor_Affinity(Thread thread, u32 cpu_number) {
+void Platform_Set_Thread_Processor_Affinity(Platform_Thread_Handle thread, u32 cpu_number) {
 	cpu_set_t cpu_set;
 	CPU_ZERO(&cpu_set);
 	CPU_SET(cpu_number, &cpu_set);
 	if (pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpu_set)) {
-		_abort("Failed on pthread_setaffinity_np(): %s", platform_get_error());
+		_abort("Failed on pthread_setaffinity_np(): %s", Platform_Get_Error());
 	}
+}
+
+u32 Platform_Get_Current_Thread_ID() {
+	return syscall(__NR_gettid);
+}
+
+void Platform_Create_Mutex(Platform_Mutex *mutex) {
+	pthread_mutex_init(mutex, NULL);
+}
+
+void Platform_Lock_Mutex(Platform_Mutex *mutex) {
+	pthread_mutex_lock(mutex);
+}
+
+void Platform_Unlock_Mutex(Platform_Mutex *mutex) {
+	pthread_mutex_unlock(mutex);
 }
 
 ////////////////////////////////////////
@@ -482,15 +515,15 @@ void Platform_Set_Thread_Processor_Affinity(Thread thread, u32 cpu_number) {
 // the fiber's context. 
 
 typedef struct {
-	Fiber_Procedure procedure;
+	Platform_Fiber_Procedure procedure;
 	void *parameter;
 	jmp_buf *jump_buffer;
 	ucontext_t *calling_context;
 } Fiber_Creation_Info;
 
-void setup_fiber(void *fiber_creation_info_pointer) {
+void Run_Fiber(void *fiber_creation_info_pointer) {
 	Fiber_Creation_Info *fiber_creation_info = (Fiber_Creation_Info *)fiber_creation_info_pointer;
-	Fiber_Procedure procedure = fiber_creation_info->procedure;
+	Platform_Fiber_Procedure procedure = fiber_creation_info->procedure;
 	void *parameter = fiber_creation_info->parameter;
 	if (!_setjmp(*fiber_creation_info->jump_buffer)) {
 		swapcontext(&(ucontext_t){}, fiber_creation_info->calling_context);
@@ -499,11 +532,12 @@ void setup_fiber(void *fiber_creation_info_pointer) {
 	pthread_exit(NULL);
 }
 
-#define FIBER_STACK_SIZE SIGSTKSZ
+#define FIBER_STACK_SIZE 81920
 
-void Platform_Create_Fiber(Fiber *fiber, Fiber_Procedure procedure, void *parameter) {
+void Platform_Create_Fiber(Platform_Fiber *fiber, Platform_Fiber_Procedure procedure, void *parameter) {
 	getcontext(&fiber->context);
-	fiber->context.uc_stack.ss_sp = linux_context.fiber_stack_memory + Platform_Atomic_Add_S32(&linux_context.fiber_count, 1);
+	s32 fiber_index = Platform_Atomic_Fetch_And_Add_S32(&linux_context.fiber_count, 1);
+	fiber->context.uc_stack.ss_sp = linux_context.fiber_stack_memory + ((fiber_index * FIBER_STACK_SIZE) + ((fiber_index + 1) * linux_context.page_size));
 	fiber->context.uc_stack.ss_size = FIBER_STACK_SIZE;
 	fiber->context.uc_link = 0;
 	ucontext_t temporary_context;
@@ -513,23 +547,23 @@ void Platform_Create_Fiber(Fiber *fiber, Fiber_Procedure procedure, void *parame
 		.jump_buffer = &fiber->jump_buffer,
 		.calling_context = &temporary_context,
 	};
-	makecontext(&fiber->context, (void(*)())setup_fiber, 1, &fiber_creation_info);
+	makecontext(&fiber->context, (void(*)())Run_Fiber, 1, &fiber_creation_info);
 	swapcontext(&temporary_context, &fiber->context);
 }
 
-void Platform_Convert_Thread_To_Fiber(Fiber *fiber) {
+void Platform_Convert_Thread_To_Fiber(Platform_Fiber *fiber) {
 	thread_local_linux_context.active_fiber = fiber;
 }
 
 // @TODO: Prevent two fibers from running at the same time.
-void Platform_Switch_To_Fiber(Fiber *fiber) {
+void Platform_Switch_To_Fiber(Platform_Fiber *fiber) {
 	if (!_setjmp(thread_local_linux_context.active_fiber->jump_buffer)) {
 		thread_local_linux_context.active_fiber = fiber;
 		_longjmp(fiber->jump_buffer, 1);
 	}
 }
 
-Fiber *Platform_Get_Current_Fiber() {
+Platform_Fiber *Platform_Get_Current_Fiber() {
 	return thread_local_linux_context.active_fiber;
 }
 
@@ -538,21 +572,21 @@ Fiber *Platform_Get_Current_Fiber() {
 // Semaphores.
 //
 
-Semaphore Platform_Create_Semaphore(u32 initial_value) {
+Platform_Semaphore Platform_Create_Semaphore(u32 initial_value) {
 	sem_t semaphore;
 	sem_init(&semaphore, 0, initial_value);
 	return semaphore;
 }
 
-void Platform_Post_Semaphore(Semaphore *semaphore) {
+void Platform_Post_Semaphore(Platform_Semaphore *semaphore) {
 	sem_post(semaphore);
 }
 
-void Platform_Wait_Semaphore(Semaphore *semaphore) {
+void Platform_Wait_Semaphore(Platform_Semaphore *semaphore) {
 	sem_wait(semaphore);
 }
 
-s32 Platform_Get_Semaphore_Value(Semaphore *semaphore) {
+s32 Platform_Get_Semaphore_Value(Platform_Semaphore *semaphore) {
 	s32 value;
 	sem_getvalue(semaphore, &value);
 	return value;
@@ -565,18 +599,17 @@ s32 Platform_Get_Semaphore_Value(Semaphore *semaphore) {
 
 s32 main(s32 argc, char **argv) {
 	srand(time(0));
-
 	XInitThreads();
+	linux_context.page_size = sysconf(_SC_PAGESIZE);
 
 	// Install a new error handler.
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
-	XSetErrorHandler(&x11_error_handler);
+	XSetErrorHandler(&X11_Error_Handler);
 
 	linux_context.display = XOpenDisplay(NULL);
 	if (!linux_context.display) {
 		_abort("Failed to create display");
 	}
-
 	s32 screen = XDefaultScreen(linux_context.display);
 	Window root_window = XRootWindow(linux_context.display, screen);
 
@@ -616,7 +649,7 @@ s32 main(s32 argc, char **argv) {
 		};
 		s32 number_of_visuals;
 		XVisualInfo *visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
-		ASSERT(visual_info->class == TrueColor);
+		Assert(visual_info->class == TrueColor);
 		XSetWindowAttributes window_attributes = {
 			.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone),
 			.background_pixel = 0xFFFFFFFF,
@@ -675,11 +708,12 @@ s32 main(s32 argc, char **argv) {
 		XFreePixmap(linux_context.display, pixmap);
 	}
 
-	linux_context.fiber_stack_memory = platform_allocate_memory(JOB_FIBER_COUNT * FIBER_STACK_SIZE);
+	linux_context.fiber_stack_memory = Platform_Allocate_Memory((JOB_FIBER_COUNT * FIBER_STACK_SIZE) + ((JOB_FIBER_COUNT + 1) * linux_context.page_size));
+	for (s32 i = 0; i <= JOB_FIBER_COUNT; i++) {
+		mprotect(linux_context.fiber_stack_memory + ((i * FIBER_STACK_SIZE) + (i * linux_context.page_size)), linux_context.page_size, PROT_NONE);
+	}
 
 	application_entry();
-
-	//platform_exit(EXIT_SUCCESS);
 
 	return 0;
 }

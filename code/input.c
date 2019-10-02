@@ -8,11 +8,12 @@ IO_Buttons initialize_buttons(Memory_Arena *arena, u32 count) {
 	return result;
 }
 
-void initialize_input(Game_State *game_state) {
+void Initialize_Input(void *job_parameter) {
+	Game_State *game_state = (Game_State *)job_parameter;
 	game_state->input.keyboard = initialize_buttons(&game_state->permanent_arena, SCANCODE_COUNT);
 	game_state->input.mouse.buttons = initialize_buttons(&game_state->permanent_arena, MOUSE_BUTTON_COUNT);
 	game_state->input.mouse.sensitivity = 0.2 * MAX_SENSITIVITY;
-	platform_get_mouse_position(&game_state->input.mouse.x, &game_state->input.mouse.y);
+	Platform_Get_Mouse_Position(&game_state->input.mouse.x, &game_state->input.mouse.y);
 }
 
 void press_button(u32 index, IO_Buttons *buttons) {
@@ -41,55 +42,46 @@ u8 button_released(u32 index, IO_Buttons *buttons) {
 	return buttons->released[index];
 }
 
-u8 key_down(Key_Symbol key_symbol, Game_Input *input) {
-	return button_down(platform_key_symbol_to_scancode(key_symbol), &input->keyboard);
+u8 key_down(Platform_Key_Symbol key_symbol, Game_Input *input) {
+	return button_down(Platform_Key_Symbol_To_Scancode(key_symbol), &input->keyboard);
 }
 
-u8 key_up(Key_Symbol key_symbol, Game_Input *input) {
-	return button_up(platform_key_symbol_to_scancode(key_symbol), &input->keyboard);
+u8 key_up(Platform_Key_Symbol key_symbol, Game_Input *input) {
+	return button_up(Platform_Key_Symbol_To_Scancode(key_symbol), &input->keyboard);
 }
 
-u8 key_pressed(Key_Symbol key_symbol, Game_Input *input) {
-	return button_pressed(platform_key_symbol_to_scancode(key_symbol), &input->keyboard);
+u8 key_pressed(Platform_Key_Symbol key_symbol, Game_Input *input) {
+	return button_pressed(Platform_Key_Symbol_To_Scancode(key_symbol), &input->keyboard);
 }
 
-u8 key_released(Key_Symbol key_symbol, Game_Input *input) {
-	return button_released(platform_key_symbol_to_scancode(key_symbol), &input->keyboard);
+u8 key_released(Platform_Key_Symbol key_symbol, Game_Input *input) {
+	return button_released(Platform_Key_Symbol_To_Scancode(key_symbol), &input->keyboard);
 }
 
 void update_input(Game_Input *input, Game_Execution_Status *execution_status) {
-	// Clear per-frame input.
-	{
+	{ // Clear per-frame input.
 		memset(input->mouse.buttons.pressed, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
 		memset(input->mouse.buttons.released, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
-
 		memset(input->keyboard.pressed, 0, sizeof(u8) * SCANCODE_COUNT);
 		memset(input->keyboard.released, 0, sizeof(u8) * SCANCODE_COUNT);
-
 		input->mouse.raw_delta_x = 0;
 		input->mouse.raw_delta_y = 0;
 	}
-
-	platform_handle_events(input, execution_status);
-
-	// Update mouse position.
-	{
+	Platform_Handle_Window_Events(input, execution_status);
+	{ // Update mouse position.
 		s32 old_x = input->mouse.x;
 		s32 old_y = input->mouse.y;
-
-		platform_get_mouse_position(&input->mouse.x, &input->mouse.y);
-
+		Platform_Get_Mouse_Position(&input->mouse.x, &input->mouse.y);
 		input->mouse.delta_x = input->mouse.x - old_x;
 		input->mouse.delta_y = input->mouse.y - old_y;
 	}
-
 	if (key_pressed(ESCAPE_KEY, input)) {
 		static u8 b = 1;
 		if (b) {
-			platform_capture_cursor();
+			Platform_Capture_Cursor();
 			b = 0;
 		} else {
-			platform_uncapture_cursor();
+			Platform_Uncapture_Cursor();
 			b = 1;
 		}
 	}

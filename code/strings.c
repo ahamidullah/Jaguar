@@ -86,18 +86,19 @@ void reverse_string(char *start, char *end) {
 	}
 }
 
-s8 compare_strings(const char *a, const char *b) {
+s8 Compare_Strings(const char *a, const char *b) {
 	s32 i = 0;
-
 	for (; a[i] != '\0'; ++i) {
-		if (b[i] == '\0')
+		if (b[i] == '\0') {
 			return 1;
-		if (a[i] > b[i])
+		}
+		if (a[i] > b[i]) {
 			return 1;
-		if (a[i] < b[i])
+		}
+		if (a[i] < b[i]) {
 			return -1;
+		}
 	}
-
 	if (b[i] == '\0') {
 		return 0;
 	}
@@ -105,16 +106,16 @@ s8 compare_strings(const char *a, const char *b) {
 }
 
 void append_string(String *destination, String source) {
-	ASSERT(!destination->is_constant);
-	ASSERT(destination->length + source.length <= destination->capacity);
-	copy_memory(destination->data + destination->length, source.data, source.length);
+	Assert(!destination->is_constant);
+	Assert(destination->length + source.length <= destination->capacity);
+	Copy_Memory(destination->data + destination->length, source.data, source.length);
 	destination->length += source.length;
 	destination->data[destination->length] = '\0';
 }
 
 void append_string_range(String *destination, String source, u32 source_start_index, u32 count) {
-	ASSERT(!destination->is_constant);
-	ASSERT(destination->length + count <= destination->capacity);
+	Assert(!destination->is_constant);
+	Assert(destination->length + count <= destination->capacity);
 	for (u32 i = source_start_index; i < (source_start_index + count) && i < source.length; i++) {
 		destination->data[destination->length++] = source.data[i];
 	}

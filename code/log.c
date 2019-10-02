@@ -1,9 +1,10 @@
 // @TODO: Rename debug_print to Console_Print.
 // @TODO: Replace a lot of debug printing with log printing or switch it to development only.
+// @TODO: Option to Log_Print without header info.
 void debug_print_va_list(const char *format, va_list argument_list) {
 	char buffer[4096];
 	s32 bytes_written = format_string(buffer, format, argument_list);
-	platform_write_file(STDOUT, bytes_written, buffer);
+	Platform_Write_To_File(STDOUT, bytes_written, buffer);
 }
 
 void debug_print(const char *format, ...) {
@@ -11,7 +12,7 @@ void debug_print(const char *format, ...) {
 	va_list argument_list;
 	va_start(argument_list, format);
 	s32 bytes_written = format_string(buffer, format, argument_list);
-	platform_write_file(STDOUT, bytes_written, buffer);
+	Platform_Write_To_File(STDOUT, bytes_written, buffer);
 	va_end(argument_list);
 }
 
@@ -33,12 +34,12 @@ void _abort_actual(const char *file_name, s32 line, const char *function_name, c
 	debug_print("%s: %s: %d:\n", file_name, function_name, line);
 	debug_print_va_list(format, arguments);
 	debug_print("\n");
-	platform_print_stacktrace();
+	Platform_Print_Stacktrace();
 	debug_print("###########################################################################\n\n");
 	va_end(arguments);
 
 #ifdef DEBUG
-	platform_signal_debug_breakpoint();
+	Platform_Signal_Debug_Breakpoint();
 #endif
 	_exit(1);
 }

@@ -244,7 +244,7 @@ M4 multiply_m4(M4 a, M4 b) {
 
 V3 normalize(V3 v) {
 	V3 result = scale_v3(1 / vector_length(v), v);
-	ASSERT(not_nan(result));
+	Assert(not_nan(result));
 	return result;
 }
 
@@ -258,7 +258,7 @@ V3 cross_product(V3 a, V3 b) {
 		a.z*b.x - b.z*a.x,
 		a.x*b.y - b.x*a.y,
 	};
-	ASSERT(not_zero(result));
+	Assert(not_zero(result));
 	return result;
 }
 

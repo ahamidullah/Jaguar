@@ -2,18 +2,27 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+// @TODO: Trying to load the same asset multiple times simultaneously?
+
 //#define DEFAULT_DIFFUSE_COLOR (V3){1.0f, 0.08f, 0.58f}
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-Texture_ID load_texture(String path) {
+typedef struct Load_Texture_Job_Parameter {
+	String path;
+	GPU_Context *gpu_context;
+	GPU_Upload_Flags gpu_upload_flags;
+	Texture_ID *output_texture_id;
+} Load_Texture_Job_Parameter;
+
+void Load_Texture(void *job_parameter_pointer) {
+	Load_Texture_Job_Parameter *job_parameter = (Load_Texture_Job_Parameter *)job_parameter_pointer;
 	s32 texture_width, texture_height, texture_channels;
-	printf("%s\n", path.data);
-	u8 *pixels = stbi_load(path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
+	u8 *pixels = stbi_load(job_parameter->path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
 	assert(pixels);
-	Texture_ID id = load_vulkan_texture(pixels, texture_width, texture_height);
+	printf("%s\n", job_parameter->path.data);
+	*job_parameter->output_texture_id = Upload_Texture_To_GPU(job_parameter->gpu_context, pixels, texture_width, texture_height, job_parameter->gpu_upload_flags);
 	free(pixels);
-	return id;
 }
 
 // @TODO @PREPROCESSOR: Generate these.
@@ -25,21 +34,29 @@ struct {
 	{GUY_ASSET, "data/models/guy"},
 };
 
-// @TODO: WRITE A BLENDER EXPORTER!!!!!!!!!!!!!!!!!!
-void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
+typedef struct Load_Model_Job_Parameter {
+	Asset_ID asset_id;
+	GPU_Context *gpu_context;
+	GPU_Upload_Flags gpu_upload_flags;
+	Memory_Arena arena;
+	void **output_mesh_asset_address;
+} Load_Model_Job_Parameter;
+
+void Load_Model(void *job_parameter_pointer) {
+	Load_Model_Job_Parameter *job_parameter = (Load_Model_Job_Parameter *)job_parameter_pointer;
 	String model_directory = {};
 	for (u32 i = 0; i < ARRAY_COUNT(asset_id_to_filepath_map); i++) {
-		if (asset_id_to_filepath_map[i].asset_id == asset_id) {
+		if (asset_id_to_filepath_map[i].asset_id == job_parameter->asset_id) {
 			model_directory = S(asset_id_to_filepath_map[i].filepath);
 			break;
 		}
 	}
-	ASSERT(model_directory.data);
+	Assert(model_directory.data);
 
-	String model_name = get_filename_from_path(model_directory, arena);
+	String model_name = Get_Filename_From_Path(model_directory, &job_parameter->arena);
 
-	String fbx_filename = join_strings(model_name, S(".fbx"), arena);
-	String fbx_filepath = join_filepaths(model_directory, fbx_filename, arena);
+	String fbx_filename = join_strings(model_name, S(".fbx"), &job_parameter->arena);
+	String fbx_filepath = Join_Filepaths(model_directory, fbx_filename, &job_parameter->arena);
 	const struct aiScene* assimp_scene = aiImportFile(fbx_filepath.data, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		_abort("assimp error: %s", aiGetErrorString());
@@ -67,7 +84,8 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 	mesh->submesh_count = mesh_count;
 	mesh->submesh_index_counts = malloc(sizeof(u32) * mesh->submesh_count);;
 	mesh->materials = malloc(sizeof(Material) * mesh->submesh_count);
-	assets->lookup[asset_id] = mesh;
+	//job_parameter->assets->lookup[asset_id] = mesh;
+	*(job_parameter->output_mesh_asset_address) = mesh;
 
 	u32 mesh_vertex_offset = 0;
 	u32 mesh_index_offset = 0;
@@ -168,12 +186,49 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 		mesh_vertex_offset += assimp_mesh->mNumVertices;
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
-		Material *material = &mesh->materials[i];
-		material->albedo_map = load_texture(join_filepaths(model_directory, S("albedo.png"), arena));
-		material->normal_map = load_texture(join_filepaths(model_directory, S("normal.png"), arena));
-		material->roughness_map = load_texture(join_filepaths(model_directory, S("roughness.png"), arena));
-		material->metallic_map = load_texture(join_filepaths(model_directory, S("metallic.png"), arena));
-		material->ambient_occlusion_map = load_texture(join_filepaths(model_directory, S("ambient_occlusion.png"), arena));
+		// Load textures.
+		{
+			Material *material = &mesh->materials[i];
+			Load_Texture_Job_Parameter load_texture_job_parameters[] = {
+				{
+					.path = Join_Filepaths(model_directory, S("albedo.png"), &job_parameter->arena),
+					.gpu_context = job_parameter->gpu_context,
+					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.output_texture_id = &mesh->materials[i].albedo_map,
+				},
+				{
+					.path = Join_Filepaths(model_directory, S("normal.png"), &job_parameter->arena),
+					.gpu_context = job_parameter->gpu_context,
+					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.output_texture_id = &mesh->materials[i].normal_map,
+				},
+				{
+					.path = Join_Filepaths(model_directory, S("roughness.png"), &job_parameter->arena),
+					.gpu_context = job_parameter->gpu_context,
+					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.output_texture_id = &mesh->materials[i].roughness_map,
+				},
+				{
+					.path = Join_Filepaths(model_directory, S("metallic.png"), &job_parameter->arena),
+					.gpu_context = job_parameter->gpu_context,
+					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.output_texture_id = &mesh->materials[i].metallic_map,
+				},
+				{
+					.path = Join_Filepaths(model_directory, S("ambient_occlusion.png"), &job_parameter->arena),
+					.gpu_context = job_parameter->gpu_context,
+					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.output_texture_id = &mesh->materials[i].ambient_occlusion_map,
+				},
+			};
+			Job_Declaration load_texture_job_declarations[ARRAY_COUNT(load_texture_job_parameters)];
+			for (s32 j = 0; j < ARRAY_COUNT(load_texture_job_parameters); j++) {
+				load_texture_job_declarations[j] = Create_Job(Load_Texture, &load_texture_job_parameters[j]);
+			}
+			Job_Counter counter;
+			Run_Jobs(ARRAY_COUNT(load_texture_job_declarations), load_texture_job_declarations, NORMAL_JOB_PRIORITY, &counter);
+			Wait_For_Job_Counter(&counter); // @TODO: Why wait????
+		}
 #if 0
 			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
@@ -213,7 +268,7 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 #endif
 	}
 
-	mesh->gpu_mesh = upload_mesh_to_gpu(mesh, &mesh->vertex_offset, &mesh->first_index);
+	mesh->gpu_mesh = Upload_Render_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
@@ -495,14 +550,34 @@ void load_model(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
 	*/
 }
 
-Mesh_Asset *get_mesh_asset(Asset_ID asset_id, Game_Assets *assets, Memory_Arena *arena) {
+// @TODO
+void *Acquire_Memory(size_t size, u64 tag) {
+	return malloc(size);
+}
+
+void Release_Memory(void *memory) {
+	free(memory);
+}
+
+// @TODO: Shouldn't we call Get_Model_Asset?
+// @TODO: Just return a regular pointer!
+Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, GPU_Context *gpu_context, GPU_Upload_Flags gpu_upload_flags, Job_Counter *job_counter) {
+	Clear_Job_Counter(job_counter);
 	if (assets->lookup[asset_id]) {
 		return assets->lookup[asset_id];
 	}
-	load_model(asset_id, assets, arena);
-	return assets->lookup[asset_id];
+	Load_Model_Job_Parameter *job_parameter = Acquire_Memory(sizeof(Load_Model_Job_Parameter), 0); // @TODO: Release memory.
+	job_parameter->asset_id = asset_id;
+	job_parameter->arena = make_memory_arena();
+	job_parameter->gpu_context = gpu_context;
+	job_parameter->gpu_upload_flags = gpu_upload_flags;
+	job_parameter->output_mesh_asset_address = &assets->lookup[asset_id];
+	Job_Declaration job_declaration = Create_Job(Load_Model, job_parameter);
+	Run_Jobs(1, &job_declaration, NORMAL_JOB_PRIORITY, job_counter);
+	return (Mesh_Asset **)&assets->lookup[asset_id];
 }
 
-void initialize_assets(Game_State *game_state) {
+void Initialize_Assets(void *job_parameter) {
+	Game_State *game_state = (Game_State *)job_parameter;
 	//load_model("data/models/anvil", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena); // @TODO @SUBARENA
 }

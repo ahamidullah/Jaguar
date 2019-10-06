@@ -514,7 +514,7 @@ void Platform_Unlock_Mutex(Platform_Mutex *mutex) {
 // to the calling context.  Now when we want to switch to the fiber we can _longjmp directly into
 // the fiber's context. 
 
-typedef struct {
+typedef struct Fiber_Creation_Info {
 	Platform_Fiber_Procedure procedure;
 	void *parameter;
 	jmp_buf *jump_buffer;

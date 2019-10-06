@@ -14,7 +14,7 @@ u32 window_width, window_height;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "vulkan.c"
-#include "renderer.c"
+#include "render.c"
 #include "assets.c"
 #include "input.c"
 #include "camera.c"

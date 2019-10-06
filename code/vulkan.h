@@ -10,7 +10,27 @@ typedef VkCommandBuffer GPU_Command_List;
 typedef VkCommandPool GPU_Command_List_Pool;
 typedef VkDeviceMemory GPU_Memory;
 typedef VkBuffer GPU_Buffer;
+typedef VkSampler GPU_Sampler;
 typedef u32 Texture_ID;
+typedef VkBlendFactor GPU_Blend_Factor;
+typedef VkBlendOp GPU_Blend_Operation;
+typedef VkColorComponentFlags GPU_Color_Component_Flags;
+typedef VkVertexInputRate GPU_Vertex_Input_Rate;
+typedef VkFormat GPU_Format;
+typedef VkShaderStageFlags GPU_Shader_Stage_Flags;
+typedef VkShaderModule GPU_Shader_Module;
+typedef VkRenderPass GPU_Render_Pass;
+typedef VkDescriptorPool GPU_Descriptor_Pool;
+typedef VkDescriptorType GPU_Descriptor_Type;
+typedef VkPrimitiveTopology GPU_Pipeline_Topology;
+typedef VkCompareOp GPU_Compare_Operation;
+typedef VkDynamicState GPU_Dynamic_Pipeline_State;
+typedef VkFramebuffer GPU_Framebuffer;
+typedef VkSampleCountFlags GPU_Sample_Count;
+typedef VkImageLayout GPU_Image_Layout;
+typedef VkImageUsageFlags GPU_Image_Usage_Flags;
+typedef VkSamplerAddressMode GPU_Sampler_Address_Mode;
+typedef VkBorderColor GPU_Border_Color;
 
 typedef enum GPU_Buffer_Usage_Flags {
 	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -29,6 +49,29 @@ typedef enum GPU_Memory_Type {
 typedef struct GPU_Thread_Local_Context {
 	VkCommandPool command_pools[VULKAN_MAX_FRAMES_IN_FLIGHT];
 } GPU_Thread_Local_Context;
+
+typedef struct GPU_Image {
+	VkImage image;
+	VkImageView view;
+	VkFormat format;
+	VkImageLayout layout;
+} GPU_Image;
+
+typedef struct GPU_Sampler_Filter {
+	VkFilter min;
+	VkFilter mag;
+	VkSamplerMipmapMode mipmap;
+} GPU_Sampler_Filter;
+
+typedef struct GPU_Descriptor_Set {
+	VkDescriptorSet descriptor_set;
+	VkDescriptorSetLayout layout;
+} GPU_Descriptor_Set;
+
+typedef struct GPU_Pipeline {
+	VkPipelineLayout layout;
+	VkPipeline pipeline;
+} GPU_Pipeline;
 
 typedef struct GPU_Context {
 	VkDevice device;

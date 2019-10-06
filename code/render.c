@@ -1,14 +1,3 @@
-Render_Context render_context; // @TODO: Move this into the game_state?
-
-////////////////////////////////////////
-//
-// Memory.
-//
-
-// A block allocator stores its memory in a linked list of fixed size blocks.
-// Memory can then be suballocated out of each block, and when space in a block runs out, a new block is allocated from the render backend and added to the end of the linked list.
-// Block allocators are dynamic and not thread-safe. All operations on a block allocator must lock the block allocator's mutex.
-
 bool Allocate_From_Render_Memory_Blocks(Render_Memory_Block_Allocator *allocator, u32 size, u32 alignment, Render_Memory_Allocation **allocation) {
 	Platform_Lock_Mutex(&allocator->mutex);
 	// @TODO: Try to allocate out of the freed allocations.
@@ -77,26 +66,21 @@ u8 Create_Render_Buffer(Render_Context *context, GPU_Buffer_Usage_Flags buffer_u
 	return true;
 }
 
-////////////////////////////////////////
-//
-// Debug.
-//
-
 #define RANDOM_COLOR_TABLE_LENGTH 1024
 V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
 
-void Add_Debug_Render_Object(void *vertices, u32 vertex_count, size_t sizeof_vertex, u32 *indices, u32 index_count, V4 color, Render_Primitive primitive) {
-	Debug_Render_Object *object = &render_context.debug_render_objects[render_context.debug_render_object_count++];
+void Add_Debug_Render_Object(Render_Context *context, void *vertices, u32 vertex_count, size_t sizeof_vertex, u32 *indices, u32 index_count, V4 color, Render_Primitive primitive) {
+	Debug_Render_Object *object = &context->debug_render_objects[context->debug_render_object_count++];
 	*object = (Debug_Render_Object){
 		.index_count = index_count,
 		.color = color,
 		.render_primitive = primitive,
 	};
 	//vulkan_push_debug_vertices(vertices, vertex_count, sizeof_vertex, indices, index_count, &object->vertex_offset, &object->first_index);
-	Assert(render_context.debug_render_object_count < MAX_DEBUG_RENDER_OBJECTS);
+	Assert(context->debug_render_object_count < MAX_DEBUG_RENDER_OBJECTS);
 }
 
-void Draw_Wire_Sphere(V3 center, f32 radius, V4 color) {
+void Draw_Wire_Sphere(Render_Context *context, V3 center, f32 radius, V4 color) {
 	const u32 sector_count = 30;
 	const u32 stack_count  = 15;
 	f32 sector_step = 2.0f * M_PI / (f32)sector_count;
@@ -131,7 +115,7 @@ void Draw_Wire_Sphere(V3 center, f32 radius, V4 color) {
 			}
 		}
 	}
-	Add_Debug_Render_Object(vertices, vertex_count, sizeof(vertices[0]), indices, index_count, color, LINE_PRIMITIVE);
+	Add_Debug_Render_Object(context, vertices, vertex_count, sizeof(vertices[0]), indices, index_count, color, LINE_PRIMITIVE);
 }
 
 V3 random_color() {
@@ -140,11 +124,6 @@ V3 random_color() {
 	float b = rand() / (float)RAND_MAX;
 	return (V3){r, g, b};
 }
-
-////////////////////////////////////////
-//
-// Culling.
-//
 
 #define MAX_VISIBLE_ENTITY_MESHES MAX_ENTITY_MESHES
 
@@ -192,13 +171,18 @@ Asset_Upload_Command_Buffers asset_upload_command_buffers;
 
 #define RENDER_DEVICE_MEMORY_BLOCK_SIZE MEGABYTE(128)
 
-void Initialize_Renderer(void *parameter) {
-	Game_State *game_state = (Game_State *)parameter;
-	GPU_Initialize();//game_state, &game_state->permanent_arena, &game_state->frame_arena);
-	render_context.aspect_ratio = swapchain_image_width() / (f32)swapchain_image_height();
-	render_context.focal_length = 0.1f;
-	render_context.scene_projection = perspective_projection(game_state->camera.field_of_view, render_context.aspect_ratio, render_context.focal_length, 100.0f); // @TODO
-	Create_Render_Memory_Block_Allocator(&render_context.memory.device_block_allocator, RENDER_DEVICE_MEMORY_BLOCK_SIZE, GPU_DEVICE_MEMORY);
+void Create_Render_Display_Objects(Render_Context *render_context) {
+	//GPU_Create_Swapchain(&render_context->gpu_context);
+	//GPU_Compile_Render_Pass(&render_context->gpu_context, render_context->render_pass_count, render_context->render_passes);
+}
+
+void Initialize_Renderer(void *job_parameter_pointer) {
+	Game_State *game_state = (Game_State *)job_parameter_pointer;
+	//Initialize_Vulkan(game_state, &game_state->permanent_arena, &game_state->frame_arena);
+	game_state->render_context.aspect_ratio = swapchain_image_width() / (f32)swapchain_image_height();
+	game_state->render_context.focal_length = 0.1f;
+	game_state->render_context.scene_projection = perspective_projection(game_state->camera.field_of_view, game_state->render_context.aspect_ratio, game_state->render_context.focal_length, 100.0f); // @TODO
+	Create_Render_Memory_Block_Allocator(&game_state->render_context.memory.device_block_allocator, RENDER_DEVICE_MEMORY_BLOCK_SIZE, GPU_DEVICE_MEMORY);
 	for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		//GPU_Create_Fence(false, &upload_fences[i]);
 		GPU_Create_Fence(true, &render_fences[i]);
@@ -322,7 +306,7 @@ void Render(Game_State *game_state) {
 	// Get a list of the meshes visible after culling.
 	u32 visible_mesh_count = 0;
 	u32 *visible_meshes = allocate_array(&game_state->frame_arena, u32, MAX_VISIBLE_ENTITY_MESHES);
-	Frustum_Cull_Meshes(&game_state->camera, game_state->entities.meshes.bounding_spheres, game_state->entities.meshes.count, render_context.focal_length, render_context.aspect_ratio, visible_meshes, &visible_mesh_count);
+	Frustum_Cull_Meshes(&game_state->camera, game_state->entities.meshes.bounding_spheres, game_state->entities.meshes.count, game_state->render_context.focal_length, game_state->render_context.aspect_ratio, visible_meshes, &visible_mesh_count);
 
 /*
 	for (u32 target_index = game_state->assets.waiting_for_gpu_upload.meshes.ring_buffer.write_index; game_state->assets.waiting_for_gpu_upload.meshes.ring_buffer.read_index != target_index;) {
@@ -410,7 +394,7 @@ void Render(Game_State *game_state) {
 */
 
 	//vulkan_submit(&game_state->camera, game_state->entities.meshes.instances, visible_meshes, visible_mesh_count, &render_context, frame_index); // @TODO
-	render_context.debug_render_object_count = 0;
+	game_state->render_context.debug_render_object_count = 0;
 }
 
 Texture_ID Upload_Texture_To_GPU(GPU_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GPU_Upload_Flags gpu_upload_flags) {

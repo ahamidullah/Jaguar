@@ -105,15 +105,15 @@ s8 Compare_Strings(const char *a, const char *b) {
 	return -1;
 }
 
-void append_string(String *destination, String source) {
+void Append_String(String *destination, String source) {
 	Assert(!destination->is_constant);
 	Assert(destination->length + source.length <= destination->capacity);
-	Copy_Memory(destination->data + destination->length, source.data, source.length);
+	Copy_Memory(source.data, destination->data + destination->length, source.length);
 	destination->length += source.length;
 	destination->data[destination->length] = '\0';
 }
 
-void append_string_range(String *destination, String source, u32 source_start_index, u32 count) {
+void Append_String_Range(String *destination, String source, u32 source_start_index, u32 count) {
 	Assert(!destination->is_constant);
 	Assert(destination->length + count <= destination->capacity);
 	for (u32 i = source_start_index; i < (source_start_index + count) && i < source.length; i++) {
@@ -123,15 +123,14 @@ void append_string_range(String *destination, String source, u32 source_start_in
 }
 
 String join_strings(String a, String b, Memory_Arena *arena) {
-	debug_print("%s %s %u %u\n", a.data, b.data, a.length, b.length);
 	size_t result_length = a.length + b.length + 1;
 	String result = {
 		.data = allocate_array(arena, char, result_length),
 		.length = 0,
 		.capacity = result_length,
 	};
-	append_string(&result, a);
-	append_string(&result, b);
+	Append_String(&result, a);
+	Append_String(&result, b);
 	result.data[result_length - 1] = '\0';
 	return result;
 }

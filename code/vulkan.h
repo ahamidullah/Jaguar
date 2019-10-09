@@ -32,6 +32,11 @@ typedef VkImageUsageFlags GPU_Image_Usage_Flags;
 typedef VkSamplerAddressMode GPU_Sampler_Address_Mode;
 typedef VkBorderColor GPU_Border_Color;
 
+typedef struct GPU_Resource_Allocation_Requirements {
+	u32 size;
+	u32 alignment;
+} GPU_Resource_Allocation_Requirements;
+
 typedef enum GPU_Buffer_Usage_Flags {
 	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 	GPU_TRANSFER_SOURCE_BUFFER = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

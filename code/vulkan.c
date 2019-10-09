@@ -341,7 +341,7 @@ Shadow_Map_UBO shadow_map_ubo;
 #define VK_CHECK(x)\
 	do {\
 		VkResult _result = (x);\
-		if (_result != VK_SUCCESS) _abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(_result));\
+		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(_result));\
 	} while (0)
 
 const char *vk_result_to_string(VkResult result) {
@@ -416,6 +416,14 @@ const char *vk_result_to_string(VkResult result) {
 	return "Unknown VkResult Code";
 }
 
+u32 Align_U32(u32 number, u32 alignment) {
+	u32 remainder = number % alignment;
+	if (remainder == 0) {
+		return number;
+	}
+	return number + alignment - remainder;
+}
+
 u32 align_to(u32 size, u32 alignment) {
 	u32 remainder = size % alignment;
 	if (remainder == 0) {
@@ -430,23 +438,22 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
 	switch (severity) {
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT: {
-		log_type = STANDARD_LOG;
+		log_type = INFO_LOG;
 		severity_string = "Info";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: {
-		log_type = MINOR_ERROR_LOG;
+		log_type = ERROR_LOG;
 		severity_string = "Warning";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT: {
-		log_type = CRITICAL_ERROR_LOG;
+		log_type = ERROR_LOG;
 		severity_string = "Error";
 	} break;
 	default: {
-		log_type = STANDARD_LOG;
+		log_type = INFO_LOG;
 		severity_string = "Unknown";
 	};
 	}
-
 	const char *type_string;
 	switch(type) {
 	case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT: {
@@ -462,9 +469,8 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
 		type_string = "Unknown";
 	};
 	}
-
-	log_print(log_type, "%s: %s: %s\n", severity_string, type_string, callback_data->pMessage);
-	if (log_type == MINOR_ERROR_LOG || log_type == CRITICAL_ERROR_LOG) {
+	Log_Print(log_type, "%s: %s: %s\n", severity_string, type_string, callback_data->pMessage);
+	if (log_type == ERROR_LOG) {
 		Platform_Print_Stacktrace();
 	}
     return 0;
@@ -525,11 +531,13 @@ void GPU_Bind_Buffer_Memory(GPU_Context *context, GPU_Buffer buffer, GPU_Memory 
 	VK_CHECK(vkBindBufferMemory(context->vulkan.device, buffer, memory, memory_offset));
 }
 
-void GPU_Get_Buffer_Allocation_Requirements(GPU_Context *context, GPU_Buffer buffer, u32 *size, u32 *alignment) {
+GPU_Resource_Allocation_Requirements GPU_Get_Buffer_Allocation_Requirements(GPU_Context *context, GPU_Buffer buffer) {
 	VkMemoryRequirements memory_requirements;
 	vkGetBufferMemoryRequirements(context->vulkan.device, buffer, &memory_requirements);
-	*size = memory_requirements.size;
-	*alignment = memory_requirements.alignment;
+	return (GPU_Resource_Allocation_Requirements){
+		.size = memory_requirements.size,
+		.alignment = memory_requirements.alignment,
+	};
 }
 
 void *GPU_Map_Memory(GPU_Context *context, GPU_Memory memory, u32 size, u32 offset) {
@@ -553,7 +561,7 @@ bool GPU_Allocate_Memory(GPU_Context *context, u32 size, GPU_Memory_Type memory_
 		}
 	}
 	if (selected_memory_type_index < 0) {
-		_abort("Failed to find suitable GPU memory type");
+		Abort("Failed to find suitable GPU memory type");
 	}
 	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
 	VkResult result = vkAllocateMemory(context->vulkan.device, &memory_allocate_info, NULL, memory);
@@ -969,7 +977,7 @@ u32 GPU_Create_Swapchain(GPU_Context *context, GPU_Image **swapchain_images) {
 			swapchain_image_extent.height = u32_max(surface_capabilities.minImageExtent.height, u32_min(surface_capabilities.maxImageExtent.height, window_height));
 		}
 		if (swapchain_image_extent.width != window_width && swapchain_image_extent.height != window_height) {
-			_abort("Swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u", swapchain_image_extent.width, swapchain_image_extent.height, window_width, window_height);
+			Abort("Swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u", swapchain_image_extent.width, swapchain_image_extent.height, window_width, window_height);
 		}
 		u32 requested_swapchain_image_count = surface_capabilities.minImageCount + 1;
 		if (surface_capabilities.maxImageCount > 0 && requested_swapchain_image_count > surface_capabilities.maxImageCount) {
@@ -996,7 +1004,7 @@ u32 GPU_Create_Swapchain(GPU_Context *context, GPU_Image **swapchain_images) {
 		};
 		if (context->vulkan.graphics_queue_family != context->vulkan.present_queue_family) {
 			swapchain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			swapchain_create_info.queueFamilyIndexCount = ARRAY_COUNT(queue_family_indices);
+			swapchain_create_info.queueFamilyIndexCount = Array_Count(queue_family_indices);
 			swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
 		} else {
 			swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1106,7 +1114,7 @@ GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Des
 					.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 				},
 			},
-			.dependencyCount = ARRAY_COUNT(subpass_dependencies),
+			.dependencyCount = Array_Count(subpass_dependencies),
 			.pDependencies   = subpass_dependencies,
 		};
 		VK_CHECK(vkCreateRenderPass(context->vulkan.device, &render_pass_create_info, NULL, &render_graph.render_passes[0]));
@@ -1136,7 +1144,7 @@ GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Des
 		};
 		VkRenderPassCreateInfo render_pass_create_info = {
 			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = ARRAY_COUNT(attachments),
+			.attachmentCount = Array_Count(attachments),
 			.pAttachments    = attachments,
 			.subpassCount    = 1,
 			.pSubpasses      = &(VkSubpassDescription){
@@ -1532,80 +1540,88 @@ GPU_Framebuffer GPU_Create_Framebuffer(GPU_Context *context, GPU_Render_Pass ren
 	return framebuffer;
 }
 
-void GPU_Get_Image_Allocation_Requirements(GPU_Context *context, GPU_Image image, u32 *size, u32 *alignment) {
-	VkMemoryRequirements image_memory_requirements;
-	vkGetImageMemoryRequirements(context->vulkan.device, image.image, &image_memory_requirements);
-	*size = image_memory_requirements.size;
-	*alignment = image_memory_requirements.alignment;
-}
-
-void GPU_Bind_Image_Memory(GPU_Context *context, GPU_Image image, GPU_Memory memory, GPU_Memory_Type memory_type, u32 memory_offset) {
-	// Check that this image type is compatible with this memory type.
-	VkMemoryRequirements image_memory_requirements;
-	vkGetImageMemoryRequirements(context->vulkan.device, image.image, &image_memory_requirements);
-	VkPhysicalDeviceMemoryProperties physical_device_memory_properties; // @TODO: Store these properties?
-	vkGetPhysicalDeviceMemoryProperties(context->vulkan.physical_device, &physical_device_memory_properties);
-	s32 selected_memory_type_index = -1;
-	for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
-		if ((image_memory_requirements.memoryTypeBits & (1 << i)) && ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_type) == memory_type)) {
-			selected_memory_type_index = i;
-			break;
-		}
-	}
-	Assert(selected_memory_type_index != -1);
-	VK_CHECK(vkBindImageMemory(context->vulkan.device, image.image, memory, memory_offset));
-}
-
-typedef struct GPU_Image_Creation_Parameters {
-	u32 width;
-	u32 height;
-	GPU_Format format;
-	GPU_Image_Layout initial_layout;
-	GPU_Image_Usage_Flags usage_flags;
-	GPU_Sample_Count sample_count;
-} GPU_Image_Creation_Parameters;
-
-GPU_Image GPU_Create_Image(GPU_Context *context, GPU_Image_Creation_Parameters *image_creation_parameters) {
-	GPU_Image image = {
-		.format = image_creation_parameters->format,
-		.layout = image_creation_parameters->initial_layout,
-	};
+VkImage Vulkan_Create_Image(GPU_Context *context, Render_Image_Creation_Parameters *parameters) {
 	VkImageCreateInfo image_create_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
-		.extent.width = image_creation_parameters->width,
-		.extent.height = image_creation_parameters->height,
+		.extent.width = parameters->width,
+		.extent.height = parameters->height,
 		.extent.depth = 1,
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.format = image_creation_parameters->format,
+		.format = parameters->format,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.initialLayout = image_creation_parameters->initial_layout,
-		.usage = image_creation_parameters->usage_flags,
+		.initialLayout = parameters->initial_layout,
+		.usage = parameters->usage_flags,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.samples = image_creation_parameters->sample_count,
+		.samples = parameters->sample_count,
 	};
-	VK_CHECK(vkCreateImage(context->vulkan.device, &image_create_info, NULL, &image.image));
-	VkImageViewCreateInfo image_view_create_info = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.image = image.image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = image_creation_parameters->format,
-		.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-		.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-		.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
-		.subresourceRange.baseMipLevel = 0,
-		.subresourceRange.levelCount = 1,
-		.subresourceRange.baseArrayLayer = 0,
-		.subresourceRange.layerCount = 1,
+	VkImage image;
+	VK_CHECK(vkCreateImage(context->vulkan.device, &image_create_info, NULL, &image));
+	return image;
+}
+
+GPU_Resource_Allocation_Requirements GPU_Get_Image_Allocation_Requirements(GPU_Context *context, Render_Image_Creation_Parameters *parameters) {
+	VkImage temporary_image = Vulkan_Create_Image(context, parameters);
+	VkMemoryRequirements image_memory_requirements;
+	vkGetImageMemoryRequirements(context->vulkan.device, temporary_image, &image_memory_requirements);
+	GPU_Resource_Allocation_Requirements resource_allocation_requirements = {
+		.size = image_memory_requirements.size,
+		.alignment = image_memory_requirements.alignment,
 	};
-	if (image_creation_parameters->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	} else {
-		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	vkDestroyImage(context->vulkan.device, temporary_image, NULL);
+	return resource_allocation_requirements;
+}
+
+GPU_Image GPU_Create_Image(GPU_Context *context, Render_Image_Creation_Parameters *parameters, GPU_Memory memory, u32 offset) {
+	GPU_Image image = {
+		.format = parameters->format,
+		.layout = parameters->initial_layout,
+	};
+	image.image = Vulkan_Create_Image(context, parameters);
+	// Bind the image to GPU memory.
+	{
+		// @TODO: Should this check be debug only?
+		// Check that this image type is compatible with this memory type.
+		VkMemoryRequirements image_memory_requirements;
+		vkGetImageMemoryRequirements(context->vulkan.device, image.image, &image_memory_requirements);
+		VkPhysicalDeviceMemoryProperties physical_device_memory_properties; // @TODO: Store these properties?
+		vkGetPhysicalDeviceMemoryProperties(context->vulkan.physical_device, &physical_device_memory_properties);
+		/* @TODO: How to get memory_type?
+		s32 selected_memory_type_index = -1;
+		for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
+			if ((image_memory_requirements.memoryTypeBits & (1 << i)) && ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_type) == memory_type)) {
+				selected_memory_type_index = i;
+				break;
+			}
+		}
+		Assert(selected_memory_type_index != -1);
+		*/
+		VK_CHECK(vkBindImageMemory(context->vulkan.device, image.image, memory, offset));
 	}
-	VK_CHECK(vkCreateImageView(context->vulkan.device, &image_view_create_info, NULL, &image.view));
+	// Create an image view.
+	{
+		VkImageViewCreateInfo image_view_create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = image.image,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = parameters->format,
+			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = 1,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1,
+		};
+		if (parameters->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		} else {
+			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		}
+		VK_CHECK(vkCreateImageView(context->vulkan.device, &image_view_create_info, NULL, &image.view));
+	}
 	return image;
 }
 
@@ -1648,7 +1664,7 @@ void GPU_Transition_Image_Layout(GPU_Command_List command_list, GPU_Image *image
 		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destination_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 	} else {
-		_abort("Unsupported Vulkan layout transition");
+		Abort("Unsupported Vulkan layout transition");
 	}
 	vkCmdPipelineBarrier(command_list, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
 	image->layout = new_layout;
@@ -1721,7 +1737,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		if (vulkan_context.graphics_queue_family != vulkan_context.present_queue_family) {
 			u32 queue_family_indices[] = { vulkan_context.graphics_queue_family, vulkan_context.present_queue_family };
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
-			swapchain_create_info.queueFamilyIndexCount = ARRAY_COUNT(queue_family_indices);
+			swapchain_create_info.queueFamilyIndexCount = Array_Count(queue_family_indices);
 			swapchain_create_info.pQueueFamilyIndices   = queue_family_indices;
 		} else {
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE;
@@ -1798,7 +1814,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 					.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 				},
 			},
-			.dependencyCount = ARRAY_COUNT(subpass_dependencies),
+			.dependencyCount = Array_Count(subpass_dependencies),
 			.pDependencies   = subpass_dependencies,
 		};
 		VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_passes.shadow_map));
@@ -1829,7 +1845,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		};
 		VkRenderPassCreateInfo render_pass_create_info = {
 			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = ARRAY_COUNT(attachments),
+			.attachmentCount = Array_Count(attachments),
 			.pAttachments    = attachments,
 			.subpassCount    = 1,
 			.pSubpasses      = &(VkSubpassDescription){
@@ -1865,7 +1881,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.scene),
+				.setLayoutCount         = Array_Count(vulkan_context.descriptor_set_layouts.scene),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.scene,
 				.pushConstantRangeCount = 1,
 				.pPushConstantRanges    = &(VkPushConstantRange){
@@ -1879,7 +1895,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.shadow_map),
+				.setLayoutCount         = Array_Count(vulkan_context.descriptor_set_layouts.shadow_map),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.shadow_map,
 			};
 			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.shadow_map));
@@ -1887,7 +1903,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ARRAY_COUNT(vulkan_context.descriptor_set_layouts.flat_color),
+				.setLayoutCount         = Array_Count(vulkan_context.descriptor_set_layouts.flat_color),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.flat_color,
 				.pushConstantRangeCount = 1,
 				.pPushConstantRanges    = &(VkPushConstantRange){
@@ -2033,9 +2049,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = Array_Count(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = Array_Count(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2044,7 +2060,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.dynamicStateCount = Array_Count(dynamic_states),
 				.pDynamicStates    = dynamic_states,
 			};
 			//VkPipelineShaderStageCreateInfo *shader_stage_create_infos = allocate_array(arena, VkPipelineShaderStageCreateInfo, requests[i].shaders->module_count);
@@ -2096,9 +2112,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = Array_Count(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = Array_Count(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2108,7 +2124,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.dynamicStateCount = Array_Count(dynamic_states),
 				.pDynamicStates = dynamic_states,
 			};
 			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
@@ -2169,9 +2185,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ARRAY_COUNT(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = Array_Count(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ARRAY_COUNT(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = Array_Count(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2180,7 +2196,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ARRAY_COUNT(dynamic_states),
+				.dynamicStateCount = Array_Count(dynamic_states),
 				.pDynamicStates = dynamic_states,
 			};
 			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
@@ -2274,7 +2290,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			VkFramebufferCreateInfo framebuffer_create_info = {
 				.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 				.renderPass      = vulkan_context.render_pass,
-				.attachmentCount = ARRAY_COUNT(attachments),
+				.attachmentCount = Array_Count(attachments),
 				.pAttachments    = attachments,
 				.width           = vulkan_context.swapchain_image_extent.width,
 				.height          = vulkan_context.swapchain_image_extent.height,
@@ -2638,10 +2654,10 @@ void Initialize_Vulkan(GPU_Context *context) {
 	Platform_Dynamic_Library_Handle vulkan_library = Platform_Open_Dynamic_Library("libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)Platform_Get_Dynamic_Library_Function(vulkan_library, #name); \
-	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_GLOBAL_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
-	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
 #include "vulkan_functions.h"
@@ -2670,9 +2686,9 @@ void Initialize_Vulkan(GPU_Context *context) {
 	u32 version;
 	vkEnumerateInstanceVersion(&version);
 	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1)) {
-		_abort("Vulkan version 1.1 or greater required: version %d.%d.%d is installed");
+		Abort("Vulkan version 1.1 or greater required: version %d.%d.%d is installed");
 	}
-	log_print(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+	Log_Print(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {
 #if defined(DEBUG)
@@ -2689,17 +2705,17 @@ void Initialize_Vulkan(GPU_Context *context) {
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, NULL);
 		VkLayerProperties available_instance_layers[available_instance_layer_count];
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, available_instance_layers);
-		log_print(INFO_LOG, "Available Vulkan layers:\n");
+		Log_Print(INFO_LOG, "Available Vulkan layers:\n");
 		for (s32 i = 0; i < available_instance_layer_count; i++) {
-			log_print(INFO_LOG, "\t%s\n", available_instance_layers[i].layerName);
+			Log_Print(INFO_LOG, "\t%s\n", available_instance_layers[i].layerName);
 		}
 		u32 available_instance_extension_count = 0;
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, NULL));
 		VkExtensionProperties available_instance_extensions[available_instance_extension_count];
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, available_instance_extensions));
-		log_print(INFO_LOG, "Available Vulkan instance extensions:\n");
+		Log_Print(INFO_LOG, "Available Vulkan instance extensions:\n");
 		for (s32 i = 0; i < available_instance_extension_count; i++) {
-			log_print(INFO_LOG, "\t%s\n", available_instance_extensions[i].extensionName);
+			Log_Print(INFO_LOG, "\t%s\n", available_instance_extensions[i].extensionName);
 		}
 		// @TODO: Check that all required extensions/layers are available.
 		VkInstanceCreateInfo instance_create_info = {
@@ -2712,9 +2728,9 @@ void Initialize_Vulkan(GPU_Context *context) {
 				.engineVersion = VK_MAKE_VERSION(1, 0, 0),
 				.apiVersion = VK_MAKE_VERSION(1, 1, 0),
 			},
-			.enabledLayerCount = ARRAY_COUNT(required_instance_layers),
+			.enabledLayerCount = Array_Count(required_instance_layers),
 			.ppEnabledLayerNames = required_instance_layers,
-			.enabledExtensionCount = ARRAY_COUNT(required_instance_extensions),
+			.enabledExtensionCount = Array_Count(required_instance_extensions),
 			.ppEnabledExtensionNames = required_instance_extensions,
 #if defined(DEBUG)
 			.pNext = &debug_create_info,
@@ -2727,7 +2743,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(context->vulkan.instance, (const char *)#name); \
-	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_DEVICE_FUNCTION(name)
 #include "vulkan_functions.h"
 #undef VK_EXPORTED_FUNCTION
@@ -2748,7 +2764,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 		u32 available_physical_device_count = 0;
 		VK_CHECK(vkEnumeratePhysicalDevices(context->vulkan.instance, &available_physical_device_count, NULL));
 		if (available_physical_device_count == 0) {
-			_abort("Could not find any physical devices.");
+			Abort("Could not find any physical devices.");
 		}
 		VkPhysicalDevice available_physical_devices[available_physical_device_count];
 		VK_CHECK(vkEnumeratePhysicalDevices(context->vulkan.instance, &available_physical_device_count , available_physical_devices));
@@ -2765,7 +2781,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			VkExtensionProperties available_device_extensions[available_device_extension_count];
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(available_physical_devices[i], NULL, &available_device_extension_count, available_device_extensions));
 			bool missing_required_device_extension = false;
-			for (s32 j = 0; j < ARRAY_COUNT(required_device_extensions); j++) {
+			for (s32 j = 0; j < Array_Count(required_device_extensions); j++) {
 				bool found = false;
 				for (s32 k = 0; k < available_device_extension_count; k++) {
 					if (Compare_Strings(available_device_extensions[k].extensionName, required_device_extensions[j]) == 0) {
@@ -2848,9 +2864,9 @@ void Initialize_Vulkan(GPU_Context *context) {
 					context->vulkan.minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
 					context->vulkan.maximum_uniform_buffer_size = physical_device_properties.limits.maxUniformBufferRange;
 					found_suitable_physical_device = true;
-					log_print(INFO_LOG, "Available Vulkan device extensions:\n");
+					Log_Print(INFO_LOG, "Available Vulkan device extensions:\n");
 					for (s32 k = 0; k < available_device_extension_count; k++) {
-						log_print(INFO_LOG, "\t%s\n", available_device_extensions[k].extensionName);
+						Log_Print(INFO_LOG, "\t%s\n", available_device_extensions[k].extensionName);
 					}
 					break;
 				}
@@ -2860,7 +2876,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			}
 		}
 		if (!found_suitable_physical_device) {
-			_abort("Could not find suitable physical device.\n");
+			Abort("Could not find suitable physical device.\n");
 		}
 	}
 
@@ -2890,9 +2906,9 @@ void Initialize_Vulkan(GPU_Context *context) {
 			.pEnabledFeatures = &(VkPhysicalDeviceFeatures){
 				.samplerAnisotropy = VK_TRUE,
 			},
-			.enabledExtensionCount = ARRAY_COUNT(required_device_extensions),
+			.enabledExtensionCount = Array_Count(required_device_extensions),
 			.ppEnabledExtensionNames = required_device_extensions,
-			.enabledLayerCount = ARRAY_COUNT(required_instance_layers),
+			.enabledLayerCount = Array_Count(required_instance_layers),
 			.ppEnabledLayerNames = required_instance_layers,
 			.pNext = &(VkPhysicalDeviceDescriptorIndexingFeaturesEXT){
 				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
@@ -2907,7 +2923,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
 	name = (PFN_##name)vkGetDeviceProcAddr(context->vulkan.device, (const char *)#name); \
-	if (!name) _abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #include "vulkan_functions.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
@@ -2975,7 +2991,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 				.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 			};
@@ -2987,7 +3003,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_MATERIAL_DESCRIPTOR_SET]));
@@ -2998,7 +3014,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET]));
@@ -3010,7 +3026,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_SAMPLER_DESCRIPTOR_SET]));
@@ -3021,7 +3037,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_TEXTURE_DESCRIPTOR_SET]));
@@ -3032,7 +3048,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.shadow_map[SHADOW_MAP_UNIFORM_DESCRIPTOR_SET]));
@@ -3043,7 +3059,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ARRAY_COUNT(bindings),
+				.bindingCount = Array_Count(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UBO_DESCRIPTOR_SET_NUMBER]));
@@ -3066,11 +3082,11 @@ void Initialize_Vulkan(GPU_Context *context) {
 		const char *flat_color_shaders[] = {"build/flat_color_vertex.spirv", "build/flat_color_fragment.spirv"};
 		// @TODO: Generate shader table.
 		Create_Shader_Request requests[] = {
-			{&vulkan_context.shaders[TEXTURED_STATIC_SHADER], textured_static_shaders, ARRAY_COUNT(textured_static_shaders)},
-			{&vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER], shadow_map_static_shaders, ARRAY_COUNT(shadow_map_static_shaders)},
-			{&vulkan_context.shaders[FLAT_COLOR_SHADER], flat_color_shaders, ARRAY_COUNT(flat_color_shaders)},
+			{&vulkan_context.shaders[TEXTURED_STATIC_SHADER], textured_static_shaders, Array_Count(textured_static_shaders)},
+			{&vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER], shadow_map_static_shaders, Array_Count(shadow_map_static_shaders)},
+			{&vulkan_context.shaders[FLAT_COLOR_SHADER], flat_color_shaders, Array_Count(flat_color_shaders)},
 		};
-		for (s32 i = 0; i < ARRAY_COUNT(requests); i++) {
+		for (s32 i = 0; i < Array_Count(requests); i++) {
 			assert(requests[i].shader_module_count < MAX_SHADER_MODULES);
 			requests[i].shaders->module_count = requests[i].shader_module_count;
 			requests[i].shaders->modules = (Shader_Module *)malloc(sizeof(Shader_Module) * requests[i].shader_module_count); // @TODO: allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
@@ -3199,7 +3215,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 		};
 		VkDescriptorPoolCreateInfo pool_info = {
 			.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.poolSizeCount = ARRAY_COUNT(pool_sizes),
+			.poolSizeCount = Array_Count(pool_sizes),
 			.pPoolSizes    = pool_sizes,
 			.maxSets       = vulkan_context.num_swapchain_images + 60,
 			.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
@@ -3585,7 +3601,7 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 			.framebuffer = vulkan_context.framebuffers[swapchain_image_index],
 			.renderArea.offset = {0, 0},
 			.renderArea.extent = vulkan_context.swapchain_image_extent,
-			.clearValueCount = ARRAY_COUNT(clear_values),
+			.clearValueCount = Array_Count(clear_values),
 			.pClearValues = clear_values,
 		};
 		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
@@ -3729,12 +3745,12 @@ void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u
 
 	VkSubmitInfo submit_info = {
 		.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount   = ARRAY_COUNT(wait_semaphores),
+		.waitSemaphoreCount   = Array_Count(wait_semaphores),
 		.pWaitSemaphores      = wait_semaphores,
 		.pWaitDstStageMask    = wait_stages,
 		.commandBufferCount   = 0,
 		.pCommandBuffers      = &vulkan_context.command_buffers[swapchain_image_index],
-		.signalSemaphoreCount = ARRAY_COUNT(signal_semaphores),
+		.signalSemaphoreCount = Array_Count(signal_semaphores),
 		.pSignalSemaphores    = signal_semaphores,
 	};
 	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, vulkan_context.inFlightFences[vulkan_context.currentFrame]));
@@ -3773,9 +3789,9 @@ void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u
 	VkSwapchainKHR swapchains[] = {vulkan_context.swapchain};
 	VkPresentInfoKHR present_info = {
 		.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = ARRAY_COUNT(signal_semaphores),
+		.waitSemaphoreCount = Array_Count(signal_semaphores),
 		.pWaitSemaphores    = signal_semaphores,
-		.swapchainCount     = ARRAY_COUNT(swapchains),
+		.swapchainCount     = Array_Count(swapchains),
 		.pSwapchains        = swapchains,
 		.pImageIndices      = &swapchain_image_index,
 	};

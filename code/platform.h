@@ -17,19 +17,19 @@ typedef double   f64;
 
 #define U32_MAX UINT32_MAX
 
-#define KILOBYTE(b) ((size_t)b*1024)
-#define MEGABYTE(b) (KILOBYTE(b)*1024)
-#define GIGABYTE(b) (MEGABYTE(b)*1024)
+#define Kilobyte(b) ((size_t)b*1024)
+#define Megabyte(b) (Kilobyte(b)*1024)
+#define Gigabyte(b) (Megabyte(b)*1024)
 
-#define MILLISECONDS(t) (t * 1000)
+#define Milliseconds(t) (t * 1000)
 
-#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
+#define Array_Count(x) (sizeof(x)/sizeof(x[0]))
 
-#ifdef DEBUG
+#if defined(DEBUG)
 #define Assert(x) \
 	do { \
 		if (!(x)) { \
-			log_print(CRITICAL_ERROR_LOG, "%s: %s: line %d: assertion failed '%s'\n", __FILE__, __func__, __LINE__, #x); \
+			Console_Print("%s: %s: line %d: assertion failed '%s'\n", __FILE__, __func__, __LINE__, #x); \
 			Platform_Print_Stacktrace(); \
 			Platform_Signal_Debug_Breakpoint(); \
 		} \
@@ -38,10 +38,15 @@ typedef double   f64;
 #define Assert(x)
 #endif
 
-#define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
-#define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
+void Console_Print(const char *format, ...);
+void Abort(const char *format, ...);
 
-#ifdef DEBUG
+#define Invalid_Code_Path() Assert(!"Invalid code path");
+
+//#define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
+//#define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
+
+#if defined(DEBUG)
 	const u8 debug = 1;
 #else
 	const u8 debug = 0;

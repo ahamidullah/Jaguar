@@ -85,7 +85,7 @@ void Platform_Get_Mouse_Position(s32 *x, s32 *y) {
 Platform_Dynamic_Library_Handle Platform_Open_Dynamic_Library(const char *filename) {
 	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
 	if (!library) {
-		_abort("Failed to load shared library: %s", dlerror());
+		Abort("Failed to load shared library: %s", dlerror());
 	}
 	return library;
 }
@@ -93,14 +93,14 @@ Platform_Dynamic_Library_Handle Platform_Open_Dynamic_Library(const char *filena
 void Platform_Close_Dynamic_Library(Platform_Dynamic_Library_Handle library) {
 	s32 error_code = dlclose(library);
 	if (error_code < 0) {
-		log_print(MINOR_ERROR_LOG, "Failed to close shared library: %s\n", dlerror());
+		Log_Print(ERROR_LOG, "Failed to close shared library: %s\n", dlerror());
 	}
 }
 
 Platform_Dynamic_Library_Function Platform_Get_Dynamic_Library_Function(Platform_Dynamic_Library_Handle library, const char *function_name) {
 	void *function = dlsym(library, function_name);
 	if (!function) {
-		_abort("Failed to load shared library function %s", function_name);
+		Abort("Failed to load shared library function %s", function_name);
 	}
 	return function;
 }
@@ -127,7 +127,7 @@ void Platform_Sleep(u32 milliseconds) {
 		.tv_nsec = (milliseconds % 1000) * 1000000,
 	};
 	if (nanosleep(&timespec, NULL)) {
-		log_print(MINOR_ERROR_LOG, "nanosleep() ended early: %s.", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "nanosleep() ended early: %s.", Platform_Get_Error());
 	}
 }
 
@@ -140,7 +140,7 @@ void Platform_Sleep(u32 milliseconds) {
 Platform_File_Handle Platform_Open_File(const char *path, Platform_Open_File_Flags flags) {
 	Platform_File_Handle file_handle = open(path, flags, 0666);
 	if (file_handle < 0) {
-		log_print(MAJOR_ERROR_LOG, "Could not open file: %s", path);
+		Log_Print(ERROR_LOG, "Could not open file: %s", path);
 		return PLATFORM_FILE_HANDLE_ERROR;
 	}
 	return file_handle;
@@ -149,7 +149,7 @@ Platform_File_Handle Platform_Open_File(const char *path, Platform_Open_File_Fla
 u8 Platform_Close_File(Platform_File_Handle file) {
 	s32 result = close(file);
 	if (result == -1) {
-		log_print(MINOR_ERROR_LOG, "Could not close file: %s", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "Could not close file: %s", Platform_Get_Error());
 		return 0;
 	}
 	return 1;
@@ -159,22 +159,19 @@ u8 Platform_Read_From_File(Platform_File_Handle file, size_t num_bytes_to_read, 
 	size_t total_bytes_read = 0;
 	ssize_t current_bytes_read = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
 	char *position = (char *)buffer;
-
 	do {
 		current_bytes_read = read(file, position, num_bytes_to_read - total_bytes_read);
 		total_bytes_read += current_bytes_read;
 		position += current_bytes_read;
 	} while (total_bytes_read < num_bytes_to_read && current_bytes_read != 0 && current_bytes_read != -1);
-
 	if (current_bytes_read == -1) {
-		log_print(MAJOR_ERROR_LOG, "Could not read from file: %s", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "Could not read from file: %s", Platform_Get_Error());
 		return 0;
 	} else if (total_bytes_read != num_bytes_to_read) {
 		// @TODO: Add file name to file handle.
-		log_print(MAJOR_ERROR_LOG, "Could only read %lu bytes, but %lu bytes were requested", total_bytes_read, num_bytes_to_read);
+		Log_Print(ERROR_LOG, "Could only read %lu bytes, but %lu bytes were requested", total_bytes_read, num_bytes_to_read);
 		return 0;
 	}
-
 	return 1;
 }
 
@@ -189,7 +186,7 @@ u8 Platform_Write_To_File(Platform_File_Handle file, size_t count, const void *b
 	} while (total_bytes_written < count && current_bytes_written != 0);
 	if (total_bytes_written != count) {
 		// @TODO: Add file name to file handle.
-		log_print(MAJOR_ERROR_LOG, "Could not write to file: %s", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "Could not write to file: %s", Platform_Get_Error());
 		return 0;
 	}
 	return 1;
@@ -206,7 +203,7 @@ Platform_File_Offset Platform_Get_File_Length(Platform_File_Handle file) {
 Platform_File_Offset Platform_Seek_In_File(Platform_File_Handle file, Platform_File_Offset offset, Platform_File_Seek_Relative relative) {
 	off_t result = lseek(file, offset, relative);
 	if (result == (off_t)-1) {
-		log_print(MAJOR_ERROR_LOG, "File seek failed: %s", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "File seek failed: %s", Platform_Get_Error());
 	}
 	return result;
 }
@@ -215,7 +212,7 @@ u8 Platform_Iterate_Through_All_Files_In_Directory(const char *path, Platform_Di
 	if (!context->dir) { // First read.
 		context->dir = opendir(path);
 		if (!context->dir) {
-			log_print(MAJOR_ERROR_LOG, "Failed to open directory %s: %s\n", path, Platform_Get_Error());
+			Log_Print(ERROR_LOG, "Failed to open directory %s: %s\n", path, Platform_Get_Error());
 			return 0;
 		}
 	}
@@ -352,7 +349,7 @@ void *Platform_Allocate_Memory(size_t size) {
 
 void Platform_Free_Memory(void *memory, size_t size) {
 	if (munmap(memory, size) == -1) {
-		log_print(MINOR_ERROR_LOG, "Failed to free platform memory: %s\n", Platform_Get_Error());
+		Log_Print(ERROR_LOG, "Failed to free platform memory: %s\n", Platform_Get_Error());
 	}
 }
 
@@ -361,20 +358,20 @@ size_t Platform_Get_Page_Size() {
 }
 
 void Platform_Print_Stacktrace() {
-	log_print(STANDARD_LOG, "Stack trace:\n");
+	Log_Print(INFO_LOG, "Stack trace:\n");
 	const u32 address_buffer_size = 100;
 	void *addresses[address_buffer_size];
 	s32 address_count = backtrace(addresses, address_buffer_size);
 	if (address_count == address_buffer_size) {
-		log_print(MINOR_ERROR_LOG, "Stack trace is probably truncated.\n");
+		Log_Print(ERROR_LOG, "Stack trace is probably truncated.\n");
 	}
 	char **strings = backtrace_symbols(addresses, address_count);
 	if (!strings) {
-		log_print(MINOR_ERROR_LOG, "Failed to get function names\n");
+		Log_Print(ERROR_LOG, "Failed to get function names\n");
 		return;
 	}
 	for (s32 i = 0; i < address_count; i++) {
-		log_print(STANDARD_LOG, "\t%s\n", strings[i]);
+		Log_Print(INFO_LOG, "\t%s\n", strings[i]);
 	}
 	free(strings);
 }
@@ -409,7 +406,7 @@ const char *Platform_Get_Error() {
 s32 X11_Error_Handler(Display *display, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linux_context.display, event->error_code, buffer, sizeof(buffer));
-	_abort("X11 error: %s.", buffer);
+	Abort("X11 error: %s.", buffer);
 	return 0;
 }
 
@@ -462,11 +459,11 @@ s32 Platform_Get_Processor_Count() {
 Platform_Thread_Handle Platform_Create_Thread(Platform_Thread_Procedure procedure, void *parameter) {
 	pthread_attr_t attributes;
 	if (pthread_attr_init(&attributes)) {
-		_abort("Failed on pthread_attr_init(): %s", Platform_Get_Error());
+		Abort("Failed on pthread_attr_init(): %s", Platform_Get_Error());
 	}
 	Platform_Thread_Handle thread;
 	if (pthread_create(&thread, &attributes, procedure, parameter)) {
-		_abort("Failed on pthread_create(): %s", Platform_Get_Error());
+		Abort("Failed on pthread_create(): %s", Platform_Get_Error());
 	}
 	return thread;
 }
@@ -480,7 +477,7 @@ void Platform_Set_Thread_Processor_Affinity(Platform_Thread_Handle thread, u32 c
 	CPU_ZERO(&cpu_set);
 	CPU_SET(cpu_number, &cpu_set);
 	if (pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpu_set)) {
-		_abort("Failed on pthread_setaffinity_np(): %s", Platform_Get_Error());
+		Abort("Failed on pthread_setaffinity_np(): %s", Platform_Get_Error());
 	}
 }
 
@@ -608,7 +605,7 @@ s32 main(s32 argc, char **argv) {
 
 	linux_context.display = XOpenDisplay(NULL);
 	if (!linux_context.display) {
-		_abort("Failed to create display");
+		Abort("Failed to create display");
 	}
 	s32 screen = XDefaultScreen(linux_context.display);
 	Window root_window = XRootWindow(linux_context.display, screen);
@@ -616,13 +613,13 @@ s32 main(s32 argc, char **argv) {
 	// Initialize XInput2, which we require for raw input.
 	{
 		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &(s32){0}, &(s32){0})) {
-			_abort("The X server does not support the XInput extension");
+			Abort("The X server does not support the XInput extension");
 		}
 		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
 		s32 major_version = 2, minor_version = 0;
 		XIQueryVersion(linux_context.display, &major_version, &minor_version);
 		if (major_version < 2) {
-			_abort("XInput version 2.0 or greater is required: version %d.%d is available", major_version, minor_version);
+			Abort("XInput version 2.0 or greater is required: version %d.%d is available", major_version, minor_version);
 		}
 		u8 mask[] = {0, 0, 0};
 		XIEventMask event_mask = {
@@ -638,7 +635,7 @@ s32 main(s32 argc, char **argv) {
 		XISetMask(mask, XI_FocusOut);
 		XISetMask(mask, XI_FocusIn);
 		if (XISelectEvents(linux_context.display, root_window, &event_mask, 1) != Success) {
-			_abort("Failed to select XInput events");
+			Abort("Failed to select XInput events");
 		}
 	}
 
@@ -676,7 +673,7 @@ s32 main(s32 argc, char **argv) {
 		                                     window_attributes_mask,
 		                                     &window_attributes);
 		if (!linux_context.window) {
-			_abort("Failed to create a window");
+			Abort("Failed to create a window");
 		}
 		XFree(visual_info);
 		XStoreName(linux_context.display, linux_context.window, "jaguar");
@@ -686,7 +683,7 @@ s32 main(s32 argc, char **argv) {
 		if ((linux_context.wm_delete_window = XInternAtom(linux_context.display, "WM_DELETE_WINDOW", 1))) {
 			XSetWMProtocols(linux_context.display, linux_context.window, &linux_context.wm_delete_window, 1);
 		} else {
-			log_print(MINOR_ERROR_LOG, "Unable to register WM_DELETE_WINDOW atom.");
+			Log_Print(ERROR_LOG, "Unable to register WM_DELETE_WINDOW atom.");
 		}
 	}
 
@@ -695,7 +692,7 @@ s32 main(s32 argc, char **argv) {
 		s32 window_x, window_y;
 		u32 border_width, depth;
 		if (!XGetGeometry(linux_context.display, linux_context.window, &root_window, &window_x, &window_y, &window_width, &window_height, &border_width, &depth)) {
-			_abort("Failed to get the screen's geometry.");
+			Abort("Failed to get the screen's geometry.");
 		}
 	}
 
@@ -728,7 +725,7 @@ platform_get_memory(size_t len)
 {
 	void *m = mmap(0, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (m == (void *)-1)
-		_abort("Failed to get memory from platform - %s.", perrno());
+		Abort("Failed to get memory from platform - %s.", perrno());
 	return (char *)m;
 }
 
@@ -737,7 +734,7 @@ platform_free_memory(void *m, size_t len)
 {
 	int ret = munmap(m, len);
 	if (ret == -1)
-		_abort("Failed to free memory from platform - %s.", perrno());
+		Abort("Failed to free memory from platform - %s.", perrno());
 }
 
 size_t
@@ -824,7 +821,7 @@ platform_pcm_open_device()
 
 	return_code = snd_pcm_open(&linux_context.pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
 	if (return_code < 0) {
-		_abort("Unable to open pcm device: %s.", snd_strerror(return_code));
+		Abort("Unable to open pcm device: %s.", snd_strerror(return_code));
 	}
 
 	pcm_playback_info.num_channels = 2;
@@ -847,7 +844,7 @@ platform_pcm_open_device()
 
 	return_code = snd_pcm_hw_params(linux_context.pcm_handle, pcm_parameters);
 	if (return_code < 0) {
-		_abort("Unable to set sound hardware parameters: %s\n", snd_strerror(return_code));
+		Abort("Unable to set sound hardware parameters: %s\n", snd_strerror(return_code));
 	}
 
 	snd_pcm_hw_params_get_period_size(pcm_parameters, &pcm_playback_info.frames_per_period, &dir);
@@ -856,7 +853,7 @@ platform_pcm_open_device()
 	pcm_playback_info.bytes_per_period = pcm_playback_info.frames_per_period * pcm_playback_info.bytes_per_frame;
 
 	if(snd_pcm_poll_descriptors(linux_context.pcm_handle, &pcm_playback_info.fd, 1) < 0) {
-		_abort("Error getting file descriptor for PCM.");
+		Abort("Error getting file descriptor for PCM.");
 	}
 }
 
@@ -967,12 +964,12 @@ platform_create_thread(Thread_Procedure tp, void *thread_argument)
 {
 	pthread_attr_t attrs;
 	if (pthread_attr_init(&attrs)) {
-		_abort("Failed on pthread_attr_init(): %s", perrno());
+		Abort("Failed on pthread_attr_init(): %s", perrno());
 	}
 
 	pthread_t handle;
 	if (pthread_create(&handle, &attrs, tp, thread_argument)) {
-		_abort("Failed on pthread_create(): %s", perrno());
+		Abort("Failed on pthread_create(): %s", perrno());
 	}
 
 	return handle;

@@ -3,9 +3,8 @@ void debug_print(const char *format, ...);
 typedef enum {
 	STANDARD_LOG, // @TODO: Get rid of this in favor of INFO_LOG.
 	INFO_LOG,
-	MINOR_ERROR_LOG,
-	MAJOR_ERROR_LOG,
-	CRITICAL_ERROR_LOG,
+	ERROR_LOG,
+	ABORT_LOG,
 } Log_Type;
 
 #define SCANCODE_COUNT 256

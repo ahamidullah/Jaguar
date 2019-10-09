@@ -36,7 +36,7 @@ void Run_Game(void *parameter) {
 			Create_Job(Initialize_Renderer, game_state),//&game_state->camera, &game_state->permanent_arena, &game_state->frame_arena),
 		};
 		Job_Counter counter;
-		Run_Jobs(ARRAY_COUNT(jobs), jobs, NORMAL_JOB_PRIORITY, &counter);
+		Run_Jobs(Array_Count(jobs), jobs, NORMAL_JOB_PRIORITY, &counter);
 		Wait_For_Job_Counter(&counter);
 	}
 	Initialize_Input(game_state); // @TODO

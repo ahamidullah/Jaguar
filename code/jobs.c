@@ -212,11 +212,9 @@ void *Worker_Thread_Procedure(void *parameter) {
 			if (!scheduled_job_fiber) {
 				break;
 			}
-			debug_print("thread %u is running job %p\n", thread_id, scheduled_job_fiber->parameter.scheduled_job);
 			Platform_Switch_To_Fiber(&scheduled_job_fiber->platform_fiber);
 			Job *scheduled_job = scheduled_job_fiber->parameter.scheduled_job;
 			if (scheduled_job->finished) {
-				debug_print("thread %u finished job %p\n", thread_id, scheduled_job_fiber->parameter.scheduled_job);
 				Atomic_Push_To_Front_Of_List(jobs_context.idle_job_fiber_list, scheduled_job_fiber);
 				s32 unfinished_job_count = Platform_Atomic_Add_S32(&scheduled_job->counter->unfinished_job_count, -1);
 				if (unfinished_job_count > 0) {

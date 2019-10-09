@@ -45,7 +45,7 @@ typedef struct Load_Model_Job_Parameter {
 void Load_Model(void *job_parameter_pointer) {
 	Load_Model_Job_Parameter *job_parameter = (Load_Model_Job_Parameter *)job_parameter_pointer;
 	String model_directory = {};
-	for (u32 i = 0; i < ARRAY_COUNT(asset_id_to_filepath_map); i++) {
+	for (u32 i = 0; i < Array_Count(asset_id_to_filepath_map); i++) {
 		if (asset_id_to_filepath_map[i].asset_id == job_parameter->asset_id) {
 			model_directory = S(asset_id_to_filepath_map[i].filepath);
 			break;
@@ -59,7 +59,7 @@ void Load_Model(void *job_parameter_pointer) {
 	String fbx_filepath = Join_Filepaths(model_directory, fbx_filename, &job_parameter->arena);
 	const struct aiScene* assimp_scene = aiImportFile(fbx_filepath.data, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
-		_abort("assimp error: %s", aiGetErrorString());
+		Abort("assimp error: %s", aiGetErrorString());
 	}
 
 	s32 num_joints = 0;
@@ -221,12 +221,12 @@ void Load_Model(void *job_parameter_pointer) {
 					.output_texture_id = &mesh->materials[i].ambient_occlusion_map,
 				},
 			};
-			Job_Declaration load_texture_job_declarations[ARRAY_COUNT(load_texture_job_parameters)];
-			for (s32 j = 0; j < ARRAY_COUNT(load_texture_job_parameters); j++) {
+			Job_Declaration load_texture_job_declarations[Array_Count(load_texture_job_parameters)];
+			for (s32 j = 0; j < Array_Count(load_texture_job_parameters); j++) {
 				load_texture_job_declarations[j] = Create_Job(Load_Texture, &load_texture_job_parameters[j]);
 			}
 			Job_Counter counter;
-			Run_Jobs(ARRAY_COUNT(load_texture_job_declarations), load_texture_job_declarations, NORMAL_JOB_PRIORITY, &counter);
+			Run_Jobs(Array_Count(load_texture_job_declarations), load_texture_job_declarations, NORMAL_JOB_PRIORITY, &counter);
 			Wait_For_Job_Counter(&counter); // @TODO: Why wait????
 		}
 #if 0

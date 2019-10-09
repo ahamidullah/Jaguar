@@ -18,15 +18,15 @@ typedef struct {
 	u8             is_directory;
 } Directory_Iteration;
 
-void _abort_actual(const char *file_name, s32 line, const char *function_name, const char *format, ...) {
+void Abort(const char *format, ...) {
 	va_list arguments;
 	va_start(arguments, format);
 	printf("\n###########################################################################\n");
 	printf("[PROGRAM ABORT]\n");
-	printf("%s: %s: %d:\n", file_name, function_name, line);
+	printf("ABORT: ");
 	vprintf(format, arguments);
 	printf("\n");
-	printf("###########################################################################\n\n");
+	printf("###########################################################################\n");
 	va_end(arguments);
 	assert(0);
 	exit(1);
@@ -65,14 +65,14 @@ const char *find_last_occurrence_of_character(const char *string, char character
 void read_entire_file(const char *path, char *output) {
 	FILE *file_handle = fopen(path, "r");
 	if (!file_handle) {
-		_abort("Failed to open file %s: %s\n", path, strerror(errno));
+		Abort("Failed to open file %s: %s\n", path, strerror(errno));
 	}
 	fseek(file_handle, 0L, SEEK_END);
 	s64 file_length = ftell(file_handle);
 	fseek(file_handle, 0L, SEEK_SET);
 	size_t read_byte_count = fread(output, 1, file_length, file_handle);
 	if (read_byte_count != file_length) {
-		_abort("Failed to read file %s: %s\n", path, strerror(errno));
+		Abort("Failed to read file %s: %s\n", path, strerror(errno));
 	}
 	output[file_length] = '\0';
 	fclose(file_handle);
@@ -180,7 +180,7 @@ u8 get_expected_token(char *token, const char *expected) {
 		return 0;
 	}
 	if (strcmp(token, expected)) {
-		_abort("Invalid token at %u:%u: expected:'%s', got:'%s'.\n", shader_line_number, shader_character_offset, expected, token);
+		Abort("Invalid token at %u:%u: expected:'%s', got:'%s'.\n", shader_line_number, shader_character_offset, expected, token);
 	}
 	return 1;
 }

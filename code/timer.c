@@ -16,7 +16,7 @@ void _Start_Performance_Timer(Performance_Timer *timer) {
 void Print_Performance_Timer_Actual(Performance_Timer *timer) {
 	Platform_Time end = Platform_Get_Current_Time();
 	timer->running_sum = timer->running_sum + Platform_Time_Difference(timer->start, end);
-	debug_print("%s: %gms, avg %gms\n", timer->name, Platform_Time_Difference(timer->start, end), timer->running_sum / timer->iteration);
+	Console_Print("%s: %gms, avg %gms\n", timer->name, Platform_Time_Difference(timer->start, end), timer->running_sum / timer->iteration);
 	timer->iteration++;
 }
 
@@ -50,12 +50,10 @@ bool
 timer_check_repeating(Timer *t)
 {
 	u32 current_time = platform_get_time_ms();
-
 	if ((current_time - t->start_time) >= t->wait_time) {
 		t->start_time = current_time;
 		return true;
 	}
-
 	return false;
 }
 #endif

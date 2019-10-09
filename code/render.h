@@ -44,17 +44,39 @@ typedef struct Render_Memory_Block_Allocator {
 	Platform_Mutex mutex;
 } Render_Memory_Block_Allocator;
 
-typedef struct Render_Ring_Buffer_Allocator {
+typedef struct Render_Memory_Ring_Buffer_Allocator {
 	GPU_Memory memory;
 	u32 size;
 	u32 read_offset;
 	u32 write_offset;
-} Render_Ring_Buffer_Allocator;
+} Render_Memory_Ring_Buffer_Allocator;
+
+typedef enum Render_Memory_Allocator_Type {
+	RENDER_MEMORY_BLOCK_ALLOCATOR,
+	RENDER_MEMORY_RING_BUFFER_ALLOCATOR,
+} Render_Memory_Allocator_Type;
+
+typedef struct Render_Memory_Allocator {
+	union {
+		Render_Memory_Block_Allocator block;
+		Render_Memory_Ring_Buffer_Allocator ring_buffer;
+	};
+	Render_Memory_Allocator_Type type;
+} Render_Memory_Allocator;
 
 typedef struct Render_Memory {
-	Render_Memory_Block_Allocator device_block_allocator;
-	Render_Ring_Buffer_Allocator host_ring_buffer_allocator;
+	Render_Memory_Allocator device_block_allocator;
+	Render_Memory_Ring_Buffer_Allocator host_ring_buffer_allocator;
 } Render_Memory;
+
+typedef struct Render_Image_Creation_Parameters {
+	u32 width;
+	u32 height;
+	GPU_Format format;
+	GPU_Image_Layout initial_layout;
+	GPU_Image_Usage_Flags usage_flags;
+	GPU_Sample_Count sample_count;
+} Render_Image_Creation_Parameters;
 
 // @TODO: Render_Mesh
 typedef struct GPU_Mesh {

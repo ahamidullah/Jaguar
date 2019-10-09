@@ -1,7 +1,8 @@
 void debug_print(const char *format, ...);
 
 typedef enum {
-	STANDARD_LOG,
+	STANDARD_LOG, // @TODO: Get rid of this in favor of INFO_LOG.
+	INFO_LOG,
 	MINOR_ERROR_LOG,
 	MAJOR_ERROR_LOG,
 	CRITICAL_ERROR_LOG,
@@ -444,12 +445,6 @@ typedef struct Game_Jobs_Context {
 typedef struct Platform_Context {
 } Platform_Context;
 
-typedef struct Thread_Local_Game_State {
-	Thread_Local_Jobs_Context jobs_context;
-	Platform_Thread_Local_Context platform_context;
-	GPU_Thread_Local_Context gpu_context;
-} Thread_Local_Game_State;
-
 typedef struct Game_Thread_Memory_Heap {
 } Game_Thread_Memory_Heap;
 
@@ -473,10 +468,6 @@ typedef struct Game_State {
 	Render_Context render_context;
 	Camera camera; // @TODO: Rename to Game_Camera.
 	Platform_Context platform_context;
-	GPU_Context gpu_context;
-
-	//u32 thread_count;
-	//Thread_Local_Game_State *thread_local;
 
 	Memory_Arena frame_arena;
 	Memory_Arena permanent_arena;

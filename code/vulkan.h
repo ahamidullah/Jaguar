@@ -45,11 +45,6 @@ typedef enum GPU_Memory_Type {
 	GPU_HOST_MEMORY = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
 } GPU_Memory_Type;
 
-// @TODO: False sharing?
-typedef struct GPU_Thread_Local_Context {
-	VkCommandPool command_pools[VULKAN_MAX_FRAMES_IN_FLIGHT];
-} GPU_Thread_Local_Context;
-
 typedef struct GPU_Image {
 	VkImage image;
 	VkImageView view;
@@ -73,10 +68,22 @@ typedef struct GPU_Pipeline {
 	VkPipeline pipeline;
 } GPU_Pipeline;
 
-typedef struct GPU_Context {
+typedef struct Vulkan_Context {
+	VkPhysicalDevice physical_device;
 	VkDevice device;
-	GPU_Thread_Local_Context *thread_local;
-} GPU_Context;
+	VkInstance instance;
+	VkDebugUtilsMessengerEXT debug_messenger;
+	VkSurfaceKHR window_surface;
+	VkSurfaceFormatKHR window_surface_format;
+	u32 graphics_queue_family;
+	u32 present_queue_family;
+	VkQueue graphics_queue;
+	VkQueue present_queue;
+	VkPresentModeKHR present_mode;
+	VkSwapchainKHR swapchain;
+	VkDeviceSize minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
+	VkDeviceSize maximum_uniform_buffer_size; // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
+} Vulkan_Context;
 
 //Texture_ID GPU_Upload_Image(u8 *pixels, s32 image_width, s32 image_height);
 //GPU_Mesh GPU_Upload_Mesh(u32 vertex_count, u32 sizeof_vertex, void *vertices, u32 index_count, u32 *indices);

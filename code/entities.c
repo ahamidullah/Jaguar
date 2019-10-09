@@ -81,7 +81,7 @@ void Set_Entity_Model(Entity_ID entity_id, Asset_ID asset_id, Transform transfor
 		.transform = transform,
 		.assets = &game_state->assets,
 		.meshes = &game_state->entities.meshes,
-		.gpu_context = &game_state->gpu_context,
+		.gpu_context = &game_state->render_context.gpu_context,
 		.gpu_upload_flags = gpu_upload_flags,
 	};
 	Job_Counter *job_counter = malloc(sizeof(Job_Counter)); // @TODO

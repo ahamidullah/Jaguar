@@ -19,24 +19,10 @@ void Console_Print(const char *format, ...) {
 // @TODO: Handle log types.
 // @TODO: Log to file.
 void Log_Print(Log_Type log_type, const char *format, ...) {
-	const char *log_type_string;
-	switch (log_type) {
-		case STANDARD_LOG:
-		case INFO_LOG: {
-			log_type_string = "INFO";
-		} break;
-		case ERROR_LOG: {
-			log_type_string = "ERROR";
-		} break;
-		case ABORT_LOG: {
-			log_type_string = "ABORT";
-		} break;
-	}
 	va_list arguments;
 	va_start(arguments, format);
 	// @TODO: Print message to a log file as well.
-#if defined(debug)
-	Console_Print("%s: ", log_type_string);
+#if defined(DEBUG)
 	Console_Printv(format, arguments);
 #endif
 	va_end(arguments);

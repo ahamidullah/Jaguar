@@ -3,6 +3,8 @@
 #define MAX_ENTITY_MESHES 1000
 #define MAX_LOADED_ASSET_COUNT 1000
 
+typedef u32 Texture_ID;
+
 typedef enum {
 	LINE_PRIMITIVE,
 } Render_Primitive;
@@ -15,74 +17,19 @@ typedef struct {
 	Render_Primitive render_primitive;
 } Debug_Render_Object;
 
-typedef struct Render_Memory_Allocation {
-	u32 offset;
-	u32 size;
-	GPU_Memory memory;
-	void *mapped_pointer; // Will be NULL if the render backend memory of the memory block is not host visible.
-} Render_Memory_Allocation;
-
-// A block allocator stores its memory in a linked list of fixed size blocks.
-// Memory can then be suballocated out of each block, and when space in a block runs out, a new block is allocated from the render backend and added to the end of the linked list.
-// Block allocators are dynamic and not thread-safe. All operations on a block allocator must lock the block allocator's mutex.
-
-typedef struct Render_Memory_Block Render_Memory_Block;
-
-typedef struct Render_Memory_Block {
-	GPU_Memory memory;
-	u32 frontier;
-	u32 active_allocation_count;
-	Render_Memory_Allocation active_allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
-	Render_Memory_Block *next;
-} Render_Memory_Block;
-
-typedef struct Render_Memory_Block_Allocator {
-	u32 block_size;
-	Render_Memory_Block *base_block;
-	Render_Memory_Block *active_block;
-	GPU_Memory_Type memory_type;
-	Platform_Mutex mutex;
-} Render_Memory_Block_Allocator;
-
-typedef struct Render_Memory_Ring_Buffer_Allocator {
-	GPU_Memory memory;
-	u32 size;
-	u32 read_offset;
-	u32 write_offset;
-} Render_Memory_Ring_Buffer_Allocator;
-
-typedef enum Render_Memory_Allocator_Type {
-	RENDER_MEMORY_BLOCK_ALLOCATOR,
-	RENDER_MEMORY_RING_BUFFER_ALLOCATOR,
-} Render_Memory_Allocator_Type;
-
-typedef struct Render_Memory_Allocator {
-	union {
-		Render_Memory_Block_Allocator block;
-		Render_Memory_Ring_Buffer_Allocator ring_buffer;
-	};
-	Render_Memory_Allocator_Type type;
-} Render_Memory_Allocator;
-
 typedef struct Render_Memory {
-	Render_Memory_Allocator device_block_allocator;
-	Render_Memory_Ring_Buffer_Allocator host_ring_buffer_allocator;
+	GPU_Memory_Allocator device_block_allocator;
+	GPU_Memory_Ring_Buffer_Allocator host_ring_buffer_allocator;
 } Render_Memory;
 
-typedef struct Render_Image_Creation_Parameters {
+typedef struct GPU_Image_Creation_Parameters {
 	u32 width;
 	u32 height;
 	GPU_Format format;
 	GPU_Image_Layout initial_layout;
 	GPU_Image_Usage_Flags usage_flags;
-	GPU_Sample_Count sample_count;
-} Render_Image_Creation_Parameters;
-
-// @TODO: Render_Mesh
-typedef struct GPU_Mesh {
-	Render_Memory_Allocation *memory;
-	u32 indices_offset;
-} GPU_Mesh;
+	GPU_Sample_Count_Flags sample_count_flags;
+} GPU_Image_Creation_Parameters;
 
 typedef struct Render_Pass_Transient_Attachment_Creation_Parameters {
 	u32 width;
@@ -123,16 +70,22 @@ typedef struct Render_Graph_Description {
 	Render_Pass_Description *render_pass_descriptions;
 } Render_Graph_Description;
 
+typedef enum Render_API_ID {
+	VULKAN_RENDER_API,
+} Render_API_ID;
+
+// @TODO: False sharing?
+typedef struct GPU_Thread_Local_Context {
+	GPU_Command_Pool command_pools[MAX_FRAMES_IN_FLIGHT];
+} GPU_Thread_Local_Context;
+
 typedef struct GPU_Context {
+	Render_API_ID active_render_api;
 	union {
 		Vulkan_Context vulkan;
 	};
+	GPU_Thread_Local_Context *thread_local;
 } GPU_Context;
-
-// @TODO: False sharing?
-typedef struct Render_Thread_Local_Context {
-	GPU_Command_List_Pool command_list_pools[MAX_FRAMES_IN_FLIGHT];
-} Render_Thread_Local_Context;
 
 typedef struct Render_Context {
 	M4 scene_projection;
@@ -143,5 +96,5 @@ typedef struct Render_Context {
 	Render_Memory memory;
 	u32 current_frame_index;
 	GPU_Context gpu_context;
-	Render_Thread_Local_Context *thread_local;
+	GPU_Swapchain swapchain;
 } Render_Context;

@@ -5,6 +5,30 @@
 #define VULKAN_MAX_FRAMES_IN_FLIGHT 2
 #define VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK 512
 
+typedef struct Vulkan_Image {
+	VkImage image;
+	VkImageView view;
+	VkFormat format;
+	VkImageLayout layout;
+} Vulkan_Image;
+
+typedef struct Vulkan_Sampler_Filter {
+	VkFilter min;
+	VkFilter mag;
+	VkSamplerMipmapMode mipmap;
+} Vulkan_Sampler_Filter;
+
+typedef struct Vulkan_Descriptor_Set {
+	VkDescriptorSet descriptor_set;
+	VkDescriptorSetLayout layout;
+} Vulkan_Descriptor_Set;
+
+typedef struct Vulkan_Pipeline {
+	VkPipelineLayout layout;
+	VkPipeline pipeline;
+} Vulkan_Pipeline;
+
+/*
 typedef VkFence GPU_Fence;
 typedef VkCommandBuffer GPU_Command_List;
 typedef VkCommandPool GPU_Command_List_Pool;
@@ -72,6 +96,7 @@ typedef struct GPU_Pipeline {
 	VkPipelineLayout layout;
 	VkPipeline pipeline;
 } GPU_Pipeline;
+*/
 
 typedef struct Vulkan_Context {
 	VkPhysicalDevice physical_device;

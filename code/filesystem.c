@@ -19,7 +19,7 @@ String Get_Directory_From_Path(String path, Memory_Arena *arena) {
 		return S("");
 	}
 	u32 directory_length = slash_index;
-	String directory = create_string(directory_length, arena);
+	String directory = Create_String(directory_length, arena);
 	Append_String_Range(&directory, path, 0, directory_length);
 	directory.data[directory_length] = '\0';
 	return directory;
@@ -32,7 +32,7 @@ String Get_Filename_From_Path(String path, Memory_Arena *arena) {
 		return S("");
 	}
 	u32 filename_length = path.length - (slash_index + 1);
-	String filename = create_string(filename_length, arena);
+	String filename = Create_String(filename_length, arena);
 	Append_String_Range(&filename, path, slash_index + 1, filename_length);
 	filename.data[filename_length] = '\0';
 	return filename;
@@ -41,7 +41,7 @@ String Get_Filename_From_Path(String path, Memory_Arena *arena) {
 // Concatenates two strings and inserts a '/' between them.
 String Join_Filepaths(String a, String b, Memory_Arena *arena) {
 	u32 result_length = a.length + b.length + 1;
-	String result = create_string(result_length, arena);
+	String result = Create_String(result_length, arena);
 	Append_String(&result, a);
 	Append_String(&result, S("/"));
 	Append_String(&result, b);

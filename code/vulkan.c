@@ -476,86 +476,79 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
     return 0;
 }
 
-void GPU_Initialize() {
-}
-
-void GPU_Create_Command_List(GPU_Context *context, GPU_Command_List_Pool command_list_pool, GPU_Command_List *command_list) {
+void
+Vulkan_Create_Command_Buffer(Vulkan_Context *context, VkCommandPool command_pool, VkCommandBuffer *command_buffer) {
     VkCommandBufferAllocateInfo command_buffer_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandPool = command_list_pool,
+		.commandPool = command_pool,
 		.commandBufferCount = 1,
     };
-    vkAllocateCommandBuffers(context->vulkan.device, &command_buffer_allocate_info, command_list);
+    vkAllocateCommandBuffers(context->device, &command_buffer_allocate_info, command_buffer);
 	VkCommandBufferBeginInfo command_buffer_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
-	vkBeginCommandBuffer(*command_list, &command_buffer_begin_info);
+	vkBeginCommandBuffer(*command_buffer, &command_buffer_begin_info);
 }
 
-void GPU_Submit_Command_Lists(u32 count, GPU_Command_List *command_lists) {
+void
+Vulkan_Submit_Command_Buffers(u32 count, VkCommandBuffer *command_buffers) {
 	// @TODO
 }
 
-void GPU_End_Command_List(GPU_Command_List command_list) {
-	vkEndCommandBuffer(command_list);
+void
+Vulkan_End_Command_Buffer(VkCommandBuffer command_buffer) {
+	vkEndCommandBuffer(command_buffer);
 }
 
-void GPU_Reset_Command_List_Pool(GPU_Context *context, GPU_Command_List_Pool command_list_pool) {
-	vkResetCommandPool(context->vulkan.device, command_list_pool, 0);
+void
+Vulkan_Reset_Command_Pool(Vulkan_Context *context, VkCommandPool command_pool) {
+	vkResetCommandPool(context->device, command_pool, 0);
 }
 
-void GPU_Record_Copy_Buffer_Command(GPU_Context *context, GPU_Command_List command_list, GPU_Buffer source, GPU_Buffer destination, u32 size) {
+void
+Vulkan_Record_Copy_Buffer_Command(Vulkan_Context *context, VkCommandBuffer command_buffer, VkBuffer source, VkBuffer destination, u32 size) {
 	VkBufferCopy buffer_copy = {
 		.srcOffset = 0,
 		.dstOffset = 0,
 		.size = size,
 	};
-	vkCmdCopyBuffer(command_list, source, destination, 1, &buffer_copy);
+	vkCmdCopyBuffer(command_buffer, source, destination, 1, &buffer_copy);
 }
 
-GPU_Buffer GPU_Create_Buffer(GPU_Context *context, u32 size, GPU_Buffer_Usage_Flags usage_flags) {
-	VkBufferCreateInfo buffer_create_info = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = size,
-		.usage = usage_flags,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-	};
+VkBuffer
+Vulkan_Create_Buffer(Vulkan_Context *context, VkBufferCreateInfo *buffer_create_info) {
 	VkBuffer buffer;
-	VK_CHECK(vkCreateBuffer(context->vulkan.device, &buffer_create_info, NULL, &buffer));
+	VK_CHECK(vkCreateBuffer(context->device, buffer_create_info, NULL, &buffer));
 	return buffer;
 }
 
-void GPU_Bind_Buffer_Memory(GPU_Context *context, GPU_Buffer buffer, GPU_Memory memory, u32 memory_offset) {
-	VK_CHECK(vkBindBufferMemory(context->vulkan.device, buffer, memory, memory_offset));
+void
+Vulkan_Bind_Buffer_Memory(Vulkan_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
+	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
 }
 
-GPU_Resource_Allocation_Requirements GPU_Get_Buffer_Allocation_Requirements(GPU_Context *context, GPU_Buffer buffer) {
+VkMemoryRequirements
+Vulkan_Get_Buffer_Allocation_Requirements(Vulkan_Context *context, VkBuffer buffer) {
 	VkMemoryRequirements memory_requirements;
-	vkGetBufferMemoryRequirements(context->vulkan.device, buffer, &memory_requirements);
-	return (GPU_Resource_Allocation_Requirements){
-		.size = memory_requirements.size,
-		.alignment = memory_requirements.alignment,
-	};
+	vkGetBufferMemoryRequirements(context->device, buffer, &memory_requirements);
+	return memory_requirements;
 }
 
-void *GPU_Map_Memory(GPU_Context *context, GPU_Memory memory, u32 size, u32 offset) {
+void *
+Vulkan_Map_Memory(Vulkan_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
 	void *pointer;
-	VK_CHECK(vkMapMemory(context->vulkan.device, memory, offset, size, 0, &pointer));
+	VK_CHECK(vkMapMemory(context->device, memory, offset, size, 0, &pointer));
 	return pointer;
 }
 
-bool GPU_Allocate_Memory(GPU_Context *context, u32 size, GPU_Memory_Type memory_type, GPU_Memory *memory) {
-	VkMemoryAllocateInfo memory_allocate_info = {
-		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = size,
-	};
+bool Vulkan_Allocate_Memory(Vulkan_Context *context, u32 size, VkMemoryPropertyFlags memory_property_flags, VkDeviceMemory *memory) {
 	VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-	vkGetPhysicalDeviceMemoryProperties(context->vulkan.physical_device, &physical_device_memory_properties);
+	vkGetPhysicalDeviceMemoryProperties(context->physical_device, &physical_device_memory_properties);
 	s32 selected_memory_type_index = -1;
 	for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
-		if ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_type) == memory_type) {
+		if ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_property_flags) == memory_property_flags) {
 			selected_memory_type_index = i;
 			break;
 		}
@@ -563,18 +556,20 @@ bool GPU_Allocate_Memory(GPU_Context *context, u32 size, GPU_Memory_Type memory_
 	if (selected_memory_type_index < 0) {
 		Abort("Failed to find suitable GPU memory type");
 	}
-	memory_allocate_info.memoryTypeIndex = selected_memory_type_index;
-	VkResult result = vkAllocateMemory(context->vulkan.device, &memory_allocate_info, NULL, memory);
-	if (result != VK_SUCCESS) {
-		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-			return false;
-		}
-		VK_CHECK(result);
+	VkMemoryAllocateInfo memory_allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = size,
+		.memoryTypeIndex = selected_memory_type_index,
+	};
+	VkResult result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, memory);
+	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+		return false;
 	}
+	VK_CHECK(result);
 	return true;
 }
 
-GPU_Fence GPU_Create_Fence(GPU_Context *context, bool start_signalled) {
+VkFence Vulkan_Create_Fence(Vulkan_Context *context, bool start_signalled) {
 	VkFenceCreateInfo fence_create_info = {
 		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 		.flags = 0,
@@ -583,12 +578,12 @@ GPU_Fence GPU_Create_Fence(GPU_Context *context, bool start_signalled) {
 		fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	}
 	VkFence fence;
-	vkCreateFence(context->vulkan.device, &fence_create_info, NULL, &fence);
+	vkCreateFence(context->device, &fence_create_info, NULL, &fence);
 	return fence;
 }
 
-bool GPU_Was_Fence_Signalled(GPU_Context *context, GPU_Fence fence) {
-	VkResult result = vkGetFenceStatus(context->vulkan.device, fence);
+bool Vulkan_Was_Fence_Signalled(Vulkan_Context *context, VkFence fence) {
+	VkResult result = vkGetFenceStatus(context->device, fence);
 	if (result == VK_SUCCESS) {
 		return true;
 	}
@@ -599,12 +594,12 @@ bool GPU_Was_Fence_Signalled(GPU_Context *context, GPU_Fence fence) {
 	return false;
 }
 
-void GPU_Wait_For_Fences(GPU_Context *context, u32 count, GPU_Fence *fences, bool wait_for_all_fences, u64 timeout) {
-	VK_CHECK(vkWaitForFences(context->vulkan.device, count, fences, wait_for_all_fences, timeout));
+void Vulkan_Wait_For_Fences(Vulkan_Context *context, u32 count, VkFence *fences, bool wait_for_all_fences, u64 timeout) {
+	VK_CHECK(vkWaitForFences(context->device, count, fences, wait_for_all_fences, timeout));
 }
 
-void GPU_Reset_Fences(GPU_Context *context, u32 count, GPU_Fence *fences) {
-	VK_CHECK(vkResetFences(context->vulkan.device, count, fences));
+void Vulkan_Reset_Fences(Vulkan_Context *context, u32 count, VkFence *fences) {
+	VK_CHECK(vkResetFences(context->device, count, fences));
 }
 
 #if 0
@@ -964,81 +959,83 @@ void Transition_Vulkan_Image_Layout(GPU_Command_List command_list, GPU_Image ima
 }
 #endif
 
-u32 GPU_Create_Swapchain(GPU_Context *context, GPU_Image **swapchain_images) {
-	// Create swapchain.
-	{
-		VkSurfaceCapabilitiesKHR surface_capabilities;
-		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->vulkan.physical_device, context->vulkan.window_surface, &surface_capabilities));
-		VkExtent2D swapchain_image_extent;
-		if (surface_capabilities.currentExtent.width != UINT32_MAX) {
-			swapchain_image_extent = surface_capabilities.currentExtent;
-		} else {
-			swapchain_image_extent.width = u32_max(surface_capabilities.minImageExtent.width, u32_min(surface_capabilities.maxImageExtent.width, window_width));
-			swapchain_image_extent.height = u32_max(surface_capabilities.minImageExtent.height, u32_min(surface_capabilities.maxImageExtent.height, window_height));
-		}
-		if (swapchain_image_extent.width != window_width && swapchain_image_extent.height != window_height) {
-			Abort("Swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u", swapchain_image_extent.width, swapchain_image_extent.height, window_width, window_height);
-		}
-		u32 requested_swapchain_image_count = surface_capabilities.minImageCount + 1;
-		if (surface_capabilities.maxImageCount > 0 && requested_swapchain_image_count > surface_capabilities.maxImageCount) {
-			requested_swapchain_image_count = surface_capabilities.maxImageCount;
-		}
-		VkSwapchainCreateInfoKHR swapchain_create_info = {
-			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-			.surface = context->vulkan.window_surface,
-			.minImageCount = requested_swapchain_image_count,
-			.imageFormat = context->vulkan.window_surface_format.format,
-			.imageColorSpace = context->vulkan.window_surface_format.colorSpace,
-			.imageExtent = swapchain_image_extent,
-			.imageArrayLayers = 1,
-			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-			.preTransform = surface_capabilities.currentTransform,
-			.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-			.presentMode = context->vulkan.present_mode,
-			.clipped = 1,
-			.oldSwapchain = NULL,
-		};
-		u32 queue_family_indices[] = {
-			context->vulkan.graphics_queue_family,
-			context->vulkan.present_queue_family,
-		};
-		if (context->vulkan.graphics_queue_family != context->vulkan.present_queue_family) {
-			swapchain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			swapchain_create_info.queueFamilyIndexCount = Array_Count(queue_family_indices);
-			swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
-		} else {
-			swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		}
-		VK_CHECK(vkCreateSwapchainKHR(context->vulkan.device, &swapchain_create_info, NULL, &context->vulkan.swapchain));
-	}
-	// Retrieve swapchain images and create swapchain image views.
+u32
+Vulkan_Get_Swapchain_Image_Count(Vulkan_Context *context, VkSwapchainKHR swapchain) {
 	u32 swapchain_image_count = 0;
-	{
-		VK_CHECK(vkGetSwapchainImagesKHR(context->vulkan.device, context->vulkan.swapchain, &swapchain_image_count, NULL));
-		VkImage swapchain_vulkan_images[swapchain_image_count]; // @TODO
-		*swapchain_images = malloc(swapchain_image_count * sizeof(GPU_Image));
-		VK_CHECK(vkGetSwapchainImagesKHR(context->vulkan.device, context->vulkan.swapchain, &swapchain_image_count, swapchain_vulkan_images));
-		for (s32 i = 0; i < swapchain_image_count; i++) {
-			(*swapchain_images)[i].image = swapchain_vulkan_images[i];
-			VkImageViewCreateInfo image_view_create_info = {
-				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-				.image = (*swapchain_images)[i].image,
-				.viewType = VK_IMAGE_VIEW_TYPE_2D,
-				.format = context->vulkan.window_surface_format.format,
-				.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-				.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-				.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-				.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
-				.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.subresourceRange.baseMipLevel = 0,
-				.subresourceRange.levelCount = 1,
-				.subresourceRange.baseArrayLayer = 0,
-				.subresourceRange.layerCount = 1,
-			};
-			VK_CHECK(vkCreateImageView(context->vulkan.device, &image_view_create_info, NULL, &(*swapchain_images)[i].view));
-		}
-	}
+	VK_CHECK(vkGetSwapchainImagesKHR(context->device, swapchain, &swapchain_image_count, NULL));
 	return swapchain_image_count;
+}
+
+void
+Vulkan_Get_Swapchain_Images(Vulkan_Context *context, VkSwapchainKHR swapchain, u32 count, VkImage *images, VkImageView *image_views) {
+	VK_CHECK(vkGetSwapchainImagesKHR(context->device, swapchain, &count, images));
+	for (s32 i = 0; i < count; i++) {
+		VkImageViewCreateInfo image_view_create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = images[i],
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = context->window_surface_format.format,
+			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = 1,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1,
+		};
+		VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL, &image_views[i]));
+	}
+}
+
+VkSwapchainKHR
+Vulkan_Create_Swapchain(Vulkan_Context *context) {
+	VkSurfaceCapabilitiesKHR surface_capabilities;
+	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device, context->window_surface, &surface_capabilities));
+	VkExtent2D swapchain_image_extent;
+	if (surface_capabilities.currentExtent.width != UINT32_MAX) {
+		swapchain_image_extent = surface_capabilities.currentExtent;
+	} else {
+		swapchain_image_extent.width = u32_max(surface_capabilities.minImageExtent.width, u32_min(surface_capabilities.maxImageExtent.width, window_width));
+		swapchain_image_extent.height = u32_max(surface_capabilities.minImageExtent.height, u32_min(surface_capabilities.maxImageExtent.height, window_height));
+	}
+	if (swapchain_image_extent.width != window_width && swapchain_image_extent.height != window_height) {
+		Abort("Swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u", swapchain_image_extent.width, swapchain_image_extent.height, window_width, window_height);
+	}
+	u32 requested_swapchain_image_count = surface_capabilities.minImageCount + 1;
+	if (surface_capabilities.maxImageCount > 0 && requested_swapchain_image_count > surface_capabilities.maxImageCount) {
+		requested_swapchain_image_count = surface_capabilities.maxImageCount;
+	}
+	VkSwapchainCreateInfoKHR swapchain_create_info = {
+		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+		.surface = context->window_surface,
+		.minImageCount = requested_swapchain_image_count,
+		.imageFormat = context->window_surface_format.format,
+		.imageColorSpace = context->window_surface_format.colorSpace,
+		.imageExtent = swapchain_image_extent,
+		.imageArrayLayers = 1,
+		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+		.preTransform = surface_capabilities.currentTransform,
+		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		.presentMode = context->present_mode,
+		.clipped = 1,
+		.oldSwapchain = NULL,
+	};
+	u32 queue_family_indices[] = {
+		context->graphics_queue_family,
+		context->present_queue_family,
+	};
+	if (context->graphics_queue_family != context->present_queue_family) {
+		swapchain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		swapchain_create_info.queueFamilyIndexCount = Array_Count(queue_family_indices);
+		swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
+	} else {
+		swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+	VkSwapchainKHR swapchain;
+	VK_CHECK(vkCreateSwapchainKHR(context->device, &swapchain_create_info, NULL, &swapchain));
+	return swapchain;
 }
 
 // @TODO: Better abstraction for render passes.
@@ -1208,7 +1205,8 @@ typedef struct GPU_Descriptor_Subpool_Description {
 	u32 size;
 } GPU_Descriptor_Subpool_Description;
 
-GPU_Descriptor_Pool GPU_Create_Descriptor_Pool(GPU_Context *context, u32 subpool_count, GPU_Descriptor_Subpool_Description *subpool_descriptions, u32 flags) {
+/*
+VkDescriptorPool Vulkan_Create_Descriptor_Pool(Vulkan_Context *context, u32 subpool_count, VkDescriptorPoolCreateInfo *create_info, u32 flags) {
 	VkDescriptorPoolSize descriptor_pool_sizes[subpool_count];
 	for (u32 i = 0; i < subpool_count; i++) {
 		descriptor_pool_sizes[i].type = subpool_descriptions[i].type;
@@ -1225,6 +1223,7 @@ GPU_Descriptor_Pool GPU_Create_Descriptor_Pool(GPU_Context *context, u32 subpool
 	VK_CHECK(vkCreateDescriptorPool(context->vulkan.device, &descriptor_pool_create_info, NULL, &descriptor_pool));
 	return descriptor_pool;
 }
+*/
 
 typedef struct GPU_Image_Descriptor_Write {
 	GPU_Image image;
@@ -1251,7 +1250,7 @@ typedef struct GPU_Descriptor_Description {
 	u32 flags;
 } GPU_Descriptor_Description;
 
-GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, GPU_Descriptor_Pool descriptor_pool) {
+GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
 	GPU_Descriptor_Set descriptor_set;
 	VkDescriptorSetLayoutBinding bindings[descriptor_count];
 	for (u32 i = 0; i < descriptor_count; i++) {
@@ -1269,14 +1268,14 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 		.pBindings = bindings,
 		.flags = flags,
 	};
-	VK_CHECK(vkCreateDescriptorSetLayout(context->vulkan.device, &descriptor_set_layout_create_info, NULL, &descriptor_set.layout));
+	VK_CHECK(vkCreateDescriptorSetLayout(context->vulkan.device, &descriptor_set_layout_create_info, NULL, &descriptor_set.vulkan.layout));
 	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = descriptor_pool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = &descriptor_set.layout,
+		.pSetLayouts = &descriptor_set.vulkan.layout,
 	};
-	VK_CHECK(vkAllocateDescriptorSets(context->vulkan.device, &descriptor_set_allocate_info, &descriptor_set.descriptor_set));
+	VK_CHECK(vkAllocateDescriptorSets(context->vulkan.device, &descriptor_set_allocate_info, &descriptor_set.vulkan.descriptor_set));
 
 	VkWriteDescriptorSet descriptor_writes[descriptor_count];
 	VkDescriptorImageInfo descriptor_image_infos[descriptor_count];
@@ -1284,7 +1283,7 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 	for (u32 i = 0; i < descriptor_count; i++) {
 		descriptor_writes[i] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set.descriptor_set,
+			.dstSet = descriptor_set.vulkan.descriptor_set,
 			.dstBinding = descriptor_descriptions[i].binding,
 			.dstArrayElement = 0,
 			.descriptorType = descriptor_descriptions[i].type,
@@ -1293,14 +1292,14 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 		Assert(descriptor_descriptions[i].write.image || descriptor_descriptions[i].write.buffer);
 		if (descriptor_descriptions[i].write.image) {
 			 descriptor_image_infos[i] = (VkDescriptorImageInfo){
-				.imageLayout = descriptor_descriptions[i].write.image->image.layout,
-				.imageView = descriptor_descriptions[i].write.image->image.view,
-				.sampler = descriptor_descriptions[i].write.image->sampler,
+				.imageLayout = descriptor_descriptions[i].write.image->image.vulkan.layout,
+				.imageView = descriptor_descriptions[i].write.image->image.vulkan.view,
+				.sampler = descriptor_descriptions[i].write.image->sampler.vulkan,
 			};
 			descriptor_writes[i].pImageInfo = &descriptor_image_infos[i];
 		} else {
 			descriptor_buffer_infos[i] = (VkDescriptorBufferInfo){
-				.buffer = descriptor_descriptions[i].write.buffer->buffer,
+				.buffer = descriptor_descriptions[i].write.buffer->buffer.vulkan,
 				.offset = descriptor_descriptions[i].write.buffer->offset,
 				.range = descriptor_descriptions[i].write.buffer->range,
 			};
@@ -1372,10 +1371,13 @@ typedef struct GPU_Pipeline_Description {
 } GPU_Pipeline_Description;
 
 GPU_Pipeline GPU_Create_Pipeline(GPU_Context *context, GPU_Pipeline_Description *pipeline_description) {
+	GPU_Pipeline p = {};
+	return p;
+#if 0
 	GPU_Pipeline pipeline;
 	VkDescriptorSetLayout descriptor_set_layouts[pipeline_description->descriptor_set_count];
 	for (u32 i = 0; i < pipeline_description->descriptor_set_count; i++) {
-		descriptor_set_layouts[i] = pipeline_description->descriptor_sets[i].layout;
+		descriptor_set_layouts[i] = pipeline_description->descriptor_sets[i].vulkan.layout;
 	}
 	VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -1392,7 +1394,7 @@ GPU_Pipeline GPU_Create_Pipeline(GPU_Context *context, GPU_Pipeline_Description 
 		};
 	}
 	pipeline_layout_create_info.pPushConstantRanges = push_constant_ranges;
-	VK_CHECK(vkCreatePipelineLayout(context->vulkan.device, &pipeline_layout_create_info, NULL, &pipeline.layout));
+	VK_CHECK(vkCreatePipelineLayout(context->vulkan.device, &pipeline_layout_create_info, NULL, &pipeline.vulkan.layout));
 
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1519,60 +1521,81 @@ GPU_Pipeline GPU_Create_Pipeline(GPU_Context *context, GPU_Pipeline_Description 
 	};
 	VK_CHECK(vkCreateGraphicsPipelines(context->vulkan.device, NULL, 1, &graphics_pipeline_create_info, NULL, &pipeline.pipeline));
 	return pipeline;
+#endif
 }
 
-GPU_Framebuffer GPU_Create_Framebuffer(GPU_Context *context, GPU_Render_Pass render_pass, u32 width, u32 height, u32 attachment_count, GPU_Image *attachments) {
-	VkImageView image_view_attachments[attachment_count];
-	for (u32 i = 0; i < attachment_count; i++) {
-		image_view_attachments[i] = attachments[i].view;
-	}
+VkFramebuffer Vulkan_Create_Framebuffer(Vulkan_Context *context, VkRenderPass render_pass, u32 width, u32 height, u32 attachment_count, VkImageView *attachments) {
 	VkFramebufferCreateInfo framebuffer_create_info = {
 		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 		.renderPass = render_pass,
 		.attachmentCount = attachment_count,
-		.pAttachments = image_view_attachments,
+		.pAttachments = attachments,
 		.width = width,
 		.height = height,
 		.layers = 1,
 	};
-	GPU_Framebuffer framebuffer;
-	VK_CHECK(vkCreateFramebuffer(context->vulkan.device, &framebuffer_create_info, NULL, &framebuffer));
+	VkFramebuffer framebuffer;
+	VK_CHECK(vkCreateFramebuffer(context->device, &framebuffer_create_info, NULL, &framebuffer));
 	return framebuffer;
 }
 
-VkImage Vulkan_Create_Image(GPU_Context *context, Render_Image_Creation_Parameters *parameters) {
-	VkImageCreateInfo image_create_info = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-		.imageType = VK_IMAGE_TYPE_2D,
-		.extent.width = parameters->width,
-		.extent.height = parameters->height,
-		.extent.depth = 1,
-		.mipLevels = 1,
-		.arrayLayers = 1,
-		.format = parameters->format,
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.initialLayout = parameters->initial_layout,
-		.usage = parameters->usage_flags,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.samples = parameters->sample_count,
-	};
-	VkImage image;
-	VK_CHECK(vkCreateImage(context->vulkan.device, &image_create_info, NULL, &image));
-	return image;
-}
-
-GPU_Resource_Allocation_Requirements GPU_Get_Image_Allocation_Requirements(GPU_Context *context, Render_Image_Creation_Parameters *parameters) {
-	VkImage temporary_image = Vulkan_Create_Image(context, parameters);
+VkMemoryRequirements Vulkan_Get_Image_Allocation_Requirements(Vulkan_Context *context, VkImageCreateInfo *image_create_info) {
+	VkImage temporary_image;
+	VK_CHECK(vkCreateImage(context->device, image_create_info, NULL, &temporary_image));
 	VkMemoryRequirements image_memory_requirements;
-	vkGetImageMemoryRequirements(context->vulkan.device, temporary_image, &image_memory_requirements);
-	GPU_Resource_Allocation_Requirements resource_allocation_requirements = {
-		.size = image_memory_requirements.size,
-		.alignment = image_memory_requirements.alignment,
-	};
-	vkDestroyImage(context->vulkan.device, temporary_image, NULL);
-	return resource_allocation_requirements;
+	vkGetImageMemoryRequirements(context->device, temporary_image, &image_memory_requirements);
+	vkDestroyImage(context->device, temporary_image, NULL);
+	return image_memory_requirements;
 }
 
+void Vulkan_Create_Image(Vulkan_Context *context, VkImageCreateInfo *image_create_info, VkDeviceMemory memory, u32 offset, VkImage *image, VkImageView *image_view) {
+	VK_CHECK(vkCreateImage(context->device, image_create_info, NULL, image));
+	// Bind the image to GPU memory.
+	{
+		// @TODO: Should this check be debug only?
+		// Check that this image type is compatible with this memory type.
+		VkMemoryRequirements image_memory_requirements;
+		vkGetImageMemoryRequirements(context->device, *image, &image_memory_requirements);
+		VkPhysicalDeviceMemoryProperties physical_device_memory_properties; // @TODO: Store these properties?
+		vkGetPhysicalDeviceMemoryProperties(context->physical_device, &physical_device_memory_properties);
+		/* @TODO: How to get memory_type?
+		s32 selected_memory_type_index = -1;
+		for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
+			if ((image_memory_requirements.memoryTypeBits & (1 << i)) && ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_type) == memory_type)) {
+				selected_memory_type_index = i;
+				break;
+			}
+		}
+		Assert(selected_memory_type_index != -1);
+		*/
+		VK_CHECK(vkBindImageMemory(context->device, *image, memory, offset));
+	}
+	// Create an image view.
+	{
+		VkImageViewCreateInfo image_view_create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = *image,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = image_create_info->format,
+			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = 1,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1,
+		};
+		if (image_create_info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		} else {
+			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		}
+		VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL, image_view));
+	}
+}
+
+#if 0
 GPU_Image GPU_Create_Image(GPU_Context *context, Render_Image_Creation_Parameters *parameters, GPU_Memory memory, u32 offset) {
 	GPU_Image image = {
 		.format = parameters->format,
@@ -1624,15 +1647,16 @@ GPU_Image GPU_Create_Image(GPU_Context *context, Render_Image_Creation_Parameter
 	}
 	return image;
 }
+#endif
 
-void GPU_Transition_Image_Layout(GPU_Command_List command_list, GPU_Image *image, GPU_Image_Layout new_layout) {
+void Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, VkFormat format) {
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.oldLayout = image->layout,
+		.oldLayout = old_layout,
 		.newLayout = new_layout,
 		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = image->image,
+		.image = image,
 		.subresourceRange.baseArrayLayer = 0,
 		.subresourceRange.baseMipLevel = 0,
 		.subresourceRange.levelCount = 1,
@@ -1640,7 +1664,7 @@ void GPU_Transition_Image_Layout(GPU_Command_List command_list, GPU_Image *image
 	};
 	if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		if (image->format == VK_FORMAT_D32_SFLOAT_S8_UINT || image->format == VK_FORMAT_D24_UNORM_S8_UINT) {
+		if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) {
 			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
 	} else {
@@ -1648,17 +1672,17 @@ void GPU_Transition_Image_Layout(GPU_Command_List command_list, GPU_Image *image
 	}
 	VkPipelineStageFlags source_stage;
 	VkPipelineStageFlags destination_stage;
-	if (image->layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-	} else if (image->layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+	} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	} else if (image->layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -1666,8 +1690,7 @@ void GPU_Transition_Image_Layout(GPU_Command_List command_list, GPU_Image *image
 	} else {
 		Abort("Unsupported Vulkan layout transition");
 	}
-	vkCmdPipelineBarrier(command_list, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
-	image->layout = new_layout;
+	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
 }
 
 typedef struct GPU_Sampler_Description {
@@ -1682,12 +1705,16 @@ typedef struct GPU_Sampler_Description {
 	GPU_Border_Color border_color;
 } GPU_Sampler_Description;
 
-GPU_Sampler GPU_Create_Sampler(GPU_Context *context, GPU_Sampler_Description sampler_description) {
+VkSampler Vulkan_Create_Sampler(Vulkan_Context *context, VkSamplerCreateInfo *sampler_create_info) {
+	VkSampler sampler;
+	VK_CHECK(vkCreateSampler(context->device, sampler_create_info, NULL, &sampler));
+	return sampler;
+#if 0
 	VkSamplerCreateInfo sampler_create_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		.magFilter = sampler_description.filter.mag,
-		.minFilter = sampler_description.filter.min,
-		.mipmapMode = sampler_description.filter.mipmap,
+		.magFilter = sampler_description.filter.vulkan.mag,
+		.minFilter = sampler_description.filter.vulkan.min,
+		.mipmapMode = sampler_description.filter.vulkan.mipmap,
 		.addressModeU = sampler_description.address_mode_u,
 		.addressModeV = sampler_description.address_mode_v,
 		.addressModeW = sampler_description.address_mode_w,
@@ -1700,6 +1727,7 @@ GPU_Sampler GPU_Create_Sampler(GPU_Context *context, GPU_Sampler_Description sam
 	VkSampler sampler;
 	VK_CHECK(vkCreateSampler(context->vulkan.device, &sampler_create_info, NULL, &sampler));
 	return sampler;
+#endif
 }
 
 #if 0
@@ -2650,7 +2678,7 @@ typedef struct {
 } Create_Shader_Request;
 
 // @TODO: Use a temporary arena.
-void Initialize_Vulkan(GPU_Context *context) {
+void Vulkan_Initialize(Vulkan_Context *context) {
 	Platform_Dynamic_Library_Handle vulkan_library = Platform_Open_Dynamic_Library("libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)Platform_Get_Dynamic_Library_Function(vulkan_library, #name); \
@@ -2736,13 +2764,13 @@ void Initialize_Vulkan(GPU_Context *context) {
 			.pNext = &debug_create_info,
 #endif
 		};
-		VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &context->vulkan.instance));
+		VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &context->instance));
 	}
 
 #define VK_EXPORTED_FUNCTION(name)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name) \
-	name = (PFN_##name)vkGetInstanceProcAddr(context->vulkan.instance, (const char *)#name); \
+	name = (PFN_##name)vkGetInstanceProcAddr(context->instance, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_DEVICE_FUNCTION(name)
 #include "vulkan_functions.h"
@@ -2752,22 +2780,22 @@ void Initialize_Vulkan(GPU_Context *context) {
 #undef VK_DEVICE_FUNCTION
 
 	if (debug) {
-		VK_CHECK(vkCreateDebugUtilsMessengerEXT(context->vulkan.instance, &debug_create_info, NULL, &context->vulkan.debug_messenger));
+		VK_CHECK(vkCreateDebugUtilsMessengerEXT(context->instance, &debug_create_info, NULL, &context->debug_messenger));
 	}
 
-	Platform_Create_Vulkan_Surface(context->vulkan.instance, &context->vulkan.window_surface);
+	Platform_Create_Vulkan_Surface(context->instance, &context->window_surface);
 
 	// Select physical device.
 	// @TODO: Rank physical device and select the best one?
 	{
 		bool found_suitable_physical_device = false;
 		u32 available_physical_device_count = 0;
-		VK_CHECK(vkEnumeratePhysicalDevices(context->vulkan.instance, &available_physical_device_count, NULL));
+		VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &available_physical_device_count, NULL));
 		if (available_physical_device_count == 0) {
 			Abort("Could not find any physical devices.");
 		}
 		VkPhysicalDevice available_physical_devices[available_physical_device_count];
-		VK_CHECK(vkEnumeratePhysicalDevices(context->vulkan.instance, &available_physical_device_count , available_physical_devices));
+		VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &available_physical_device_count , available_physical_devices));
 		for (s32 i = 0; i < available_physical_device_count; i++) {
 			VkPhysicalDeviceProperties physical_device_properties;
 			vkGetPhysicalDeviceProperties(available_physical_devices[i], &physical_device_properties);
@@ -2801,15 +2829,15 @@ void Initialize_Vulkan(GPU_Context *context) {
 			// If we have at least one supported surface format and present mode, we will consider the device.
 			// @TODO: Should we die if error, or just skip this physical device?
 			u32 available_surface_format_count = 0;
-			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->vulkan.window_surface, &available_surface_format_count, NULL));
+			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->window_surface, &available_surface_format_count, NULL));
 			u32 available_present_mode_count = 0;
-			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->vulkan.window_surface, &available_present_mode_count, NULL));
+			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->window_surface, &available_present_mode_count, NULL));
 			if (available_surface_format_count == 0 || available_present_mode_count == 0) {
 				continue;
 			}
 			// Select the best swap chain settings.
 			VkSurfaceFormatKHR available_surface_formats[available_surface_format_count];
-			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->vulkan.window_surface, &available_surface_format_count, available_surface_formats));
+			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->window_surface, &available_surface_format_count, available_surface_formats));
 			VkSurfaceFormatKHR surface_format = available_surface_formats[0];
 			if (available_surface_format_count == 1 && available_surface_formats[0].format == VK_FORMAT_UNDEFINED) {
 				// No preferred format, so we get to pick our own.
@@ -2829,7 +2857,7 @@ void Initialize_Vulkan(GPU_Context *context) {
 			// In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be immediately displayed, even though that may mean some tearing.
 			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
 			VkPresentModeKHR available_present_modes[available_present_mode_count];
-			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->vulkan.window_surface, &available_present_mode_count, available_present_modes));
+			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->window_surface, &available_present_mode_count, available_present_modes));
 			for (s32 j = 0; j < available_present_mode_count; j++) {
 				if (available_present_modes[j] == VK_PRESENT_MODE_MAILBOX_KHR) {
 					present_mode = available_present_modes[j];
@@ -2851,18 +2879,18 @@ void Initialize_Vulkan(GPU_Context *context) {
 					graphics_queue_family = j;
 				}
 				u32 present_support = 0;
-				VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(available_physical_devices[i], j, context->vulkan.window_surface, &present_support));
+				VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(available_physical_devices[i], j, context->window_surface, &present_support));
 				if (present_support) {
 					present_queue_family = j;
 				}
 				if (graphics_queue_family != -1 && present_queue_family != -1) {
-					context->vulkan.physical_device = available_physical_devices[i];
-					context->vulkan.graphics_queue_family = graphics_queue_family;
-					context->vulkan.present_queue_family = present_queue_family;
-					context->vulkan.window_surface_format = surface_format;
-					context->vulkan.present_mode = present_mode;
-					context->vulkan.minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
-					context->vulkan.maximum_uniform_buffer_size = physical_device_properties.limits.maxUniformBufferRange;
+					context->physical_device = available_physical_devices[i];
+					context->graphics_queue_family = graphics_queue_family;
+					context->present_queue_family = present_queue_family;
+					context->window_surface_format = surface_format;
+					context->present_mode = present_mode;
+					context->minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
+					context->maximum_uniform_buffer_size = physical_device_properties.limits.maxUniformBufferRange;
 					found_suitable_physical_device = true;
 					Log_Print(INFO_LOG, "Available Vulkan device extensions:\n");
 					for (s32 k = 0; k < available_device_extension_count; k++) {
@@ -2882,19 +2910,19 @@ void Initialize_Vulkan(GPU_Context *context) {
 
 	// Create logical device.
 	{
-		u32 unique_queue_family_count = (context->vulkan.graphics_queue_family == context->vulkan.present_queue_family) ? 1 : 2;
+		u32 unique_queue_family_count = (context->graphics_queue_family == context->present_queue_family) ? 1 : 2;
 		f32 queue_priority = 1.0f;
 		VkDeviceQueueCreateInfo device_queue_create_info[unique_queue_family_count];
 		device_queue_create_info[0] = (VkDeviceQueueCreateInfo){
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			.queueFamilyIndex = context->vulkan.graphics_queue_family,
+			.queueFamilyIndex = context->graphics_queue_family,
 			.queueCount = 1,
 			.pQueuePriorities = &queue_priority,
 		};
 		if (unique_queue_family_count > 1) {
 			device_queue_create_info[1] = (VkDeviceQueueCreateInfo){
 				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				.queueFamilyIndex = context->vulkan.present_queue_family,
+				.queueFamilyIndex = context->present_queue_family,
 				.queueCount = 1,
 				.pQueuePriorities = &queue_priority,
 			};
@@ -2915,14 +2943,14 @@ void Initialize_Vulkan(GPU_Context *context) {
 				.runtimeDescriptorArray = VK_TRUE,
 			},
 		};
-		VK_CHECK(vkCreateDevice(context->vulkan.physical_device, &device_create_info, NULL, &context->vulkan.device));
+		VK_CHECK(vkCreateDevice(context->physical_device, &device_create_info, NULL, &context->device));
 	}
 
 #define VK_EXPORTED_FUNCTION(name)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
-	name = (PFN_##name)vkGetDeviceProcAddr(context->vulkan.device, (const char *)#name); \
+	name = (PFN_##name)vkGetDeviceProcAddr(context->device, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #include "vulkan_functions.h"
 #undef VK_EXPORTED_FUNCTION
@@ -2930,8 +2958,8 @@ void Initialize_Vulkan(GPU_Context *context) {
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	vkGetDeviceQueue(context->vulkan.device, context->vulkan.graphics_queue_family, 0, &context->vulkan.graphics_queue); // No return.
-	vkGetDeviceQueue(context->vulkan.device, context->vulkan.present_queue_family, 0, &context->vulkan.present_queue); // No return.
+	vkGetDeviceQueue(context->device, context->graphics_queue_family, 0, &context->graphics_queue); // No return.
+	vkGetDeviceQueue(context->device, context->present_queue_family, 0, &context->present_queue); // No return.
 
 #if 0
 	// Descriptor set layout.

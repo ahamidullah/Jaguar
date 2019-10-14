@@ -1,4 +1,4 @@
-size_t c_string_length(const char *c_string) {
+size_t C_String_Length(const char *c_string) {
 	size_t length = 0;
 	while (*c_string++) {
 		length++;
@@ -7,7 +7,7 @@ size_t c_string_length(const char *c_string) {
 }
 
 String S(const char *c_string) {
-	size_t length = c_string_length(c_string);
+	size_t length = C_String_Length(c_string);
 	return (String){
 		.data = (char *)c_string,
 		.length = length,
@@ -16,7 +16,7 @@ String S(const char *c_string) {
 	};
 }
 
-String create_string(u32 capacity, Memory_Arena *arena) {
+String Create_String(u32 capacity, Memory_Arena *arena) {
 	// We still null-terminate our strings to ensure compatibility with libraries, debuggers, etc.
 	return (String){
 		.data = allocate_array(arena, char, capacity + 1),
@@ -76,14 +76,6 @@ void copy_string(char *destination, const char *source) {
 		*destination++ = *source++;
 	}
 	*destination = '\0';
-}
-
-void reverse_string(char *start, char *end) {
-	while (start < end) {
-		char tmp = *start;
-		*start++ = *end;
-		*end-- = tmp;
-	}
 }
 
 s8 Compare_Strings(const char *a, const char *b) {

@@ -41,7 +41,7 @@ typedef double   f64;
 void Console_Print(const char *format, ...);
 void Abort(const char *format, ...);
 
-#define Invalid_Code_Path() Assert(!"Invalid code path");
+#define Invalid_Code_Path() Abort("%s: %s: line %d: Invalid code path\n", __FILE__, __func__, __LINE__);
 
 //#define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
 //#define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)

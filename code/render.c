@@ -1,97 +1,3 @@
-void Create_Render_Memory_Block_Allocator(Render_Memory_Allocator *allocator, u32 block_size, GPU_Memory_Type memory_type) {
-	allocator->type = RENDER_MEMORY_BLOCK_ALLOCATOR;
-	allocator->block.block_size = block_size;
-	allocator->block.active_block = NULL;
-	allocator->block.base_block = NULL;
-	allocator->block.memory_type = memory_type;
-	Platform_Create_Mutex(&allocator->block.mutex);
-}
-
-bool Allocate_From_Render_Memory_Blocks(Render_Context *context, Render_Memory_Block_Allocator *allocator, u32 size, u32 alignment, Render_Memory_Allocation **allocation) {
-	Platform_Lock_Mutex(&allocator->mutex);
-	// @TODO: Try to allocate out of the freed allocations.
-	if (!allocator->active_block || allocator->active_block->frontier + size > allocator->block_size) {
-		// Need to allocate a new block.
-		Render_Memory_Block *new_block = malloc(sizeof(Render_Memory_Block)); // @TODO
-		if (allocator->base_block) {
-			allocator->active_block->next = new_block;
-			allocator->active_block = new_block;
-		} else {
-			allocator->base_block = new_block;
-			allocator->active_block = allocator->base_block;
-		}
-		if (!GPU_Allocate_Memory(&context->gpu_context, allocator->block_size, allocator->memory_type, &new_block->memory)) {
-			free(new_block); // @TODO
-			return false;
-		}
-		new_block->frontier = 0;
-		new_block->active_allocation_count = 0;
-		new_block->next = NULL;
-	}
-	// Allocate out of the active block's frontier.
-	Render_Memory_Allocation *new_allocation = &allocator->active_block->active_allocations[allocator->active_block->active_allocation_count++];
-	u32 allocation_start_offset = Align_U32(allocator->active_block->frontier, alignment);
-	*new_allocation = (Render_Memory_Allocation){
-		.size = size,
-		.offset = allocation_start_offset,
-		.memory = allocator->active_block->memory,
-	};
-	if (allocator->memory_type & GPU_HOST_MEMORY) {
-		new_allocation->mapped_pointer = GPU_Map_Memory(&context->gpu_context, new_allocation->memory, new_allocation->size, new_allocation->offset);
-	} else {
-		new_allocation->mapped_pointer = NULL;
-	}
-	Assert(allocator->active_block->active_allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
-	allocator->active_block->frontier = allocation_start_offset + size;
-	Assert(allocator->active_block->frontier <= allocator->block_size);
-	*allocation = new_allocation;
-	Platform_Unlock_Mutex(&allocator->mutex);
-	return true;
-}
-
-void Create_Render_Ring_Buffer_Allocator() {
-}
-
-bool Allocate_From_Render_Memory_Ring_Buffer(Render_Context *context, Render_Memory_Ring_Buffer_Allocator *allocator, u32 size, u32 alignment, Render_Memory_Allocation **allocation) {
-	return false;
-}
-
-bool Allocate_Render_Memory(Render_Context *context, Render_Memory_Allocator *allocator, u32 size, u32 alignment, Render_Memory_Allocation **allocation) {
-	switch (allocator->type) {
-		case RENDER_MEMORY_BLOCK_ALLOCATOR: {
-			return Allocate_From_Render_Memory_Blocks(context, &allocator->block, size, alignment, allocation);
-		} break;
-		case RENDER_MEMORY_RING_BUFFER_ALLOCATOR: {
-			return Allocate_From_Render_Memory_Ring_Buffer(context, &allocator->ring_buffer, size, alignment, allocation);
-		} break;
-		default: {
-			Invalid_Code_Path();
-		}
-	}
-	return false;
-}
-
-typedef struct Render_Buffer {
-	GPU_Buffer gpu_buffer;
-	Render_Memory_Allocation *allocation;
-} Render_Buffer;
-
-typedef struct Render_Image {
-	GPU_Image gpu_image;
-	Render_Memory_Allocation *allocation;
-} Render_Image;
-
-u8 Create_Render_Buffer(Render_Context *context, GPU_Buffer_Usage_Flags buffer_usage_flags, u32 buffer_size, Render_Buffer *buffer) {
-	buffer->gpu_buffer = GPU_Create_Buffer(&context->gpu_context, buffer_size, buffer_usage_flags);
-	u32 allocation_size, allocation_alignment;
-	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Buffer_Allocation_Requirements(&context->gpu_context, buffer->gpu_buffer);
-	if (!Allocate_Render_Memory(context, &context->memory.device_block_allocator, allocation_requirements.size, allocation_requirements.alignment, &buffer->allocation)) {
-		return false;
-	}
-	GPU_Bind_Buffer_Memory(&context->gpu_context, buffer->gpu_buffer, buffer->allocation->memory, buffer->allocation->offset);
-	return true;
-}
-
 #define RANDOM_COLOR_TABLE_LENGTH 1024
 V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
 
@@ -153,7 +59,11 @@ V3 random_color() {
 
 #define MAX_VISIBLE_ENTITY_MESHES MAX_ENTITY_MESHES
 
-void Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
+// Render_Memory_Allocation ???
+// GPU_Memory_Allocation ????
+
+void
+Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
 	f32 half_near_plane_height = focal_length * tan(camera->field_of_view / 2.0f);
 	f32 half_near_plane_width = focal_length * tan(camera->field_of_view / 2.0f) * aspect_ratio;
 	V3 center_of_near_plane = scale_v3(focal_length, camera->forward);
@@ -185,7 +95,7 @@ void Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres,
 #define MAX_ASSET_UPLOAD_COMMAND_BUFFERS 100
 
 typedef struct Asset_Upload_Command_Buffers {
-	GPU_Command_List elements[MAX_ASSET_UPLOAD_COMMAND_BUFFERS];
+	GPU_Command_Buffer elements[MAX_ASSET_UPLOAD_COMMAND_BUFFERS];
 	Ring_Buffer ring_buffer;
 } Asset_Upload_Command_Buffers;
 
@@ -207,22 +117,13 @@ enum {
 	SWAPCHAIN_IMAGE_ATTACHMENT_ID,
 };
 
-bool Create_Render_Image(Render_Context *context, Render_Memory_Allocator *allocator, Render_Image_Creation_Parameters *parameters, Render_Image *image) {
-	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Image_Allocation_Requirements(&context->gpu_context, parameters);
-	Render_Memory_Allocation *allocation;
-	if (!Allocate_Render_Memory(context, allocator, allocation_requirements.size, allocation_requirements.alignment, &image->allocation)) {
-		return false;
-	}
-	image->gpu_image = GPU_Create_Image(&context->gpu_context, parameters, image->allocation->memory, image->allocation->offset);
-	return true;
-}
-
-void Initialize_Renderer(void *job_parameter_pointer) {
+void
+Initialize_Renderer(void *job_parameter_pointer) {
 	Game_State *game_state = (Game_State *)job_parameter_pointer;
 	Render_Context *render_context = &game_state->render_context;
 	GPU_Context *gpu_context = &render_context->gpu_context;
-	Initialize_Vulkan(gpu_context);
-	Create_Render_Memory_Block_Allocator(&render_context->memory.device_block_allocator, RENDER_DEVICE_MEMORY_BLOCK_SIZE, GPU_DEVICE_MEMORY);
+	GPU_Initialize(gpu_context);
+	Create_GPU_Memory_Block_Allocator(&render_context->memory.device_block_allocator, RENDER_DEVICE_MEMORY_BLOCK_SIZE, GPU_DEVICE_MEMORY);
 	// Descriptor sets.
 	// Command Pools.
 	// Create shaders.
@@ -231,36 +132,41 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	//     Device block.
 	//     Host ring buffer.
 	//     Create uniform buffers.
-	Render_Image_Creation_Parameters shadow_map_image_creation_parameters = {
+	GPU_Image_Creation_Parameters shadow_map_image_creation_parameters = {
 		.width = SHADOW_MAP_WIDTH,
 		.height = SHADOW_MAP_HEIGHT,
 		.format = SHADOW_MAP_DEPTH_FORMAT,
 		.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.usage_flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		.sample_count = VK_SAMPLE_COUNT_1_BIT,
+		.sample_count_flags = VK_SAMPLE_COUNT_1_BIT,
 	};
-	Render_Image shadow_map_image;
-	Assert(Create_Render_Image(render_context, &render_context->memory.device_block_allocator, &shadow_map_image_creation_parameters, &shadow_map_image));
-	Render_Image_Creation_Parameters depth_buffer_image_creation_parameters = {
+	GPU_Image shadow_map_image;
+	Assert(Create_GPU_Image(gpu_context, &render_context->memory.device_block_allocator, &shadow_map_image_creation_parameters, &shadow_map_image));
+
+	GPU_Image_Creation_Parameters depth_buffer_image_creation_parameters = {
 		.width = window_width,
 		.height = window_height,
-		.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
-		.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.usage_flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-		.sample_count = VK_SAMPLE_COUNT_1_BIT,
+		.format = GPU_FORMAT_D32_SFLOAT_S8_UINT,
+		.initial_layout = GPU_IMAGE_LAYOUT_UNDEFINED,
+		.usage_flags = GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT,
+		.sample_count_flags = GPU_SAMPLE_COUNT_1,
 	};
-	Render_Image depth_buffer_image;
-	Assert(Create_Render_Image(render_context, &render_context->memory.device_block_allocator, &depth_buffer_image_creation_parameters, &depth_buffer_image));
-	GPU_Image *swapchain_images;
-	u32 swapchain_image_count = GPU_Create_Swapchain(gpu_context, &swapchain_images);
+	GPU_Image depth_buffer_image;
+	Assert(Create_GPU_Image(gpu_context, &render_context->memory.device_block_allocator, &depth_buffer_image_creation_parameters, &depth_buffer_image));
+
+	render_context->swapchain = GPU_Create_Swapchain(gpu_context);
+	u32 swapchain_image_count = GPU_Get_Swapchain_Image_Count(gpu_context, render_context->swapchain);
+	GPU_Image *swapchain_images = malloc(swapchain_image_count * sizeof(GPU_Image)); // @TODO
+	GPU_Get_Swapchain_Images(gpu_context, render_context->swapchain, swapchain_image_count, swapchain_images);
+
 	Render_Graph_External_Attachment external_attachments[] = {
 		{
 			.id = SHADOW_MAP_ATTACHMENT_ID,
-			.image = shadow_map_image.gpu_image,
+			.image = shadow_map_image,
 		},
 		{
 			.id = DEPTH_BUFFER_ATTACHMENT_ID,
-			.image = depth_buffer_image.gpu_image,
+			.image = depth_buffer_image,
 		},
 		{
 			.id = SWAPCHAIN_IMAGE_ATTACHMENT_ID,
@@ -361,15 +267,15 @@ GPU_Mesh Upload_Indexed_Render_Geometry_To_GPU(u32 vertex_count, u32 size_of_ver
 	void *staging_buffer = NULL;//GPU_Acquire_Host_Memory(vertices_size + indices_size);
 	Copy_Memory(vertices, staging_buffer, vertices_size);
 	Copy_Memory(indices, ((char *)staging_buffer) + vertices_size, indices_size);
-	Render_Memory_Allocation *gpu_memory = NULL;//GPU_Acquire_Device_Memory(size);
-	GPU_Command_List command_list;
+	GPU_Memory_Allocation *gpu_memory = NULL;//GPU_Acquire_Device_Memory(size);
+	GPU_Command_Buffer command_list;
 	//GPU_Create_Command_List(vulkan_context.thread_local[thread_index].command_pools, &command_list);
 	//GPU_Record_Copy_Buffer_Command(command_list, staging_buffer, gpu_memory, size);
 	//GPU_End_Command_List(command_list);
 	//Atomic_Write_To_Ring_Buffer(asset_upload_command_buffers, command_list);
 	return (GPU_Mesh){
-		.memory = gpu_memory,
-		.indices_offset = vertices_size,
+		//.memory = gpu_memory,
+		//.indices_offset = vertices_size,
 	};
 }
 

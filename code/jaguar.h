@@ -158,6 +158,8 @@ typedef struct {
 	Quaternion rotation;
 } Transform;
 
+#include "backend.h"
+#include "gpu.h"
 #include "render.h"
 
 ////////////////////////////////////////
@@ -426,17 +428,6 @@ typedef struct {
 	u32 id_count;
 } Game_Entities;
 
-typedef struct Game_Frame_Context {
-	u32 frame_number;
-	Memory_Arena arena;
-} Game_Frame_Context;
-
-typedef struct Thread_Local_Jobs_Context {
-} Thread_Local_Jobs_Context;
-
-typedef struct Platform_Thread_Local_Context {
-} Platform_Thread_Local_Context;
-
 typedef struct Game_Jobs_Context {
 	u32 worker_thread_count;
 } Game_Jobs_Context;
@@ -444,16 +435,16 @@ typedef struct Game_Jobs_Context {
 typedef struct Platform_Context {
 } Platform_Context;
 
-typedef struct Game_Thread_Memory_Heap {
-} Game_Thread_Memory_Heap;
+typedef struct Thread_Memory_Heap {
+} Thread_Memory_Heap;
 
-typedef struct Game_Main_Memory_Heap {
-} Game_Main_Memory_Heap;
+typedef struct Main_Memory_Heap {
+} Main_Memory_Heap;
 
 typedef struct Game_Memory {
-	Game_Main_Memory_Heap main_heap;
+	Main_Memory_Heap main_heap;
 	u32 thread_heap_count;
-	Game_Thread_Memory_Heap *thread_heaps;
+	Thread_Memory_Heap *thread_heaps;
 } Game_Memory;
 
 typedef struct Game_State {
@@ -463,7 +454,6 @@ typedef struct Game_State {
 	Game_Assets assets;
 	Game_Entities entities;
 	Game_Jobs_Context jobs_context;
-	Game_Frame_Context frame_context;
 	Render_Context render_context;
 	Camera camera; // @TODO: Rename to Game_Camera.
 	Platform_Context platform_context;

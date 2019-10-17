@@ -10,7 +10,7 @@
 
 typedef struct Load_Texture_Job_Parameter {
 	String path;
-	GPU_Context *gpu_context;
+	Render_Context *render_context;
 	GPU_Upload_Flags gpu_upload_flags;
 	Texture_ID *output_texture_id;
 } Load_Texture_Job_Parameter;
@@ -21,7 +21,7 @@ void Load_Texture(void *job_parameter_pointer) {
 	u8 *pixels = stbi_load(job_parameter->path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
 	assert(pixels);
 	printf("%s\n", job_parameter->path.data);
-	*job_parameter->output_texture_id = Upload_Texture_To_GPU(job_parameter->gpu_context, pixels, texture_width, texture_height, job_parameter->gpu_upload_flags);
+	//*job_parameter->output_texture_id = Upload_Texture_To_GPU(job_parameter->render_context, pixels, texture_width, texture_height, job_parameter->gpu_upload_flags);
 	free(pixels);
 }
 
@@ -36,7 +36,7 @@ struct {
 
 typedef struct Load_Model_Job_Parameter {
 	Asset_ID asset_id;
-	GPU_Context *gpu_context;
+	Render_Context *render_context;
 	GPU_Upload_Flags gpu_upload_flags;
 	Memory_Arena arena;
 	void **output_mesh_asset_address;
@@ -78,12 +78,12 @@ void Load_Model(void *job_parameter_pointer) {
 
 	Mesh_Asset *mesh = malloc(sizeof(Mesh_Asset));
 	mesh->vertex_count = vertex_count;
-	mesh->vertices = malloc(sizeof(Vertex) * mesh->vertex_count);
+	//mesh->vertices = malloc(sizeof(Vertex) * mesh->vertex_count);
 	mesh->index_count = index_count;
-	mesh->indices = malloc(sizeof(u32) * mesh->index_count);
+	//mesh->indices = malloc(sizeof(u32) * mesh->index_count);
 	mesh->submesh_count = mesh_count;
-	mesh->submesh_index_counts = malloc(sizeof(u32) * mesh->submesh_count);;
-	mesh->materials = malloc(sizeof(Material) * mesh->submesh_count);
+	mesh->submesh_index_counts = malloc(sizeof(u32) * mesh->submesh_count);; // @TODO
+	mesh->materials = malloc(sizeof(Material) * mesh->submesh_count); // @TODO
 	//job_parameter->assets->lookup[asset_id] = mesh;
 	*(job_parameter->output_mesh_asset_address) = mesh;
 
@@ -95,8 +95,13 @@ void Load_Model(void *job_parameter_pointer) {
 		struct aiMesh *assimp_mesh = assimp_scene->mMeshes[i];
 		assert(assimp_mesh->mVertices && assimp_mesh->mNormals && (assimp_mesh->mFaces && assimp_mesh->mNumFaces > 0));
 
+		u32 vertices_size = sizeof(Vertex) * assimp_mesh->mNumVertices;
+		u32 indices_size = sizeof(u32) * 3 * assimp_mesh->mNumFaces;
+		Vertex *vertex_buffer = malloc(vertices_size); // @TODO
+		u32 *index_buffer = malloc(indices_size); // @TODO
+
 		for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
-			Vertex *v = &mesh->vertices[mesh_vertex_offset + j];
+			Vertex *v = &vertex_buffer[mesh_vertex_offset + j];
 			v->position = (V3){
 				.x = assimp_mesh->mVertices[j].x,
 				.y = assimp_mesh->mVertices[j].y,
@@ -177,14 +182,20 @@ void Load_Model(void *job_parameter_pointer) {
 
 		for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
 			assert(assimp_mesh->mFaces[j].mNumIndices == 3);
-			mesh->indices[mesh_index_offset + (3 * j) + 0] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[0];
-			mesh->indices[mesh_index_offset + (3 * j) + 1] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[1];
-			mesh->indices[mesh_index_offset + (3 * j) + 2] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[2];
+			index_buffer[mesh_index_offset + (3 * j) + 0] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[0];
+			index_buffer[mesh_index_offset + (3 * j) + 1] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[1];
+			index_buffer[mesh_index_offset + (3 * j) + 2] = mesh_vertex_offset + assimp_mesh->mFaces[j].mIndices[2];
 		}
 		mesh->submesh_index_counts[i] = 3 * assimp_mesh->mNumFaces;
 
 		mesh_vertex_offset += assimp_mesh->mNumVertices;
 		mesh_index_offset += mesh->submesh_index_counts[i];
+
+		void *staging_memory;
+		GPU_Subbuffer staging_subbuffer = Create_GPU_Staging_Subbuffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
+		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
+		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
+		mesh->gpu_mesh = Upload_Staged_Indexed_Geometry_To_GPU(job_parameter->render_context, vertices_size, indices_size, staging_subbuffer);
 
 		// Load textures.
 		{
@@ -192,31 +203,31 @@ void Load_Model(void *job_parameter_pointer) {
 			Load_Texture_Job_Parameter load_texture_job_parameters[] = {
 				{
 					.path = Join_Filepaths(model_directory, S("albedo.png"), &job_parameter->arena),
-					.gpu_context = job_parameter->gpu_context,
+					.render_context = job_parameter->render_context,
 					.gpu_upload_flags = job_parameter->gpu_upload_flags,
 					.output_texture_id = &mesh->materials[i].albedo_map,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("normal.png"), &job_parameter->arena),
-					.gpu_context = job_parameter->gpu_context,
+					.render_context = job_parameter->render_context,
 					.gpu_upload_flags = job_parameter->gpu_upload_flags,
 					.output_texture_id = &mesh->materials[i].normal_map,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("roughness.png"), &job_parameter->arena),
-					.gpu_context = job_parameter->gpu_context,
+					.render_context = job_parameter->render_context,
 					.gpu_upload_flags = job_parameter->gpu_upload_flags,
 					.output_texture_id = &mesh->materials[i].roughness_map,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("metallic.png"), &job_parameter->arena),
-					.gpu_context = job_parameter->gpu_context,
+					.render_context = job_parameter->render_context,
 					.gpu_upload_flags = job_parameter->gpu_upload_flags,
 					.output_texture_id = &mesh->materials[i].metallic_map,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("ambient_occlusion.png"), &job_parameter->arena),
-					.gpu_context = job_parameter->gpu_context,
+					.render_context = job_parameter->render_context,
 					.gpu_upload_flags = job_parameter->gpu_upload_flags,
 					.output_texture_id = &mesh->materials[i].ambient_occlusion_map,
 				},
@@ -268,7 +279,7 @@ void Load_Model(void *job_parameter_pointer) {
 #endif
 	}
 
-	mesh->gpu_mesh = Upload_Render_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
+	//mesh->gpu_mesh = Upload_Indexed_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
@@ -561,7 +572,7 @@ void Release_Memory(void *memory) {
 
 // @TODO: Shouldn't we call Get_Model_Asset?
 // @TODO: Just return a regular pointer!
-Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, GPU_Context *gpu_context, GPU_Upload_Flags gpu_upload_flags, Job_Counter *job_counter) {
+Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, Render_Context *render_context, GPU_Upload_Flags gpu_upload_flags, Job_Counter *job_counter) {
 	Clear_Job_Counter(job_counter);
 	if (assets->lookup[asset_id]) {
 		return assets->lookup[asset_id];
@@ -569,7 +580,7 @@ Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, GPU_Context 
 	Load_Model_Job_Parameter *job_parameter = Acquire_Memory(sizeof(Load_Model_Job_Parameter), 0); // @TODO: Release memory.
 	job_parameter->asset_id = asset_id;
 	job_parameter->arena = make_memory_arena();
-	job_parameter->gpu_context = gpu_context;
+	job_parameter->render_context = render_context;
 	job_parameter->gpu_upload_flags = gpu_upload_flags;
 	job_parameter->output_mesh_asset_address = &assets->lookup[asset_id];
 	Job_Declaration job_declaration = Create_Job(Load_Model, job_parameter);

@@ -341,7 +341,7 @@ Shadow_Map_UBO shadow_map_ubo;
 #define VK_CHECK(x)\
 	do {\
 		VkResult _result = (x);\
-		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %s", #x, vk_result_to_string(_result));\
+		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %s\n", #x, vk_result_to_string(_result));\
 	} while (0)
 
 const char *vk_result_to_string(VkResult result) {
@@ -476,68 +476,62 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
     return 0;
 }
 
-void
-Vulkan_Create_Command_Buffer(Vulkan_Context *context, VkCommandPool command_pool, VkCommandBuffer *command_buffer) {
+VkCommandBuffer Vulkan_Create_Command_Buffer(Vulkan_Context *context, VkCommandPool command_pool) {
     VkCommandBufferAllocateInfo command_buffer_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandPool = command_pool,
 		.commandBufferCount = 1,
     };
-    vkAllocateCommandBuffers(context->device, &command_buffer_allocate_info, command_buffer);
+	VkCommandBuffer command_buffer;
+    vkAllocateCommandBuffers(context->device, &command_buffer_allocate_info, &command_buffer);
 	VkCommandBufferBeginInfo command_buffer_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
-	vkBeginCommandBuffer(*command_buffer, &command_buffer_begin_info);
+	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+	return command_buffer;
 }
 
-void
-Vulkan_Submit_Command_Buffers(u32 count, VkCommandBuffer *command_buffers) {
+void Vulkan_Submit_Command_Buffers(u32 count, VkCommandBuffer *command_buffers) {
 	// @TODO
 }
 
-void
-Vulkan_End_Command_Buffer(VkCommandBuffer command_buffer) {
+void Vulkan_End_Command_Buffer(VkCommandBuffer command_buffer) {
 	vkEndCommandBuffer(command_buffer);
 }
 
-void
-Vulkan_Reset_Command_Pool(Vulkan_Context *context, VkCommandPool command_pool) {
+void Vulkan_Reset_Command_Pool(Vulkan_Context *context, VkCommandPool command_pool) {
 	vkResetCommandPool(context->device, command_pool, 0);
 }
 
-void
-Vulkan_Record_Copy_Buffer_Command(Vulkan_Context *context, VkCommandBuffer command_buffer, VkBuffer source, VkBuffer destination, u32 size) {
-	VkBufferCopy buffer_copy = {
-		.srcOffset = 0,
-		.dstOffset = 0,
-		.size = size,
-	};
-	vkCmdCopyBuffer(command_buffer, source, destination, 1, &buffer_copy);
+void Vulkan_Record_Copy_Buffer_Commands(Vulkan_Context *context, VkCommandBuffer command_buffer, u32 count, u32 *sizes, VkBuffer source, VkBuffer destination, u32 *source_offsets, u32 *destination_offsets) {
+	VkBufferCopy buffer_copies[count];
+	for (s32 i = 0; i < count; i++) {
+		buffer_copies[i].srcOffset = source_offsets[i];
+		buffer_copies[i].dstOffset = destination_offsets[i];
+		buffer_copies[i].size = sizes[i];
+	}
+	vkCmdCopyBuffer(command_buffer, source, destination, count, buffer_copies);
 }
 
-VkBuffer
-Vulkan_Create_Buffer(Vulkan_Context *context, VkBufferCreateInfo *buffer_create_info) {
+VkBuffer Vulkan_Create_Buffer(Vulkan_Context *context, VkBufferCreateInfo *buffer_create_info) {
 	VkBuffer buffer;
 	VK_CHECK(vkCreateBuffer(context->device, buffer_create_info, NULL, &buffer));
 	return buffer;
 }
 
-void
-Vulkan_Bind_Buffer_Memory(Vulkan_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
+void Vulkan_Bind_Buffer_Memory(Vulkan_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
 	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
 }
 
-VkMemoryRequirements
-Vulkan_Get_Buffer_Allocation_Requirements(Vulkan_Context *context, VkBuffer buffer) {
+VkMemoryRequirements Vulkan_Get_Buffer_Allocation_Requirements(Vulkan_Context *context, VkBuffer buffer) {
 	VkMemoryRequirements memory_requirements;
 	vkGetBufferMemoryRequirements(context->device, buffer, &memory_requirements);
 	return memory_requirements;
 }
 
-void *
-Vulkan_Map_Memory(Vulkan_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
+void *Vulkan_Map_Memory(Vulkan_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
 	void *pointer;
 	VK_CHECK(vkMapMemory(context->device, memory, offset, size, 0, &pointer));
 	return pointer;

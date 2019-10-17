@@ -242,14 +242,96 @@ typedef struct GPU_Swapchain {
 
 typedef struct GPU_Memory_Allocation {
 	u32 offset;
-	u32 size;
 	GPU_Memory memory;
-	void *mapped_pointer; // Will be NULL if the render backend memory of the memory block is not host visible.
 } GPU_Memory_Allocation;
+
+typedef struct GPU_Subbuffer {
+	GPU_Buffer buffer;
+	u32 *offset;
+} GPU_Subbuffer;
+
+typedef struct GPU_Image_Allocation {
+	GPU_Memory memory;
+	u32 *offset;
+} GPU_Image_Allocation;
 
 // A block allocator stores its memory in a linked list of fixed size blocks.
 // Memory can then be suballocated out of each block, and when space in a block runs out, a new block is allocated from the render backend and added to the end of the linked list.
 // Block allocators are dynamic and not thread-safe. All operations on a block allocator must lock the block allocator's mutex.
+
+typedef struct GPU_Buffer_Memory_Block GPU_Buffer_Memory_Block;
+typedef struct GPU_Buffer_Memory_Block GPU_Buffer_Memory_Block;
+typedef struct GPU_Image_Memory_Block GPU_Image_Memory_Block;
+
+typedef struct GPU_Buffer_Memory_Block {
+	GPU_Memory memory;
+	GPU_Buffer buffer;
+	u32 frontier; // @TODO
+	void *mapped_pointer;
+	u32 allocation_count;
+	u32 allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	GPU_Buffer_Memory_Block *next;
+} GPU_Buffer_Memory_Block;
+
+#if 0
+typedef struct GPU_Device_Buffer_Memory_Block {
+	GPU_Memory memory;
+	GPU_Buffer buffer;
+	u32 frontier; // @TODO
+	u32 allocation_count;
+	u32 allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	GPU_Buffer_Memory_Block *next;
+} GPU_Device_Buffer_Memory_Block;
+#endif
+
+typedef struct GPU_Image_Memory_Block {
+	GPU_Memory memory;
+	u32 frontier; // @TODO
+	u32 allocation_count;
+	u32 allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	GPU_Image_Memory_Block *next;
+} GPU_Image_Memory_Block;
+
+typedef struct GPU_Buffer_Block_Allocator {
+	Platform_Mutex mutex;
+	GPU_Memory_Type memory_type;
+	u32 block_size;
+	GPU_Buffer_Usage_Flags buffer_usage_flags;
+	GPU_Buffer_Memory_Block *base_block;
+	GPU_Buffer_Memory_Block *active_block;
+} GPU_Buffer_Block_Allocator;
+
+#if 0
+typedef struct GPU_Device_Buffer_Block_Allocator {
+	Platform_Mutex mutex;
+	GPU_Memory_Type memory_type;
+	u32 block_size;
+	GPU_Buffer_Usage_Flags buffer_usage_flags;
+	GPU_Device_Buffer_Memory_Block *base_block;
+	GPU_Device_Buffer_Memory_Block *active_block;
+} GPU_Device_Buffer_Block_Allocator;
+#endif
+
+typedef struct GPU_Image_Block_Allocator {
+	Platform_Mutex mutex;
+	GPU_Memory_Type memory_type;
+	u32 block_size;
+	GPU_Image_Memory_Block *base_block;
+	GPU_Image_Memory_Block *active_block;
+} GPU_Image_Block_Allocator;
+
+typedef struct GPU_Buffer_Ring_Allocator {
+	GPU_Memory memory;
+	GPU_Memory_Type memory_type;
+	GPU_Buffer buffer;
+	void *mapped_pointer;
+	s32 size;
+	s32 read_index;
+	s32 write_index;
+} GPU_Buffer_Ring_Allocator;
+
+
+
 
 typedef struct GPU_Memory_Block GPU_Memory_Block;
 
@@ -289,5 +371,7 @@ typedef struct GPU_Memory_Allocator {
 	GPU_Memory_Allocator_Type type;
 } GPU_Memory_Allocator;
 
-typedef struct GPU_Mesh {
-} GPU_Mesh;
+typedef struct GPU_Indexed_Geometry {
+	GPU_Subbuffer vertex_subbuffer;
+	GPU_Subbuffer index_subbuffer;
+} GPU_Indexed_Geometry;

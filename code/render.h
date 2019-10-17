@@ -17,10 +17,22 @@ typedef struct {
 	Render_Primitive render_primitive;
 } Debug_Render_Object;
 
-typedef struct Render_Memory {
-	GPU_Memory_Allocator device_block_allocator;
-	GPU_Memory_Ring_Buffer_Allocator host_ring_buffer_allocator;
-} Render_Memory;
+typedef struct GPU_Memory_Allocators {
+	GPU_Buffer_Block_Allocator device_vertex_block;
+	GPU_Buffer_Block_Allocator device_index_block;
+	GPU_Buffer_Block_Allocator device_uniform_block;
+	GPU_Image_Block_Allocator device_image_block;
+
+	GPU_Buffer_Ring_Allocator host_vertex_ring;
+	GPU_Buffer_Ring_Allocator host_index_ring;
+	GPU_Buffer_Ring_Allocator host_uniform_ring;
+	GPU_Buffer_Ring_Allocator host_staging_ring;
+
+	GPU_Buffer_Block_Allocator host_vertex_block;
+	GPU_Buffer_Block_Allocator host_index_block;
+	GPU_Buffer_Block_Allocator host_uniform_block;
+	GPU_Buffer_Block_Allocator host_staging_block;
+} GPU_Memory_Allocators;
 
 typedef struct GPU_Image_Creation_Parameters {
 	u32 width;
@@ -93,7 +105,7 @@ typedef struct Render_Context {
 	f32 aspect_ratio; // Calculated from the render area dimensions, not the window dimensions.
 	u32 debug_render_object_count;
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
-	Render_Memory memory;
+	GPU_Memory_Allocators gpu_memory_allocators;
 	u32 current_frame_index;
 	GPU_Context gpu_context;
 	GPU_Swapchain swapchain;

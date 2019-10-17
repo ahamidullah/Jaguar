@@ -234,12 +234,12 @@ typedef struct Mesh_Asset {
 	u32 *submesh_index_counts;
 	u32 vertex_offset;
 	u32 first_index;
-	GPU_Mesh gpu_mesh;
+	GPU_Indexed_Geometry gpu_mesh;
 
 	// Cold. Accessed when the asset is loaded.
 	u32 vertex_count;
-	Vertex *vertices;
-	u32 *indices;
+	//Vertex *vertices;
+	//u32 *indices;
 	u32 index_count;
 	Bounding_Sphere bounding_sphere;
 } Mesh_Asset;

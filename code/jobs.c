@@ -127,15 +127,15 @@ Jobs_Context jobs_context;
 		container.elements[current_write_index] = new_element; \
 	} while (0)
 
-#define Do_Ring_Buffer_Read(container, result, output_read_index) \
+#define Atomic_Read_From_Ring_Buffer(container, result) \
 	do { \
 		result = NULL; \
 		while (container.ring_buffer.read_index != container.ring_buffer.write_index) { \
 			/* We need to do this a bit carefully to make sure we stop trying to get read an element if the ring buffer is emptied. */ \
-			output_read_index = container.ring_buffer.read_index; \
-			if (output_read_index != container.ring_buffer.write_index) { \
-				s32 job_index = Platform_Compare_And_Swap_S32(&container.ring_buffer.read_index, output_read_index, (output_read_index + 1) % MAX_JOBS_PER_QUEUE); \
-				if (job_index == output_read_index) { \
+			s32 read_index = container.ring_buffer.read_index; \
+			if (read_index != container.ring_buffer.write_index) { \
+				s32 job_index = Platform_Compare_And_Swap_S32(&container.ring_buffer.read_index, read_index, (read_index + 1) % MAX_JOBS_PER_QUEUE); \
+				if (job_index == read_index) { \
 					result = &container.elements[job_index]; \
 					break; \
 				} \
@@ -143,16 +143,12 @@ Jobs_Context jobs_context;
 		} \
 	} while(0)
 
-#define Atomic_Read_From_Ring_Buffer(container, result) \
-	do { \
-		s32 ring_buffer_read_index; \
-		Do_Ring_Buffer_Read(container, result, ring_buffer_read_index); \
-	} while(0)
-
-#define Atomic_Read_From_Ring_Buffer_With_Index(container, result, read_index) \
+/*
+#define Atomic_Read_Element_From_Ring_Buffer_With_Index(container, result, read_index) \
 	do { \
 		Do_Ring_Buffer_Read(container, result, read_index); \
 	} while(0)
+*/
 
 /*
 Job *Get_Next_Job_From_Queue(Job_Queue *queue) {

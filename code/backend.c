@@ -233,12 +233,12 @@ GPU_Buffer GPU_Create_Buffer(GPU_Context *context, GPU_Buffer_Usage_Flags usage_
 	return (GPU_Buffer){};
 }
 
-GPU_Image GPU_Create_Image(GPU_Context *context, GPU_Image_Creation_Parameters *parameters, GPU_Memory_Allocation *allocation) {
+GPU_Image GPU_Create_Image(GPU_Context *context, GPU_Image_Creation_Parameters *parameters, GPU_Image_Allocation image_allocation) {
 	switch (context->active_render_api) {
 	case VULKAN_RENDER_API: {
 		GPU_Image image;
 		VkImageCreateInfo image_create_info = GPU_Convert_To_Vulkan_Image_Create_Info(parameters);
-		Vulkan_Create_Image(&context->vulkan, &image_create_info, allocation->memory.vulkan, allocation->offset, &image.vulkan.image, &image.vulkan.view);
+		Vulkan_Create_Image(&context->vulkan, &image_create_info, image_allocation.memory.vulkan, *image_allocation.offset, &image.vulkan.image, &image.vulkan.view);
 		return image;
 	} break;
 	}
@@ -332,6 +332,39 @@ GPU_Fence GPU_Create_Fence(GPU_Context *context, bool start_signalled) {
 	}
 	Invalid_Code_Path();
 	return (GPU_Fence){};
+}
+
+GPU_Command_Buffer GPU_Create_Command_Buffer(GPU_Context *context, GPU_Command_Pool command_pool) {
+	switch (context->active_render_api) {
+	case VULKAN_RENDER_API: {
+		GPU_Command_Buffer buffer;
+		buffer.vulkan = Vulkan_Create_Command_Buffer(&context->vulkan, command_pool.vulkan);
+		return buffer;
+	} break;
+	}
+	Invalid_Code_Path();
+	return (GPU_Command_Buffer){};
+}
+
+void GPU_Record_Copy_Buffer_Commands(GPU_Context *context, GPU_Command_Buffer command_buffer, u32 count, u32 *sizes, GPU_Buffer source, GPU_Buffer destination, u32 *source_offsets, u32 *destination_offsets) {
+	switch (context->active_render_api) {
+	case VULKAN_RENDER_API: {
+		Vulkan_Record_Copy_Buffer_Commands(&context->vulkan, command_buffer.vulkan, count, sizes, source.vulkan, destination.vulkan, source_offsets, destination_offsets);
+		return;
+	} break;
+	}
+	Invalid_Code_Path();
+}
+
+
+void GPU_End_Command_Buffer(GPU_Context *context, GPU_Command_Buffer command_buffer) {
+	switch (context->active_render_api) {
+	case VULKAN_RENDER_API: {
+		vkEndCommandBuffer(command_buffer.vulkan);
+		return;
+	} break;
+	}
+	Invalid_Code_Path();
 }
 
 void GPU_Initialize(GPU_Context *context) {

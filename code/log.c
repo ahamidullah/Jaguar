@@ -36,7 +36,6 @@ void Abort(const char *format, ...) {
 	Console_Print("###########################################################################\n");
 	Console_Print("[PROGRAM ABORT]\n");
 	Console_Printv(format, arguments);
-	Console_Print("\n");
 	Platform_Print_Stacktrace();
 	Console_Print("###########################################################################\n");
 	va_end(arguments);

@@ -53,14 +53,14 @@ typedef struct Set_Entity_Model_Job_Parameter {
 	Transform transform;
 	Game_Assets *assets;
 	Entity_Meshes *meshes;
-	GPU_Context *gpu_context;
+	Render_Context *render_context;
 	GPU_Upload_Flags gpu_upload_flags;
 } Set_Entity_Model_Job_Parameter;
 
 void Set_Entity_Model_Job(void *job_parameter_pointer) {
 	Set_Entity_Model_Job_Parameter *job_parameter = job_parameter_pointer;
 	Job_Counter job_counter;
-	Mesh_Asset **asset = Get_Mesh_Asset(job_parameter->asset_id, job_parameter->assets, job_parameter->gpu_context, job_parameter->gpu_upload_flags, &job_counter);
+	Mesh_Asset **asset = Get_Mesh_Asset(job_parameter->asset_id, job_parameter->assets, job_parameter->render_context, job_parameter->gpu_upload_flags, &job_counter);
 	Wait_For_Job_Counter(&job_counter);
 	job_parameter->meshes->instances[job_parameter->meshes->count] = (Mesh_Instance){
 		.transform = job_parameter->transform,
@@ -81,7 +81,7 @@ void Set_Entity_Model(Entity_ID entity_id, Asset_ID asset_id, Transform transfor
 		.transform = transform,
 		.assets = &game_state->assets,
 		.meshes = &game_state->entities.meshes,
-		.gpu_context = &game_state->render_context.gpu_context,
+		.render_context = &game_state->render_context,
 		.gpu_upload_flags = gpu_upload_flags,
 	};
 	Job_Counter *job_counter = malloc(sizeof(Job_Counter)); // @TODO

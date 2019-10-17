@@ -122,7 +122,7 @@ void Copy_Memory(const void *source, void *destination, size_t size) {
 }
 
 // @TODO: Use non-caching intrinsics?
-void set_memory(void *destination, char set_to, size_t count) {
+void Set_Memory(void *destination, char set_to, size_t count) {
 	char *d = (char *)destination;
 	for (size_t i = 0; i < count; ++i) {
 		d[i] = set_to;

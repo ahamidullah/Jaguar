@@ -1,3 +1,24 @@
+#if defined(USE_VULKAN_RENDER_API)
+
+// @TODO: Move this to render.c.
+#define SHADOW_MAP_WIDTH  1024
+#define SHADOW_MAP_HEIGHT 1024
+#define SHADOW_MAP_INITIAL_LAYOUT GPU_IMAGE_LAYOUT_UNDEFINED
+#define SHADOW_MAP_FORMAT GPU_FORMAT_D16_UNORM
+#define SHADOW_MAP_IMAGE_USAGE_FLAGS (GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GPU_IMAGE_USAGE_SAMPLED)
+#define SHADOW_MAP_SAMPLE_COUNT_FLAGS GPU_SAMPLE_COUNT_1
+// Depth bias and slope are used to avoid shadowing artifacts.
+// Constant depth bias factor is always applied.
+#define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
+// Slope depth bias factor is applied depending on the polygon's slope.
+#define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
+#define SHADOW_MAP_FILTER GPU_LINEAR_FILTER
+
+#define DEPTH_BUFFER_INITIAL_LAYOUT GPU_IMAGE_LAYOUT_UNDEFINED
+#define DEPTH_BUFFER_FORMAT GPU_FORMAT_D32_SFLOAT_S8_UINT
+#define DEPTH_BUFFER_IMAGE_USAGE_FLAGS GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT
+#define DEPTH_BUFFER_SAMPLE_COUNT_FLAGS GPU_SAMPLE_COUNT_1
+
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
 // @TODO: Some kind of memory protection for the GPU buffer!
 // @TODO: Better texture descriptor set update scheme.
@@ -29,32 +50,15 @@
 
 #include "vulkan_generated.h"
 
-#define VK_EXPORTED_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_GLOBAL_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_INSTANCE_FUNCTION(name)\
-	PFN_##name name = NULL;
-#define VK_DEVICE_FUNCTION(name)\
-	PFN_##name name = NULL;
-
+#define VK_EXPORTED_FUNCTION(name) PFN_##name name = NULL;
+#define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
+#define VK_INSTANCE_FUNCTION(name) PFN_##name name = NULL;
+#define VK_DEVICE_FUNCTION(name) PFN_##name name = NULL;
 #include "vulkan_functions.h"
-
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
-
-#define SHADOW_MAP_WIDTH  1024
-#define SHADOW_MAP_HEIGHT 1024
-// Depth bias and slope are used to avoid shadowing artifacts.
-// Constant depth bias factor is always applied.
-#define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
-// Slope depth bias factor is applied depending on the polygon's slope.
-#define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
-#define SHADOW_MAP_DEPTH_FORMAT VK_FORMAT_D16_UNORM
-#define SHADOW_MAP_COLOR_FORMAT VK_FORMAT_R8G8B8A8_UNORM
-#define SHADOW_MAP_FILTER VK_FILTER_LINEAR
 
 #define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
 
@@ -166,7 +170,7 @@ enum {
 	//FLAT_COLOR_DESCRIPTOR_SET_TYPE_COUNT,
 };
 
-struct _Vulkan_Context {
+struct _Render_API_Context {
 	VkDebugUtilsMessengerEXT  debug_messenger;
 	VkInstance                instance;
 	VkPhysicalDevice          physical_device;
@@ -432,7 +436,7 @@ u32 align_to(u32 size, u32 alignment) {
 	return size + alignment - remainder;
 }
 
-u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data) {
+u32 Vulkan_Debug_Message_Callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *callback_data, void *user_data) {
 	Log_Type log_type;
 	const char *severity_string;
 	switch (severity) {
@@ -469,14 +473,14 @@ u32 vulkan_debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severit
 		type_string = "Unknown";
 	};
 	}
-	Log_Print(log_type, "%s: %s: %s\n", severity_string, type_string, callback_data->pMessage);
+	Log_Print(log_type, "Vulkan debug message: %s: %s: %s\n", severity_string, type_string, callback_data->pMessage);
 	if (log_type == ERROR_LOG) {
 		Platform_Print_Stacktrace();
 	}
     return 0;
 }
 
-VkCommandBuffer Vulkan_Create_Command_Buffer(Vulkan_Context *context, VkCommandPool command_pool) {
+VkCommandBuffer Render_API_Create_Command_Buffer(Render_API_Context *context, VkCommandPool command_pool) {
     VkCommandBufferAllocateInfo command_buffer_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -493,51 +497,94 @@ VkCommandBuffer Vulkan_Create_Command_Buffer(Vulkan_Context *context, VkCommandP
 	return command_buffer;
 }
 
-void Vulkan_Submit_Command_Buffers(u32 count, VkCommandBuffer *command_buffers) {
-	// @TODO
+VkFence Render_API_Submit_Command_Buffers(Render_API_Context *context, u32 count, VkCommandBuffer *command_buffers, GPU_Command_Queue_Type queue_type) {
+	VkSubmitInfo submit_info = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = count,
+		.pCommandBuffers = command_buffers,
+	};
+	VkFenceCreateInfo fence_create_info = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.pNext = NULL,
+		.flags = 0,
+	};
+	VkFence fence;
+	VK_CHECK(vkCreateFence(context->device, &fence_create_info, NULL, &fence));
+	switch (queue_type) {
+	case GPU_GRAPHICS_COMMAND_QUEUE: {
+		VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info, fence));
+	} break;
+	default: {
+		Invalid_Code_Path();
+	} break;
+	}
+	return fence;
 }
 
-void Vulkan_End_Command_Buffer(VkCommandBuffer command_buffer) {
-	vkEndCommandBuffer(command_buffer);
+void Render_API_End_Command_Buffer(Render_API_Context *context, VkCommandBuffer command_buffer) {
+	VK_CHECK(vkEndCommandBuffer(command_buffer));
 }
 
-void Vulkan_Reset_Command_Pool(Vulkan_Context *context, VkCommandPool command_pool) {
+VkCommandPool Render_API_Create_Command_Pool(Render_API_Context *context, GPU_Command_Queue_Type queue_type) {
+	VkCommandPoolCreateInfo command_pool_create_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		//.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+	};
+	switch (queue_type) {
+	case GPU_GRAPHICS_COMMAND_QUEUE: {
+		command_pool_create_info.queueFamilyIndex = context->graphics_queue_family;
+	} break;
+	default: {
+		Invalid_Code_Path();
+	} break;
+	}
+	VkCommandPool pool;
+	VK_CHECK(vkCreateCommandPool(context->device, &command_pool_create_info, NULL, &pool));
+	return pool;
+}
+
+void Render_API_Reset_Command_Pool(Render_API_Context *context, VkCommandPool command_pool) {
 	vkResetCommandPool(context->device, command_pool, 0);
 }
 
-void Vulkan_Record_Copy_Buffer_Commands(Vulkan_Context *context, VkCommandBuffer command_buffer, u32 count, u32 *sizes, VkBuffer source, VkBuffer destination, u32 *source_offsets, u32 *destination_offsets) {
-	VkBufferCopy buffer_copies[count];
-	for (s32 i = 0; i < count; i++) {
-		buffer_copies[i].srcOffset = source_offsets[i];
-		buffer_copies[i].dstOffset = destination_offsets[i];
-		buffer_copies[i].size = sizes[i];
-	}
-	vkCmdCopyBuffer(command_buffer, source, destination, count, buffer_copies);
+void Render_API_Record_Copy_Buffer_Command(Render_API_Context *context, VkCommandBuffer command_buffer, u32 size, VkBuffer source, VkBuffer destination, u32 source_offset, u32 destination_offset) {
+	VkBufferCopy buffer_copy = {
+		.srcOffset = source_offset,
+		.dstOffset = destination_offset,
+		.size = size,
+	};
+	vkCmdCopyBuffer(command_buffer, source, destination, 1, &buffer_copy);
 }
 
-VkBuffer Vulkan_Create_Buffer(Vulkan_Context *context, VkBufferCreateInfo *buffer_create_info) {
-	VkBuffer buffer;
-	VK_CHECK(vkCreateBuffer(context->device, buffer_create_info, NULL, &buffer));
-	return buffer;
-}
-
-void Vulkan_Bind_Buffer_Memory(Vulkan_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
-	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
-}
-
-VkMemoryRequirements Vulkan_Get_Buffer_Allocation_Requirements(Vulkan_Context *context, VkBuffer buffer) {
+GPU_Resource_Allocation_Requirements Render_API_Get_Buffer_Allocation_Requirements(Render_API_Context *context, GPU_Buffer buffer) {
 	VkMemoryRequirements memory_requirements;
 	vkGetBufferMemoryRequirements(context->device, buffer, &memory_requirements);
 	return memory_requirements;
 }
 
-void *Vulkan_Map_Memory(Vulkan_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
+VkBuffer Render_API_Create_Buffer(Render_API_Context *context, u32 size, VkBufferUsageFlags usage_flags) {
+	VkBufferCreateInfo buffer_create_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = size,
+		.usage = usage_flags,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+	};
+	VkBuffer buffer;
+	VK_CHECK(vkCreateBuffer(context->device, &buffer_create_info, NULL, &buffer));
+	return buffer;
+}
+
+void Render_API_Bind_Buffer_Memory(Render_API_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
+	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
+}
+
+void *Render_API_Map_Memory(Render_API_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
 	void *pointer;
 	VK_CHECK(vkMapMemory(context->device, memory, offset, size, 0, &pointer));
 	return pointer;
 }
 
-bool Vulkan_Allocate_Memory(Vulkan_Context *context, u32 size, VkMemoryPropertyFlags memory_property_flags, VkDeviceMemory *memory) {
+bool Render_API_Allocate_Memory(Render_API_Context *context, u32 size, VkMemoryPropertyFlags memory_property_flags, VkDeviceMemory *memory) {
 	VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
 	vkGetPhysicalDeviceMemoryProperties(context->physical_device, &physical_device_memory_properties);
 	s32 selected_memory_type_index = -1;
@@ -563,7 +610,7 @@ bool Vulkan_Allocate_Memory(Vulkan_Context *context, u32 size, VkMemoryPropertyF
 	return true;
 }
 
-VkFence Vulkan_Create_Fence(Vulkan_Context *context, bool start_signalled) {
+VkFence Render_API_Create_Fence(Render_API_Context *context, bool start_signalled) {
 	VkFenceCreateInfo fence_create_info = {
 		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 		.flags = 0,
@@ -576,7 +623,7 @@ VkFence Vulkan_Create_Fence(Vulkan_Context *context, bool start_signalled) {
 	return fence;
 }
 
-bool Vulkan_Was_Fence_Signalled(Vulkan_Context *context, VkFence fence) {
+bool Render_API_Was_Fence_Signalled(Render_API_Context *context, VkFence fence) {
 	VkResult result = vkGetFenceStatus(context->device, fence);
 	if (result == VK_SUCCESS) {
 		return true;
@@ -588,11 +635,11 @@ bool Vulkan_Was_Fence_Signalled(Vulkan_Context *context, VkFence fence) {
 	return false;
 }
 
-void Vulkan_Wait_For_Fences(Vulkan_Context *context, u32 count, VkFence *fences, bool wait_for_all_fences, u64 timeout) {
+void Render_API_Wait_For_Fences(Render_API_Context *context, u32 count, VkFence *fences, bool wait_for_all_fences, u64 timeout) {
 	VK_CHECK(vkWaitForFences(context->device, count, fences, wait_for_all_fences, timeout));
 }
 
-void Vulkan_Reset_Fences(Vulkan_Context *context, u32 count, VkFence *fences) {
+void Render_API_Reset_Fences(Render_API_Context *context, u32 count, VkFence *fences) {
 	VK_CHECK(vkResetFences(context->device, count, fences));
 }
 
@@ -953,15 +1000,14 @@ void Transition_Vulkan_Image_Layout(GPU_Command_List command_list, GPU_Image ima
 }
 #endif
 
-u32
-Vulkan_Get_Swapchain_Image_Count(Vulkan_Context *context, VkSwapchainKHR swapchain) {
-	u32 swapchain_image_count = 0;
+u32 Render_API_Get_Swapchain_Image_Count(Render_API_Context *context, VkSwapchainKHR swapchain) {
+	u32 swapchain_image_count;
 	VK_CHECK(vkGetSwapchainImagesKHR(context->device, swapchain, &swapchain_image_count, NULL));
 	return swapchain_image_count;
 }
 
-void
-Vulkan_Get_Swapchain_Images(Vulkan_Context *context, VkSwapchainKHR swapchain, u32 count, VkImage *images, VkImageView *image_views) {
+void Render_API_Get_Swapchain_Image_Views(Render_API_Context *context, VkSwapchainKHR swapchain, u32 count, VkImageView *image_views) {
+	VkImage images[count];
 	VK_CHECK(vkGetSwapchainImagesKHR(context->device, swapchain, &count, images));
 	for (s32 i = 0; i < count; i++) {
 		VkImageViewCreateInfo image_view_create_info = {
@@ -983,8 +1029,7 @@ Vulkan_Get_Swapchain_Images(Vulkan_Context *context, VkSwapchainKHR swapchain, u
 	}
 }
 
-VkSwapchainKHR
-Vulkan_Create_Swapchain(Vulkan_Context *context) {
+VkSwapchainKHR Render_API_Create_Swapchain(Render_API_Context *context) {
 	VkSurfaceCapabilitiesKHR surface_capabilities;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device, context->window_surface, &surface_capabilities));
 	VkExtent2D swapchain_image_extent;
@@ -1057,7 +1102,7 @@ typedef struct GPU_Render_Graph {
 	VkRenderPass *render_passes;
 } GPU_Render_Graph;
 
-GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Description *render_graph_description) {
+GPU_Render_Graph GPU_Compile_Render_Graph(Render_API_Context *context, Render_Graph_Description *render_graph_description) {
 	GPU_Render_Graph render_graph = {
 		.render_pass_count = 2,
 		.render_passes = malloc(2 * sizeof(VkRenderPass)), // @TODO
@@ -1087,7 +1132,7 @@ GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Des
 			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 			.attachmentCount = 1,
 			.pAttachments    = &(VkAttachmentDescription){
-				.format         = SHADOW_MAP_DEPTH_FORMAT,
+				.format         = SHADOW_MAP_FORMAT,
 				.samples        = VK_SAMPLE_COUNT_1_BIT,
 				.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1108,12 +1153,12 @@ GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Des
 			.dependencyCount = Array_Count(subpass_dependencies),
 			.pDependencies   = subpass_dependencies,
 		};
-		VK_CHECK(vkCreateRenderPass(context->vulkan.device, &render_pass_create_info, NULL, &render_graph.render_passes[0]));
+		VK_CHECK(vkCreateRenderPass(context->device, &render_pass_create_info, NULL, &render_graph.render_passes[0]));
 	}
 	{
 		VkAttachmentDescription attachments[] = {
 			{
-				.format         = context->vulkan.window_surface_format.format,
+				.format         = context->window_surface_format.format,
 				.samples        = VK_SAMPLE_COUNT_1_BIT,
 				.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp        = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1160,7 +1205,7 @@ GPU_Render_Graph GPU_Compile_Render_Graph(GPU_Context *context, Render_Graph_Des
 				.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			},
 		};
-		VK_CHECK(vkCreateRenderPass(context->vulkan.device, &render_pass_create_info, NULL, &render_graph.render_passes[1]));
+		VK_CHECK(vkCreateRenderPass(context->device, &render_pass_create_info, NULL, &render_graph.render_passes[1]));
 	}
 	return render_graph;
 }
@@ -1200,7 +1245,7 @@ typedef struct GPU_Descriptor_Subpool_Description {
 } GPU_Descriptor_Subpool_Description;
 
 /*
-VkDescriptorPool Vulkan_Create_Descriptor_Pool(Vulkan_Context *context, u32 subpool_count, VkDescriptorPoolCreateInfo *create_info, u32 flags) {
+VkDescriptorPool Vulkan_Create_Descriptor_Pool(Render_API_Context *context, u32 subpool_count, VkDescriptorPoolCreateInfo *create_info, u32 flags) {
 	VkDescriptorPoolSize descriptor_pool_sizes[subpool_count];
 	for (u32 i = 0; i < subpool_count; i++) {
 		descriptor_pool_sizes[i].type = subpool_descriptions[i].type;
@@ -1220,7 +1265,8 @@ VkDescriptorPool Vulkan_Create_Descriptor_Pool(Vulkan_Context *context, u32 subp
 */
 
 typedef struct GPU_Image_Descriptor_Write {
-	GPU_Image image;
+	GPU_Image_Layout layout;
+	GPU_Image_View view;
 	GPU_Sampler sampler;
 } GPU_Image_Descriptor_Write;
 
@@ -1244,7 +1290,7 @@ typedef struct GPU_Descriptor_Description {
 	u32 flags;
 } GPU_Descriptor_Description;
 
-GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
+GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
 	GPU_Descriptor_Set descriptor_set;
 	VkDescriptorSetLayoutBinding bindings[descriptor_count];
 	for (u32 i = 0; i < descriptor_count; i++) {
@@ -1262,14 +1308,14 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 		.pBindings = bindings,
 		.flags = flags,
 	};
-	VK_CHECK(vkCreateDescriptorSetLayout(context->vulkan.device, &descriptor_set_layout_create_info, NULL, &descriptor_set.vulkan.layout));
+	VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &descriptor_set.layout));
 	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = descriptor_pool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = &descriptor_set.vulkan.layout,
+		.pSetLayouts = &descriptor_set.layout,
 	};
-	VK_CHECK(vkAllocateDescriptorSets(context->vulkan.device, &descriptor_set_allocate_info, &descriptor_set.vulkan.descriptor_set));
+	VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, &descriptor_set.descriptor_set));
 
 	VkWriteDescriptorSet descriptor_writes[descriptor_count];
 	VkDescriptorImageInfo descriptor_image_infos[descriptor_count];
@@ -1277,7 +1323,7 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 	for (u32 i = 0; i < descriptor_count; i++) {
 		descriptor_writes[i] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set.vulkan.descriptor_set,
+			.dstSet = descriptor_set.descriptor_set,
 			.dstBinding = descriptor_descriptions[i].binding,
 			.dstArrayElement = 0,
 			.descriptorType = descriptor_descriptions[i].type,
@@ -1286,21 +1332,21 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(GPU_Context *context, u32 descripto
 		Assert(descriptor_descriptions[i].write.image || descriptor_descriptions[i].write.buffer);
 		if (descriptor_descriptions[i].write.image) {
 			 descriptor_image_infos[i] = (VkDescriptorImageInfo){
-				.imageLayout = descriptor_descriptions[i].write.image->image.vulkan.layout,
-				.imageView = descriptor_descriptions[i].write.image->image.vulkan.view,
-				.sampler = descriptor_descriptions[i].write.image->sampler.vulkan,
+				.imageLayout = descriptor_descriptions[i].write.image->layout,
+				.imageView = descriptor_descriptions[i].write.image->view,
+				.sampler = descriptor_descriptions[i].write.image->sampler,
 			};
 			descriptor_writes[i].pImageInfo = &descriptor_image_infos[i];
 		} else {
 			descriptor_buffer_infos[i] = (VkDescriptorBufferInfo){
-				.buffer = descriptor_descriptions[i].write.buffer->buffer.vulkan,
+				.buffer = descriptor_descriptions[i].write.buffer->buffer,
 				.offset = descriptor_descriptions[i].write.buffer->offset,
 				.range = descriptor_descriptions[i].write.buffer->range,
 			};
 			descriptor_writes[i].pBufferInfo = &descriptor_buffer_infos[i];
 		}
 	}
-	vkUpdateDescriptorSets(context->vulkan.device, descriptor_count, descriptor_writes, 0, NULL); // No return.
+	vkUpdateDescriptorSets(context->device, descriptor_count, descriptor_writes, 0, NULL); // No return.
 	return descriptor_set;
 }
 
@@ -1364,7 +1410,7 @@ typedef struct GPU_Pipeline_Description {
 	bool enable_depth_bias;
 } GPU_Pipeline_Description;
 
-GPU_Pipeline GPU_Create_Pipeline(GPU_Context *context, GPU_Pipeline_Description *pipeline_description) {
+GPU_Pipeline GPU_Create_Pipeline(Render_API_Context *context, GPU_Pipeline_Description *pipeline_description) {
 	GPU_Pipeline p = {};
 	return p;
 #if 0
@@ -1518,7 +1564,7 @@ GPU_Pipeline GPU_Create_Pipeline(GPU_Context *context, GPU_Pipeline_Description 
 #endif
 }
 
-VkFramebuffer Vulkan_Create_Framebuffer(Vulkan_Context *context, VkRenderPass render_pass, u32 width, u32 height, u32 attachment_count, VkImageView *attachments) {
+VkFramebuffer Render_API_Create_Framebuffer(Render_API_Context *context, VkRenderPass render_pass, u32 width, u32 height, u32 attachment_count, VkImageView *attachments) {
 	VkFramebufferCreateInfo framebuffer_create_info = {
 		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 		.renderPass = render_pass,
@@ -1533,60 +1579,125 @@ VkFramebuffer Vulkan_Create_Framebuffer(Vulkan_Context *context, VkRenderPass re
 	return framebuffer;
 }
 
-VkMemoryRequirements Vulkan_Get_Image_Allocation_Requirements(Vulkan_Context *context, VkImageCreateInfo *image_create_info) {
-	VkImage temporary_image;
-	VK_CHECK(vkCreateImage(context->device, image_create_info, NULL, &temporary_image));
+VkMemoryRequirements Render_API_Get_Image_Allocation_Requirements(Render_API_Context *context, GPU_Image image) {
 	VkMemoryRequirements image_memory_requirements;
-	vkGetImageMemoryRequirements(context->device, temporary_image, &image_memory_requirements);
-	vkDestroyImage(context->device, temporary_image, NULL);
+	vkGetImageMemoryRequirements(context->device, image, &image_memory_requirements);
 	return image_memory_requirements;
 }
 
-void Vulkan_Create_Image(Vulkan_Context *context, VkImageCreateInfo *image_create_info, VkDeviceMemory memory, u32 offset, VkImage *image, VkImageView *image_view) {
-	VK_CHECK(vkCreateImage(context->device, image_create_info, NULL, image));
-	// Bind the image to GPU memory.
-	{
-		// @TODO: Should this check be debug only?
-		// Check that this image type is compatible with this memory type.
-		VkMemoryRequirements image_memory_requirements;
-		vkGetImageMemoryRequirements(context->device, *image, &image_memory_requirements);
-		VkPhysicalDeviceMemoryProperties physical_device_memory_properties; // @TODO: Store these properties?
-		vkGetPhysicalDeviceMemoryProperties(context->physical_device, &physical_device_memory_properties);
-		/* @TODO: How to get memory_type?
-		s32 selected_memory_type_index = -1;
-		for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
-			if ((image_memory_requirements.memoryTypeBits & (1 << i)) && ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_type) == memory_type)) {
-				selected_memory_type_index = i;
-				break;
-			}
-		}
-		Assert(selected_memory_type_index != -1);
-		*/
-		VK_CHECK(vkBindImageMemory(context->device, *image, memory, offset));
+VkImage Render_API_Create_Image(Render_API_Context *context, u32 width, u32 height, VkFormat format, VkImageLayout initial_layout, VkImageUsageFlags usage_flags, VkSampleCountFlags sample_count_flags) {
+	VkImageCreateInfo image_create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.extent.width = width,
+		.extent.height = height,
+		.extent.depth = 1,
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.format = format,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.initialLayout = initial_layout,
+		.usage = usage_flags,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.samples = sample_count_flags,
+	};
+	GPU_Image image;
+	VK_CHECK(vkCreateImage(context->device, &image_create_info, NULL, &image));
+	return image;
+}
+
+void Render_API_Bind_Image_Memory(Render_API_Context *context, VkImage image, VkDeviceMemory memory, u32 offset) {
+	VK_CHECK(vkBindImageMemory(context->device, image, memory, offset));
+}
+
+VkImageView Render_API_Create_Image_View(Render_API_Context *context, VkImage image, VkFormat format, VkImageUsageFlags usage_flags) {
+	VkImageViewCreateInfo image_view_create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = format,
+		.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.subresourceRange.baseMipLevel = 0,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1,
+	};
+	if (usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	} else {
+		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
-	// Create an image view.
-	{
-		VkImageViewCreateInfo image_view_create_info = {
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = *image,
-			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = image_create_info->format,
-			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.subresourceRange.baseMipLevel = 0,
-			.subresourceRange.levelCount = 1,
-			.subresourceRange.baseArrayLayer = 0,
-			.subresourceRange.layerCount = 1,
-		};
-		if (image_create_info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		} else {
-			image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	VkImageView image_view;
+	VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL, &image_view));
+	return image_view;
+}
+
+void Render_API_Transition_Image_Layout(Render_API_Context *context, VkCommandBuffer command_buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) {
+	VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.oldLayout = old_layout,
+		.newLayout = new_layout,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange = {
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		},
+	};
+	if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) {
+			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
-		VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL, image_view));
+	} else {
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
+	VkPipelineStageFlags source_stage;
+	VkPipelineStageFlags destination_stage;
+	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+	} else {
+		Abort("Unsupported Vulkan image layout transition\n");
+	}
+	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
+}
+
+void Render_API_Record_Copy_Buffer_To_Image_Command(Render_API_Context *context, VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image, u32 image_width, u32 image_height) {
+	VkBufferImageCopy region = {
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+		.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.imageSubresource.mipLevel = 0,
+		.imageSubresource.baseArrayLayer = 0,
+		.imageSubresource.layerCount = 1,
+		.imageOffset = {0, 0, 0},
+		.imageExtent = {
+			image_width,
+			image_height,
+			1,
+		},
+	};
+	vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 #if 0
@@ -1643,7 +1754,7 @@ GPU_Image GPU_Create_Image(GPU_Context *context, Render_Image_Creation_Parameter
 }
 #endif
 
-void Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, VkFormat format) {
+void _Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, VkFormat format) {
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 		.oldLayout = old_layout,
@@ -1699,7 +1810,7 @@ typedef struct GPU_Sampler_Description {
 	GPU_Border_Color border_color;
 } GPU_Sampler_Description;
 
-VkSampler Vulkan_Create_Sampler(Vulkan_Context *context, VkSamplerCreateInfo *sampler_create_info) {
+VkSampler Vulkan_Create_Sampler(Render_API_Context *context, VkSamplerCreateInfo *sampler_create_info) {
 	VkSampler sampler;
 	VK_CHECK(vkCreateSampler(context->device, sampler_create_info, NULL, &sampler));
 	return sampler;
@@ -2671,8 +2782,7 @@ typedef struct {
 	u32 shader_module_count;
 } Create_Shader_Request;
 
-// @TODO: Use a temporary arena.
-void Vulkan_Initialize(Vulkan_Context *context) {
+void Render_API_Initialize(Render_API_Context *context) {
 	Platform_Dynamic_Library_Handle vulkan_library = Platform_Open_Dynamic_Library("libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)Platform_Get_Dynamic_Library_Function(vulkan_library, #name); \
@@ -2717,7 +2827,7 @@ void Vulkan_Initialize(Vulkan_Context *context) {
 		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
 		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
 		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-		.pfnUserCallback = vulkan_debug_message_callback,
+		.pfnUserCallback = Vulkan_Debug_Message_Callback,
 #endif
 	};
 
@@ -3886,5 +3996,7 @@ void Cleanup_Renderer() {
 
 	vkDestroyInstance(vulkan_context.instance, NULL); // On X11, the Vulkan instance must be destroyed after the display resources are destroyed.
 }
+
+#endif
 
 #endif

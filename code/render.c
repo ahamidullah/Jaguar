@@ -118,14 +118,17 @@ enum {
 void
 Initialize_Renderer(void *job_parameter_pointer) {
 	Game_State *game_state = (Game_State *)job_parameter_pointer;
-	Render_Context *render_context = &game_state->render_context;
-	GPU_Context *gpu_context = &render_context->gpu_context;
-	GPU_Initialize(gpu_context);
-	Create_GPU_Buffer_Block_Allocator(&render_context->gpu_memory_allocators.device_vertex_block, GPU_VERTEX_BUFFER, Megabyte(8), GPU_DEVICE_MEMORY);
-	Create_GPU_Buffer_Block_Allocator(&render_context->gpu_memory_allocators.device_index_block, GPU_INDEX_BUFFER, Megabyte(8), GPU_DEVICE_MEMORY);
-	Create_GPU_Buffer_Block_Allocator(&render_context->gpu_memory_allocators.device_uniform_block, GPU_UNIFORM_BUFFER, Megabyte(8), GPU_DEVICE_MEMORY);
-	Create_GPU_Buffer_Block_Allocator(&render_context->gpu_memory_allocators.host_staging_block, GPU_TRANSFER_SOURCE_BUFFER, Megabyte(8), GPU_HOST_MEMORY);
-	Create_GPU_Image_Block_Allocator(&render_context->gpu_memory_allocators.device_image_block, Megabyte(128), GPU_DEVICE_MEMORY);
+	Render_Context *context = &game_state->render_context;
+	Render_API_Initialize(&context->api_context);
+	context->thread_local_context = malloc(game_state->jobs_context.worker_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
+	for (s32 i = 0; i < game_state->jobs_context.worker_thread_count; i++) {
+		for (s32 j = 0; j < MAX_FRAMES_IN_FLIGHT; j++) {
+			context->thread_local_context[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+		}
+	}
+	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
+	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
+	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
 	// Descriptor sets.
 	// Command Pools.
 	// Create shaders.
@@ -134,6 +137,7 @@ Initialize_Renderer(void *job_parameter_pointer) {
 	//     Device block.
 	//     Host ring buffer.
 	//     Create uniform buffers.
+	/*
 	GPU_Image_Creation_Parameters shadow_map_image_creation_parameters = {
 		.width = SHADOW_MAP_WIDTH,
 		.height = SHADOW_MAP_HEIGHT,
@@ -142,22 +146,27 @@ Initialize_Renderer(void *job_parameter_pointer) {
 		.usage_flags = GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GPU_IMAGE_USAGE_SAMPLED,
 		.sample_count_flags = GPU_SAMPLE_COUNT_1,
 	};
-	GPU_Image shadow_map_image = Create_GPU_Device_Image(render_context, &shadow_map_image_creation_parameters);
+	*/
+	GPU_Image shadow_map_image = Create_GPU_Device_Image(context, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
+	GPU_Image_View shadow_map_image_view = Render_API_Create_Image_View(&context->api_context, shadow_map_image, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
+	/*
 	GPU_Image_Creation_Parameters depth_buffer_image_creation_parameters = {
 		.width = window_width,
 		.height = window_height,
-		.format = GPU_FORMAT_D32_SFLOAT_S8_UINT,
-		.initial_layout = GPU_IMAGE_LAYOUT_UNDEFINED,
-		.usage_flags = GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT,
-		.sample_count_flags = GPU_SAMPLE_COUNT_1,
+		.format = DEPTH_BUFFER_FORMAT,
+		.initial_layout = DEPTH_BUFFER_INITIAL_LAYOUT,
+		.usage_flags = DEPTH_BUFFER_IMAGE_USAGE_FLAGS,
+		.sample_count_flags = DEPTH_BUFFER_SAMPLE_COUNT_FLAGS,
 	};
-	GPU_Image depth_buffer_image = Create_GPU_Device_Image(render_context, &depth_buffer_image_creation_parameters);
+	*/
+	GPU_Image depth_buffer_image = Create_GPU_Device_Image(context, window_width, window_height, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
+	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
-	render_context->swapchain = GPU_Create_Swapchain(gpu_context);
-	u32 swapchain_image_count = GPU_Get_Swapchain_Image_Count(gpu_context, render_context->swapchain);
-	GPU_Image *swapchain_images = malloc(swapchain_image_count * sizeof(GPU_Image)); // @TODO
-	GPU_Get_Swapchain_Images(gpu_context, render_context->swapchain, swapchain_image_count, swapchain_images);
+	context->gpu_swapchain = Render_API_Create_Swapchain(&context->api_context);
+	u32 swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->gpu_swapchain);
+	GPU_Image_View *swapchain_image_views = malloc(swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
+	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->gpu_swapchain, swapchain_image_count, swapchain_image_views);
 
 #if 0
 	Render_Graph_External_Attachment external_attachments[] = {
@@ -210,12 +219,12 @@ Initialize_Renderer(void *job_parameter_pointer) {
 	};
 	GPU_Render_Graph render_graph = GPU_Compile_Render_Graph(&game_state->render_context.gpu_context, &render_graph_description);
 #endif
-	render_context->aspect_ratio = window_width / (f32)window_height;
-	render_context->focal_length = 0.1f;
-	render_context->scene_projection = perspective_projection(game_state->camera.field_of_view, render_context->aspect_ratio, render_context->focal_length, 100.0f); // @TODO
+	context->aspect_ratio = window_width / (f32)window_height;
+	context->focal_length = 0.1f;
+	context->scene_projection = perspective_projection(game_state->camera.field_of_view, context->aspect_ratio, context->focal_length, 100.0f); // @TODO
 	for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		//GPU_Create_Fence(false, &upload_fences[i]);
-		render_fences[i] = GPU_Create_Fence(gpu_context, true);
+		render_fences[i] = Render_API_Create_Fence(&context->api_context, true);
 	}
 	// @TODO: Handpick these colors so they're visually distinct.
 	for (u32 i = 0; i < RANDOM_COLOR_TABLE_LENGTH; i++) {
@@ -405,10 +414,6 @@ void Render(Game_State *game_state) {
 #endif
 	//vulkan_submit(&game_state->camera, game_state->entities.meshes.instances, visible_meshes, visible_mesh_count, &render_context, frame_index); // @TODO
 	game_state->render_context.debug_render_object_count = 0;
-}
-
-Texture_ID Upload_Texture_To_GPU(GPU_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GPU_Upload_Flags gpu_upload_flags) {
-	return 0;
 }
 
 /*

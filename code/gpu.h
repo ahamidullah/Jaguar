@@ -1,3 +1,4 @@
+#if 0
 typedef enum GPU_Color_Component_Flags {
 	GPU_COLOR_COMPONENT_RED = 0x1,
 	GPU_COLOR_COMPONENT_GREEN = 0x2,
@@ -133,12 +134,16 @@ typedef enum GPU_Border_Color {
 } GPU_Border_Color;
 
 typedef enum GPU_Buffer_Usage_Flags {
-	GPU_TRANSFER_DESTINATION_BUFFER,
-	GPU_TRANSFER_SOURCE_BUFFER,
-	GPU_VERTEX_BUFFER,
-	GPU_INDEX_BUFFER,
-	GPU_UNIFORM_BUFFER,
+	GPU_TRANSFER_DESTINATION_BUFFER = 0x1,
+	GPU_TRANSFER_SOURCE_BUFFER = 0x2,
+	GPU_VERTEX_BUFFER = 0x4,
+	GPU_INDEX_BUFFER = 0x8,
+	GPU_UNIFORM_BUFFER = 0x10,
 } GPU_Buffer_Usage_Flags;
+
+typedef enum GPU_Command_Pool_Type {
+	GPU_GRAPHICS_COMMAND_POOL,
+} GPU_Command_Pool_Type;
 
 typedef enum GPU_Memory_Type {
 	GPU_DEVICE_MEMORY,// = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -239,10 +244,12 @@ typedef struct GPU_Swapchain {
 		VkSwapchainKHR vulkan;
 	};
 } GPU_Swapchain;
+#endif
 
 typedef struct GPU_Memory_Allocation {
-	u32 offset;
 	GPU_Memory memory;
+	u32 offset;
+	void *mapped_pointer;
 } GPU_Memory_Allocation;
 
 typedef struct GPU_Subbuffer {
@@ -337,41 +344,30 @@ typedef struct GPU_Memory_Block GPU_Memory_Block;
 
 typedef struct GPU_Memory_Block {
 	GPU_Memory memory;
+	void *mapped_pointer;
 	u32 frontier;
-	u32 active_allocation_count;
-	GPU_Memory_Allocation active_allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32 allocation_count;
+	GPU_Memory_Allocation allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
 	GPU_Memory_Block *next;
 } GPU_Memory_Block;
 
 typedef struct GPU_Memory_Block_Allocator {
+	Platform_Mutex mutex;
 	u32 block_size;
 	GPU_Memory_Block *base_block;
 	GPU_Memory_Block *active_block;
 	GPU_Memory_Type memory_type;
-	Platform_Mutex mutex;
 } GPU_Memory_Block_Allocator;
 
-typedef struct GPU_Memory_Ring_Buffer_Allocator {
+typedef struct GPU_Memory_Ring_Allocator {
 	GPU_Memory memory;
+	void *mapped_pointer;
 	u32 size;
-	u32 read_offset;
-	u32 write_offset;
-} GPU_Memory_Ring_Buffer_Allocator;
-
-typedef enum GPU_Memory_Allocator_Type {
-	GPU_MEMORY_BLOCK_ALLOCATOR,
-	GPU_MEMORY_RING_BUFFER_ALLOCATOR,
-} GPU_Memory_Allocator_Type;
-
-typedef struct GPU_Memory_Allocator {
-	union {
-		GPU_Memory_Block_Allocator block;
-		GPU_Memory_Ring_Buffer_Allocator ring_buffer;
-	};
-	GPU_Memory_Allocator_Type type;
-} GPU_Memory_Allocator;
+	u32 read_index;
+	u32 write_index;
+} GPU_Memory_Ring_Allocator;
 
 typedef struct GPU_Indexed_Geometry {
-	GPU_Subbuffer vertex_subbuffer;
-	GPU_Subbuffer index_subbuffer;
+	GPU_Buffer vertex_buffer;
+	GPU_Buffer index_buffer;
 } GPU_Indexed_Geometry;

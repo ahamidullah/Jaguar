@@ -115,8 +115,10 @@ f64 Platform_Time_Difference(Platform_Time start, Platform_Time end);
 void Platform_Sleep(u32 milliseconds);
 
 // Vulkan.
+#if defined(USE_VULKAN_RENDER_API)
 const char *Platform_Get_Required_Vulkan_Surface_Instance_Extension();
 void Platform_Create_Vulkan_Surface(VkInstance instance, VkSurfaceKHR *surface);
+#endif
 
 // Errors.
 const char *Platform_Get_Error();

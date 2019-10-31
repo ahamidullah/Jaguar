@@ -13,12 +13,7 @@ typedef enum {
 void log_print_actual(Log_Type , const char *file, int line, const char *func, const char *format, ...);
 void _abort_actual(const char *file, int line, const char *func, const char *fmt, ...);
 
-typedef struct {
-	char *data;
-	u32 length;
-	u32 capacity;
-	u8 is_constant;
-} String;
+#include "strings.h"
 
 typedef struct {
 	char *contents;
@@ -446,6 +441,8 @@ typedef struct Game_Memory {
 	u32 thread_heap_count;
 	Thread_Memory_Heap *thread_heaps;
 } Game_Memory;
+
+__thread u32 global_thread_index;
 
 typedef struct Game_State {
 	Game_Execution_Status execution_status;

@@ -598,18 +598,15 @@ s32 main(s32 argc, char **argv) {
 	srand(time(0));
 	XInitThreads();
 	linux_context.page_size = sysconf(_SC_PAGESIZE);
-
 	// Install a new error handler.
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
 	XSetErrorHandler(&X11_Error_Handler);
-
 	linux_context.display = XOpenDisplay(NULL);
 	if (!linux_context.display) {
 		Abort("Failed to create display");
 	}
 	s32 screen = XDefaultScreen(linux_context.display);
 	Window root_window = XRootWindow(linux_context.display, screen);
-
 	// Initialize XInput2, which we require for raw input.
 	{
 		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &(s32){0}, &(s32){0})) {
@@ -638,7 +635,6 @@ s32 main(s32 argc, char **argv) {
 			Abort("Failed to select XInput events");
 		}
 	}
-
 	// Create window.
 	{
 		XVisualInfo visual_info_template = {
@@ -686,7 +682,6 @@ s32 main(s32 argc, char **argv) {
 			Log_Print(ERROR_LOG, "Unable to register WM_DELETE_WINDOW atom.");
 		}
 	}
-
 	// Get actual window dimensions without window borders.
 	{
 		s32 window_x, window_y;
@@ -695,7 +690,6 @@ s32 main(s32 argc, char **argv) {
 			Abort("Failed to get the screen's geometry.");
 		}
 	}
-
 	// Create a blank cursor for when we want to hide the cursor.
 	{
 		XColor xcolor;
@@ -704,14 +698,11 @@ s32 main(s32 argc, char **argv) {
 		linux_context.blank_cursor = XCreatePixmapCursor(linux_context.display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
 		XFreePixmap(linux_context.display, pixmap);
 	}
-
 	linux_context.fiber_stack_memory = Platform_Allocate_Memory((JOB_FIBER_COUNT * FIBER_STACK_SIZE) + ((JOB_FIBER_COUNT + 1) * linux_context.page_size));
 	for (s32 i = 0; i <= JOB_FIBER_COUNT; i++) {
 		mprotect(linux_context.fiber_stack_memory + ((i * FIBER_STACK_SIZE) + (i * linux_context.page_size)), linux_context.page_size, PROT_NONE);
 	}
-
 	application_entry();
-
 	return 0;
 }
 

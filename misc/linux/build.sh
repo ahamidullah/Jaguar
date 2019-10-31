@@ -14,8 +14,9 @@ pushd . >& /dev/null
 cd $PROJECT_DIRECTORY/code
 
 # Build and run preprocessor.
-gcc $COMPILER_FLAGS preprocessor.c $LINKER_FLAGS -o $BUILD_DIRECTORY/preprocessor
 pushd . >& /dev/null
+cd preprocessor
+gcc -g -Wall -Werror -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers preprocessor.c -o $BUILD_DIRECTORY/preprocessor
 cd $PROJECT_DIRECTORY
 $BUILD_DIRECTORY/preprocessor
 popd >& /dev/null
@@ -25,7 +26,7 @@ popd >& /dev/null
 # @TODO: Fix -rdynamic so stacktrace prints function names and line numbers.
 # @TODO: Vendor freetype library.
 # @TODO: Vendor assimp library.
-COMPILER_FLAGS="-D_GNU_SOURCE -std=gnu99 -g -O0 -ffast-math -fno-exceptions -Idependencies/vulkan/1.1.106.0/include -Wall -Wextra -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=5 -Wundef -Werror -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers"
+COMPILER_FLAGS="-D_GNU_SOURCE -std=gnu99 -g -O0 -ffast-math -fno-exceptions -DUSE_VULKAN_RENDER_API -Idependencies/vulkan/1.1.106.0/include -Wall -Wextra -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=5 -Wundef -Werror -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers"
 if [ DEVELOPMENT ]; then
 	COMPILER_FLAGS+=" -DDEVELOPMENT -I/usr/include/freetype2"
 fi

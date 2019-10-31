@@ -18,20 +18,10 @@ typedef struct {
 } Debug_Render_Object;
 
 typedef struct GPU_Memory_Allocators {
-	GPU_Buffer_Block_Allocator device_vertex_block;
-	GPU_Buffer_Block_Allocator device_index_block;
-	GPU_Buffer_Block_Allocator device_uniform_block;
-	GPU_Image_Block_Allocator device_image_block;
-
-	GPU_Buffer_Ring_Allocator host_vertex_ring;
-	GPU_Buffer_Ring_Allocator host_index_ring;
-	GPU_Buffer_Ring_Allocator host_uniform_ring;
-	GPU_Buffer_Ring_Allocator host_staging_ring;
-
-	GPU_Buffer_Block_Allocator host_vertex_block;
-	GPU_Buffer_Block_Allocator host_index_block;
-	GPU_Buffer_Block_Allocator host_uniform_block;
-	GPU_Buffer_Block_Allocator host_staging_block;
+	GPU_Memory_Block_Allocator device_block_buffer;
+	GPU_Memory_Block_Allocator device_block_image;
+	GPU_Memory_Ring_Allocator staging_ring;
+	GPU_Memory_Block_Allocator staging_block;
 } GPU_Memory_Allocators;
 
 typedef struct GPU_Image_Creation_Parameters {
@@ -86,27 +76,19 @@ typedef enum Render_API_ID {
 	VULKAN_RENDER_API,
 } Render_API_ID;
 
-// @TODO: False sharing?
-typedef struct GPU_Thread_Local_Context {
+typedef struct Thread_Local_Render_Context {
 	GPU_Command_Pool command_pools[MAX_FRAMES_IN_FLIGHT];
-} GPU_Thread_Local_Context;
-
-typedef struct GPU_Context {
-	Render_API_ID active_render_api;
-	union {
-		Vulkan_Context vulkan;
-	};
-	GPU_Thread_Local_Context *thread_local;
-} GPU_Context;
+} Thread_Local_Render_Context;
 
 typedef struct Render_Context {
+	Thread_Local_Render_Context *thread_local_context;
+	Render_API_Context api_context;
 	M4 scene_projection;
 	f32 focal_length; // The distance between the camera position and the near render plane in world space.
 	f32 aspect_ratio; // Calculated from the render area dimensions, not the window dimensions.
 	u32 debug_render_object_count;
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
-	GPU_Memory_Allocators gpu_memory_allocators;
 	u32 current_frame_index;
-	GPU_Context gpu_context;
-	GPU_Swapchain swapchain;
+	GPU_Memory_Allocators gpu_memory_allocators;
+	GPU_Swapchain gpu_swapchain;
 } Render_Context;

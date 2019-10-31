@@ -1,3 +1,6 @@
+#define STB_SPRINTF_IMPLEMENTATION
+#include "stb_sprintf.h"
+
 size_t C_String_Length(const char *c_string) {
 	size_t length = 0;
 	while (*c_string++) {
@@ -16,33 +19,31 @@ String S(const char *c_string) {
 	};
 }
 
-String Create_String(u32 capacity, Memory_Arena *arena) {
+String Create_String(u32 capacity) {
 	// We still null-terminate our strings to ensure compatibility with libraries, debuggers, etc.
 	return (String){
-		.data = allocate_array(arena, char, capacity + 1),
+		.data = malloc(capacity + 1),
 		.length = 0,
 		.capacity = capacity,
 		.is_constant = 0,
 	};
 }
 
-s32 format_string(char *buffer, const char *format, va_list arguments) {
-	return stbsp_vsprintf(buffer, format, arguments);
+s32 Format_String(String buffer, String format, va_list arguments) {
+	return stbsp_vsprintf(buffer.data, format.data, arguments);
 }
 
-// @TODO: Use String.
-const char *find_first_occurrence_of_character(const char *string, char character) {
-	while (*string && *string != character) {
-		string++;
+s64 Find_First_Occurrence_Of_Character(String string, char character) {
+	for (u32 i = 0; i < string.length; i++) {
+		if (string.data[i] == character) {
+			return i;
+		}
 	}
-	if (*string != character) {
-		return NULL;
-	}
-	return string;
+	return -1;
 }
 
-u32 find_last_occurrence_of_character(String string, char character) {
-	u32 occurrence = U32_MAX;
+s64 Find_Last_Occurrence_Of_Character(String string, char character) {
+	s32 occurrence = -1;
 	for (u32 i = 0; i < string.length; i++) {
 		if (string.data[i] == character) {
 			occurrence = i;
@@ -71,13 +72,28 @@ const char *find_substring(const char *s, const char *substring) {
 	return NULL;
 }
 
-void copy_string(char *destination, const char *source) {
-	while (*source) {
-		*destination++ = *source++;
+void Copy_String(String source, String destination) {
+	Assert(destination.capacity >= source.length + 1);
+	for (u32 i = 0; i < source.length; i++) {
+		destination.data[i] = source.data[i];
 	}
-	*destination = '\0';
+	destination.length = source.length;
+	destination.data[destination.length] = '\0';
 }
 
+bool Strings_Equal(String a, String b) {
+	if (a.length != b.length) {
+		return false;
+	}
+	for (u32 i = 0; i < a.length; i++) {
+		if (a.data[i] != b.data[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+#if 0
 s8 Compare_Strings(const char *a, const char *b) {
 	s32 i = 0;
 	for (; a[i] != '\0'; ++i) {
@@ -96,6 +112,7 @@ s8 Compare_Strings(const char *a, const char *b) {
 	}
 	return -1;
 }
+#endif
 
 void Append_String(String *destination, String source) {
 	Assert(!destination->is_constant);
@@ -114,10 +131,10 @@ void Append_String_Range(String *destination, String source, u32 source_start_in
 	destination->data[destination->length] = '\0';
 }
 
-String join_strings(String a, String b, Memory_Arena *arena) {
+String Join_Strings(String a, String b) {
 	size_t result_length = a.length + b.length + 1;
 	String result = {
-		.data = allocate_array(arena, char, result_length),
+		.data = malloc(result_length),
 		.length = 0,
 		.capacity = result_length,
 	};

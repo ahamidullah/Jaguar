@@ -2,8 +2,6 @@
 
 u32 window_width, window_height;
 
-#define STB_SPRINTF_IMPLEMENTATION
-#include "stb_sprintf.h"
 #include "memory.c"
 #include "jobs.c"
 #include "math.c"
@@ -14,7 +12,7 @@ u32 window_width, window_height;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "vulkan.c"
-#include "backend.c"
+//#include "backend.c"
 #include "gpu.c"
 #include "render.c"
 #include "assets.c"

@@ -1,25 +1,28 @@
-#if 0
-void Create_GPU_Memory_Block_Allocator(GPU_Memory_Allocator *allocator, u32 block_size, GPU_Memory_Type memory_type) {
-	allocator->type = GPU_MEMORY_BLOCK_ALLOCATOR;
-	allocator->block.block_size = block_size;
-	allocator->block.active_block = NULL;
-	allocator->block.base_block = NULL;
-	allocator->block.memory_type = memory_type;
-	Platform_Create_Mutex(&allocator->block.mutex);
+void Create_GPU_Memory_Block_Allocator(GPU_Memory_Block_Allocator *allocator, u32 block_size, GPU_Memory_Type memory_type) {
+	allocator->block_size = block_size;
+	allocator->active_block = NULL;
+	allocator->base_block = NULL;
+	allocator->memory_type = memory_type;
+	Platform_Create_Mutex(&allocator->mutex);
 }
 
-GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(GPU_Context *context, GPU_Memory_Block_Allocator *allocator, u32 size, u32 alignment) {
+GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(Render_Context *context, GPU_Memory_Block_Allocator *allocator, GPU_Resource_Allocation_Requirements allocation_requirements) {
 	Platform_Lock_Mutex(&allocator->mutex);
 	// @TODO: Try to allocate out of the freed allocations.
-	if (!allocator->active_block || allocator->active_block->frontier + size > allocator->block_size) {
+	if (!allocator->active_block || allocator->active_block->frontier + allocation_requirements.size > allocator->block_size) {
 		// Need to allocate a new block.
 		GPU_Memory_Block *new_block = malloc(sizeof(GPU_Memory_Block)); // @TODO
-		if (!GPU_Allocate_Memory(context, allocator->block_size, allocator->memory_type, &new_block->memory)) {
+		if (!Render_API_Allocate_Memory(&context->api_context, allocator->block_size, allocator->memory_type, &new_block->memory)) {
 			free(new_block); // @TODO
 			return NULL;
 		}
 		new_block->frontier = 0;
-		new_block->active_allocation_count = 0;
+		new_block->allocation_count = 0;
+		if (allocator->memory_type & GPU_HOST_MEMORY) {
+			new_block->mapped_pointer = Render_API_Map_Memory(&context->api_context, new_block->memory, allocator->block_size, 0);
+		} else {
+			new_block->mapped_pointer = NULL;
+		}
 		new_block->next = NULL;
 		if (allocator->base_block) {
 			allocator->active_block->next = new_block;
@@ -30,46 +33,47 @@ GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(GPU_Context *context, GPU
 		}
 	}
 	// Allocate out of the active block's frontier.
-	GPU_Memory_Allocation *new_allocation = &allocator->active_block->active_allocations[allocator->active_block->active_allocation_count++];
-	u32 allocation_start_offset = Align_U32(allocator->active_block->frontier, alignment);
+	GPU_Memory_Allocation *new_allocation = &allocator->active_block->allocations[allocator->active_block->allocation_count++];
+	u32 allocation_start_offset = Align_U32(allocator->active_block->frontier, allocation_requirements.alignment);
 	*new_allocation = (GPU_Memory_Allocation){
-		.size = size,
 		.offset = allocation_start_offset,
 		.memory = allocator->active_block->memory,
 	};
 	if (allocator->memory_type & GPU_HOST_MEMORY) {
-		new_allocation->mapped_pointer = GPU_Map_Memory(context, new_allocation->memory, new_allocation->size, new_allocation->offset);
+		new_allocation->mapped_pointer = (char *)allocator->active_block->mapped_pointer + allocation_start_offset;
 	} else {
 		new_allocation->mapped_pointer = NULL;
 	}
-	Assert(allocator->active_block->active_allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
-	allocator->active_block->frontier = allocation_start_offset + size;
+	Assert(allocator->active_block->allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
+	allocator->active_block->frontier = allocation_start_offset + allocation_requirements.size;
 	Assert(allocator->active_block->frontier <= allocator->block_size);
 	Platform_Unlock_Mutex(&allocator->mutex);
 	return new_allocation;
 }
 
-bool Create_GPU_Buffer(GPU_Context *context, GPU_Memory_Block_Allocator *allocator, GPU_Buffer_Usage_Flags buffer_usage_flags, u32 buffer_size, GPU_Buffer *buffer) {
-	*buffer = GPU_Create_Buffer(context, buffer_size, buffer_usage_flags);
-	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Buffer_Allocation_Requirements(context, *buffer);
-	GPU_Memory_Allocation *allocation = Allocate_From_GPU_Memory_Blocks(context, allocator, allocation_requirements.size, allocation_requirements.alignment); // @TODO: Store these allocations so the resource can be freed.
-	if (!allocation) {
-		return false;
-	}
-	GPU_Bind_Buffer_Memory(context, *buffer, allocation->memory, allocation->offset);
-	return true;
+typedef struct GPU_Buffer_Creation_Paramters {
+	u32 size;
+	GPU_Buffer_Usage_Flags usage_flags;
+} GPU_Buffer_Creation_Paramters;
+
+GPU_Buffer Create_GPU_Device_Buffer(Render_Context *context, u32 size, GPU_Buffer_Usage_Flags usage_flags) {
+	GPU_Buffer buffer = Render_API_Create_Buffer(&context->api_context, size, usage_flags);
+	GPU_Resource_Allocation_Requirements allocation_requirements = Render_API_Get_Buffer_Allocation_Requirements(&context->api_context, buffer);
+	GPU_Memory_Allocation *allocation = Allocate_From_GPU_Memory_Blocks(context, &context->gpu_memory_allocators.device_block_buffer, allocation_requirements); // @TODO: Store these allocations so the resource can be freed.
+	Assert(allocation);
+	Render_API_Bind_Buffer_Memory(&context->api_context, buffer, allocation->memory, allocation->offset);
+	return buffer;
 }
 
-bool Create_GPU_Image(GPU_Context *context, GPU_Memory_Block_Allocator *allocator, GPU_Image_Creation_Parameters *parameters, GPU_Image *image) {
-	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Image_Allocation_Requirements(context, parameters);
-	GPU_Memory_Allocation *allocation = Allocate_From_GPU_Memory_Blocks(context, allocator, allocation_requirements.size, allocation_requirements.alignment); // @TODO: Store these allocations so the resource can be freed.
-	if (!allocation) {
-		return false;
-	}
-	*image = GPU_Create_Image(context, parameters, allocation);
-	return true;
+GPU_Image Create_GPU_Device_Image(Render_Context *context, u32 width, u32 height, GPU_Format format, GPU_Image_Layout initial_layout, GPU_Image_Usage_Flags usage_flags, GPU_Sample_Count_Flags sample_count_flags) {
+	GPU_Image image = Render_API_Create_Image(&context->api_context, width, height, format, initial_layout, usage_flags, sample_count_flags);
+	GPU_Resource_Allocation_Requirements allocation_requirements = Render_API_Get_Image_Allocation_Requirements(&context->api_context, image);
+	GPU_Memory_Allocation *allocation = Allocate_From_GPU_Memory_Blocks(context, &context->gpu_memory_allocators.device_block_image, allocation_requirements); // @TODO: Store these allocations so the resource can be freed.
+	Assert(allocation);
+	Render_API_Bind_Image_Memory(&context->api_context, image, allocation->memory, allocation->offset);
+	//Render_API_Create_Image_View(&context->api_context, image, format, usage_flags)
+	return image;
 }
-#endif
 
 #if 0
 typedef struct GPU_Subbuffer {
@@ -191,7 +195,6 @@ bool Allocate_GPU_Device_Buffer_Memory(GPU_Device_Buffer_Memory_Pool *pool, u32 
 bool Allocate_GPU_Device_Image_Memory(GPU_Device_Image_Memory_Pool *pool, u32 size, u32 memory_tag, GPU_Memory *memory, u32 *offset) {
 }
 
-#endif
 
 void Create_GPU_Buffer_Block_Allocator(GPU_Buffer_Block_Allocator *allocator, GPU_Buffer_Usage_Flags buffer_usage_flags, u32 block_size, GPU_Memory_Type memory_type) {
 	Platform_Create_Mutex(&allocator->mutex);
@@ -222,7 +225,7 @@ void Create_GPU_Buffer_Ring_Allocator(GPU_Buffer_Ring_Allocator *allocator, GPU_
 		if (!allocator->active_block || allocator->active_block->frontier + size > allocator->block_size) { \
 			/* Need to allocate a new block. */ \
 			typeof(allocator->active_block) new_block = malloc(sizeof(typeof(allocator->active_block))); /* TODO */ \
-			if (!GPU_Allocate_Memory(&context->gpu_context, allocator->block_size, allocator->memory_type, &new_block->memory)) { \
+			if (!GPU_Allocate_Memory(&context->api_context, allocator->block_size, allocator->memory_type, &new_block->memory)) { \
 				free(new_block); /* @TODO */ \
 				Assert(0); /* TODO */ \
 			} \
@@ -253,11 +256,11 @@ GPU_Subbuffer GPU_Buffer_Block_Allocator_Push_Size(Render_Context *context, GPU_
 	u32 *subbuffer_start_offset;
 	GPU_Block_Allocator_Push_Size(context, allocator, size, 1, new_buffer_block, subbuffer_start_offset);
 	if (new_buffer_block) {
-		new_buffer_block->buffer = GPU_Create_Buffer(&context->gpu_context, allocator->buffer_usage_flags, size);
+		new_buffer_block->buffer = GPU_Create_Buffer(&context->api_context, allocator->buffer_usage_flags, size);
 		new_buffer_block->mapped_pointer = NULL;
 	}
 	if (new_buffer_block && (allocator->memory_type & GPU_HOST_MEMORY)) {
-		new_buffer_block->mapped_pointer = GPU_Map_Memory(&context->gpu_context, new_buffer_block->memory, allocator->block_size, 0);
+		new_buffer_block->mapped_pointer = GPU_Map_Memory(&context->api_context, new_buffer_block->memory, allocator->block_size, 0);
 	}
 	return (GPU_Subbuffer){
 		.buffer = allocator->active_block->buffer,
@@ -336,31 +339,43 @@ GPU_Subbuffer Create_GPU_Device_Uniform_Subbuffer(Render_Context *context, u32 s
 
 GPU_Image Create_GPU_Device_Image(Render_Context *context, GPU_Image_Creation_Parameters *parameters) {
 	GPU_Image_Block_Allocator *allocator = &context->gpu_memory_allocators.device_image_block;
-	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Image_Allocation_Requirements(&context->gpu_context, parameters);
+	GPU_Resource_Allocation_Requirements allocation_requirements = GPU_Get_Image_Allocation_Requirements(&context->api_context, parameters);
 	Platform_Lock_Mutex(&allocator->mutex);
 	GPU_Image_Allocation image_allocation = GPU_Device_Image_Block_Allocator_Push_Size(context, allocator, allocation_requirements.size, allocation_requirements.alignment);
 	Platform_Unlock_Mutex(&allocator->mutex);
-	return GPU_Create_Image(&context->gpu_context, parameters, image_allocation);
+	return GPU_Create_Image(&context->api_context, parameters, image_allocation);
+}
+#endif
+
+typedef struct GPU_Staging_Buffer {
+	GPU_Buffer buffer;
+	u32 offset;
+} GPU_Staging_Buffer;
+
+GPU_Staging_Buffer Create_GPU_Staging_Buffer(Render_Context *context, u32 size, void **mapped_pointer) {
+	// @TODO: Use a staging ring buffer and block-bound buffers as a fallback for overflow.
+	GPU_Buffer buffer = Render_API_Create_Buffer(&context->api_context, size, GPU_TRANSFER_SOURCE_BUFFER);
+	GPU_Resource_Allocation_Requirements allocation_requirements = Render_API_Get_Buffer_Allocation_Requirements(&context->api_context, buffer);
+	GPU_Memory_Allocation *allocation = Allocate_From_GPU_Memory_Blocks(context, &context->gpu_memory_allocators.staging_block, allocation_requirements);
+	Assert(allocation);
+	Render_API_Bind_Buffer_Memory(&context->api_context, buffer, allocation->memory, allocation->offset);
+	*mapped_pointer = allocation->mapped_pointer;
+	return (GPU_Staging_Buffer){
+		.buffer = buffer,
+		.offset = 0,
+	};
 }
 
-GPU_Subbuffer Create_GPU_Staging_Subbuffer(Render_Context *context, u32 size, void **mapped_pointer) {
-	GPU_Buffer_Block_Allocator *allocator = &context->gpu_memory_allocators.host_staging_block;
-	Platform_Lock_Mutex(&allocator->mutex);
-	GPU_Subbuffer subbuffer = GPU_Host_Buffer_Block_Allocator_Push_Size(context, allocator, size, mapped_pointer);
-	Platform_Unlock_Mutex(&allocator->mutex);
-	return subbuffer;
-}
-
-GPU_Indexed_Geometry Upload_Staged_Indexed_Geometry_To_GPU(Render_Context *context, u32 vertices_size, u32 indices_size, GPU_Subbuffer staging_subbuffer) {
-	GPU_Subbuffer vertex_subbuffer = Create_GPU_Device_Vertex_Subbuffer(context, vertices_size);
-	GPU_Subbuffer index_subbuffer = Create_GPU_Device_Index_Subbuffer(context, indices_size);
-	GPU_Command_Buffer command_buffer = GPU_Create_Command_Buffer(&context->gpu_context, context->gpu_context.thread_local[thread_index].command_pools[context->current_frame_index]);
-	GPU_Record_Copy_Buffer_Commands(&context->gpu_context, command_buffer, 1, &vertices_size, staging_subbuffer.buffer, vertex_subbuffer.buffer, staging_subbuffer.offset, vertex_subbuffer.offset);
-	GPU_Record_Copy_Buffer_Commands(&context->gpu_context, command_buffer, 1, &indices_size, staging_subbuffer.buffer, index_subbuffer.buffer, staging_subbuffer.offset + vertices_size, index_subbuffer.offset);
-	GPU_End_Command_Buffer(&context->gpu_context, command_buffer);
+GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *context, u32 vertices_size, u32 indices_size, GPU_Staging_Buffer staging_buffer) {
+	GPU_Buffer vertex_buffer = Create_GPU_Device_Buffer(context, vertices_size, GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	GPU_Buffer index_buffer = Create_GPU_Device_Buffer(context, indices_size, GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_context[thread_index].command_pools[context->current_frame_index]);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, vertices_size, staging_buffer.buffer, vertex_buffer, staging_buffer.offset, 0);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, indices_size, staging_buffer.buffer, index_buffer, staging_buffer.offset + vertices_size, 0);
+	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
 	return (GPU_Indexed_Geometry){
-		.vertex_subbuffer = vertex_subbuffer,
-		.index_subbuffer = index_subbuffer,
+		.vertex_buffer = vertex_buffer,
+		.index_buffer = index_buffer,
 	};
 #if 0
 	GPU_Buffer staging_buffer;
@@ -392,4 +407,32 @@ GPU_Indexed_Geometry Upload_Staged_Indexed_Geometry_To_GPU(Render_Context *conte
 		//.memory = gpu_memory,
 		//.indices_offset = vertices_size,
 	//};
+}
+
+typedef u32 GPU_Texture_ID;
+
+GPU_Texture_ID Queue_Texture_Upload_To_GPU(Render_Context *context, u8 *pixels, s32 texture_width, s32 texture_height) {
+	// @TODO: Load texture directly into staging memory.
+	void *staging_memory;
+	u32 texture_byte_size = sizeof(u32) * texture_width * texture_height;
+	GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, texture_byte_size, &staging_memory);
+	Copy_Memory(pixels, staging_memory, texture_byte_size);
+	/*
+	GPU_Image_Creation_Parameters texture_creation_parameters = {
+		.width = texture_width,
+		.height = texture_height,
+		.format = GPU_FORMAT_R8G8B8A8_UNORM,
+		.initial_layout = GPU_IMAGE_LAYOUT_UNDEFINED,
+		.usage_flags = GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED,
+		.sample_count_flags = GPU_SAMPLE_COUNT_1,
+	};
+	*/
+	GPU_Image image = Create_GPU_Device_Image(context, texture_width, texture_height, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED, GPU_SAMPLE_COUNT_1);
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_context[thread_index].command_pools[context->current_frame_index]);
+	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	Render_API_Record_Copy_Buffer_To_Image_Command(&context->api_context, command_buffer, staging_buffer.buffer, image, texture_width, texture_height);
+	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
+	Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE);
+	return 0;
 }

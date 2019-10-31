@@ -48,3 +48,21 @@ String Join_Filepaths(String a, String b, Memory_Arena *arena) {
 	result.data[result_length - 1];
 	return result;
 }
+
+#define STRING_ERROR (String){}
+
+typedef struct String_View {
+	char *data;
+	u32 length;
+} String_View;
+
+String_View Get_File_Extension(String filepath) {
+	s64 dot_index = Find_Last_Occurrence_Of_Character(filepath, '.');
+	if (dot_index < 0) {
+		return STRING_ERROR;
+	}
+	return (String_View){
+		.data = filepath.data,
+		.length = filepath.length - dot_index,
+	};
+}

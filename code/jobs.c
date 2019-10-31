@@ -11,11 +11,14 @@
 // Per-frame state. Delta time, frame number, skinning matrices, etc.
 // Per-thread memory heap. 2mb?
 
+// @TODO: If the parent job does not wait on the counter, and the counter gets deallocated, then the job may access the freed counter memory.
+//        Need a better way to handle jobs not waiting on the counter. Maybe the jobs system should own the counter memory?
 // @TODO: Check to see what should be volatile.
 // @TODO: For now, you have to eventually wait for a counter or else you get a zombie resumable job.
 //        We could create a function to mark the job as not rejoining.
 // @TODO: We could create some mechanism to detect zombie jobs.
 // @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
+// @TODO: Move the jobs context into the game state (jobs_state?).
 
 #define JOB_FIBER_COUNT 160
 #define MAX_JOBS_PER_QUEUE 100
@@ -32,7 +35,7 @@ typedef struct Job Job;
 typedef struct Jobs_Context Jobs_Context;
 typedef void (*Job_Procedure)(void *);
 
-typedef struct {
+typedef struct Job_Fiber_Parameter {
 	Job *scheduled_job; // @TODO: Running job?
 } Job_Fiber_Parameter;
 
@@ -42,12 +45,12 @@ typedef struct Job_Fiber {
 	struct Job_Fiber *next;
 } Job_Fiber;
 
-typedef struct {
+typedef struct Job_Counter {
 	volatile s32 unfinished_job_count;
 	Job_Fiber *waiting_job_fiber;
 } Job_Counter;
 
-typedef struct {
+typedef struct Job_Declaration {
 	Job_Procedure procedure;
 	void *parameter;
 } Job_Declaration;
@@ -60,22 +63,21 @@ typedef struct Job {
 	u8 finished;
 } Job;
 
-typedef struct {
+typedef struct Job_Queue {
 	Job elements[MAX_JOBS_PER_QUEUE];
 	Ring_Buffer ring_buffer;
 } Job_Queue;
 
-typedef struct {
+typedef struct Resumable_Job_Queue {
 	Job_Fiber *elements[MAX_JOBS_PER_QUEUE];
 	Ring_Buffer ring_buffer;
 } Resumable_Job_Queue;
 
-typedef struct {
-	Jobs_Context *jobs_context;
+typedef struct Worker_Thread_Parameter {
 	u32 thread_index;
 } Worker_Thread_Parameter;
 
-typedef struct {
+typedef struct Worker_Thread {
 	Platform_Thread_Handle platform_thread;
 	Worker_Thread_Parameter parameter;
 } Worker_Thread;
@@ -93,8 +95,6 @@ __thread struct {
 	//Job_Fiber *active_job_fiber;
 	Job_Counter *waiting_job_counter;
 } thread_local_jobs_context;
-
-__thread u32 thread_index;
 
 Jobs_Context jobs_context;
 
@@ -180,14 +180,13 @@ Job *Get_Next_Job() {
 
 void *Worker_Thread_Procedure(void *parameter) {
 	Platform_Convert_Thread_To_Fiber(&thread_local_jobs_context.worker_thread_fiber);
+	global_thread_index = (Worker_Thread_Parameter *)parameter->thread_index;
 	Job_Fiber *scheduled_job_fiber = NULL;
-	u32 thread_id = Platform_Get_Current_Thread_ID();
 	while (1) {
-		// @TODO: Don't wait on the semaphore after every job!
 		Platform_Wait_Semaphore(&jobs_context.jobs_available_semaphore);
 		do {
 			scheduled_job_fiber = NULL;
-			// Get next job.
+			// Get the next job to run. Prefer higher priority jobs and resumable jobs.
 			{
 				Job_Fiber **resumable_job_fiber = NULL;
 				Job *new_job = NULL;
@@ -212,18 +211,21 @@ void *Worker_Thread_Procedure(void *parameter) {
 			Job *scheduled_job = scheduled_job_fiber->parameter.scheduled_job;
 			if (scheduled_job->finished) {
 				Atomic_Push_To_Front_Of_List(jobs_context.idle_job_fiber_list, scheduled_job_fiber);
+				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
 				s32 unfinished_job_count = Platform_Atomic_Add_S32(&scheduled_job->counter->unfinished_job_count, -1);
 				if (unfinished_job_count > 0) {
 					continue;
 				}
+				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waiting_job_fiber will be NULL.
 				Job_Fiber *waiting_job_fiber = Platform_Fetch_And_Set_Pointer((void *volatile *)&scheduled_job->counter->waiting_job_fiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waiting_job_fiber) {
 					continue;
 				}
+				// OK, the job finished, the counter reached zero, and the parent job started waiting on the counter. Now we can mark the parent job as resumable.
 				Atomic_Write_To_Ring_Buffer(jobs_context.resumable_job_queues[waiting_job_fiber->parameter.scheduled_job->priority], waiting_job_fiber);
 			} else {
 				if (Platform_Compare_And_Swap_Pointers((void *volatile *)&thread_local_jobs_context.waiting_job_counter->waiting_job_fiber, NULL, scheduled_job_fiber) == JOB_FIBER_POINTER_SENTINEL) {
-					// All of the dependency jobs already finished. This job can be resumed immediately.
+					// The waiting_job_fiber was not NULL, hence all dependency jobs already finished. This job can resume immediately.
 					Atomic_Write_To_Ring_Buffer(jobs_context.resumable_job_queues[scheduled_job->priority], scheduled_job_fiber);
 				}
 			}
@@ -292,7 +294,6 @@ void Initialize_Jobs(Game_State *game_state, Job_Procedure initial_job_procedure
 	for (u32 i = 0; i < game_state->jobs_context.worker_thread_count; i++) {
 		Platform_Create_Thread(Worker_Thread_Procedure, &jobs_context.worker_threads[i].parameter);
 		jobs_context.worker_threads[i].parameter = (Worker_Thread_Parameter){
-			.jobs_context = &jobs_context,
 			.thread_index = i,
 		};
 	}

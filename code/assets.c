@@ -21,7 +21,7 @@ void Load_Texture(void *job_parameter_pointer) {
 	u8 *pixels = stbi_load(job_parameter->path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
 	assert(pixels);
 	printf("%s\n", job_parameter->path.data);
-	//*job_parameter->output_texture_id = Upload_Texture_To_GPU(job_parameter->render_context, pixels, texture_width, texture_height, job_parameter->gpu_upload_flags);
+	*job_parameter->output_texture_id = Queue_Texture_Upload_To_GPU(job_parameter->render_context, pixels, texture_width, texture_height);
 	free(pixels);
 }
 
@@ -192,10 +192,10 @@ void Load_Model(void *job_parameter_pointer) {
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
 		void *staging_memory;
-		GPU_Subbuffer staging_subbuffer = Create_GPU_Staging_Subbuffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
+		GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
 		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
 		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
-		mesh->gpu_mesh = Upload_Staged_Indexed_Geometry_To_GPU(job_parameter->render_context, vertices_size, indices_size, staging_subbuffer);
+		mesh->gpu_mesh = Queue_Indexed_Geometry_Upload_To_GPU(job_parameter->render_context, vertices_size, indices_size, staging_buffer);
 
 		// Load textures.
 		{

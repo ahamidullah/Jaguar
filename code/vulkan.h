@@ -286,9 +286,11 @@ typedef struct Render_API_Context {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 	VkPresentModeKHR present_mode;
-	VkSwapchainKHR swapchain;
+	//VkSwapchainKHR swapchain;
 	VkDeviceSize minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize maximum_uniform_buffer_size; // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
+	VkSemaphore image_available_semaphores[VULKAN_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore render_finished_semaphores[VULKAN_MAX_FRAMES_IN_FLIGHT];
 } Render_API_Context;
 
 //Texture_ID GPU_Upload_Image(u8 *pixels, s32 image_width, s32 image_height);

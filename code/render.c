@@ -62,8 +62,7 @@ V3 random_color() {
 // Render_Memory_Allocation ???
 // GPU_Memory_Allocation ????
 
-void
-Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
+void Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
 	f32 half_near_plane_height = focal_length * tan(camera->field_of_view / 2.0f);
 	f32 half_near_plane_width = focal_length * tan(camera->field_of_view / 2.0f) * aspect_ratio;
 	V3 center_of_near_plane = scale_v3(focal_length, camera->forward);
@@ -115,15 +114,14 @@ enum {
 	SWAPCHAIN_IMAGE_ATTACHMENT_ID,
 };
 
-void
-Initialize_Renderer(void *job_parameter_pointer) {
+void Initialize_Renderer(void *job_parameter_pointer) {
 	Game_State *game_state = (Game_State *)job_parameter_pointer;
 	Render_Context *context = &game_state->render_context;
 	Render_API_Initialize(&context->api_context);
-	context->thread_local_context = malloc(game_state->jobs_context.worker_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
+	context->thread_local_contexts = malloc(game_state->jobs_context.worker_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
 	for (s32 i = 0; i < game_state->jobs_context.worker_thread_count; i++) {
 		for (s32 j = 0; j < MAX_FRAMES_IN_FLIGHT; j++) {
-			context->thread_local_context[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+			context->thread_local_contexts[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
 		}
 	}
 	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
@@ -163,11 +161,17 @@ Initialize_Renderer(void *job_parameter_pointer) {
 	GPU_Image depth_buffer_image = Create_GPU_Device_Image(context, window_width, window_height, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
 	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
-	context->gpu_swapchain = Render_API_Create_Swapchain(&context->api_context);
-	u32 swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->gpu_swapchain);
+	context->swapchain = Render_API_Create_Swapchain(&context->api_context);
+	u32 swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->swapchain);
 	GPU_Image_View *swapchain_image_views = malloc(swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
-	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->gpu_swapchain, swapchain_image_count, swapchain_image_views);
+	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->swapchain, swapchain_image_count, swapchain_image_views);
 
+	for (s32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		context->inFlightFences[i] = Render_API_Create_Fence(&context->api_context, true);
+	}
+
+	static GPU_Shader shaders[SHADER_COUNT];
+	Render_API_Create_Shaders(&context->api_context, shaders);
 #if 0
 	Render_Graph_External_Attachment external_attachments[] = {
 		{
@@ -271,17 +275,20 @@ void Gather_Submeshes_For_Render_Pass(void *job_parameter_pointer) {
 */
 
 // @TODO: Float up render passes, descriptor sets, pipelines, command lists.
-void Render(Game_State *game_state) {
-/*
-	vulkan_context.currentFrame = vulkan_context.nextFrame;
-	vulkan_context.nextFrame = (vulkan_context.nextFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
-	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], 1, UINT64_MAX);
-	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
-	vkResetCommandPool(vulkan_context.device, context->thread_local[thread_index].command_pools[vulkan_context.currentFrame], 0);
-	u32 swapchain_image_index = 0;
-	VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &swapchain_image_index));
-	return swapchain_image_index;
-*/
+void Render(Render_Context *context) {
+	context->currentFrame = context->nextFrame;
+	context->nextFrame = (context->nextFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
+	Console_Print("%d %d\n", context->currentFrame, context->nextFrame);
+	Render_API_Wait_For_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
+	Render_API_Reset_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame]);
+	Render_API_Reset_Command_Pool(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
+	//vkWaitForFences(context->device, 1, &context->inFlightFences[context->currentFrame], 1, UINT64_MAX);
+	//vkResetFences(context->device, 1, &context->inFlightFences[context->currentFrame]);
+	//vkResetCommandPool(context->device, context->thread_local_contexts[thread_index].command_pools[context->currentFrame], 0);
+	u32 swapchain_image_index = Render_API_Acquire_Next_Swapchain_Image_Index(&context->api_context, context->swapchain, context->currentFrame);
+	Render_API_Present_Swapchain_Image(&context->api_context, context->swapchain, swapchain_image_index);
+	//VK_CHECK(vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX, context->image_available_semaphores[context->currentFrame], NULL, &swapchain_image_index));
+	//return swapchain_image_index;
 
 #if 0
 	// Flush uploads to GPU.
@@ -413,7 +420,7 @@ void Render(Game_State *game_state) {
 */
 #endif
 	//vulkan_submit(&game_state->camera, game_state->entities.meshes.instances, visible_meshes, visible_mesh_count, &render_context, frame_index); // @TODO
-	game_state->render_context.debug_render_object_count = 0;
+	context->debug_render_object_count = 0;
 }
 
 /*

@@ -180,7 +180,7 @@ Job *Get_Next_Job() {
 
 void *Worker_Thread_Procedure(void *parameter) {
 	Platform_Convert_Thread_To_Fiber(&thread_local_jobs_context.worker_thread_fiber);
-	global_thread_index = (Worker_Thread_Parameter *)parameter->thread_index;
+	thread_index = ((Worker_Thread_Parameter *)parameter)->thread_index;
 	Job_Fiber *scheduled_job_fiber = NULL;
 	while (1) {
 		Platform_Wait_Semaphore(&jobs_context.jobs_available_semaphore);

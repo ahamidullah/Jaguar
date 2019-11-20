@@ -15,9 +15,9 @@ void _abort_actual(const char *file, int line, const char *func, const char *fmt
 
 #include "strings.h"
 
-typedef struct {
-	char *contents;
-	u8 error;
+typedef struct Read_File_Result {
+	char *data;
+	s32 size;
 } Read_File_Result;
 
 typedef struct {
@@ -171,7 +171,7 @@ typedef enum {
 	SHADOW_MAP_STATIC_SHADER,
 	FLAT_COLOR_SHADER,
 
-	SHADER_COUNT
+	_SHADER_COUNT
 } Shader_Type;
 
 // @TODO @PREPROCCESSOR: Generate Material_IDs.
@@ -442,7 +442,7 @@ typedef struct Game_Memory {
 	Thread_Memory_Heap *thread_heaps;
 } Game_Memory;
 
-__thread u32 global_thread_index;
+__thread u32 thread_index;
 
 typedef struct Game_State {
 	Game_Execution_Status execution_status;

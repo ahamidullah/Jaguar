@@ -3,5 +3,11 @@
 set -e
 
 cd $PROJECT_DIRECTORY
-build/$PROJECT_NAME
+if [ "$1" = "material_compiler" ]; then
+	build/material_compiler
+elif [ "$1" = "asset_packer" ]; then
+	build/asset_packer
+else
+	build/$PROJECT_NAME
+fi
 cd - >& /dev/null

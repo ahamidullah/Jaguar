@@ -3,7 +3,7 @@
 // @TODO: Option to Log_Print without header info.
 void Console_Printv(const char *format, va_list argument_list) {
 	char buffer[4096];
-	s32 bytes_written = format_string(buffer, format, argument_list);
+	s32 bytes_written = Format_String(buffer, format, argument_list);
 	Platform_Write_To_File(STDOUT, bytes_written, buffer);
 }
 
@@ -11,7 +11,7 @@ void Console_Print(const char *format, ...) {
 	char buffer[4096];
 	va_list argument_list;
 	va_start(argument_list, format);
-	s32 bytes_written = format_string(buffer, format, argument_list);
+	s32 bytes_written = Format_String(buffer, format, argument_list);
 	Platform_Write_To_File(STDOUT, bytes_written, buffer);
 	va_end(argument_list);
 }

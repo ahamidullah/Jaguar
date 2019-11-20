@@ -29,8 +29,8 @@ String Create_String(u32 capacity) {
 	};
 }
 
-s32 Format_String(String buffer, String format, va_list arguments) {
-	return stbsp_vsprintf(buffer.data, format.data, arguments);
+s32 Format_String(char *buffer, const char *format, va_list arguments) {
+	return stbsp_vsprintf(buffer, format, arguments);
 }
 
 s64 Find_First_Occurrence_Of_Character(String string, char character) {
@@ -53,7 +53,7 @@ s64 Find_Last_Occurrence_Of_Character(String string, char character) {
 }
 
 // "Naive" approach. We don't use this for anthing perf critical now.
-const char *find_substring(const char *s, const char *substring) {
+const char *Find_Substring(const char *s, const char *substring) {
 	while (*s) {
 		const char *subs = substring;
 		if (*s != *subs) {
@@ -81,14 +81,16 @@ void Copy_String(String source, String destination) {
 	destination.data[destination.length] = '\0';
 }
 
-bool Strings_Equal(String a, String b) {
-	if (a.length != b.length) {
-		return false;
-	}
-	for (u32 i = 0; i < a.length; i++) {
-		if (a.data[i] != b.data[i]) {
+bool Strings_Equal(const char *a, const char *b) {
+	while (*a && *b) {
+		if (*a != *b) {
 			return false;
 		}
+		*a++;
+		*b++;
+	}
+	if (*a || *b) {
+		return false;
 	}
 	return true;
 }

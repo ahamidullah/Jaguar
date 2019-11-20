@@ -55,7 +55,7 @@ void Load_Model(void *job_parameter_pointer) {
 
 	String model_name = Get_Filename_From_Path(model_directory, &job_parameter->arena);
 
-	String fbx_filename = join_strings(model_name, S(".fbx"), &job_parameter->arena);
+	String fbx_filename = Join_Strings(model_name, S(".fbx"));
 	String fbx_filepath = Join_Filepaths(model_directory, fbx_filename, &job_parameter->arena);
 	const struct aiScene* assimp_scene = aiImportFile(fbx_filepath.data, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {

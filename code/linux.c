@@ -140,7 +140,7 @@ void Platform_Sleep(u32 milliseconds) {
 Platform_File_Handle Platform_Open_File(const char *path, Platform_Open_File_Flags flags) {
 	Platform_File_Handle file_handle = open(path, flags, 0666);
 	if (file_handle < 0) {
-		Log_Print(ERROR_LOG, "Could not open file: %s", path);
+		Log_Print(ERROR_LOG, "Could not open file: %s\n", path);
 		return PLATFORM_FILE_HANDLE_ERROR;
 	}
 	return file_handle;
@@ -217,7 +217,7 @@ u8 Platform_Iterate_Through_All_Files_In_Directory(const char *path, Platform_Di
 		}
 	}
 	while ((context->dirent = readdir(context->dir))) {
-		if (!Compare_Strings(context->dirent->d_name, ".") || !Compare_Strings(context->dirent->d_name, "..")) {
+		if (Strings_Equal(context->dirent->d_name, ".") || Strings_Equal(context->dirent->d_name, "..")) {
 			continue;
 		}
 		context->filename = context->dirent->d_name;

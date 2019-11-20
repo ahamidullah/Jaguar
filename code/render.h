@@ -81,7 +81,7 @@ typedef struct Thread_Local_Render_Context {
 } Thread_Local_Render_Context;
 
 typedef struct Render_Context {
-	Thread_Local_Render_Context *thread_local_context;
+	Thread_Local_Render_Context *thread_local_contexts;
 	Render_API_Context api_context;
 	M4 scene_projection;
 	f32 focal_length; // The distance between the camera position and the near render plane in world space.
@@ -90,5 +90,9 @@ typedef struct Render_Context {
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
 	u32 current_frame_index;
 	GPU_Memory_Allocators gpu_memory_allocators;
-	GPU_Swapchain gpu_swapchain;
+	GPU_Swapchain swapchain;
+
+	u32 currentFrame;
+	u32 nextFrame;
+	GPU_Fence inFlightFences[MAX_FRAMES_IN_FLIGHT];
 } Render_Context;

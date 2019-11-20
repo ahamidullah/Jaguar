@@ -1,16 +1,19 @@
 @VERTEX
-UNIFORMS {
-	vec4 color;
+UNIFORMS: {
+	vec4 color; @PER_MATERIAL
+	texture2D texture; @PER_MATERIAL
+	texture2D texture2; @PER_OBJECT
+	texture2D texture3; @PER_OBJECT
 }
 
-INPUT: {
-	vec3 vertex_position;
+OUTPUT: {
+	vec4 fragment_color;
 }
 
 MAIN: {
 	fragment_color = color;
-	gl_Position = ubo.model_view_projection * vec4(vertex_position, 1.0);
 }
+
 
 @FRAGMENT
 INPUT: {

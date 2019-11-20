@@ -1,6 +1,6 @@
 @VERTEX
-UNIFORM: {
-	mat4 model_view_projection;
+UNIFORMS: {
+	mat4 model_to_world_space; @PER_OBJECT
 }
 
 INPUT: {
@@ -8,5 +8,5 @@ INPUT: {
 }
 
 MAIN: {
-	gl_Position = model_view_projection * vec4(vertex_position, 1.0);
+	gl_Position = model_to_world_space * vec4(vertex_position, 1.0);
 }

@@ -48,7 +48,83 @@
 // @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
 // @TODO: Move logging out of band?
 
-#include "vulkan_generated.h"
+#define VK_CHECK(x)\
+	do {\
+		VkResult _result = (x);\
+		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %s\n", #x, Vk_Result_To_String(_result));\
+	} while (0)
+
+const char *Vk_Result_To_String(VkResult result) {
+	switch(result) {
+		case (VK_SUCCESS):
+			return "VK_SUCCESS";
+		case (VK_NOT_READY):
+			return "VK_NOT_READY";
+		case (VK_TIMEOUT):
+			return "VK_TIMEOUT";
+		case (VK_EVENT_SET):
+			return "VK_EVENT_SET";
+		case (VK_EVENT_RESET):
+			return "VK_EVENT_RESET";
+		case (VK_INCOMPLETE):
+			return "VK_INCOMPLETE";
+		case (VK_ERROR_OUT_OF_HOST_MEMORY):
+			return "VK_ERROR_OUT_OF_HOST_MEMORY";
+		case (VK_ERROR_INITIALIZATION_FAILED):
+			return "VK_ERROR_INITIALIZATION_FAILED";
+		case (VK_ERROR_DEVICE_LOST):
+			return "VK_ERROR_DEVICE_LOST";
+		case (VK_ERROR_MEMORY_MAP_FAILED):
+			return "VK_ERROR_MEMORY_MAP_FAILED";
+		case (VK_ERROR_LAYER_NOT_PRESENT):
+			return "VK_ERROR_LAYER_NOT_PRESENT";
+		case (VK_ERROR_EXTENSION_NOT_PRESENT):
+			return "VK_ERROR_EXTENSION_NOT_PRESENT";
+		case (VK_ERROR_FEATURE_NOT_PRESENT):
+			return "VK_ERROR_FEATURE_NOT_PRESENT";
+		case (VK_ERROR_INCOMPATIBLE_DRIVER):
+			return "VK_ERROR_INCOMPATIBLE_DRIVER";
+		case (VK_ERROR_TOO_MANY_OBJECTS):
+			return "VK_ERROR_TOO_MANY_OBJECTS";
+		case (VK_ERROR_FORMAT_NOT_SUPPORTED):
+			return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+		case (VK_ERROR_FRAGMENTED_POOL):
+			return "VK_ERROR_FRAGMENTED_POOL";
+		case (VK_ERROR_OUT_OF_DEVICE_MEMORY):
+			return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+		case (VK_ERROR_OUT_OF_POOL_MEMORY):
+			return "VK_ERROR_OUT_OF_POOL_MEMORY";
+		case (VK_ERROR_INVALID_EXTERNAL_HANDLE):
+			return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+		case (VK_ERROR_SURFACE_LOST_KHR):
+			return "VK_ERROR_SURFACE_LOST_KHR";
+		case (VK_ERROR_NATIVE_WINDOW_IN_USE_KHR):
+			return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+		case (VK_SUBOPTIMAL_KHR):
+			return "VK_SUBOPTIMAL_KHR";
+		case (VK_ERROR_OUT_OF_DATE_KHR):
+			return "VK_ERROR_OUT_OF_DATE_KHR";
+		case (VK_ERROR_INCOMPATIBLE_DISPLAY_KHR):
+			return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
+		case (VK_ERROR_VALIDATION_FAILED_EXT):
+			return "VK_ERROR_VALIDATION_FAILED_EXT";
+		case (VK_ERROR_INVALID_SHADER_NV):
+			return "VK_ERROR_INVALID_SHADER_NV";
+		case (VK_ERROR_NOT_PERMITTED_EXT):
+			return "VK_ERROR_NOT_PERMITTED_EXT";
+		case (VK_RESULT_RANGE_SIZE):
+			return "VK_RESULT_RANGE_SIZE";
+		case (VK_RESULT_MAX_ENUM):
+			return "VK_RESULT_MAX_ENUM";
+		case (VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT):
+			return "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT";
+		case (VK_ERROR_FRAGMENTATION_EXT):
+			return "VK_ERROR_FRAGMENTATION_EXT";
+		case (VK_ERROR_INVALID_DEVICE_ADDRESS_EXT):
+			return "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT";
+	}
+	return "Unknown VkResult Code";
+}
 
 #define VK_EXPORTED_FUNCTION(name) PFN_##name name = NULL;
 #define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
@@ -59,6 +135,10 @@
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
+
+#include "_vulkan_generated.h" // @TODO @DELTEME
+#include "vulkan_generated.h"
+#include "vulkan_generated.c"
 
 #define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
 
@@ -144,6 +224,7 @@ typedef struct {
 
 #define MAX_SHADER_MODULES 3
 
+/*
 typedef struct {
 	VkRenderPass render_pass;
 	VkPipelineLayout pipeline_layout;
@@ -154,6 +235,7 @@ typedef struct {
 	} modules[MAX_SHADER_MODULES];
 	u32 module_count;
 } Shader;
+*/
 
 enum {
 	SCENE_SAMPLER_DESCRIPTOR_SET = 0,
@@ -341,84 +423,6 @@ typedef struct {
 } Shadow_Map_UBO;
 
 Shadow_Map_UBO shadow_map_ubo;
-
-#define VK_CHECK(x)\
-	do {\
-		VkResult _result = (x);\
-		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %s\n", #x, vk_result_to_string(_result));\
-	} while (0)
-
-const char *vk_result_to_string(VkResult result) {
-	switch(result) {
-		case (VK_SUCCESS):
-			return "VK_SUCCESS";
-		case (VK_NOT_READY):
-			return "VK_NOT_READY";
-		case (VK_TIMEOUT):
-			return "VK_TIMEOUT";
-		case (VK_EVENT_SET):
-			return "VK_EVENT_SET";
-		case (VK_EVENT_RESET):
-			return "VK_EVENT_RESET";
-		case (VK_INCOMPLETE):
-			return "VK_INCOMPLETE";
-		case (VK_ERROR_OUT_OF_HOST_MEMORY):
-			return "VK_ERROR_OUT_OF_HOST_MEMORY";
-		case (VK_ERROR_INITIALIZATION_FAILED):
-			return "VK_ERROR_INITIALIZATION_FAILED";
-		case (VK_ERROR_DEVICE_LOST):
-			return "VK_ERROR_DEVICE_LOST";
-		case (VK_ERROR_MEMORY_MAP_FAILED):
-			return "VK_ERROR_MEMORY_MAP_FAILED";
-		case (VK_ERROR_LAYER_NOT_PRESENT):
-			return "VK_ERROR_LAYER_NOT_PRESENT";
-		case (VK_ERROR_EXTENSION_NOT_PRESENT):
-			return "VK_ERROR_EXTENSION_NOT_PRESENT";
-		case (VK_ERROR_FEATURE_NOT_PRESENT):
-			return "VK_ERROR_FEATURE_NOT_PRESENT";
-		case (VK_ERROR_INCOMPATIBLE_DRIVER):
-			return "VK_ERROR_INCOMPATIBLE_DRIVER";
-		case (VK_ERROR_TOO_MANY_OBJECTS):
-			return "VK_ERROR_TOO_MANY_OBJECTS";
-		case (VK_ERROR_FORMAT_NOT_SUPPORTED):
-			return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-		case (VK_ERROR_FRAGMENTED_POOL):
-			return "VK_ERROR_FRAGMENTED_POOL";
-		case (VK_ERROR_OUT_OF_DEVICE_MEMORY):
-			return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-		case (VK_ERROR_OUT_OF_POOL_MEMORY):
-			return "VK_ERROR_OUT_OF_POOL_MEMORY";
-		case (VK_ERROR_INVALID_EXTERNAL_HANDLE):
-			return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
-		case (VK_ERROR_SURFACE_LOST_KHR):
-			return "VK_ERROR_SURFACE_LOST_KHR";
-		case (VK_ERROR_NATIVE_WINDOW_IN_USE_KHR):
-			return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-		case (VK_SUBOPTIMAL_KHR):
-			return "VK_SUBOPTIMAL_KHR";
-		case (VK_ERROR_OUT_OF_DATE_KHR):
-			return "VK_ERROR_OUT_OF_DATE_KHR";
-		case (VK_ERROR_INCOMPATIBLE_DISPLAY_KHR):
-			return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
-		case (VK_ERROR_VALIDATION_FAILED_EXT):
-			return "VK_ERROR_VALIDATION_FAILED_EXT";
-		case (VK_ERROR_INVALID_SHADER_NV):
-			return "VK_ERROR_INVALID_SHADER_NV";
-		case (VK_ERROR_NOT_PERMITTED_EXT):
-			return "VK_ERROR_NOT_PERMITTED_EXT";
-		case (VK_RESULT_RANGE_SIZE):
-			return "VK_RESULT_RANGE_SIZE";
-		case (VK_RESULT_MAX_ENUM):
-			return "VK_RESULT_MAX_ENUM";
-		case (VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT):
-			return "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT";
-		case (VK_ERROR_FRAGMENTATION_EXT):
-			return "VK_ERROR_FRAGMENTATION_EXT";
-		case (VK_ERROR_INVALID_DEVICE_ADDRESS_EXT):
-			return "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT";
-	}
-	return "Unknown VkResult Code";
-}
 
 u32 Align_U32(u32 number, u32 alignment) {
 	u32 remainder = number % alignment;
@@ -641,6 +645,12 @@ void Render_API_Wait_For_Fences(Render_API_Context *context, u32 count, VkFence 
 
 void Render_API_Reset_Fences(Render_API_Context *context, u32 count, VkFence *fences) {
 	VK_CHECK(vkResetFences(context->device, count, fences));
+}
+
+u32 Render_API_Acquire_Next_Swapchain_Image_Index(Render_API_Context *context, GPU_Swapchain swapchain, u32 current_frame_index) {
+	u32 swapchain_image_index = 0;
+	VK_CHECK(vkAcquireNextImageKHR(context->device, swapchain, UINT64_MAX, context->image_available_semaphores[current_frame_index], NULL, &swapchain_image_index));
+	return swapchain_image_index;
 }
 
 #if 0
@@ -1698,6 +1708,22 @@ void Render_API_Record_Copy_Buffer_To_Image_Command(Render_API_Context *context,
 		},
 	};
 	vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+}
+
+void Render_API_Present_Swapchain_Image(Render_API_Context *context, GPU_Swapchain swapchain, u32 swapchain_image_index) {
+	VkSemaphore wait_semaphores[] = {context->image_available_semaphores[swapchain_image_index]};
+	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+	VkSemaphore signal_semaphores[] = {context->render_finished_semaphores[swapchain_image_index]};
+	VkSwapchainKHR swapchains[] = {swapchain};
+	VkPresentInfoKHR present_info = {
+		.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = Array_Count(signal_semaphores),
+		.pWaitSemaphores    = signal_semaphores,
+		.swapchainCount     = Array_Count(swapchains),
+		.pSwapchains        = swapchains,
+		.pImageIndices      = &swapchain_image_index,
+	};
+	VK_CHECK(vkQueuePresentKHR(context->present_queue, &present_info));
 }
 
 #if 0
@@ -2916,7 +2942,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 			for (s32 j = 0; j < Array_Count(required_device_extensions); j++) {
 				bool found = false;
 				for (s32 k = 0; k < available_device_extension_count; k++) {
-					if (Compare_Strings(available_device_extensions[k].extensionName, required_device_extensions[j]) == 0) {
+					if (Strings_Equal(available_device_extensions[k].extensionName, required_device_extensions[j])) {
 						found = true;
 						break;
 					}
@@ -3064,6 +3090,21 @@ void Render_API_Initialize(Render_API_Context *context) {
 
 	vkGetDeviceQueue(context->device, context->graphics_queue_family, 0, &context->graphics_queue); // No return.
 	vkGetDeviceQueue(context->device, context->present_queue_family, 0, &context->present_queue); // No return.
+
+	// Create presentation semaphores.
+	{
+		VkSemaphoreCreateInfo semaphore_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};
+		VkFenceCreateInfo fence_create_info = {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+		};
+		for (s32 i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; i++) {
+			VK_CHECK(vkCreateSemaphore(context->device, &semaphore_create_info, NULL, &context->image_available_semaphores[i]));
+			VK_CHECK(vkCreateSemaphore(context->device, &semaphore_create_info, NULL, &context->render_finished_semaphores[i]));
+		}
+	}
 
 #if 0
 	// Descriptor set layout.

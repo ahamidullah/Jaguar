@@ -11,13 +11,10 @@ layout (location = 0) out vec4 fragment_color; // flat_color
 layout (set = 0, binding = 0) uniform Per_Material_UBO {
 	vec4 color; // flat_color
 };
-layout (set = 0, binding = 1) uniform texture2D texture; // flat_color
 
 layout (set = 1, binding = 0) uniform Per_Object_UBO {
 	mat4 model_to_world_space; // world_space
 };
-layout (set = 1, binding = 1) uniform texture2D texture2; // flat_color
-layout (set = 1, binding = 2) uniform texture2D texture3; // flat_color
 
 void main() {
 	// flat_color
@@ -32,6 +29,7 @@ void main() {
 }
 
 #endif
+
 #if defined(FRAGMENT_SHADER)
 
 layout (location = 0) in vec4 fragment_color; // flat_color
@@ -46,3 +44,4 @@ void main() {
 }
 
 #endif
+

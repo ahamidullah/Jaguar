@@ -153,7 +153,6 @@ typedef struct {
 	Quaternion rotation;
 } Transform;
 
-#include "backend.h"
 #include "gpu.h"
 #include "render.h"
 
@@ -222,8 +221,9 @@ typedef enum Asset_Load_Status {
 } Asset_Load_Status;
 
 typedef struct Mesh_Asset {
+	// @TODO: Seperate hot and cold data?
 	// Hot. Potentially accessed every frame.
-	Asset_Load_Status load_status;
+	Asset_Load_Status load_status; // @TODO: Keep seperate lists for loaded and unloaded assets?
 	u32 submesh_count;
 	Material *materials;
 	u32 *submesh_index_counts;
@@ -345,16 +345,24 @@ typedef enum Asset_ID {
 	ASSET_COUNT
 } Asset_ID;
 
+/*
 typedef struct Ring_Buffer {
 	volatile s32 read_index;
 	volatile s32 write_index;
 	volatile u32 read_count;
 } Ring_Buffer;
+*/
+
+#define Ring_Buffer(size) \
+	volatile s32 read_index; \
+	volatile s32 write_index; \
+	volatile u32 read_count; \
+	bool ready[size];
 
 typedef struct Meshes_Waiting_For_GPU_Upload {
 	GPU_Fence elements[100]; // @TODO
 	Mesh_Asset *assets[100];
-	Ring_Buffer ring_buffer;
+	//Ring_Buffer ring_buffer;
 } Meshes_Waiting_For_GPU_Upload;
 
 typedef struct Material_Asset {
@@ -369,7 +377,7 @@ typedef struct Material_GPU_Fences {
 typedef struct Materials_Waiting_For_GPU_Upload {
 	Material_GPU_Fences elements[100]; // @TODO
 	Material_Asset *assets[100];
-	Ring_Buffer ring_buffer;
+	//Ring_Buffer ring_buffer;
 } Materials_Waiting_For_GPU_Upload;
 
 typedef struct Assets_Waiting_For_GPU_Upload {
@@ -377,14 +385,86 @@ typedef struct Assets_Waiting_For_GPU_Upload {
 	Materials_Waiting_For_GPU_Upload materials;
 } Assets_Waiting_For_GPU_Upload;
 
-typedef struct {
+// @TODO: Move this to a seperate file?
+typedef struct Double_Buffer {
+	s32 inactive_buffer_index;
+	s32 active_buffer_element_count;
+	s32 inactive_buffer_element_count;
+} Double_Buffer;
+
+#define Create_Double_Buffer(container) \
+	do { \
+		container.write_buffer = &container.buffers[0]; \
+		container.write_head = container.buffers[0].command_buffers ; \
+		container.read_buffer_element_count = 0; \
+		container.read_buffer = &container.buffers[1]; \
+		container.write_buffer->ready_count = 0; \
+		container.read_buffer->ready_count = 0; \
+	} while (0)
+
+#define Switch_Double_Buffer(container) \
+	do { \
+		if (container.write_buffer == &container.buffers[0]) { \
+			container.write_buffer = &container.buffers[1]; \
+			container.read_buffer = &container.buffers[0]; \
+		} else { \
+			container.write_buffer = &container.buffers[0]; \
+			container.read_buffer = &container.buffers[1]; \
+		} \
+		typeof(container.write_head) old_write_head = container.write_head; \
+		container.write_buffer->ready_count = 0; \
+		container.write_head = container.write_buffer->command_buffers; \
+		container.read_buffer_element_count = old_write_head - container.read_buffer->command_buffers; \
+		/*Console_Print("read_buffer_element_count: %d %d owh: %x, w: %x, r: %x\n", container.read_buffer_element_count, container.read_buffer->ready_count, old_write_head, container.write_buffer->command_buffers, container.read_buffer->command_buffers);*/ \
+		while (container.read_buffer_element_count != container.read_buffer->ready_count) { \
+			/**/ \
+		} \
+	} while (0)
+
+#define Atomic_Write_To_Double_Buffer(container, command_buffer, counter) \
+	do { \
+		GPU_Command_Buffer *write_pointer; \
+		do { \
+			write_pointer = container.write_head; \
+			Platform_Compare_And_Swap_Pointers((void *volatile *)&container.write_head, write_pointer, write_pointer + 1); \
+		} while (container.write_head != write_pointer + 1); \
+		*write_pointer = command_buffer; \
+		s32 buffer_index = (write_pointer < container.buffers[1].command_buffers) ? 0 : 1; \
+		s32 element_index = write_pointer - container.buffers[buffer_index].command_buffers; \
+		container.buffers[buffer_index].gpu_upload_counters[element_index] = counter; \
+		container.buffers[buffer_index].ready_count += 1; \
+		/*Console_Print("buffer_index: %d %d\n", buffer_index, element_index);*/ \
+	} while (0)
+
+#define MAX_GPU_UPLOAD_COMMAND_BUFFERS 128
+#define MAX_GPU_UPLOAD_FENCES 128
+#define MAX_COMMAND_BUFFERS_PER_GPU_UPLOAD_FENCE 32
+
+typedef struct Asset_GPU_Upload_Counter {
+	s32 gpu_command_buffer_count;
+	Asset_Load_Status *load_status;
+} Asset_GPU_Upload_Counter;
+
+typedef struct Upload_Buffer {
+	s32 ready_count;
+	GPU_Command_Buffer command_buffers[MAX_GPU_UPLOAD_COMMAND_BUFFERS];
+	Asset_GPU_Upload_Counter *gpu_upload_counters[MAX_GPU_UPLOAD_COMMAND_BUFFERS];
+} Upload_Buffer;
+
+typedef struct Game_Assets {
 	void *lookup[ASSET_COUNT]; // @TODO: Use a hash table.
-	Asset_Load_Status load_statuses[ASSET_COUNT];
-	Assets_Waiting_For_GPU_Upload waiting_for_gpu_upload;
-	//Material materials[MAX_MATERIALS];    // @TODO: This really should be the exact count of materials, we know how many there will be from the directory, just need to preprocess.
-	//u32 material_count;
-	//Texture *textures;
-	//Mesh_Asset *meshes;
+	struct {
+		Upload_Buffer buffers[2];
+		GPU_Command_Buffer *write_head;
+		s32 read_buffer_element_count;
+		Upload_Buffer *read_buffer;
+		Upload_Buffer *write_buffer;
+	} gpu_upload_command_buffers;
+	s32 gpu_upload_fence_count;
+	GPU_Fence gpu_upload_fences[MAX_GPU_UPLOAD_FENCES];
+	s32 pending_gpu_upload_counter_counts[MAX_GPU_UPLOAD_FENCES];
+	Asset_GPU_Upload_Counter *pending_gpu_upload_counters[MAX_GPU_UPLOAD_FENCES][MAX_COMMAND_BUFFERS_PER_GPU_UPLOAD_FENCE];
+	GPU_Command_Pool gpu_upload_command_pool;
 } Game_Assets;
 
 struct Submesh_Instance {

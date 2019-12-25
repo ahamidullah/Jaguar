@@ -44,7 +44,7 @@ GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(Render_Context *context, 
 	} else {
 		new_allocation->mapped_pointer = NULL;
 	}
-	Assert(allocator->active_block->allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
+	Assert(allocator->active_block->allocation_count < GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
 	allocator->active_block->frontier = allocation_start_offset + allocation_requirements.size;
 	Assert(allocator->active_block->frontier <= allocator->block_size);
 	Platform_Unlock_Mutex(&allocator->mutex);
@@ -224,6 +224,7 @@ void Create_GPU_Buffer_Ring_Allocator(GPU_Buffer_Ring_Allocator *allocator, GPU_
 	do { \
 		if (!allocator->active_block || allocator->active_block->frontier + size > allocator->block_size) { \
 			/* Need to allocate a new block. */ \
+			/* @TODO: Get rid of this typeof, no longer a reason for this to be a macro. */ \
 			typeof(allocator->active_block) new_block = malloc(sizeof(typeof(allocator->active_block))); /* TODO */ \
 			if (!GPU_Allocate_Memory(&context->api_context, allocator->block_size, allocator->memory_type, &new_block->memory)) { \
 				free(new_block); /* @TODO */ \
@@ -247,7 +248,7 @@ void Create_GPU_Buffer_Ring_Allocator(GPU_Buffer_Ring_Allocator *allocator, GPU_
 		output_start_offset = &allocator->active_block->allocations[allocator->active_block->allocation_count++]; \
 		*output_start_offset = aligned_frontier; \
 		allocator->active_block->frontier = aligned_frontier + size; \
-		Assert(allocator->active_block->allocation_count < VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK); \
+		Assert(allocator->active_block->allocation_count < GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK); \
 		Assert(allocator->active_block->frontier <= allocator->block_size); \
 	} while (0)
 
@@ -366,6 +367,7 @@ GPU_Staging_Buffer Create_GPU_Staging_Buffer(Render_Context *context, u32 size, 
 	};
 }
 
+#if 0
 GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *context, u32 vertices_size, u32 indices_size, GPU_Staging_Buffer staging_buffer) {
 	GPU_Buffer vertex_buffer = Create_GPU_Device_Buffer(context, vertices_size, GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
 	GPU_Buffer index_buffer = Create_GPU_Device_Buffer(context, indices_size, GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
@@ -408,25 +410,17 @@ GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *contex
 		//.indices_offset = vertices_size,
 	//};
 }
+#endif
 
 typedef u32 GPU_Texture_ID;
 
+#if 0
 GPU_Texture_ID Queue_Texture_Upload_To_GPU(Render_Context *context, u8 *pixels, s32 texture_width, s32 texture_height) {
 	// @TODO: Load texture directly into staging memory.
 	void *staging_memory;
 	u32 texture_byte_size = sizeof(u32) * texture_width * texture_height;
 	GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, texture_byte_size, &staging_memory);
 	Copy_Memory(pixels, staging_memory, texture_byte_size);
-	/*
-	GPU_Image_Creation_Parameters texture_creation_parameters = {
-		.width = texture_width,
-		.height = texture_height,
-		.format = GPU_FORMAT_R8G8B8A8_UNORM,
-		.initial_layout = GPU_IMAGE_LAYOUT_UNDEFINED,
-		.usage_flags = GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED,
-		.sample_count_flags = GPU_SAMPLE_COUNT_1,
-	};
-	*/
 	GPU_Image image = Create_GPU_Device_Image(context, texture_width, texture_height, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED, GPU_SAMPLE_COUNT_1);
 	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->current_frame_index]);
 	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -436,3 +430,4 @@ GPU_Texture_ID Queue_Texture_Upload_To_GPU(Render_Context *context, u8 *pixels, 
 	Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE);
 	return 0;
 }
+#endif

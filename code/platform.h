@@ -4,16 +4,16 @@
 #include <stdbool.h>
 #include <math.h>
 
-typedef uint8_t  u8;
+typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef int8_t   s8;
-typedef int16_t  s16;
-typedef int32_t  s32;
-typedef int64_t  s64;
-typedef float    f32;
-typedef double   f64;
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef int64_t s64;
+typedef float f32;
+typedef double f64;
 
 #define U32_MAX UINT32_MAX
 
@@ -43,22 +43,19 @@ void Abort(const char *format, ...);
 
 #define Invalid_Code_Path() Abort("%s: %s: line %d: Invalid code path\n", __FILE__, __func__, __LINE__);
 
-//#define _abort(fmt, ...) _abort_actual(__FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
-//#define log_print(log_type, fmt, ...) log_print_actual(log_type, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
-
 #if defined(DEBUG)
 	const u8 debug = 1;
 #else
 	const u8 debug = 0;
 #endif
 
-typedef struct {
+typedef struct IO_Buttons {
 	u8 *down;
 	u8 *pressed;
 	u8 *released;
 } IO_Buttons;
 
-typedef struct {
+typedef struct Mouse {
 	s32 wheel;
 	s32 x, y;
 	s32 delta_x, delta_y;
@@ -67,12 +64,12 @@ typedef struct {
 	IO_Buttons buttons;
 } Mouse;
 
-typedef struct {
+typedef struct Game_Input {
 	Mouse mouse;
 	IO_Buttons keyboard;
 } Game_Input;
 
-typedef enum {
+typedef enum Game_Execution_Status {
 	GAME_RUNNING,
 	GAME_PAUSED,
 	GAME_EXITING,

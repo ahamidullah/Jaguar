@@ -1,6 +1,6 @@
 @VERTEX
 UNIFORMS: {
-	mat4 model_to_world_space; @PER_OBJECT
+	mat4 model_to_world_space; @BIND_PER_OBJECT @UPDATE_IMMEDIATE
 }
 
 INPUT: {

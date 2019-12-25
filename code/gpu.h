@@ -246,6 +246,8 @@ typedef struct GPU_Swapchain {
 } GPU_Swapchain;
 #endif
 
+#define GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK 512
+
 typedef struct GPU_Memory_Allocation {
 	GPU_Memory memory;
 	u32 offset;
@@ -276,7 +278,7 @@ typedef struct GPU_Buffer_Memory_Block {
 	u32 frontier; // @TODO
 	void *mapped_pointer;
 	u32 allocation_count;
-	u32 allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32 allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
 	GPU_Buffer_Memory_Block *next;
 } GPU_Buffer_Memory_Block;
 
@@ -295,7 +297,7 @@ typedef struct GPU_Image_Memory_Block {
 	GPU_Memory memory;
 	u32 frontier; // @TODO
 	u32 allocation_count;
-	u32 allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	u32 allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
 	GPU_Image_Memory_Block *next;
 } GPU_Image_Memory_Block;
 
@@ -337,9 +339,6 @@ typedef struct GPU_Buffer_Ring_Allocator {
 	s32 write_index;
 } GPU_Buffer_Ring_Allocator;
 
-
-
-
 typedef struct GPU_Memory_Block GPU_Memory_Block;
 
 typedef struct GPU_Memory_Block {
@@ -347,7 +346,7 @@ typedef struct GPU_Memory_Block {
 	void *mapped_pointer;
 	u32 frontier;
 	u32 allocation_count;
-	GPU_Memory_Allocation allocations[VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	GPU_Memory_Allocation allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
 	GPU_Memory_Block *next;
 } GPU_Memory_Block;
 

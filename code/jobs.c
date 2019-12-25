@@ -65,12 +65,14 @@ typedef struct Job {
 
 typedef struct Job_Queue {
 	Job elements[MAX_JOBS_PER_QUEUE];
-	Ring_Buffer ring_buffer;
+	Ring_Buffer(MAX_JOBS_PER_QUEUE);
+	//Ring_Buffer ring_buffer;
 } Job_Queue;
 
 typedef struct Resumable_Job_Queue {
 	Job_Fiber *elements[MAX_JOBS_PER_QUEUE];
-	Ring_Buffer ring_buffer;
+	Ring_Buffer(MAX_JOBS_PER_QUEUE);
+	//Ring_Buffer ring_buffer;
 } Resumable_Job_Queue;
 
 typedef struct Worker_Thread_Parameter {
@@ -122,33 +124,30 @@ Jobs_Context jobs_context;
 		s32 current_write_index; \
 		do { \
 			/* @TODO: Some way to detect overwriting a job that isn't done yet (at least in debug mode). */ \
-			current_write_index = container.ring_buffer.write_index; \
-		} while(Platform_Compare_And_Swap_S32(&container.ring_buffer.write_index, current_write_index, (current_write_index + 1) % MAX_JOBS_PER_QUEUE) != current_write_index); \
+			current_write_index = container.write_index; \
+		} while(Platform_Compare_And_Swap_S32(&container.write_index, current_write_index, (current_write_index + 1) % MAX_JOBS_PER_QUEUE) != current_write_index); \
 		container.elements[current_write_index] = new_element; \
+		container.ready[current_write_index] = true; \
 	} while (0)
 
 #define Atomic_Read_From_Ring_Buffer(container, result) \
 	do { \
 		result = NULL; \
-		while (container.ring_buffer.read_index != container.ring_buffer.write_index) { \
+		while (container.read_index != container.write_index) { \
 			/* We need to do this a bit carefully to make sure we stop trying to get read an element if the ring buffer is emptied. */ \
-			s32 read_index = container.ring_buffer.read_index; \
-			if (read_index != container.ring_buffer.write_index) { \
-				s32 job_index = Platform_Compare_And_Swap_S32(&container.ring_buffer.read_index, read_index, (read_index + 1) % MAX_JOBS_PER_QUEUE); \
+			s32 read_index = container.read_index; \
+			if (read_index != container.write_index) { \
+				s32 job_index = Platform_Compare_And_Swap_S32(&container.read_index, read_index, (read_index + 1) % MAX_JOBS_PER_QUEUE); \
 				if (job_index == read_index) { \
+					while (!container.ready[job_index]) { \
+						/**/ \
+					} \
 					result = &container.elements[job_index]; \
 					break; \
 				} \
 			} \
 		} \
-	} while(0)
-
-/*
-#define Atomic_Read_Element_From_Ring_Buffer_With_Index(container, result, read_index) \
-	do { \
-		Do_Ring_Buffer_Read(container, result, read_index); \
-	} while(0)
-*/
+	} while (0)
 
 /*
 Job *Get_Next_Job_From_Queue(Job_Queue *queue) {

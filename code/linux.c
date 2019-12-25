@@ -419,7 +419,7 @@ s32 Platform_Atomic_Add_S32(volatile s32 *operand, s32 addend) {
 	return __sync_add_and_fetch(operand, addend);
 }
 
-s64 platform_atomic_add_s64(volatile s64 *operand, s64 addend) {
+s64 Platform_Atomic_Add_S64(volatile s64 *operand, s64 addend) {
 	return __sync_add_and_fetch(operand, addend);
 }
 
@@ -504,7 +504,7 @@ void Platform_Unlock_Mutex(Platform_Mutex *mutex) {
 // ucontext_t is the recommended method for implementing fibers on Linux, but it is apparently very
 // slow because it preserves each fiber's signal mask.
 //
-// This method (from http://www.1024cores.net/home/lock-free-algorithms/tricks/fibers) still creates
+// Our method (from http://www.1024cores.net/home/lock-free-algorithms/tricks/fibers) still creates
 // ucontext_t contexts, but it uses _setjmp/_longjmp to switch between them, thus avoiding syscalls
 // for saving and setting signal masks.  It works by swapping to the fiber's context during fiber
 // creation, setting up a long jump into the new fiber's context using _setjmp, then swapping back
@@ -531,6 +531,7 @@ void Run_Fiber(void *fiber_creation_info_pointer) {
 
 #define FIBER_STACK_SIZE 81920
 
+// @TODO: Rather than mprotecting memory, we should just check to see if the stack pointer is out-of-bound.
 void Platform_Create_Fiber(Platform_Fiber *fiber, Platform_Fiber_Procedure procedure, void *parameter) {
 	getcontext(&fiber->context);
 	s32 fiber_index = Platform_Atomic_Fetch_And_Add_S32(&linux_context.fiber_count, 1);

@@ -12,7 +12,6 @@ u32 window_width, window_height;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "vulkan.c"
-//#include "backend.c"
 #include "gpu.c"
 #include "render.c"
 #include "assets.c"
@@ -27,13 +26,14 @@ void Update(Game_State *game_state) {
 
 void Run_Game(void *parameter) {
 	Game_State *game_state = (Game_State *)parameter;
+	Initialize_Renderer(game_state);
 	// Initialization.
 	{
 		Job_Declaration jobs[] = {
 			Create_Job(Initialize_Assets, game_state),
 			//Create_Job(Initialize_Input, game_state),
 			Create_Job(Initialize_Camera, game_state),//&game_state->camera, (V3){2, 2, 2}, (V3){1, 1, 1}, 0.4f, DEGREES_TO_RADIANS(90.0f)),
-			Create_Job(Initialize_Renderer, game_state),//&game_state->camera, &game_state->permanent_arena, &game_state->frame_arena),
+			//Create_Job(Initialize_Renderer, game_state),//&game_state->camera, &game_state->permanent_arena, &game_state->frame_arena),
 		};
 		Job_Counter counter;
 		Run_Jobs(Array_Count(jobs), jobs, NORMAL_JOB_PRIORITY, &counter);
@@ -44,7 +44,7 @@ void Run_Game(void *parameter) {
 	Clear_Memory_Arena(&game_state->frame_arena);
 	while (game_state->execution_status != GAME_EXITING) {
 		Update(game_state);
-		Render(&game_state->render_context);
+		Render(&game_state->render_context, &game_state->assets, game_state->entities.meshes.count, game_state->entities.meshes.instances);
 		Clear_Memory_Arena(&game_state->frame_arena);
 	}
 	//Cleanup_Renderer();

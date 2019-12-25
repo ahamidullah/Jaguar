@@ -1,3 +1,5 @@
+#include "render_generated.c"
+
 #define RANDOM_COLOR_TABLE_LENGTH 1024
 V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
 
@@ -51,9 +53,9 @@ void Draw_Wire_Sphere(Render_Context *context, V3 center, f32 radius, V4 color) 
 }
 
 V3 random_color() {
-	float r = rand() / (float)RAND_MAX;
-	float g = rand() / (float)RAND_MAX;
-	float b = rand() / (float)RAND_MAX;
+	float r = rand() / (f32)RAND_MAX;
+	float g = rand() / (f32)RAND_MAX;
+	float b = rand() / (f32)RAND_MAX;
 	return (V3){r, g, b};
 }
 
@@ -95,11 +97,11 @@ void Frustum_Cull_Meshes(Camera *camera, Bounding_Sphere *mesh_bounding_spheres,
 
 typedef struct Asset_Upload_Command_Buffers {
 	GPU_Command_Buffer elements[MAX_ASSET_UPLOAD_COMMAND_BUFFERS];
-	Ring_Buffer ring_buffer;
+	//Ring_Buffer ring_buffer;
 } Asset_Upload_Command_Buffers;
 
-GPU_Fence upload_fences[MAX_FRAMES_IN_FLIGHT];
-GPU_Fence render_fences[MAX_FRAMES_IN_FLIGHT];
+GPU_Fence upload_fences[GPU_MAX_FRAMES_IN_FLIGHT];
+GPU_Fence render_fences[GPU_MAX_FRAMES_IN_FLIGHT];
 u32 current_frame_index;
 Asset_Upload_Command_Buffers asset_upload_command_buffers;
 
@@ -118,12 +120,6 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	Game_State *game_state = (Game_State *)job_parameter_pointer;
 	Render_Context *context = &game_state->render_context;
 	Render_API_Initialize(&context->api_context);
-	context->thread_local_contexts = malloc(game_state->jobs_context.worker_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
-	for (s32 i = 0; i < game_state->jobs_context.worker_thread_count; i++) {
-		for (s32 j = 0; j < MAX_FRAMES_IN_FLIGHT; j++) {
-			context->thread_local_contexts[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
-		}
-	}
 	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
 	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
 	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
@@ -162,16 +158,40 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
 	context->swapchain = Render_API_Create_Swapchain(&context->api_context);
-	u32 swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->swapchain);
-	GPU_Image_View *swapchain_image_views = malloc(swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
-	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->swapchain, swapchain_image_count, swapchain_image_views);
+	context->swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->swapchain);
+	GPU_Image_View *swapchain_image_views = malloc(context->swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
+	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->swapchain, context->swapchain_image_count, swapchain_image_views);
 
-	for (s32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
 		context->inFlightFences[i] = Render_API_Create_Fence(&context->api_context, true);
 	}
 
-	static GPU_Shader shaders[SHADER_COUNT];
-	Render_API_Create_Shaders(&context->api_context, shaders);
+	Render_API_Load_Shaders(&context->api_context, context->shaders);
+
+	context->descriptor_pool = Render_API_Initialize_Descriptors(&context->api_context, &context->descriptor_sets);
+
+	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass(&context->api_context);
+
+	context->framebuffers = malloc(context->swapchain_image_count * sizeof(GPU_Framebuffer));
+	for (s32 i = 0; i < context->swapchain_image_count; i++) {
+		GPU_Image_View attachments[] = {
+			swapchain_image_views[i],
+			depth_buffer_image_view,
+		};
+		context->framebuffers[i] = Render_API_Create_Framebuffer(&context->api_context, context->render_passes.scene, window_width, window_height, Array_Count(attachments), attachments);
+	}
+
+	context->render_thread_count = game_state->jobs_context.worker_thread_count;
+	context->thread_local_contexts = malloc(context->render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
+	for (s32 i = 0; i < context->render_thread_count; i++) {
+		context->thread_local_contexts[i].upload_command_pool = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+		context->thread_local_contexts[i].command_pools = malloc(context->swapchain_image_count * sizeof(GPU_Command_Pool));
+		for (s32 j = 0; j < context->swapchain_image_count; j++) {
+			context->thread_local_contexts[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+		}
+	}
+
+	Create_Material_Pipelines(&context->api_context, &context->descriptor_sets, context->shaders, context->render_passes.scene, context->pipelines);
 #if 0
 	Render_Graph_External_Attachment external_attachments[] = {
 		{
@@ -226,7 +246,7 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	context->aspect_ratio = window_width / (f32)window_height;
 	context->focal_length = 0.1f;
 	context->scene_projection = perspective_projection(game_state->camera.field_of_view, context->aspect_ratio, context->focal_length, 100.0f); // @TODO
-	for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+	for (u32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
 		//GPU_Create_Fence(false, &upload_fences[i]);
 		render_fences[i] = Render_API_Create_Fence(&context->api_context, true);
 	}
@@ -274,22 +294,64 @@ void Gather_Submeshes_For_Render_Pass(void *job_parameter_pointer) {
 }
 */
 
+void Finalize_Asset_GPU_Uploads(Game_Assets *assets, Render_API_Context *api_context);
+
 // @TODO: Float up render passes, descriptor sets, pipelines, command lists.
-void Render(Render_Context *context) {
-	context->currentFrame = context->nextFrame;
-	context->nextFrame = (context->nextFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
-	Console_Print("%d %d\n", context->currentFrame, context->nextFrame);
+void Render(Render_Context *context, Game_Assets *assets, s32 mesh_instance_count, Mesh_Instance *mesh_instances) {
+	Finalize_Asset_GPU_Uploads(assets, &context->api_context);
+/*
+	Switch_Double_Buffer(&context->gpu_upload_command_buffers);
+	GPU_Fence fence = Render_API_Create_Fence(&context->api_context, false);
+	Render_API_Submit_Command_Buffers(&context->api_context, context->gpu_upload_command_buffers.inactive_buffer_count, context->gpu_upload_command_buffers.inactive_buffer, fence);
+	context->gpu_upload_fences[assets->gpu_upload_fence_count] = fence;
+	context->gpu_upload_fence_count++;
+
+	for (s32 i = 0; i < context->gpu_upload_fence_count; i++) {
+		if (Render_API_Was_Fence_Signalled(&context->api_context, context->gpu_upload_fences[i])) {
+			for (s32 j = 0; j < assets->pending_gpu_upload_status_counts[i]; j++) {
+				*assets->pending_gpu_upload_statuses[i][j] = ASSET_LOADED;
+			}
+		} else {
+			Atomic_Write_To_Ring_Buffer(assets->gpu_upload_fences);
+		}
+	}
+*/
 	Render_API_Wait_For_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
 	Render_API_Reset_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame]);
-	Render_API_Reset_Command_Pool(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
-	//vkWaitForFences(context->device, 1, &context->inFlightFences[context->currentFrame], 1, UINT64_MAX);
-	//vkResetFences(context->device, 1, &context->inFlightFences[context->currentFrame]);
-	//vkResetCommandPool(context->device, context->thread_local_contexts[thread_index].command_pools[context->currentFrame], 0);
-	u32 swapchain_image_index = Render_API_Acquire_Next_Swapchain_Image_Index(&context->api_context, context->swapchain, context->currentFrame);
-	Render_API_Present_Swapchain_Image(&context->api_context, context->swapchain, swapchain_image_index);
-	//VK_CHECK(vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX, context->image_available_semaphores[context->currentFrame], NULL, &swapchain_image_index));
-	//return swapchain_image_index;
+	for (s32 i = 0; i < context->render_thread_count; i++) {
+		Render_API_Reset_Command_Pool(&context->api_context, context->thread_local_contexts[i].command_pools[context->currentFrame]);
+	}
 
+	u32 swapchain_image_index = Render_API_Acquire_Next_Swapchain_Image_Index(&context->api_context, context->swapchain, context->currentFrame);
+
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
+	Render_API_Record_Begin_Render_Pass_Command(&context->api_context, command_buffer, context->render_passes.scene, context->framebuffers[swapchain_image_index]);
+	Render_API_Record_Set_Viewport_Command(&context->api_context, command_buffer, window_width, window_height);
+	Render_API_Record_Set_Scissor_Command(&context->api_context, command_buffer, window_width, window_height);
+	Render_API_Record_Bind_Pipeline_Command(&context->api_context, command_buffer, context->pipelines[RUSTED_IRON_SHADER]);
+	for (s32 i = 0; i < mesh_instance_count; i++) {
+		// @TODO
+		if (mesh_instances[i].asset->load_status != ASSET_LOADED) {
+			continue;
+		}
+		//Render_API_Set_Per_Object_Shader_Parameters(&context->api_context);
+		Render_API_Record_Bind_Vertex_Buffer_Command(&context->api_context, command_buffer, mesh_instances[i].asset->gpu_mesh.vertex_buffer);
+		Render_API_Record_Bind_Index_Buffer_Command(&context->api_context, command_buffer, mesh_instances[i].asset->gpu_mesh.index_buffer);
+		u32 total_mesh_index_count = 0;
+		for (s32 j = 0; j < mesh_instances[i].asset->submesh_count; j++) {
+			//Render_API_Set_Per_Material_Shader_Parameters(&context->api_context, RUSTED_IRON_SHADER); // @TODO: WRONG!
+			//Render_API_Draw_Indexed_Vertices(&context->api_context, command_buffer, mesh_instances[i].asset->submesh_index_counts[j], total_mesh_index_count);
+			Render_API_Draw_Indexed_Vertices(&context->api_context, command_buffer, 3, total_mesh_index_count);
+			total_mesh_index_count += mesh_instances[i].asset->submesh_index_counts[j];
+		}
+	}
+	Render_API_Record_End_Render_Pass_Command(&context->api_context, command_buffer);
+	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
+	TEMPORARY_VULKAN_SUBMIT(&context->api_context, command_buffer, context->currentFrame, context->inFlightFences[context->currentFrame]);
+
+	Render_API_Present_Swapchain_Image(&context->api_context, context->swapchain, swapchain_image_index, context->currentFrame);
+
+	context->currentFrame = (context->currentFrame + 1) % GPU_MAX_FRAMES_IN_FLIGHT;
 #if 0
 	// Flush uploads to GPU.
 	{

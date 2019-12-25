@@ -1,11 +1,12 @@
 #if defined(USE_VULKAN_RENDER_API)
 
+#define GPU_MAX_FRAMES_IN_FLIGHT 2
+
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h> 
 
-#define VULKAN_MAX_FRAMES_IN_FLIGHT 2
-#define VULKAN_MAX_MEMORY_ALLOCATIONS_PER_BLOCK 512
+#include "vulkan_generated.h"
 
 typedef enum GPU_Filter {
 	GPU_LINEAR_FILTER = VK_FILTER_LINEAR,
@@ -33,10 +34,14 @@ typedef enum GPU_Image_Usage_Flags {
 	GPU_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_EXT = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT,
 } GPU_Image_Usage_Flags;
 
+/*
 typedef enum GPU_Shader_Stage_Flags {
 	GPU_SHADER_STAGE_VERTEX = VK_SHADER_STAGE_VERTEX_BIT,
 	GPU_SHADER_STAGE_FRAGMENT = VK_SHADER_STAGE_VERTEX_BIT,
+
+	GPU_SHADER_STAGE_COUNT
 } GPU_Shader_Stage_Flags;
+*/
 
 typedef enum GPU_Sample_Count_Flags {
 	GPU_SAMPLE_COUNT_1 = VK_SAMPLE_COUNT_1_BIT,
@@ -97,7 +102,7 @@ typedef enum GPU_Compare_Operation {
 	GPU_COMPARE_OP_ALWAYS = VK_COMPARE_OP_ALWAYS,
 } GPU_Compare_Operation;
 
-typedef enum GPU_Dynamic_Pipeline_State {
+typedef enum GPU_Dynamic_Pipeline_State_Flag {
 	GPU_DYNAMIC_PIPELINE_STATE_VIEWPORT = VK_DYNAMIC_STATE_VIEWPORT,
 	GPU_DYNAMIC_PIPELINE_STATE_SCISSOR = VK_DYNAMIC_STATE_SCISSOR,
 	GPU_DYNAMIC_PIPELINE_STATE_LINE_WIDTH = VK_DYNAMIC_STATE_LINE_WIDTH,
@@ -107,7 +112,7 @@ typedef enum GPU_Dynamic_Pipeline_State {
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_COMPARE_MASK = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_WRITE_MASK = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_REFERENCE = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-} GPU_Dynamic_Pipeline_State;
+} GPU_Dynamic_Pipeline_State_Flag;
 
 typedef enum GPU_Image_Layout {
 	GPU_IMAGE_LAYOUT_UNDEFINED = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -176,6 +181,8 @@ typedef struct Vulkan_Sampler_Filter {
 	VkSamplerMipmapMode mipmap;
 } Vulkan_Sampler_Filter;
 
+// @TODO: seperate the layout from the data by eg. hashing the data handle.
+
 typedef struct Vulkan_Descriptor_Set {
 	VkDescriptorSet descriptor_set;
 	VkDescriptorSetLayout layout;
@@ -200,8 +207,10 @@ typedef VkSwapchainKHR GPU_Swapchain;
 typedef VkMemoryRequirements GPU_Resource_Allocation_Requirements;
 typedef VkImage GPU_Image;
 typedef VkImageView GPU_Image_View;
+typedef VkDynamicState GPU_Dynamic_Pipeline_State;
 typedef Vulkan_Sampler_Filter GPU_Sampler_Filter;
 typedef Vulkan_Descriptor_Set GPU_Descriptor_Set;
+typedef VkDescriptorSetLayout GPU_Descriptor_Set_Layout;
 typedef Vulkan_Pipeline GPU_Pipeline;
 
 /*
@@ -286,14 +295,13 @@ typedef struct Render_API_Context {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 	VkPresentModeKHR present_mode;
+	//Vulkan_Descriptor_Set_Layouts descriptor_set_layouts;
+	//Vulkan_Descriptor_Sets descriptor_sets;
 	//VkSwapchainKHR swapchain;
 	VkDeviceSize minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize maximum_uniform_buffer_size; // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
-	VkSemaphore image_available_semaphores[VULKAN_MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore render_finished_semaphores[VULKAN_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore image_available_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore render_finished_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
 } Render_API_Context;
-
-//Texture_ID GPU_Upload_Image(u8 *pixels, s32 image_width, s32 image_height);
-//GPU_Mesh GPU_Upload_Mesh(u32 vertex_count, u32 sizeof_vertex, void *vertices, u32 index_count, u32 *indices);
 
 #endif

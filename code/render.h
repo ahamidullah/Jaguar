@@ -1,4 +1,3 @@
-#define MAX_FRAMES_IN_FLIGHT 2
 #define MAX_DEBUG_RENDER_OBJECTS 500
 #define MAX_ENTITY_MESHES 1000
 #define MAX_LOADED_ASSET_COUNT 1000
@@ -77,10 +76,12 @@ typedef enum Render_API_ID {
 } Render_API_ID;
 
 typedef struct Thread_Local_Render_Context {
-	GPU_Command_Pool command_pools[MAX_FRAMES_IN_FLIGHT];
+	GPU_Command_Pool *command_pools;
+	GPU_Command_Pool upload_command_pool; // @TODO: Double buffer and wait for one pool to empty to free it.
 } Thread_Local_Render_Context;
 
 typedef struct Render_Context {
+	s32 render_thread_count;
 	Thread_Local_Render_Context *thread_local_contexts;
 	Render_API_Context api_context;
 	M4 scene_projection;
@@ -91,8 +92,18 @@ typedef struct Render_Context {
 	u32 current_frame_index;
 	GPU_Memory_Allocators gpu_memory_allocators;
 	GPU_Swapchain swapchain;
+	u32 swapchain_image_count;
+	GPU_Framebuffer *framebuffers;
+	GPU_Shader shaders[GPU_SHADER_COUNT];
+	GPU_Descriptor_Pool descriptor_pool;
+	GPU_Descriptor_Sets descriptor_sets;
+	GPU_Pipeline pipelines[GPU_SHADER_COUNT];
+	GPU_Command_Pool asset_upload_command_pool;
+	struct {
+		GPU_Render_Pass scene;
+	} render_passes;
 
 	u32 currentFrame;
 	u32 nextFrame;
-	GPU_Fence inFlightFences[MAX_FRAMES_IN_FLIGHT];
+	GPU_Fence inFlightFences[GPU_MAX_FRAMES_IN_FLIGHT];
 } Render_Context;

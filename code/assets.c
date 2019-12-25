@@ -8,10 +8,41 @@
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
+GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *context, Game_Assets *assets, u32 vertices_size, u32 indices_size, GPU_Staging_Buffer staging_buffer, Asset_GPU_Upload_Counter *asset_gpu_upload_counter) {
+	GPU_Buffer vertex_buffer = Create_GPU_Device_Buffer(context, vertices_size, GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	GPU_Buffer index_buffer = Create_GPU_Device_Buffer(context, indices_size, GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, vertices_size, staging_buffer.buffer, vertex_buffer, staging_buffer.offset, 0);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, indices_size, staging_buffer.buffer, index_buffer, staging_buffer.offset + vertices_size, 0);
+	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
+	Atomic_Write_To_Double_Buffer(assets->gpu_upload_command_buffers, command_buffer, asset_gpu_upload_counter);
+	return (GPU_Indexed_Geometry){
+		.vertex_buffer = vertex_buffer,
+		.index_buffer = index_buffer,
+	};
+}
+
+GPU_Texture_ID Queue_Texture_Upload_To_GPU(Render_Context *context, Game_Assets *assets, u8 *pixels, s32 texture_width, s32 texture_height, Asset_GPU_Upload_Counter *asset_gpu_upload_counter) {
+	// @TODO: Load texture directly into staging memory.
+	void *staging_memory;
+	u32 texture_byte_size = sizeof(u32) * texture_width * texture_height;
+	GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, texture_byte_size, &staging_memory);
+	Copy_Memory(pixels, staging_memory, texture_byte_size);
+	GPU_Image image = Create_GPU_Device_Image(context, texture_width, texture_height, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED, GPU_SAMPLE_COUNT_1);
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
+	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	Render_API_Record_Copy_Buffer_To_Image_Command(&context->api_context, command_buffer, staging_buffer.buffer, image, texture_width, texture_height);
+	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
+	Atomic_Write_To_Double_Buffer(assets->gpu_upload_command_buffers, command_buffer, asset_gpu_upload_counter);
+	return 0;
+}
+
 typedef struct Load_Texture_Job_Parameter {
 	String path;
 	Render_Context *render_context;
-	GPU_Upload_Flags gpu_upload_flags;
+	Game_Assets *assets;
+	Asset_GPU_Upload_Counter *asset_gpu_upload_counter;
 	Texture_ID *output_texture_id;
 } Load_Texture_Job_Parameter;
 
@@ -21,7 +52,7 @@ void Load_Texture(void *job_parameter_pointer) {
 	u8 *pixels = stbi_load(job_parameter->path.data, &texture_width, &texture_height, &texture_channels, STBI_rgb_alpha);
 	assert(pixels);
 	printf("%s\n", job_parameter->path.data);
-	*job_parameter->output_texture_id = Queue_Texture_Upload_To_GPU(job_parameter->render_context, pixels, texture_width, texture_height);
+	*job_parameter->output_texture_id = Queue_Texture_Upload_To_GPU(job_parameter->render_context, job_parameter->assets, pixels, texture_width, texture_height, job_parameter->asset_gpu_upload_counter);
 	free(pixels);
 }
 
@@ -37,6 +68,7 @@ struct {
 typedef struct Load_Model_Job_Parameter {
 	Asset_ID asset_id;
 	Render_Context *render_context;
+	Game_Assets *assets;
 	GPU_Upload_Flags gpu_upload_flags;
 	Memory_Arena arena;
 	void **output_mesh_asset_address;
@@ -191,11 +223,27 @@ void Load_Model(void *job_parameter_pointer) {
 		mesh_vertex_offset += assimp_mesh->mNumVertices;
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
+		Asset_GPU_Upload_Counter *asset_gpu_upload_counter = malloc(sizeof(Asset_GPU_Upload_Counter));
+		asset_gpu_upload_counter->load_status = &mesh->load_status;
+		asset_gpu_upload_counter->gpu_command_buffer_count = 6; // @TODO
+
+		V3 vs[3] = {
+			{-1.0f, -1.0f, 0.0f},
+			{0.0f, 1.0f, 0.0f},
+			{1.0f, -1.0f, 0.0f},
+		};
+		u32 is[3] = {
+			0, 1, 2,
+		};
 		void *staging_memory;
-		GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
-		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
-		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
-		mesh->gpu_mesh = Queue_Indexed_Geometry_Upload_To_GPU(job_parameter->render_context, vertices_size, indices_size, staging_buffer);
+		//GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
+		//Copy_Memory(vertex_buffer, staging_memory, vertices_size);
+		//Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
+		//mesh->gpu_mesh = Queue_Indexed_Geometry_Upload_To_GPU(job_parameter->render_context, job_parameter->assets, vertices_size, indices_size, staging_buffer, asset_gpu_upload_counter);
+		GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, sizeof(vs) + sizeof(is), &staging_memory);
+		Copy_Memory(vs, staging_memory, sizeof(vs));
+		Copy_Memory(is, (char *)staging_memory + sizeof(vs), sizeof(is));
+		mesh->gpu_mesh = Queue_Indexed_Geometry_Upload_To_GPU(job_parameter->render_context, job_parameter->assets, sizeof(vs), sizeof(is), staging_buffer, asset_gpu_upload_counter);
 
 		// Load textures.
 		{
@@ -204,32 +252,37 @@ void Load_Model(void *job_parameter_pointer) {
 				{
 					.path = Join_Filepaths(model_directory, S("albedo.png"), &job_parameter->arena),
 					.render_context = job_parameter->render_context,
-					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.assets = job_parameter->assets,
 					.output_texture_id = &mesh->materials[i].albedo_map,
+					.asset_gpu_upload_counter = asset_gpu_upload_counter,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("normal.png"), &job_parameter->arena),
 					.render_context = job_parameter->render_context,
-					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.assets = job_parameter->assets,
 					.output_texture_id = &mesh->materials[i].normal_map,
+					.asset_gpu_upload_counter = asset_gpu_upload_counter,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("roughness.png"), &job_parameter->arena),
 					.render_context = job_parameter->render_context,
-					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.assets = job_parameter->assets,
 					.output_texture_id = &mesh->materials[i].roughness_map,
+					.asset_gpu_upload_counter = asset_gpu_upload_counter,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("metallic.png"), &job_parameter->arena),
 					.render_context = job_parameter->render_context,
-					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.assets = job_parameter->assets,
 					.output_texture_id = &mesh->materials[i].metallic_map,
+					.asset_gpu_upload_counter = asset_gpu_upload_counter,
 				},
 				{
 					.path = Join_Filepaths(model_directory, S("ambient_occlusion.png"), &job_parameter->arena),
 					.render_context = job_parameter->render_context,
-					.gpu_upload_flags = job_parameter->gpu_upload_flags,
+					.assets = job_parameter->assets,
 					.output_texture_id = &mesh->materials[i].ambient_occlusion_map,
+					.asset_gpu_upload_counter = asset_gpu_upload_counter,
 				},
 			};
 			Job_Declaration load_texture_job_declarations[Array_Count(load_texture_job_parameters)];
@@ -240,6 +293,8 @@ void Load_Model(void *job_parameter_pointer) {
 			Run_Jobs(Array_Count(load_texture_job_declarations), load_texture_job_declarations, NORMAL_JOB_PRIORITY, &counter);
 			Wait_For_Job_Counter(&counter); // @TODO: Why wait????
 		}
+
+		//mesh->load_status = ASSET_LOADED;
 #if 0
 			struct aiString diffuse_path;
 			if (aiGetMaterialTexture(assimp_material, aiTextureType_DIFFUSE, 0, &diffuse_path, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
@@ -581,6 +636,7 @@ Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, Render_Conte
 	job_parameter->asset_id = asset_id;
 	job_parameter->arena = make_memory_arena();
 	job_parameter->render_context = render_context;
+	job_parameter->assets = assets;
 	job_parameter->gpu_upload_flags = gpu_upload_flags;
 	job_parameter->output_mesh_asset_address = &assets->lookup[asset_id];
 	Job_Declaration job_declaration = Create_Job(Load_Model, job_parameter);
@@ -588,7 +644,45 @@ Mesh_Asset **Get_Mesh_Asset(Asset_ID asset_id, Game_Assets *assets, Render_Conte
 	return (Mesh_Asset **)&assets->lookup[asset_id];
 }
 
+void Finalize_Asset_GPU_Uploads(Game_Assets *assets, Render_API_Context *api_context) {
+	// Submit queued asset upload commands.
+	//Console_Print("read_buffer_element_count: %d\n", assets->gpu_upload_command_buffers.read_buffer_element_count);
+	Switch_Double_Buffer(assets->gpu_upload_command_buffers);
+	if (assets->gpu_upload_command_buffers.read_buffer_element_count > 0) {
+		GPU_Fence fence = Render_API_Submit_Command_Buffers(api_context, assets->gpu_upload_command_buffers.read_buffer_element_count, assets->gpu_upload_command_buffers.read_buffer->command_buffers, GPU_GRAPHICS_COMMAND_QUEUE);
+		assets->gpu_upload_fences[assets->gpu_upload_fence_count] = fence;
+		assets->pending_gpu_upload_counter_counts[assets->gpu_upload_fence_count] = assets->gpu_upload_command_buffers.read_buffer_element_count;
+		Copy_Memory(assets->gpu_upload_command_buffers.read_buffer->gpu_upload_counters, &assets->pending_gpu_upload_counters[assets->gpu_upload_fence_count], assets->gpu_upload_command_buffers.read_buffer_element_count * sizeof(Asset_GPU_Upload_Counter *));
+		assets->gpu_upload_fence_count += 1;
+		// @TODO: Render_API_Free_Command_Buffers(api_context, assets->gpu_upload_command_pool, assets->gpu_upload_command_buffers.read_buffer_element_count, assets->gpu_upload_command_buffers.read_buffer->command_buffers);
+	}
+
+	// Check whether submitted asset upload commands have finished.
+	// @TODO: Destroy fences?
+	//Console_Print("gpu_upload_fence_count: %d\n", assets->gpu_upload_fence_count);
+	for (s32 i = 0; i < assets->gpu_upload_fence_count; i++) {
+		if (Render_API_Was_Fence_Signalled(api_context, assets->gpu_upload_fences[i])) {
+			for (s32 j = 0; j < assets->pending_gpu_upload_counter_counts[i]; j++) {
+				//Console_Print("gpu_command_buffer_count: %d\n", assets->pending_gpu_upload_counters[i][j]->gpu_command_buffer_count);
+				assets->pending_gpu_upload_counters[i][j]->gpu_command_buffer_count -= 1;
+				if (assets->pending_gpu_upload_counters[i][j]->gpu_command_buffer_count == 0) {
+					*assets->pending_gpu_upload_counters[i][j]->load_status = ASSET_LOADED;
+				}
+			}
+
+			// Remove the fence.
+			assets->gpu_upload_fence_count -= 1;
+			if (i != assets->gpu_upload_fence_count) {
+				assets->gpu_upload_fences[i] = assets->gpu_upload_fences[assets->gpu_upload_fence_count];
+				i -= 1;
+			}
+		}
+	}
+}
+
 void Initialize_Assets(void *job_parameter) {
 	Game_State *game_state = (Game_State *)job_parameter;
+	game_state->assets.gpu_upload_command_pool = Render_API_Create_Command_Pool(&game_state->render_context.api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+	Create_Double_Buffer(game_state->assets.gpu_upload_command_buffers);
 	//load_model("data/models/anvil", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena); // @TODO @SUBARENA
 }

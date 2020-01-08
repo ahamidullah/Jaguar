@@ -210,6 +210,9 @@ void *Worker_Thread_Procedure(void *parameter) {
 			Job *scheduled_job = scheduled_job_fiber->parameter.scheduled_job;
 			if (scheduled_job->finished) {
 				Atomic_Push_To_Front_Of_List(jobs_context.idle_job_fiber_list, scheduled_job_fiber);
+				if (!scheduled_job->counter) {
+					continue;
+				}
 				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
 				s32 unfinished_job_count = Platform_Atomic_Add_S32(&scheduled_job->counter->unfinished_job_count, -1);
 				if (unfinished_job_count > 0) {
@@ -252,8 +255,10 @@ Job_Declaration Create_Job(Job_Procedure procedure, void *parameter) {
 }
 
 void Run_Jobs(u32 count, Job_Declaration *job_declarations, Job_Priority priority, Job_Counter *counter) {
-	counter->unfinished_job_count = count;
-	counter->waiting_job_fiber = NULL;
+	if (counter) {
+		counter->unfinished_job_count = count;
+		counter->waiting_job_fiber = NULL;
+	}
 	for (u32 i = 0; i < count; i++) {
 		Job new_job = {
 			.procedure = job_declarations[i].procedure,

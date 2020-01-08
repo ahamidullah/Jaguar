@@ -324,6 +324,7 @@ typedef struct Animation_Instance {
 
 typedef struct Camera {
 	M4 view_matrix;
+	M4 projection_matrix;
 
 	V3 position;
 	V3 forward;
@@ -331,6 +332,7 @@ typedef struct Camera {
 	V3 up;
 
 	f32 field_of_view;
+	f32 focal_length;
 	f32 yaw;
 	f32 pitch;
 	f32 speed;

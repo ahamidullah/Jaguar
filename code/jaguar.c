@@ -44,7 +44,7 @@ void Run_Game(void *parameter) {
 	Clear_Memory_Arena(&game_state->frame_arena);
 	while (game_state->execution_status != GAME_EXITING) {
 		Update(game_state);
-		Render(&game_state->render_context, &game_state->assets, game_state->entities.meshes.count, game_state->entities.meshes.instances);
+		Render(&game_state->render_context, &game_state->assets, &game_state->camera, game_state->entities.meshes.count, game_state->entities.meshes.instances);
 		Clear_Memory_Arena(&game_state->frame_arena);
 	}
 	//Cleanup_Renderer();

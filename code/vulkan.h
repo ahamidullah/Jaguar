@@ -295,6 +295,7 @@ typedef struct Render_API_Context {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 	VkPresentModeKHR present_mode;
+	u32 descriptor_set_count;
 	//Vulkan_Descriptor_Set_Layouts descriptor_set_layouts;
 	//Vulkan_Descriptor_Sets descriptor_sets;
 	//VkSwapchainKHR swapchain;

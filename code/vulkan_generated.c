@@ -5,10 +5,15 @@ const char *SHADER_SPIRV_FILEPATHS[GPU_SHADER_COUNT][GPU_SHADER_STAGE_COUNT] = {
 	[RUSTED_IRON_SHADER][GPU_FRAGMENT_SHADER_STAGE] = "build/shaders/binaries/rusted_iron_frag.spirv",
 };
 
-VkDescriptorPoolSize vulkan_descriptor_pool_sizes[] = {
+struct {
+	VkDescriptorType type;
+	s32 non_immediate_descriptor_count;
+	s32 immediate_descriptor_count;
+} vulkan_descriptor_pool_size_infos[] = {
 	{
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = 1 + 1 * GPU_MAX_FRAMES_IN_FLIGHT,
+		.immediate_descriptor_count = 1,
+		.non_immediate_descriptor_count = 1,
 	},
 };
 
@@ -32,7 +37,7 @@ void Render_API_Load_Shaders(Render_API_Context *context, GPU_Shader shaders[GPU
 	}
 }
 
-void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, VkDescriptorPool descriptor_pool, GPU_Descriptor_Sets *descriptor_sets) {
+void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, u32 swapchain_image_count, VkDescriptorPool descriptor_pool, GPU_Descriptor_Sets *descriptor_sets) {
 	// Create the descriptor set layouts.
 	{
 		VkDescriptorSetLayoutBinding bindings[] = {
@@ -73,22 +78,23 @@ void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, VkDescriptorPool
 
 	// Create the descriptor sets.
 	s32 layout_index = 0;
-	VkDescriptorSetLayout layouts[GPU_DESCRIPTOR_SET_COUNT];
+	VkDescriptorSetLayout layouts[context->descriptor_set_count];
 	layouts[layout_index++] = descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET];
-	for (s32 i = 0; i != GPU_MAX_FRAMES_IN_FLIGHT; i++) {
+	for (s32 i = 0; i != swapchain_image_count; i++) {
 		layouts[layout_index++] = descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET];
 	}
-	VkDescriptorSet results[GPU_DESCRIPTOR_SET_COUNT];
+	VkDescriptorSet results[context->descriptor_set_count];
 	VkDescriptorSetAllocateInfo allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = descriptor_pool,
-		.descriptorSetCount = GPU_DESCRIPTOR_SET_COUNT,
+		.descriptorSetCount = context->descriptor_set_count,
 		.pSetLayouts = layouts,
 	};
 	VK_CHECK(vkAllocateDescriptorSets(context->device, &allocate_info, results));
 	s32 result_index = 0;
 	descriptor_sets->rusted_iron_vertex_bind_per_material_update_delayed = results[result_index++];
-	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
+	descriptor_sets->rusted_iron_vertex_bind_per_object_update_immediate = malloc(swapchain_image_count * sizeof(VkDescriptorSet)); // @TODO
+	for (s32 i = 0; i < swapchain_image_count; i++) {
 		descriptor_sets->rusted_iron_vertex_bind_per_object_update_immediate[i] = results[result_index++];
 	}
 }

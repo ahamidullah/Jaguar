@@ -500,19 +500,12 @@ VkCommandBuffer Render_API_Create_Command_Buffer(Render_API_Context *context, Vk
 	return command_buffer;
 }
 
-VkFence Render_API_Submit_Command_Buffers(Render_API_Context *context, u32 count, VkCommandBuffer *command_buffers, GPU_Command_Queue_Type queue_type) {
+void Render_API_Submit_Command_Buffers(Render_API_Context *context, u32 count, VkCommandBuffer *command_buffers, GPU_Command_Queue_Type queue_type, VkFence fence) {
 	VkSubmitInfo submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.commandBufferCount = count,
 		.pCommandBuffers = command_buffers,
 	};
-	VkFenceCreateInfo fence_create_info = {
-		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-		.pNext = NULL,
-		.flags = 0,
-	};
-	VkFence fence;
-	VK_CHECK(vkCreateFence(context->device, &fence_create_info, NULL, &fence));
 	switch (queue_type) {
 	case GPU_GRAPHICS_COMMAND_QUEUE: {
 		VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info, fence));
@@ -521,7 +514,6 @@ VkFence Render_API_Submit_Command_Buffers(Render_API_Context *context, u32 count
 		Invalid_Code_Path();
 	} break;
 	}
-	return fence;
 }
 
 void Render_API_Free_Command_Buffers(Render_API_Context *context, GPU_Command_Pool command_pool, s32 command_buffer_count, GPU_Command_Buffer *command_buffers) {
@@ -598,8 +590,12 @@ VkBuffer Render_API_Create_Buffer(Render_API_Context *context, u32 size, VkBuffe
 	return buffer;
 }
 
-void Render_API_Bind_Buffer_Memory(Render_API_Context *context, VkBuffer buffer, VkDeviceMemory memory, u32 memory_offset) {
+void Render_API_Bind_Buffer_Memory(Render_API_Context *context, GPU_Buffer buffer, GPU_Memory memory, u32 memory_offset) {
 	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
+}
+
+void Render_API_Destroy_Buffer(Render_API_Context *context, GPU_Buffer buffer) {
+	vkDestroyBuffer(context->device, buffer, NULL);
 }
 
 void *Render_API_Map_Memory(Render_API_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
@@ -1277,17 +1273,24 @@ GPU_Render_Graph GPU_Compile_Render_Pass(GPU_Context *context, xRender_Pass *ren
 	//}
 
 
-VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, GPU_Descriptor_Sets *descriptor_sets) {
+VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, u32 swapchain_image_count, GPU_Descriptor_Sets *descriptor_sets) {
+	context->descriptor_set_count = GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT + (GPU_IMMEDIATE_DESCRIPTOR_COUNT * swapchain_image_count);
+
+	VkDescriptorPoolSize descriptor_pool_sizes[Array_Count(vulkan_descriptor_pool_size_infos)];
+	for (s32 i = 0; i < Array_Count(vulkan_descriptor_pool_size_infos); i++) {
+		descriptor_pool_sizes[i].type = vulkan_descriptor_pool_size_infos[i].type;
+		descriptor_pool_sizes[i].descriptorCount = vulkan_descriptor_pool_size_infos[i].non_immediate_descriptor_count + (vulkan_descriptor_pool_size_infos[i].immediate_descriptor_count * swapchain_image_count);
+	}
 	VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.poolSizeCount = Array_Count(vulkan_descriptor_pool_sizes),
-		.pPoolSizes = vulkan_descriptor_pool_sizes,
-		.maxSets = GPU_DESCRIPTOR_SET_COUNT,
+		.poolSizeCount = Array_Count(descriptor_pool_sizes),
+		.pPoolSizes = descriptor_pool_sizes,
+		.maxSets = context->descriptor_set_count,
 		.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
 	};
 	VkDescriptorPool descriptor_pool;
 	VK_CHECK(vkCreateDescriptorPool(context->device, &descriptor_pool_create_info, NULL, &descriptor_pool));
-	Vulkan_Create_Descriptor_Sets(context, descriptor_pool, descriptor_sets);
+	Vulkan_Create_Descriptor_Sets(context, swapchain_image_count, descriptor_pool, descriptor_sets);
 	return descriptor_pool;
 }
 

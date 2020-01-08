@@ -33,7 +33,8 @@ typedef struct Vulkan_Descriptor_Set_Layouts {
 typedef struct GPU_Descriptor_Sets {
 	Vulkan_Descriptor_Set_Layouts layouts;
 	VkDescriptorSet rusted_iron_vertex_bind_per_material_update_delayed;
-	VkDescriptorSet rusted_iron_vertex_bind_per_object_update_immediate[GPU_MAX_FRAMES_IN_FLIGHT];
+	VkDescriptorSet *rusted_iron_vertex_bind_per_object_update_immediate;
 } GPU_Descriptor_Sets;
 
-#define GPU_DESCRIPTOR_SET_COUNT (1 + 1 * GPU_MAX_FRAMES_IN_FLIGHT)
+#define GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT 1
+#define GPU_IMMEDIATE_DESCRIPTOR_COUNT 1

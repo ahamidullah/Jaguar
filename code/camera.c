@@ -16,6 +16,8 @@ void Initialize_Camera(void *parameter) {//Camera *camera, V3 position, V3 forwa
 	camera->pitch = 0.0f;
 	camera->view_matrix = view_matrix(camera->position, camera->forward, camera->side, camera->up);
 	camera->field_of_view = DEGREES_TO_RADIANS(90.0f);
+	camera->focal_length = 0.01f;
+	camera->projection_matrix = infinite_perspective_projection(camera->field_of_view, window_width / (f32)window_height); // @TODO
 }
 
 V3 calculate_camera_forward(f32 pitch, f32 yaw) {

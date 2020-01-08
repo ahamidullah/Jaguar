@@ -84,8 +84,8 @@ typedef struct Render_Context {
 	s32 render_thread_count;
 	Thread_Local_Render_Context *thread_local_contexts;
 	Render_API_Context api_context;
-	M4 scene_projection;
-	f32 focal_length; // The distance between the camera position and the near render plane in world space.
+	//M4 scene_projection_matrix;
+	//f32 focal_length; // The distance between the camera position and the near render plane in world space.
 	f32 aspect_ratio; // Calculated from the render area dimensions, not the window dimensions.
 	u32 debug_render_object_count;
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];

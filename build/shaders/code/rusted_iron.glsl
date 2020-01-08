@@ -17,19 +17,18 @@ layout (set = 0, binding = 0) uniform Bind_Per_Material_Update_Delayed_UBO {
 };
 
 layout (set = 1, binding = 0) uniform Bind_Per_Object_Update_Immediate_UBO {
-	mat4 model_to_world_space; // world_space
+	layout(row_major) mat4 model_to_world_space; // world_space
 };
 
 void main() {
 	// flat_color
 	{
-		fragment_color = vec4(1.0, 0.0, 0.0, 1.0);
+		fragment_color = color;
 	}
 
 	// world_space
 	{
-		//gl_Position = model_to_world_space * vec4(vertex_position, 1.0);
-		gl_Position = vec4(vertex_position, 1.0);
+		gl_Position = model_to_world_space * vec4(vertex_position, 1.0);
 	}
 }
 

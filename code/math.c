@@ -353,7 +353,6 @@ M4 perspective_projection(f32 fovy, f32 aspect_ratio, f32 near, f32 far) {
 M4 infinite_perspective_projection(f32 fovy, f32 aspect_ratio) {
 	const f32 near = 0.01f;
 	f32 focal_length = 1 / tan(fovy / 2);
-
 	return (M4){{
 		{focal_length,   0.0f,                           0.0f,    0.0f},
 		{0.0f,           -focal_length * aspect_ratio,   0.0f,    0.0f},

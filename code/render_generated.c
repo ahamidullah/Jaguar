@@ -9,9 +9,9 @@ void Create_Material_Pipelines(Render_API_Context *context, GPU_Descriptor_Sets 
 			.push_constant_descriptions = NULL,
 			.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 			.viewport_width = window_width,
-			.viewport_height = window_height,
+			.viewport_height = window_width,
 			.scissor_width = window_width,
-			.scissor_height = window_height,
+			.scissor_height = window_width,
 			.depth_compare_operation = VK_COMPARE_OP_LESS,
 			.framebuffer_attachment_color_blend_count = 1,
 			.framebuffer_attachment_color_blend_descriptions = &(GPU_Framebuffer_Attachment_Color_Blend_Description){

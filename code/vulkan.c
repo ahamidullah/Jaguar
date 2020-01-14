@@ -1294,6 +1294,9 @@ VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, 
 	return descriptor_pool;
 }
 
+GPU_Descriptor_Set Render_API_Create_Descriptor_Set(Render_API_Context *context, GPU_Shader_ID shader_id) {
+}
+
 typedef struct GPU_Image_Descriptor_Write {
 	GPU_Image_Layout layout;
 	GPU_Image_View view;

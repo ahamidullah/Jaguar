@@ -56,3 +56,13 @@ void Create_Material_Pipelines(Render_API_Context *context, GPU_Descriptor_Sets 
 	}
 }
 
+GPU_Shader_ID Get_Shader_ID_From_Material_ID() {
+}
+
+void Update_Descriptor_Sets(Render_Context *context, s32 descriptor_set_data_count, Descriptor_Set_Data *descriptor_set_data, Camera *camera) {
+	for (s32 i = 0; i < descriptor_set_data_count; i++) {
+	switch (descriptor_set_data[i].shader_id) {
+	}
+	}
+}
+

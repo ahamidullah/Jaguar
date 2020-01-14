@@ -1,5 +1,6 @@
 // @TODO: Split the material compiler and the shader compiler.
 // @TODO: Shouldn't world space be world coordinate system?
+// @TODO: Get rid of block groups and just use the shader info.
 
 #include <stdint.h>
 #include <stddef.h>
@@ -273,6 +274,9 @@ Token Parse_String_Value(Stream *stream) {
 #define MAX_MATERIALS 256
 #define MAX_SHADERS 512
 #define MAX_SHADER_BLOCK_MAIN_LENGTH 1024
+#define MAX_INPUTS_PER_STAGE 64
+#define MAX_OUTPUTS_PER_STAGE 64
+#define MAX_MAIN_LENGTH_PER_STAGE 1024
 #define MAX_BLOCKS_PER_SHADER 16
 
 typedef enum Coordinate_System {
@@ -375,10 +379,10 @@ bool Strings_Equal(const char *a, const char *b) {
 const char *Shader_Stage_To_String(Shader_Stage stage) {
 	switch (stage) {
 	case VERTEX_SHADER_STAGE: {
-		return "Vertex";
+		return "vertex";
 	} break;
 	case FRAGMENT_SHADER_STAGE: {
-		return "Fragment";
+		return "fragment";
 	} break;
 	default: {
 		Abort("invalid shader stage: %d", stage);
@@ -390,28 +394,41 @@ const char *Shader_Stage_To_String(Shader_Stage stage) {
 const char *Uniform_Set_To_String(Uniform_Set set) {
 	switch (set) {
 	case BIND_PER_MATERIAL_UPDATE_NEVER_UNIFORM_SET: {
-		return "Bind_Per_Material_Update_Never";
+		return "bind_per_material_update_never";
 	} break;
 	case BIND_PER_MATERIAL_UPDATE_DELAYABLE_UNIFORM_SET: {
-		return "Bind_Per_Material_Update_Delayed";
+		return "bind_per_material_update_delayed";
 	} break;
 	case BIND_PER_MATERIAL_UPDATE_IMMEDIATE_UNIFORM_SET: {
-		return "Bind_Per_Material_Update_Immediate";
+		return "bind_per_material_update_immediate";
 	} break;
 	case BIND_PER_OBJECT_UPDATE_NEVER_UNIFORM_SET: {
-		return "Bind_Per_Object_Update_Never";
+		return "bind_per_object_update_never";
 	} break;
 	case BIND_PER_OBJECT_UPDATE_DELAYABLE_UNIFORM_SET: {
-		return "Bind_Per_Object_Update_Delayable";
+		return "bind_per_object_update_delayable";
 	} break;
 	case BIND_PER_OBJECT_UPDATE_IMMEDIATE_UNIFORM_SET: {
-		return "Bind_Per_Object_Update_Immediate";
+		return "bind_per_object_update_immediate";
 	} break;
 	default: {
 		Abort("unknown uniform set");
 	} break;
 	}
 	return NULL;
+}
+
+char *Type_Nameify_String(const char *type_name, char *buffer) {
+	s32 i = 0;
+	for (; type_name[i] != '\0'; i++) {
+		if (i == 0 || type_name[i - 1] == '_') {
+			buffer[i] = toupper(type_name[i]);
+		} else {
+			buffer[i] = type_name[i];
+		}
+	}
+	buffer[i] = '\0';
+	return buffer;
 }
 
 Uniform_Update_Policy Get_Uniform_Update_Policy_From_Set(Uniform_Set set) {
@@ -597,7 +614,33 @@ typedef struct Shader_Block_Group {
 	Shader_Block *blocks[MAX_BLOCKS_PER_SHADER];
 } Shader_Block_Group;
 
+typedef struct Shader_Info {
+	char *name;
+	struct {
+		bool stage_used;
+
+		s32 input_count;
+		Shader_Resource inputs[MAX_INPUTS_PER_STAGE];
+
+		s32 output_count;
+		Shader_Resource outputs[MAX_OUTPUTS_PER_STAGE];
+
+		bool uniform_sets_used[UNIFORM_SET_COUNT];
+
+		s32 uniform_counts[UNIFORM_SET_COUNT];
+		Shader_Resource uniforms[UNIFORM_SET_COUNT][MAX_UNIFORMS_PER_SET];
+		Descriptor_Type uniform_descriptor_types[UNIFORM_SET_COUNT][MAX_UNIFORMS_PER_SET];
+
+		s32 ubo_member_counts[UNIFORM_SET_COUNT];
+		Shader_Resource ubo_members[UNIFORM_SET_COUNT][MAX_UBO_MEMBERS_PER_SET];
+
+		s32 main_length;
+		char main[MAX_MAIN_LENGTH_PER_STAGE];
+	} stages[SHADER_STAGE_COUNT];
+} Shader_Info;
+
 void Output_Shader(const char *shader_name, Shader_Block_Group *block_group) {
+	char buffer[128];
 	static char shader_filepath[MAX_FILEPATH_LENGTH];
 	sprintf(shader_filepath, "%s/%s.glsl", SHADER_CODE_DIRECTORY, shader_name);
 	FILE *shader_file = fopen(shader_filepath, "w");
@@ -653,7 +696,7 @@ void Output_Shader(const char *shader_name, Shader_Block_Group *block_group) {
 		for (s32 j = 0; j < UNIFORM_SET_COUNT; j++) {
 			s32 binding_number = 0;
 			if (block_group->ubo_member_counts_per_set[i][j] > 0) {
-				fprintf(shader_file, "layout (set = %d, binding = %d) uniform %s_UBO {\n", set_number, binding_number, Uniform_Set_To_String(j));
+				fprintf(shader_file, "layout (set = %d, binding = %d) uniform %s_UBO {\n", set_number, binding_number, Type_Nameify_String(Uniform_Set_To_String(j), buffer));
 				for (s32 k = 0; k < block_group->block_count; k++) {
 					for (s32 l = 0; l < block_group->blocks[k]->stages[i].ubo_member_counts[j]; l++) {
 						fprintf(shader_file, "\t");
@@ -701,20 +744,44 @@ void Output_Shader(const char *shader_name, Shader_Block_Group *block_group) {
 	fclose(shader_file);
 }
 
-void Add_Shader_Block_To_Group(Shader_Block *block, Shader_Block_Group *block_group) {
+void Add_Shader_Block_To_Group(Shader_Block *block, Shader_Block_Group *block_group, Shader_Info *shader_info) {
 	for (s32 i = 0; i < SHADER_STAGE_COUNT; i++) {
 		if (block->stages_used[i]) {
 			block_group->stages_used[i] = true;
+		}
+		if (block->stages_used[i]) {
+			shader_info->stages[i].stage_used = true;
 		}
 	}
 	for (s32 i = 0; i < SHADER_STAGE_COUNT; i++) {
 		if (!block->stages_used[i]) {
 			continue;
 		}
+
+		shader_info->stages[i].stage_used = true;
+
+		memcpy(&shader_info->stages[i].inputs[shader_info->stages[i].input_count], block->stages[i].inputs, block->stages[i].input_count * sizeof(Shader_Resource));
+		shader_info->stages[i].input_count += block->stages[i].input_count;
+
+		memcpy(&shader_info->stages[i].outputs[shader_info->stages[i].output_count], block->stages[i].outputs, block->stages[i].output_count * sizeof(Shader_Resource));
+		shader_info->stages[i].output_count += block->stages[i].output_count;
+
+		s32 block_main_length = strlen(block->stages[i].main);
+		memcpy(shader_info->stages[i].main + shader_info->stages[i].main_length, block->stages[i].main, block_main_length + 1);
+		shader_info->stages[i].main_length += block_main_length;
+
 		for (s32 j = 0; j < UNIFORM_SET_COUNT; j++) {
+			memcpy(&shader_info->stages[i].uniforms[j][shader_info->stages[i].uniform_counts[j]], block->stages[i].uniforms, block->stages[i].uniform_counts[j] * sizeof(Shader_Resource));
+			memcpy(&shader_info->stages[i].uniform_descriptor_types[j][shader_info->stages[i].uniform_counts[j]], block->stages[i].uniform_descriptor_types, block->stages[i].uniform_counts[j] * sizeof(Descriptor_Type));
+			shader_info->stages[i].uniform_counts[j] += block->stages[i].uniform_counts[j];
+
+			memcpy(&shader_info->stages[i].ubo_members[j][shader_info->stages[i].ubo_member_counts[j]], block->stages[i].ubo_members[j], block->stages[i].ubo_member_counts[j] * sizeof(Shader_Resource));
+			shader_info->stages[i].ubo_member_counts[j] += block->stages[i].ubo_member_counts[j];
+
 			block_group->ubo_member_counts_per_set[i][j] += block->stages[i].ubo_member_counts[j];
 			if (block->stages[i].uniform_counts[j] > 0 || block->stages[i].ubo_member_counts[j] > 0) {
 				block_group->uniform_sets_used[i][j] = true;
+				shader_info->stages[i].uniform_sets_used[j] = true;
 			}
 		}
 	}
@@ -722,17 +789,17 @@ void Add_Shader_Block_To_Group(Shader_Block *block, Shader_Block_Group *block_gr
 	block_group->block_count++;
 }
 
-s32 Generate_Shader_Code(s32 material_count, Material *materials, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS]) {
+s32 Generate_Shader_Code(s32 material_count, Material *materials, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS], Shader_Info shader_infos[MAX_SHADERS]) {
 	static Shader_Block shader_blocks[MAX_SHADER_BLOCKS];
 	s32 shader_block_count = Parse_Shader_Blocks(shader_blocks);
 	s32 shader_count = 0;
 	for (s32 i = 0; i < material_count; i++) {
 		if (materials[i].has_color) {
-			Add_Shader_Block_To_Group(&shader_blocks[COLOR_SHADER_BLOCK], &block_groups[shader_count]);
+			Add_Shader_Block_To_Group(&shader_blocks[COLOR_SHADER_BLOCK], &block_groups[shader_count], &shader_infos[shader_count]);
 		}
 		switch (materials[i].coordinate_system) {
 		case WORLD_COORDINATE_SYSTEM: {
-			Add_Shader_Block_To_Group(&shader_blocks[WORLD_SPACE_SHADER_BLOCK], &block_groups[shader_count]);
+			Add_Shader_Block_To_Group(&shader_blocks[WORLD_SPACE_SHADER_BLOCK], &block_groups[shader_count], &shader_infos[shader_count]);
 		} break;
 		case INVALID_COORDINATE_SYSTEM: {
 			Abort("No coordinate system assigned to material %s", materials[i].name);
@@ -798,15 +865,25 @@ char *Get_Descriptor_Set_Name(const char *shader_name, Shader_Stage stage, Unifo
 	s32 i = sprintf(destination, "%s_", shader_name);
 	i += sprintf(destination + i, "%s_", Shader_Stage_To_String(stage));
 	i += sprintf(destination + i, "%s", Uniform_Set_To_String(set));
-	Lowercase_String(destination, destination);
 	return destination;
+}
+
+const char *Convert_GLSL_Type_To_Engine_Type(const char *glsl_type) {
+	if (Strings_Equal(glsl_type, "mat4")) {
+		return "M4";
+	} else if (Strings_Equal(glsl_type, "vec4")) {
+		return "V4";
+	} else {
+		Abort("unknown glsl type: %s", glsl_type);
+	}
+	return NULL;
 }
 
 #define MAX_UNIFORMS_PER_SHADER 32
 #define MAX_DESCRIPTORS_PER_SET 16
 #define MAX_DESCRIPTOR_SETS 16
 
-void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS]) {
+void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS], Shader_Info *shader_infos) {
 	char buffer[128];
 
 	s32 descriptor_set_layout_count = 0;
@@ -1137,6 +1214,52 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 		fclose(vulkan_source_file);
 	}
 
+	// Render header file.
+	{
+		FILE *render_header_file = fopen("code/render_generated.h", "w");
+		assert(render_header_file);
+
+		fprintf(render_header_file, "// This file was auto-generated by material_compiler.c.\n\n");
+
+		for (s32 i = 0; i < shader_count; i++) {
+			for (s32 j = 0; j < SHADER_STAGE_COUNT; j++) {
+				for (s32 k = 0; k < UNIFORM_SET_COUNT; k++) {
+					if (shader_infos[i].stages[j].ubo_member_counts[k] == 0) {
+						continue;
+					}
+					Type_Nameify_String(Get_Descriptor_Set_Name(shader_names[i], j, k, buffer), buffer);
+					fprintf(render_header_file, "typedef struct %s {\n", buffer);
+					for (s32 l = 0; l < shader_infos[i].stages[j].ubo_member_counts[k]; l++) {
+						fprintf(render_header_file, "	%s %s;\n", Convert_GLSL_Type_To_Engine_Type(shader_infos[i].stages[j].ubo_members[k][l].type), shader_infos[i].stages[j].ubo_members[k][l].name);
+					}
+					fprintf(render_header_file, "} %s;\n\n", buffer);
+				}
+			}
+		}
+
+		fprintf(render_header_file, "typedef union Descriptor_Set_Parameters  {\n");
+		for (s32 i = 0; i < shader_count; i++) {
+			fprintf(render_header_file, "	struct {\n");
+			for (s32 j = 0; j < SHADER_STAGE_COUNT; j++) {
+				for (s32 k = 0; k < UNIFORM_SET_COUNT; k++) {
+					if (shader_infos[i].stages[j].ubo_member_counts[k] > 0) {
+						fprintf(render_header_file, "		%s %s_%s;\n", Type_Nameify_String(Get_Descriptor_Set_Name(shader_names[i], j, k, buffer), buffer), Shader_Stage_To_String(j), Uniform_Set_To_String(k));
+					}
+					for (s32 l = 0; l < shader_infos[i].stages[j].uniform_counts[k]; l++) {
+						fprintf(render_header_file, "		%s %s;\n", Convert_GLSL_Type_To_Engine_Type(shader_infos[i].stages[j].uniforms[k][l].type), shader_infos[i].stages[j].uniforms[k][l].name);
+					}
+				}
+			}
+			fprintf(render_header_file, "	} %s;\n", shader_names[i]);
+		}
+		fprintf(render_header_file, "} Descriptor_Set_Parameters;\n\n");
+
+		fprintf(render_header_file, "typedef struct Descriptor_Set_Data  {\n"
+		                            "	GPU_Descriptor_Set handle;\n"
+		                            "	Descriptor_Set_Parameters parameters;\n"
+		                            "} Descriptor_Set_Data;\n\n");
+	}
+
 	// Render source file.
 	{
 		FILE *render_source_file = fopen("code/render_generated.c", "w");
@@ -1204,9 +1327,6 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 			fprintf(render_source_file, "}\n\n");
 		}
 
-		fprintf(render_source_file, "GPU_Shader_ID Get_Shader_ID_From_Material_ID() {\n");
-		fprintf(render_source_file, "}\n\n");
-
 		fprintf(render_source_file, "void Update_Descriptor_Sets(Render_Context *context, s32 descriptor_set_data_count, Descriptor_Set_Data *descriptor_set_data, Camera *camera) {\n"
 		                            "	for (s32 i = 0; i < descriptor_set_data_count; i++) {\n"
 		                            "	switch (descriptor_set_data[i].shader_id) {\n"
@@ -1216,40 +1336,6 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 
 		fclose(render_source_file);
 	}
-
-	// Render header file.
-	{
-		FILE *render_header_file = fopen("code/render_generated.h", "w");
-		assert(render_header_file);
-
-		fprintf(render_header_file, "// This file was auto-generated by material_compiler.c.\n\n");
-
-		fprintf(render_header_file, "typedef union Descriptor_Set_Parameters  {\n");
-		for (s32 i = 0; i < shader_count; i++) {
-			fprintf(render_header_file, "	struct {\n");
-			for (s32 j = 0; j < block_groups[i].block_count; j++) {
-				for (s32 k = 0; k < SHADER_STAGE_COUNT; k++) {
-					for (s32 l = 0; l < UNIFORM_SET_COUNT; l++) {
-						for (s32 m = 0; m < block_groups[i].blocks[j]->stages[k].uniform_counts[l]; m++) {
-							if (Strings_Equal(block_groups[i].blocks[j]->stages[k].uniforms[l][m].type, "mat4")) {
-								fprintf(render_header_file, "		M4 %s;\n", block_groups[i].blocks[j]->stages[k].uniforms[l][m].name);
-							} else {
-								Abort("unknown uniform type: %s", block_groups[i].blocks[j]->stages[k].uniforms[l][m].type);
-							}
-						}
-					}
-				}
-			}
-			fprintf(render_header_file, "	} %s;\n", shader_names[i]);
-		}
-		fprintf(render_header_file, "} Descriptor_Set_Parameters;\n\n");
-
-		fprintf(render_header_file, "typedef struct Descriptor_Set_Data  {\n"
-		                            "	GPU_Shader_ID shader_id;\n"
-		                            "	s32 count;\n"
-		                            "	Descriptor_Set_Parameters parameters;\n"
-		                            "} Descriptor_Set_Data;\n\n");
-	}
 }
 
 s32 main(s32 argc, char **argv) {
@@ -1257,7 +1343,8 @@ s32 main(s32 argc, char **argv) {
 	s32 material_count = Parse_Materials(materials);
 	static char *shader_names[MAX_SHADERS];
 	static Shader_Block_Group shader_block_groups[MAX_SHADERS];
-	s32 shader_count = Generate_Shader_Code(material_count, materials, shader_names, shader_block_groups);
+	static Shader_Info shader_infos[MAX_SHADERS];
+	s32 shader_count = Generate_Shader_Code(material_count, materials, shader_names, shader_block_groups, shader_infos);
 	Compile_Shader_Code(shader_count, shader_names, shader_block_groups);
-	Generate_Render_Code(shader_count, shader_names, shader_block_groups);
+	Generate_Render_Code(shader_count, shader_names, shader_block_groups, shader_infos);
 }

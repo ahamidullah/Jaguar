@@ -614,8 +614,13 @@ typedef struct Shader_Block_Group {
 	Shader_Block *blocks[MAX_BLOCKS_PER_SHADER];
 } Shader_Block_Group;
 
+#define MAX_DESCRIPTOR_SETS_PER_SHADER 16
+#define MAX_DESCRIPTORS_PER_SET 8
+#define MAX_MEMBERS_PER_SET 32
+
 typedef struct Shader_Info {
 	char *name;
+
 	struct {
 		bool stage_used;
 
@@ -637,6 +642,19 @@ typedef struct Shader_Info {
 		s32 main_length;
 		char main[MAX_MAIN_LENGTH_PER_STAGE];
 	} stages[SHADER_STAGE_COUNT];
+
+	s32 immediate_descriptor_set_count;
+	s32 non_immediate_descriptor_set_count;
+	s32 descriptor_set_count;
+	struct {
+		char set_name[128];
+		Shader_Stage stage;
+		Uniform_Set set;
+		s32 member_count;
+		char *member_names[MAX_MEMBERS_PER_SET];
+		s32 descriptor_count;
+		Descriptor_Type descriptor_types[MAX_DESCRIPTORS_PER_SET];
+	} descriptor_sets[MAX_DESCRIPTOR_SETS_PER_SHADER];
 } Shader_Info;
 
 void Output_Shader(const char *shader_name, Shader_Block_Group *block_group) {
@@ -789,6 +807,52 @@ void Add_Shader_Block_To_Group(Shader_Block *block, Shader_Block_Group *block_gr
 	block_group->block_count++;
 }
 
+char *Get_Descriptor_Set_Name(const char *shader_name, Shader_Stage stage, Uniform_Set set, char *destination) {
+	s32 i = sprintf(destination, "%s_", shader_name);
+	i += sprintf(destination + i, "%s_", Shader_Stage_To_String(stage));
+	i += sprintf(destination + i, "%s", Uniform_Set_To_String(set));
+	return destination;
+}
+
+void Finalize_Shader_Info(Shader_Info *info) {
+	for (s32 i = 0; i < SHADER_STAGE_COUNT; i++) {
+		for (s32 j = 0; j < UNIFORM_SET_COUNT; j++) {
+			if (!info->stages[i].uniform_sets_used[j]) {
+				continue;
+			}
+			s32 set_count = info->descriptor_set_count;
+			Get_Descriptor_Set_Name(info->name, i, j, info->descriptor_sets[set_count].set_name);
+			info->descriptor_sets[info->descriptor_set_count].stage = i;
+			info->descriptor_sets[info->descriptor_set_count].set = j;
+			if (info->stages[i].ubo_member_counts[j] > 0) {
+				info->descriptor_sets[set_count].descriptor_types[info->descriptor_sets[set_count].descriptor_count] = UNIFORM_BUFFER_DESCRIPTOR;
+				info->descriptor_sets[set_count].descriptor_count++;
+			}
+			for (s32 k = 0; k < info->stages[i].ubo_member_counts[j]; k++) {
+				info->descriptor_sets[set_count].member_names[info->descriptor_sets[set_count].member_count] = info->stages[i].ubo_members[j][k].name;
+				info->descriptor_sets[set_count].member_count++;
+			}
+			for (s32 k = 0; k < info->stages[i].uniform_counts[j]; k++) {
+				Descriptor_Type type;
+				if (Strings_Equal(info->stages[i].uniforms[j][k].type, "texture2D")) {
+					type = SAMPLED_IMAGE_DESCRIPTOR;
+				} else {
+					Abort("unknown uniform type: %s", info->stages[i].uniforms[j][k].type);
+				}
+				s32 descriptor_count = info->descriptor_sets[set_count].descriptor_count;
+				info->descriptor_sets[set_count].descriptor_types[descriptor_count] = type;
+				info->descriptor_sets[set_count].descriptor_count++;
+			}
+			info->descriptor_set_count++;
+			if (Get_Uniform_Update_Policy_From_Set(j) == UPDATE_UNIFORM_IMMEDIATE) {
+				info->immediate_descriptor_set_count++;
+			} else {
+				info->non_immediate_descriptor_set_count++;
+			}
+		}
+	}
+}
+
 s32 Generate_Shader_Code(s32 material_count, Material *materials, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS], Shader_Info shader_infos[MAX_SHADERS]) {
 	static Shader_Block shader_blocks[MAX_SHADER_BLOCKS];
 	s32 shader_block_count = Parse_Shader_Blocks(shader_blocks);
@@ -807,6 +871,8 @@ s32 Generate_Shader_Code(s32 material_count, Material *materials, char *shader_n
 		}
 		assert(block_groups[i].block_count < MAX_BLOCKS_PER_SHADER);
 		shader_names[i] = materials[i].name;
+		shader_infos[shader_count].name = materials[i].name; // @TODO: WRONG! Needs a real name.
+		Finalize_Shader_Info(&shader_infos[shader_count]);
 		Output_Shader(shader_names[shader_count], &block_groups[shader_count]);
 		shader_count++;
 	}
@@ -861,13 +927,6 @@ char *Lowercase_String(const char *source, char *destination) {
 	return result;
 }
 
-char *Get_Descriptor_Set_Name(const char *shader_name, Shader_Stage stage, Uniform_Set set, char *destination) {
-	s32 i = sprintf(destination, "%s_", shader_name);
-	i += sprintf(destination + i, "%s_", Shader_Stage_To_String(stage));
-	i += sprintf(destination + i, "%s", Uniform_Set_To_String(set));
-	return destination;
-}
-
 const char *Convert_GLSL_Type_To_Engine_Type(const char *glsl_type) {
 	if (Strings_Equal(glsl_type, "mat4")) {
 		return "M4";
@@ -880,12 +939,12 @@ const char *Convert_GLSL_Type_To_Engine_Type(const char *glsl_type) {
 }
 
 #define MAX_UNIFORMS_PER_SHADER 32
-#define MAX_DESCRIPTORS_PER_SET 16
 #define MAX_DESCRIPTOR_SETS 16
 
 void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Shader_Block_Group block_groups[MAX_SHADERS], Shader_Info *shader_infos) {
 	char buffer[128];
 
+	// @TODO: Get rid of all of this.
 	s32 descriptor_set_layout_count = 0;
 	struct {
 		Uniform_Set uniform_set;
@@ -997,6 +1056,7 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 				fprintf(vulkan_header_file, "	%s_DESCRIPTOR_SET,\n", Uppercase_String(Get_Descriptor_Set_Name(shader_names[i], descriptor_set_layouts[i][j].stage, descriptor_set_layouts[i][j].uniform_set, buffer), buffer));
 			}
 		}
+		fprintf(vulkan_header_file, "GPU_DESCRIPTOR_SET_LAYOUT_COUNT\n\n");
 		fprintf(vulkan_header_file, "} GPU_Descriptor_Set_ID;\n\n");
 
 		for (s32 i = 0; i < shader_count; i++) {
@@ -1004,12 +1064,13 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 		}
 		fprintf(vulkan_header_file, "\n");
 
-		fprintf(vulkan_header_file, "typedef struct Vulkan_Descriptor_Set_Layouts {\n");
-		for (s32 i = 0; i < shader_count; i++) {
-			fprintf(vulkan_header_file, "	VkDescriptorSetLayout %s[%s_DESCRIPTOR_SET_LAYOUT_COUNT];\n", shader_names[i], Uppercase_String(shader_names[i], buffer));
-		}
-		fprintf(vulkan_header_file, "} Vulkan_Descriptor_Set_Layouts;\n\n");
+		//fprintf(vulkan_header_file, "typedef struct Vulkan_Descriptor_Set_Layouts {\n");
+		//for (s32 i = 0; i < shader_count; i++) {
+			//fprintf(vulkan_header_file, "	VkDescriptorSetLayout %s[%s_DESCRIPTOR_SET_LAYOUT_COUNT];\n", shader_names[i], Uppercase_String(shader_names[i], buffer));
+		//}
+		//fprintf(vulkan_header_file, "} Vulkan_Descriptor_Set_Layouts;\n\n");
 
+		/*
 		fprintf(vulkan_header_file, "typedef struct GPU_Descriptor_Sets {\n"
 		                     "	Vulkan_Descriptor_Set_Layouts layouts;\n");
 		for (s32 i = 0; i < shader_count; i++) {
@@ -1023,6 +1084,34 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 			}
 		}
 		fprintf(vulkan_header_file, "} GPU_Descriptor_Sets;\n\n");
+		*/
+
+		fprintf(vulkan_header_file, "typedef struct GPU_Shader_Descriptor_Sets {\n"
+		                            "	GPU_Buffer buffer;\n"
+		                            "	s32 buffer_offset;\n"
+		                            "	s32 set_count;\n"
+		                            "	GPU_Descriptor_Set *sets;\n"
+		                            "} GPU_Shader_Descriptor_Sets;\n\n");
+
+		fprintf(vulkan_header_file, "typedef enum GPU_Descriptor_ID {\n");
+		for (s32 i = 0; i < shader_count; i++) {
+			for (s32 j = 0; j < shader_infos[i].descriptor_set_count; j++) {
+				for (s32 k = 0; k < shader_infos[i].descriptor_sets[j].member_count; k++) {
+					fprintf(vulkan_header_file, "	%s_DESCRIPTOR,\n", Uppercase_String(shader_infos[i].descriptor_sets[j].member_names[k], buffer));
+				}
+			}
+		}
+		fprintf(vulkan_header_file, "} GPU_Descriptor_ID;\n\n");
+
+		fprintf(vulkan_header_file, "typedef union GPU_Descriptor_Data {\n"
+		                            "	f32 v4[4];\n"
+		                            "	f32 m4[4][4];\n"
+									"} GPU_Descriptor_Data;\n\n");
+
+		fprintf(vulkan_header_file, "typedef struct GPU_Descriptor_Update_Info {\n"
+		                            "	GPU_Descriptor_ID id;\n"
+		                            "	GPU_Descriptor_Data data;\n"
+		                            "} GPU_Descriptor_Update_Info;\n\n");
 
 		fprintf(vulkan_header_file, "#define GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT %d\n", non_immediate_set_count);
 		fprintf(vulkan_header_file, "#define GPU_IMMEDIATE_DESCRIPTOR_COUNT %d\n", immediate_set_count);
@@ -1112,8 +1201,7 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 							 "	}\n"
 							 "}\n\n");
 
-		fprintf(vulkan_source_file, "void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, u32 swapchain_image_count, VkDescriptorPool descriptor_pool, GPU_Descriptor_Sets *descriptor_sets) {\n");
-		fprintf(vulkan_source_file, "	// Create the descriptor set layouts.\n");
+		fprintf(vulkan_source_file, "void Vulkan_Create_Descriptor_Set_Layouts(Render_API_Context *context, u32 swapchain_image_count, VkDescriptorSetLayout *layouts) {\n");
 		for (s32 i = 0; i < shader_count; i++) {
 			for (s32 j = 0; j < descriptor_set_layout_count; j++) {
 				char *stage_flags;
@@ -1167,11 +1255,12 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 									 "			.pBindings = bindings,\n"
 									 "			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,\n"
 									 "		};\n");
-				fprintf(vulkan_source_file, "		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &descriptor_sets->layouts.%s[%s_DESCRIPTOR_SET]));\n", shader_names[i], Uppercase_String(Get_Descriptor_Set_Name(shader_names[i], descriptor_set_layouts[i][j].stage, descriptor_set_layouts[i][j].uniform_set, buffer), buffer));
+				fprintf(vulkan_source_file, "		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &layouts[%d]));\n", j);
 				fprintf(vulkan_source_file, "\t}\n");
 			}
 		}
 
+#if 0
 		fprintf(vulkan_source_file, "\n	// Create the descriptor sets.\n");
 		fprintf(vulkan_source_file, "	s32 layout_index = 0;\n");
 		fprintf(vulkan_source_file, "	VkDescriptorSetLayout layouts[context->descriptor_set_count];\n");
@@ -1208,6 +1297,7 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 				}
 			}
 		}
+#endif
 
 		fprintf(vulkan_source_file, "}\n\n");
 
@@ -1267,13 +1357,13 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 
 		fprintf(render_source_file, "// This file was auto-generated by material_compiler.c.\n\n");
 
-		fprintf(render_source_file, "void Create_Material_Pipelines(Render_API_Context *context, GPU_Descriptor_Sets *descriptor_sets, GPU_Shader shaders[GPU_SHADER_COUNT], GPU_Render_Pass scene_render_pass, GPU_Pipeline *pipelines) {\n");
+		fprintf(render_source_file, "void Create_Material_Pipelines(Render_API_Context *context, GPU_Shader shaders[GPU_SHADER_COUNT], GPU_Render_Pass scene_render_pass, GPU_Pipeline *pipelines) {\n");
 		for (s32 i = 0; i < shader_count; i++) {
 			// @TODO: Hardcode less of this stuff.
 			fprintf(render_source_file, "	{\n"
 			                     "		GPU_Pipeline_Description pipeline_description = {\n"
 			                     "			.descriptor_set_layout_count = %s_DESCRIPTOR_SET_LAYOUT_COUNT,\n"
-			                     "			.descriptor_set_layouts = descriptor_sets->layouts.%s,\n"
+			                     "			.descriptor_set_layouts = &context->descriptor_set_layouts[%s_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET],\n"
 			                     "			.push_constant_count = 0,\n"
 			                     "			.push_constant_descriptions = NULL,\n"
 			                     "			.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,\n"
@@ -1323,15 +1413,56 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 			                     "		};\n"
 			                     "		pipelines[%s_SHADER] = Render_API_Create_Pipeline(context, &pipeline_description);\n"
 			                     "	}\n",
-			                     Uppercase_String(shader_names[i], buffer), shader_names[i], buffer, buffer);
+			                     Uppercase_String(shader_names[i], buffer), buffer, buffer, buffer);
 			fprintf(render_source_file, "}\n\n");
 		}
 
-		fprintf(render_source_file, "void Update_Descriptor_Sets(Render_Context *context, s32 descriptor_set_data_count, Descriptor_Set_Data *descriptor_set_data, Camera *camera) {\n"
-		                            "	for (s32 i = 0; i < descriptor_set_data_count; i++) {\n"
-		                            "	switch (descriptor_set_data[i].shader_id) {\n"
-		                            "	}\n"
-		                            "	}\n");
+		//fprintf(render_source_file, "void Update_Descriptor_Sets(Render_Context *context, s32 descriptor_set_data_count, Descriptor_Set_Data *descriptor_set_data, Camera *camera) {\n"
+		                            //"	for (s32 i = 0; i < descriptor_set_data_count; i++) {\n"
+		                            //"	switch (descriptor_set_data[i].shader_id) {\n"
+		                            //"	}\n"
+		                            //"	}\n");
+		//fprintf(render_source_file, "}\n\n");
+
+		fprintf(render_source_file, "GPU_Shader_Descriptor_Sets Create_Descriptor_Sets_For_Shader(Render_Context *context, u32 swapchain_image_count, GPU_Descriptor_Pool descriptor_pool, GPU_Shader_ID shader_id) {\n");
+		fprintf(render_source_file, "	GPU_Shader_Descriptor_Sets sets = {};\n");
+		fprintf(render_source_file, "	switch (shader_id) {\n");
+		for (s32 i = 0; i < shader_count; i++) {
+			fprintf(render_source_file, "	case %s_SHADER: {\n", Uppercase_String(shader_infos[i].name, buffer));
+			fprintf(render_source_file, "		s32 set_count = %d * swapchain_image_count + %d;\n", shader_infos[i].immediate_descriptor_set_count, shader_infos[i].non_immediate_descriptor_set_count);
+			fprintf(render_source_file, "		sets.sets = &context->descriptor_sets[context->descriptor_set_count];\n");
+			fprintf(render_source_file, "		sets.set_count = set_count;\n");
+			fprintf(render_source_file, "		context->descriptor_set_count += set_count;\n");
+			fprintf(render_source_file, "		Render_API_Create_Descriptor_Sets(&context->api_context, descriptor_pool, set_count, shader_id, sets.sets);\n");
+			//fprintf(render_source_file, "		VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {\n");
+			//fprintf(render_source_file, "			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,\n");
+			//fprintf(render_source_file, "			.descriptorPool = descriptor_pool,\n");
+			//fprintf(render_source_file, "			.descriptorSetCount = set_count,\n");
+			//fprintf(render_source_file, "			.pSetLayouts = context->descriptor_set_layouts.%s,\n", shader_infos[i].name);
+			//fprintf(render_source_file, "		};\n");
+			//fprintf(render_source_file, "		VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, sets.sets));\n");
+
+			fprintf(render_source_file, "		sets.buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * swapchain_image_count + 0x100 * swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);\n"); // @TODO
+			fprintf(render_source_file, "	} break;\n"); 
+		}
+		fprintf(render_source_file, "	default: {\n");
+		fprintf(render_source_file, "		Abort(\"invalid shader id\");\n");
+		fprintf(render_source_file, "	} break;\n");
+		fprintf(render_source_file, "	}\n");
+		fprintf(render_source_file, "	return sets;\n");
+		fprintf(render_source_file, "}\n\n");
+
+		fprintf(render_source_file, "void Update_Descriptors(Render_Context *context, GPU_Fence fence, s32 swapchain_image_index, GPU_Shader_Descriptor_Sets *sets, s32 update_count, GPU_Descriptor_Update_Info *update_infos) {\n");
+		// @TODO
+		// @TODO: Shouldn't be generated?
+		fprintf(render_source_file, "	void *staging_memory;\n");
+		fprintf(render_source_file, "	GPU_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, sizeof(M4), &staging_memory);\n");
+		fprintf(render_source_file, "	Copy_Memory(&update_infos[0].data.m4, staging_memory, sizeof(M4));\n");
+		fprintf(render_source_file, "	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);\n");
+		fprintf(render_source_file, "	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, sizeof(M4), staging_buffer, sets->buffer, 0, 0x100 * swapchain_image_index);\n");
+		fprintf(render_source_file, "	Render_API_End_Command_Buffer(&context->api_context, command_buffer);\n");
+		fprintf(render_source_file, "	Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, fence);\n");
+		fprintf(render_source_file, "	Render_API_Update_Descriptor_Sets(&context->api_context, swapchain_image_index, sets->sets[0], sets->buffer);\n");
 		fprintf(render_source_file, "}\n\n");
 
 		fclose(render_source_file);

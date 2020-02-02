@@ -155,7 +155,7 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 
 	Render_API_Load_Shaders(&context->api_context, context->shaders);
 
-	context->descriptor_pool = Render_API_Initialize_Descriptors(&context->api_context, context->swapchain_image_count, &context->descriptor_sets);
+	context->descriptor_pool = Render_API_Initialize_Descriptors(&context->api_context, context->swapchain_image_count);
 
 	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass(&context->api_context);
 
@@ -178,7 +178,7 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 		}
 	}
 
-	Create_Material_Pipelines(&context->api_context, &context->descriptor_sets, context->shaders, context->render_passes.scene, context->pipelines);
+	Create_Material_Pipelines(&context->api_context, context->shaders, context->render_passes.scene, context->pipelines);
 
 	context->aspect_ratio = window_width / (f32)window_height;
 	//context->focal_length = 0.1f;
@@ -189,6 +189,9 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 		random_color_table[i] = random_color();
 	}
 
+	context->rrdescriptor_sets = Create_Descriptor_Sets_For_Shader(context, context->swapchain_image_count, context->descriptor_pool, RUSTED_IRON_SHADER);
+
+	#if 0
 	VkWriteDescriptorSet descriptor_writes[10]; // @TODO
 	s32 write_count = 0;
 	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * context->swapchain_image_count + 0x100 * context->swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
@@ -212,8 +215,11 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 		buffer_info_count++;
 	}
 	vkUpdateDescriptorSets(context->api_context.device, write_count, descriptor_writes, 0, NULL);
+	#endif
 
 	matrix_fence = Render_API_Create_Fence(&context->api_context, false);
+
+	// @TODO
 #if 0
 	Render_Graph_External_Attachment external_attachments[] = {
 		{
@@ -311,23 +317,6 @@ void Finalize_Asset_GPU_Uploads(Game_Assets *assets, Render_API_Context *api_con
 void Render(Render_Context *context, Game_Assets *assets, Camera *camera, s32 mesh_instance_count, Mesh_Instance *mesh_instances) {
 	Finalize_Asset_GPU_Uploads(assets, &context->api_context);
 
-/*
-	Switch_Double_Buffer(&context->gpu_upload_command_buffers);
-	GPU_Fence fence = Render_API_Create_Fence(&context->api_context, false);
-	Render_API_Submit_Command_Buffers(&context->api_context, context->gpu_upload_command_buffers.inactive_buffer_count, context->gpu_upload_command_buffers.inactive_buffer, fence);
-	context->gpu_upload_fences[assets->gpu_upload_fence_count] = fence;
-	context->gpu_upload_fence_count++;
-
-	for (s32 i = 0; i < context->gpu_upload_fence_count; i++) {
-		if (Render_API_Was_Fence_Signalled(&context->api_context, context->gpu_upload_fences[i])) {
-			for (s32 j = 0; j < assets->pending_gpu_upload_status_counts[i]; j++) {
-				*assets->pending_gpu_upload_statuses[i][j] = ASSET_LOADED;
-			}
-		} else {
-			Atomic_Write_To_Ring_Buffer(assets->gpu_upload_fences);
-		}
-	}
-*/
 	Render_API_Wait_For_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
 	Render_API_Reset_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame]);
 	for (s32 i = 0; i < context->render_thread_count; i++) {
@@ -350,15 +339,22 @@ void Render(Render_Context *context, Game_Assets *assets, Camera *camera, s32 me
 		Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
 	}
 	#endif
-
-	Descriptor_Set_Data descriptor_set_data[] = {
-		{
-			RUSTED_IRON_SHADER,
-			1,
-			{.rusted_iron = {m4_identity()}},
-		},
+	M4 m = m4_identity();
+	GPU_Descriptor_Update_Info update_infos[] = {
+		{COLOR_DESCRIPTOR, {.v4 = {1.0f, 0.0f, 0.0f, 1.0f}}},
+		{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 	};
-	Update_Descriptor_Sets(context, Array_Count(descriptor_set_data), descriptor_set_data, camera);
+	Update_Descriptors(context, matrix_fence, swapchain_image_index, &context->rrdescriptor_sets, Array_Count(update_infos), update_infos);
+
+	//M4 scene_projection_view_matrix = multiply_m4(camera->projection_matrix, camera->view_matrix);
+	//Descriptor_Set_Data descriptor_set_data[] = {
+		//{
+			//RUSTED_IRON_SHADER,
+			//1,
+			//{.rusted_iron = {m4_identity()}},
+		//},
+	//};
+	//Update_Descriptor_Sets(context, Array_Count(descriptor_set_data), descriptor_set_data, camera);
 
 	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
 	Render_API_Record_Begin_Render_Pass_Command(&context->api_context, command_buffer, context->render_passes.scene, context->framebuffers[swapchain_image_index]);

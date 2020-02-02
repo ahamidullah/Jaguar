@@ -136,7 +136,6 @@ const char *Vk_Result_To_String(VkResult result) {
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-//#include "_vulkan_generated.h" // @TODO @DELTEME
 #include "vulkan_generated.c"
 
 #define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
@@ -1273,29 +1272,82 @@ GPU_Render_Graph GPU_Compile_Render_Pass(GPU_Context *context, xRender_Pass *ren
 	//}
 
 
-VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, u32 swapchain_image_count, GPU_Descriptor_Sets *descriptor_sets) {
-	context->descriptor_set_count = GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT + (GPU_IMMEDIATE_DESCRIPTOR_COUNT * swapchain_image_count);
+VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, u32 swapchain_image_count) {
+	//context->descriptor_set_count = GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT + (GPU_IMMEDIATE_DESCRIPTOR_COUNT * swapchain_image_count);
 
 	VkDescriptorPoolSize descriptor_pool_sizes[Array_Count(vulkan_descriptor_pool_size_infos)];
 	for (s32 i = 0; i < Array_Count(vulkan_descriptor_pool_size_infos); i++) {
 		descriptor_pool_sizes[i].type = vulkan_descriptor_pool_size_infos[i].type;
-		descriptor_pool_sizes[i].descriptorCount = vulkan_descriptor_pool_size_infos[i].non_immediate_descriptor_count + (vulkan_descriptor_pool_size_infos[i].immediate_descriptor_count * swapchain_image_count);
+		descriptor_pool_sizes[i].descriptorCount = vulkan_descriptor_pool_size_infos[i].non_immediate_descriptor_count + (vulkan_descriptor_pool_size_infos[i].immediate_descriptor_count * swapchain_image_count) + 100; // @TODO
 	}
 	VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 		.poolSizeCount = Array_Count(descriptor_pool_sizes),
 		.pPoolSizes = descriptor_pool_sizes,
-		.maxSets = context->descriptor_set_count,
+		.maxSets = GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT + (GPU_IMMEDIATE_DESCRIPTOR_COUNT * swapchain_image_count),
 		.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
 	};
 	VkDescriptorPool descriptor_pool;
 	VK_CHECK(vkCreateDescriptorPool(context->device, &descriptor_pool_create_info, NULL, &descriptor_pool));
-	Vulkan_Create_Descriptor_Sets(context, swapchain_image_count, descriptor_pool, descriptor_sets);
+	Vulkan_Create_Descriptor_Set_Layouts(context, swapchain_image_count, context->descriptor_set_layouts);
 	return descriptor_pool;
 }
 
-GPU_Descriptor_Set Render_API_Create_Descriptor_Set(Render_API_Context *context, GPU_Shader_ID shader_id) {
+void Render_API_Create_Descriptor_Sets(Render_API_Context *context, GPU_Descriptor_Pool pool, GPU_Descriptor_Set_ID id, s32 set_count, GPU_Descriptor_Set *sets) {
+	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = pool,
+		.descriptorSetCount = set_count,
+		.pSetLayouts = &context->descriptor_set_layouts[id],
+	};
+	VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, sets));
 }
+
+void Render_API_Update_Descriptor_Sets(Render_API_Context *context, s32 swapchain_image_index, GPU_Descriptor_Set set, GPU_Buffer buffer) {
+	VkDescriptorBufferInfo buffer_info = {
+		.buffer = buffer,
+		.offset = swapchain_image_index * 0x100,
+		.range  = sizeof(M4),
+	};
+	VkWriteDescriptorSet descriptor_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = set,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.pBufferInfo = &buffer_info,
+	};
+	vkUpdateDescriptorSets(context->device, 1, &descriptor_write, 0, NULL);
+}
+
+#if 0
+GPU_Descriptor_Set Render_API_Create_Shader_Descriptor_Sets(Render_API_Context *context, GPU_Shader_ID shader_id) {
+	VkWriteDescriptorSet descriptor_writes[10]; // @TODO
+	s32 write_count = 0;
+	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * context->swapchain_image_count + 0x100 * context->swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	VkDescriptorBufferInfo buffer_infos[context->swapchain_image_count];
+	s32 buffer_info_count = 0;
+	for (s32 i = 0; i < context->swapchain_image_count; i++) {
+		buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
+			.buffer = uniform_buffer,
+			.offset = i * 0x100,
+			.range  = sizeof(M4),
+		};
+		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
+			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet          = context->descriptor_sets.rusted_iron_vertex_bind_per_object_update_immediate[i],
+			.dstBinding      = 0,
+			.dstArrayElement = 0,
+			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo     = &buffer_infos[buffer_info_count],
+		};
+		buffer_info_count++;
+	}
+	vkUpdateDescriptorSets(context->api_context.device, write_count, descriptor_writes, 0, NULL);
+}
+#endif
 
 typedef struct GPU_Image_Descriptor_Write {
 	GPU_Image_Layout layout;
@@ -1322,6 +1374,17 @@ typedef struct GPU_Descriptor_Description {
 	GPU_Descriptor_Write write; 
 	u32 flags;
 } GPU_Descriptor_Description;
+
+#if 0
+void GPU_Create_Descriptor_Sets(Render_API_Context *context, s32 count, GPU_Descriptor_Pool descriptor_pool, GPU_Descriptor_Set *sets) {
+	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = descriptor_pool,
+		.descriptorSetCount = count,
+		.pSetLayouts = &descriptor_set.layout,
+	};
+	VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, &descriptor_set.descriptor_set));
+}
 
 GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
 	GPU_Descriptor_Set descriptor_set;
@@ -1382,6 +1445,7 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 de
 	vkUpdateDescriptorSets(context->device, descriptor_count, descriptor_writes, 0, NULL); // No return.
 	return descriptor_set;
 }
+#endif
 
 typedef struct Push_Constant_Description {
 	u32 offset;

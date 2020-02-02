@@ -8,12 +8,12 @@
 #define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 #define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *context, Game_Assets *assets, u32 vertices_size, u32 indices_size, GPU_Staging_Buffer staging_buffer, Asset_GPU_Upload_Counter *asset_gpu_upload_counter) {
+GPU_Indexed_Geometry Queue_Indexed_Geometry_Upload_To_GPU(Render_Context *context, Game_Assets *assets, u32 vertices_size, u32 indices_size, GPU_Buffer staging_buffer, Asset_GPU_Upload_Counter *asset_gpu_upload_counter) {
 	GPU_Buffer vertex_buffer = Create_GPU_Device_Buffer(context, vertices_size, GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
 	GPU_Buffer index_buffer = Create_GPU_Device_Buffer(context, indices_size, GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
 	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
-	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, vertices_size, staging_buffer.buffer, vertex_buffer, staging_buffer.offset, 0);
-	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, indices_size, staging_buffer.buffer, index_buffer, staging_buffer.offset + vertices_size, 0);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, vertices_size, staging_buffer, vertex_buffer, 0, 0);
+	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, indices_size, staging_buffer, index_buffer, vertices_size, 0);
 	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
 	Atomic_Write_To_Double_Buffer(assets->gpu_upload_command_buffers, command_buffer, asset_gpu_upload_counter);
 	return (GPU_Indexed_Geometry){
@@ -26,12 +26,12 @@ GPU_Texture_ID Queue_Texture_Upload_To_GPU(Render_Context *context, Game_Assets 
 	// @TODO: Load texture directly into staging memory.
 	void *staging_memory;
 	u32 texture_byte_size = sizeof(u32) * texture_width * texture_height;
-	GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, texture_byte_size, &staging_memory);
+	GPU_Buffer staging_buffer = Create_GPU_Staging_Buffer(context, texture_byte_size, &staging_memory);
 	Copy_Memory(pixels, staging_memory, texture_byte_size);
 	GPU_Image image = Create_GPU_Device_Image(context, texture_width, texture_height, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED, GPU_SAMPLE_COUNT_1);
 	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
 	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	Render_API_Record_Copy_Buffer_To_Image_Command(&context->api_context, command_buffer, staging_buffer.buffer, image, texture_width, texture_height);
+	Render_API_Record_Copy_Buffer_To_Image_Command(&context->api_context, command_buffer, staging_buffer, image, texture_width, texture_height);
 	Render_API_Transition_Image_Layout(&context->api_context, command_buffer, image, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
 	Atomic_Write_To_Double_Buffer(assets->gpu_upload_command_buffers, command_buffer, asset_gpu_upload_counter);
@@ -278,7 +278,7 @@ void Load_Model(void *job_parameter_pointer) {
 		mesh_index_offset += mesh->submesh_index_counts[i];
 
 		void *staging_memory;
-		GPU_Staging_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
+		GPU_Buffer staging_buffer = Create_GPU_Staging_Buffer(job_parameter->render_context, vertices_size + indices_size, &staging_memory);
 		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
 		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
 		mesh->gpu_mesh = Queue_Indexed_Geometry_Upload_To_GPU(job_parameter->render_context, job_parameter->assets, vertices_size, indices_size, staging_buffer, asset_gpu_upload_counter);

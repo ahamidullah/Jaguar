@@ -37,8 +37,7 @@ void Render_API_Load_Shaders(Render_API_Context *context, GPU_Shader shaders[GPU
 	}
 }
 
-void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, u32 swapchain_image_count, VkDescriptorPool descriptor_pool, GPU_Descriptor_Sets *descriptor_sets) {
-	// Create the descriptor set layouts.
+void Vulkan_Create_Descriptor_Set_Layouts(Render_API_Context *context, u32 swapchain_image_count, VkDescriptorSetLayout *layouts) {
 	{
 		VkDescriptorSetLayoutBinding bindings[] = {
 			{
@@ -55,7 +54,7 @@ void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, u32 swapchain_im
 			.pBindings = bindings,
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 		};
-		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET]));
+		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &layouts[0]));
 	}
 	{
 		VkDescriptorSetLayoutBinding bindings[] = {
@@ -73,29 +72,7 @@ void Vulkan_Create_Descriptor_Sets(Render_API_Context *context, u32 swapchain_im
 			.pBindings = bindings,
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 		};
-		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET]));
-	}
-
-	// Create the descriptor sets.
-	s32 layout_index = 0;
-	VkDescriptorSetLayout layouts[context->descriptor_set_count];
-	layouts[layout_index++] = descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET];
-	for (s32 i = 0; i != swapchain_image_count; i++) {
-		layouts[layout_index++] = descriptor_sets->layouts.rusted_iron[RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET];
-	}
-	VkDescriptorSet results[context->descriptor_set_count];
-	VkDescriptorSetAllocateInfo allocate_info = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = descriptor_pool,
-		.descriptorSetCount = context->descriptor_set_count,
-		.pSetLayouts = layouts,
-	};
-	VK_CHECK(vkAllocateDescriptorSets(context->device, &allocate_info, results));
-	s32 result_index = 0;
-	descriptor_sets->rusted_iron_vertex_bind_per_material_update_delayed = results[result_index++];
-	descriptor_sets->rusted_iron_vertex_bind_per_object_update_immediate = malloc(swapchain_image_count * sizeof(VkDescriptorSet)); // @TODO
-	for (s32 i = 0; i < swapchain_image_count; i++) {
-		descriptor_sets->rusted_iron_vertex_bind_per_object_update_immediate[i] = results[result_index++];
+		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &layouts[1]));
 	}
 }
 

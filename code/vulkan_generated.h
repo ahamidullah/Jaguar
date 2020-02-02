@@ -22,19 +22,33 @@ typedef struct GPU_Shader {
 typedef enum GPU_Descriptor_Set_ID {
 	RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET,
 	RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET,
+GPU_DESCRIPTOR_SET_LAYOUT_COUNT
+
 } GPU_Descriptor_Set_ID;
 
 #define RUSTED_IRON_DESCRIPTOR_SET_LAYOUT_COUNT 2
 
-typedef struct Vulkan_Descriptor_Set_Layouts {
-	VkDescriptorSetLayout rusted_iron[RUSTED_IRON_DESCRIPTOR_SET_LAYOUT_COUNT];
-} Vulkan_Descriptor_Set_Layouts;
+typedef struct GPU_Shader_Descriptor_Sets {
+	GPU_Buffer buffer;
+	s32 buffer_offset;
+	s32 set_count;
+	GPU_Descriptor_Set *sets;
+} GPU_Shader_Descriptor_Sets;
 
-typedef struct GPU_Descriptor_Sets {
-	Vulkan_Descriptor_Set_Layouts layouts;
-	VkDescriptorSet rusted_iron_vertex_bind_per_material_update_delayed;
-	VkDescriptorSet *rusted_iron_vertex_bind_per_object_update_immediate;
-} GPU_Descriptor_Sets;
+typedef enum GPU_Descriptor_ID {
+	COLOR_DESCRIPTOR,
+	MODEL_TO_WORLD_SPACE_DESCRIPTOR,
+} GPU_Descriptor_ID;
+
+typedef union GPU_Descriptor_Data {
+	f32 v4[4];
+	f32 m4[4][4];
+} GPU_Descriptor_Data;
+
+typedef struct GPU_Descriptor_Update_Info {
+	GPU_Descriptor_ID id;
+	GPU_Descriptor_Data data;
+} GPU_Descriptor_Update_Info;
 
 #define GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT 1
 #define GPU_IMMEDIATE_DESCRIPTOR_COUNT 1

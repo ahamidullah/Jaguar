@@ -6,6 +6,21 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h> 
 
+typedef VkBuffer GPU_Buffer;
+typedef VkDescriptorSet GPU_Descriptor_Set;
+
+typedef enum GPU_Buffer_Usage_Flags {
+	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+	GPU_TRANSFER_SOURCE_BUFFER = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	GPU_VERTEX_BUFFER = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+	GPU_INDEX_BUFFER = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+	GPU_UNIFORM_BUFFER = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+} GPU_Buffer_Usage_Flags;
+
+typedef struct Render_Context Render_Context;
+
+GPU_Buffer Create_GPU_Device_Buffer(Render_Context *context, u32 size, GPU_Buffer_Usage_Flags usage_flags);
+
 #include "vulkan_generated.h"
 
 typedef enum GPU_Filter {
@@ -149,14 +164,6 @@ typedef enum GPU_Border_Color {
 	GPU_BORDER_COLOR_INT_OPAQUE_WHITE = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
 } GPU_Border_Color;
 
-typedef enum GPU_Buffer_Usage_Flags {
-	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-	GPU_TRANSFER_SOURCE_BUFFER = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-	GPU_VERTEX_BUFFER = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-	GPU_INDEX_BUFFER = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-	GPU_UNIFORM_BUFFER = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-} GPU_Buffer_Usage_Flags;
-
 typedef enum GPU_Command_Queue_Type {
 	GPU_GRAPHICS_COMMAND_QUEUE,
 	GPU_COMPUTE_COMMAND_QUEUE,
@@ -197,7 +204,6 @@ typedef VkFence GPU_Fence;
 typedef VkCommandBuffer GPU_Command_Buffer;
 typedef VkCommandPool GPU_Command_Pool;
 typedef VkDeviceMemory GPU_Memory;
-typedef VkBuffer GPU_Buffer;
 typedef VkSampler GPU_Sampler;
 typedef VkShaderModule GPU_Shader_Module;
 typedef VkRenderPass GPU_Render_Pass;
@@ -209,7 +215,6 @@ typedef VkImage GPU_Image;
 typedef VkImageView GPU_Image_View;
 typedef VkDynamicState GPU_Dynamic_Pipeline_State;
 typedef Vulkan_Sampler_Filter GPU_Sampler_Filter;
-typedef Vulkan_Descriptor_Set GPU_Descriptor_Set;
 typedef VkDescriptorSetLayout GPU_Descriptor_Set_Layout;
 typedef Vulkan_Pipeline GPU_Pipeline;
 
@@ -295,10 +300,13 @@ typedef struct Render_API_Context {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 	VkPresentModeKHR present_mode;
-	u32 descriptor_set_count;
+	VkDescriptorSetLayout descriptor_set_layouts[GPU_DESCRIPTOR_SET_LAYOUT_COUNT];
+
+	//u32 descriptor_set_count;
 	//Vulkan_Descriptor_Set_Layouts descriptor_set_layouts;
 	//Vulkan_Descriptor_Sets descriptor_sets;
 	//VkSwapchainKHR swapchain;
+
 	VkDeviceSize minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize maximum_uniform_buffer_size; // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
 	VkSemaphore image_available_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];

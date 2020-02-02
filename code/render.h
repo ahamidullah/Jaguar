@@ -96,9 +96,11 @@ typedef struct Render_Context {
 	GPU_Framebuffer *framebuffers;
 	GPU_Shader shaders[GPU_SHADER_COUNT];
 	GPU_Descriptor_Pool descriptor_pool;
-	GPU_Descriptor_Sets descriptor_sets;
 	GPU_Pipeline pipelines[GPU_SHADER_COUNT];
 	GPU_Command_Pool asset_upload_command_pool;
+	GPU_Shader_Descriptor_Sets rrdescriptor_sets;
+	u32 descriptor_set_count;
+	VkDescriptorSet descriptor_sets[100]; // @TODO
 	struct {
 		GPU_Render_Pass scene;
 	} render_passes;

@@ -16,8 +16,7 @@ typedef union Descriptor_Set_Parameters  {
 } Descriptor_Set_Parameters;
 
 typedef struct Descriptor_Set_Data  {
-	GPU_Shader_ID shader_id;
-	s32 count;
+	GPU_Descriptor_Set handle;
 	Descriptor_Set_Parameters parameters;
 } Descriptor_Set_Data;
 

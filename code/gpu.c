@@ -102,7 +102,7 @@ typedef struct GPU_Staging_Buffer {
 	u32 offset;
 } GPU_Staging_Buffer;
 
-GPU_Staging_Buffer Create_GPU_Staging_Buffer(Render_Context *context, u32 size, void **mapped_pointer) {
+GPU_Buffer Create_GPU_Staging_Buffer(Render_Context *context, u32 size, void **mapped_pointer) {
 	// @TODO: Use a staging ring buffer and block-bound buffers as a fallback for overflow.
 	GPU_Buffer buffer = Render_API_Create_Buffer(&context->api_context, size, GPU_TRANSFER_SOURCE_BUFFER);
 	GPU_Resource_Allocation_Requirements allocation_requirements = Render_API_Get_Buffer_Allocation_Requirements(&context->api_context, buffer);
@@ -110,10 +110,7 @@ GPU_Staging_Buffer Create_GPU_Staging_Buffer(Render_Context *context, u32 size, 
 	Assert(allocation);
 	Render_API_Bind_Buffer_Memory(&context->api_context, buffer, allocation->memory, allocation->offset);
 	*mapped_pointer = allocation->mapped_pointer;
-	return (GPU_Staging_Buffer){
-		.buffer = buffer,
-		.offset = 0,
-	};
+	return buffer;
 }
 
 typedef u32 GPU_Texture_ID;

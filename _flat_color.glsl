@@ -1,10 +1,14 @@
 @VERTEX
+UNIFORMS: {
+	vec4 color; @BIND_PER_MATERIAL @UPDATE_DELAYABLE
+}
+
 OUTPUT: {
 	vec4 fragment_color;
 }
 
 MAIN: {
-	fragment_color = vec4(1.0, 0.0, 0.0, 1.0);
+	fragment_color = color;
 }
 
 

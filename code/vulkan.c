@@ -1294,11 +1294,17 @@ VkDescriptorPool Render_API_Initialize_Descriptors(Render_API_Context *context, 
 }
 
 void Render_API_Create_Descriptor_Sets(Render_API_Context *context, GPU_Descriptor_Pool pool, GPU_Descriptor_Set_ID id, s32 set_count, GPU_Descriptor_Set *sets) {
+	VkDescriptorSetLayout layouts[] = {
+		context->descriptor_set_layouts[id],
+		context->descriptor_set_layouts[id],
+		context->descriptor_set_layouts[id],
+	};
+	Assert(Array_Count(layouts) == set_count);
 	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = pool,
 		.descriptorSetCount = set_count,
-		.pSetLayouts = &context->descriptor_set_layouts[id],
+		.pSetLayouts = layouts,
 	};
 	VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, sets));
 }
@@ -1307,7 +1313,7 @@ void Render_API_Update_Descriptor_Sets(Render_API_Context *context, s32 swapchai
 	VkDescriptorBufferInfo buffer_info = {
 		.buffer = buffer,
 		.offset = swapchain_image_index * 0x100,
-		.range  = sizeof(M4),
+		.range = sizeof(M4),
 	};
 	VkWriteDescriptorSet descriptor_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,

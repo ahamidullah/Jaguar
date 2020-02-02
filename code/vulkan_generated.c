@@ -12,7 +12,7 @@ struct {
 } vulkan_descriptor_pool_size_infos[] = {
 	{
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.immediate_descriptor_count = 1,
+		.immediate_descriptor_count = 0,
 		.non_immediate_descriptor_count = 1,
 	},
 };
@@ -55,24 +55,6 @@ void Vulkan_Create_Descriptor_Set_Layouts(Render_API_Context *context, u32 swapc
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 		};
 		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &layouts[0]));
-	}
-	{
-		VkDescriptorSetLayoutBinding bindings[] = {
-			{
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-				.pImmutableSamplers = NULL,
-			},
-		};
-		VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = Array_Count(bindings),
-			.pBindings = bindings,
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-		};
-		VK_CHECK(vkCreateDescriptorSetLayout(context->device, &descriptor_set_layout_create_info, NULL, &layouts[1]));
 	}
 }
 

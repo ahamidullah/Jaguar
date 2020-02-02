@@ -4,7 +4,7 @@ void Create_Material_Pipelines(Render_API_Context *context, GPU_Shader shaders[G
 	{
 		GPU_Pipeline_Description pipeline_description = {
 			.descriptor_set_layout_count = RUSTED_IRON_DESCRIPTOR_SET_LAYOUT_COUNT,
-			.descriptor_set_layouts = &context->descriptor_set_layouts[RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET],
+			.descriptor_set_layouts = &context->descriptor_set_layouts[RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET],
 			.push_constant_count = 0,
 			.push_constant_descriptions = NULL,
 			.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -60,11 +60,11 @@ GPU_Shader_Descriptor_Sets Create_Descriptor_Sets_For_Shader(Render_Context *con
 	GPU_Shader_Descriptor_Sets sets = {};
 	switch (shader_id) {
 	case RUSTED_IRON_SHADER: {
-		s32 set_count = 1 * swapchain_image_count + 1;
+		s32 set_count = 1 * swapchain_image_count + 0;
 		sets.sets = &context->descriptor_sets[context->descriptor_set_count];
 		sets.set_count = set_count;
 		context->descriptor_set_count += set_count;
-		Render_API_Create_Descriptor_Sets(&context->api_context, descriptor_pool, set_count, shader_id, sets.sets);
+		Render_API_Create_Descriptor_Sets(&context->api_context, descriptor_pool, 0, set_count, sets.sets);
 		sets.buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * swapchain_image_count + 0x100 * swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
 	} break;
 	default: {
@@ -82,6 +82,6 @@ void Update_Descriptors(Render_Context *context, GPU_Fence fence, s32 swapchain_
 	Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, sizeof(M4), staging_buffer, sets->buffer, 0, 0x100 * swapchain_image_index);
 	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
 	Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, fence);
-	Render_API_Update_Descriptor_Sets(&context->api_context, swapchain_image_index, sets->sets[0], sets->buffer);
+	Render_API_Update_Descriptor_Sets(&context->api_context, swapchain_image_index, sets->sets[swapchain_image_index], sets->buffer);
 }
 

@@ -12,18 +12,14 @@ layout (location = 0) in vec3 vertex_position; // world_space
 
 layout (location = 0) out vec4 fragment_color; // flat_color
 
-layout (set = 0, binding = 0) uniform Bind_Per_Material_Update_Delayed_UBO {
-	vec4 color; // flat_color
-};
-
-layout (set = 1, binding = 0) uniform Bind_Per_Object_Update_Immediate_UBO {
+layout (set = 0, binding = 0) uniform Bind_Per_Object_Update_Immediate_UBO {
 	layout(row_major) mat4 model_to_world_space; // world_space
 };
 
 void main() {
 	// flat_color
 	{
-		fragment_color = color;
+		fragment_color = vec4(1.0, 0.0, 0.0, 1.0);
 	}
 
 	// world_space

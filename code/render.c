@@ -219,6 +219,16 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 
 	matrix_fence = Render_API_Create_Fence(&context->api_context, false);
 
+	for (s32 i = 0; i < context->swapchain_image_count; i++) {
+		M4 m = m4_identity();
+		GPU_Descriptor_Update_Info update_infos[] = {
+			{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
+		};
+		Update_Descriptors(context, matrix_fence, i, &context->rrdescriptor_sets, Array_Count(update_infos), update_infos);
+		Render_API_Wait_For_Fences(&context->api_context, 1, &matrix_fence, true, U32_MAX);
+		Render_API_Reset_Fences(&context->api_context, 1, &matrix_fence);
+	}
+
 	// @TODO
 #if 0
 	Render_Graph_External_Attachment external_attachments[] = {
@@ -339,11 +349,11 @@ void Render(Render_Context *context, Game_Assets *assets, Camera *camera, s32 me
 		Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
 	}
 	#endif
-	M4 m = m4_identity();
+	M4 m = multiply_m4(camera->projection_matrix, camera->view_matrix);
 	GPU_Descriptor_Update_Info update_infos[] = {
-		{COLOR_DESCRIPTOR, {.v4 = {1.0f, 0.0f, 0.0f, 1.0f}}},
 		{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 	};
+	Copy_Memory(m.m, update_infos[0].data.m4, sizeof(m.m));
 	Update_Descriptors(context, matrix_fence, swapchain_image_index, &context->rrdescriptor_sets, Array_Count(update_infos), update_infos);
 
 	//M4 scene_projection_view_matrix = multiply_m4(camera->projection_matrix, camera->view_matrix);
@@ -368,7 +378,7 @@ void Render(Render_Context *context, Game_Assets *assets, Camera *camera, s32 me
 		}
 		//Render_API_Set_Per_Object_Shader_Parameters(&context->api_context);
 		//Bind_Shader_Per_Object_Descriptor_Sets(context, RUSTED_IRON_SHADER);
-		//vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelines[RUSTED_IRON_SHADER].layout, 1, 1, &context->descriptor_sets.rusted_iron_vertex_bind_per_object_update_immediate[swapchain_image_index], 0, NULL);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelines[RUSTED_IRON_SHADER].layout, 0, 1, &context->rrdescriptor_sets.sets[swapchain_image_index], 0, NULL);
 		Render_API_Record_Bind_Vertex_Buffer_Command(&context->api_context, command_buffer, mesh_instances[i].asset->gpu_mesh.vertex_buffer);
 		Render_API_Record_Bind_Index_Buffer_Command(&context->api_context, command_buffer, mesh_instances[i].asset->gpu_mesh.index_buffer);
 		u32 total_mesh_index_count = 0;

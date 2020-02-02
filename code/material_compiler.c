@@ -902,6 +902,7 @@ void Compile_Shader_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Shad
 			} break;
 			}
 			sprintf(command, "$VULKAN_SDK_PATH/bin/glslangValidator -V %s/%s.glsl -D%s -S %s -o %s/%s_%s.spirv", SHADER_CODE_DIRECTORY, shader_names[i], stage_define, stage, SHADER_BINARY_DIRECTORY, shader_names[i], stage);
+			printf("%s\n", command);
 			if (system(command) != 0) {
 				Abort("Shader compilation command failed: %s", command);
 			}
@@ -1363,7 +1364,7 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 			fprintf(render_source_file, "	{\n"
 			                     "		GPU_Pipeline_Description pipeline_description = {\n"
 			                     "			.descriptor_set_layout_count = %s_DESCRIPTOR_SET_LAYOUT_COUNT,\n"
-			                     "			.descriptor_set_layouts = &context->descriptor_set_layouts[%s_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET],\n"
+			                     "			.descriptor_set_layouts = &context->descriptor_set_layouts[%s_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET],\n"
 			                     "			.push_constant_count = 0,\n"
 			                     "			.push_constant_descriptions = NULL,\n"
 			                     "			.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,\n"
@@ -1433,7 +1434,7 @@ void Generate_Render_Code(s32 shader_count, char *shader_names[MAX_SHADERS], Sha
 			fprintf(render_source_file, "		sets.sets = &context->descriptor_sets[context->descriptor_set_count];\n");
 			fprintf(render_source_file, "		sets.set_count = set_count;\n");
 			fprintf(render_source_file, "		context->descriptor_set_count += set_count;\n");
-			fprintf(render_source_file, "		Render_API_Create_Descriptor_Sets(&context->api_context, descriptor_pool, set_count, shader_id, sets.sets);\n");
+			fprintf(render_source_file, "		Render_API_Create_Descriptor_Sets(&context->api_context, descriptor_pool, 0, set_count, sets.sets);\n");
 			//fprintf(render_source_file, "		VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {\n");
 			//fprintf(render_source_file, "			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,\n");
 			//fprintf(render_source_file, "			.descriptorPool = descriptor_pool,\n");

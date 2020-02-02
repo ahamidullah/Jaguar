@@ -20,13 +20,12 @@ typedef struct GPU_Shader {
 } GPU_Shader;
 
 typedef enum GPU_Descriptor_Set_ID {
-	RUSTED_IRON_VERTEX_BIND_PER_MATERIAL_UPDATE_DELAYED_DESCRIPTOR_SET,
 	RUSTED_IRON_VERTEX_BIND_PER_OBJECT_UPDATE_IMMEDIATE_DESCRIPTOR_SET,
 GPU_DESCRIPTOR_SET_LAYOUT_COUNT
 
 } GPU_Descriptor_Set_ID;
 
-#define RUSTED_IRON_DESCRIPTOR_SET_LAYOUT_COUNT 2
+#define RUSTED_IRON_DESCRIPTOR_SET_LAYOUT_COUNT 1
 
 typedef struct GPU_Shader_Descriptor_Sets {
 	GPU_Buffer buffer;
@@ -36,7 +35,6 @@ typedef struct GPU_Shader_Descriptor_Sets {
 } GPU_Shader_Descriptor_Sets;
 
 typedef enum GPU_Descriptor_ID {
-	COLOR_DESCRIPTOR,
 	MODEL_TO_WORLD_SPACE_DESCRIPTOR,
 } GPU_Descriptor_ID;
 
@@ -50,5 +48,5 @@ typedef struct GPU_Descriptor_Update_Info {
 	GPU_Descriptor_Data data;
 } GPU_Descriptor_Update_Info;
 
-#define GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT 1
+#define GPU_NON_IMMEDIATE_DESCRIPTOR_COUNT 0
 #define GPU_IMMEDIATE_DESCRIPTOR_COUNT 1

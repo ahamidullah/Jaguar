@@ -105,7 +105,7 @@ Jobs_Context jobs_context;
 		void *current_head; \
 		do { \
 			current_head = head; \
-			new_head->next = current_head; \
+			new_head->next = (decltype(new_head->next))current_head; \
 		} while (Platform_Compare_And_Swap_Pointers((void *volatile *)&head, current_head, new_head) != current_head); \
 	} while (0)
 
@@ -116,7 +116,7 @@ Jobs_Context jobs_context;
 			current_head = head; \
 			Assert(current_head); \
 		} while (Platform_Compare_And_Swap_Pointers((void *volatile *)&head, current_head, head->next) != current_head); \
-		result = current_head; \
+		result = (decltype(result))current_head; \
 	} while (0)
 
 #define Atomic_Write_To_Ring_Buffer(container, new_element) \
@@ -219,7 +219,7 @@ void *Worker_Thread_Procedure(void *parameter) {
 					continue;
 				}
 				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waiting_job_fiber will be NULL.
-				Job_Fiber *waiting_job_fiber = Platform_Fetch_And_Set_Pointer((void *volatile *)&scheduled_job->counter->waiting_job_fiber, JOB_FIBER_POINTER_SENTINEL);
+				Job_Fiber *waiting_job_fiber = (Job_Fiber *)Platform_Fetch_And_Set_Pointer((void *volatile *)&scheduled_job->counter->waiting_job_fiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waiting_job_fiber) {
 					continue;
 				}
@@ -263,9 +263,9 @@ void Run_Jobs(u32 count, Job_Declaration *job_declarations, Job_Priority priorit
 		Job new_job = {
 			.procedure = job_declarations[i].procedure,
 			.parameter = job_declarations[i].parameter,
-			.finished = 0,
 			.priority = priority,
 			.counter = counter,
+			.finished = 0,
 		};
 		Atomic_Write_To_Ring_Buffer(jobs_context.job_queues[priority], new_job);
 		Platform_Post_Semaphore(&jobs_context.jobs_available_semaphore);
@@ -301,7 +301,7 @@ void Initialize_Jobs(Game_State *game_state, Job_Procedure initial_job_procedure
 			.thread_index = i,
 		};
 	}
-	jobs_context.worker_threads = allocate_array(&game_state->permanent_arena, Platform_Thread_Handle, game_state->jobs_context.worker_thread_count);
+	jobs_context.worker_threads = allocate_array(&game_state->permanent_arena, Worker_Thread, game_state->jobs_context.worker_thread_count);
 	for (u32 i = 0; i < game_state->jobs_context.worker_thread_count - 1; i++) {
 		jobs_context.worker_threads[i].platform_thread = Platform_Create_Thread(Worker_Thread_Procedure, &jobs_context.worker_threads[i].parameter);
 	}

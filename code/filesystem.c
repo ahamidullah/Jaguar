@@ -4,12 +4,12 @@ Read_File_Result Read_Entire_File(const char *path) {
 		return (Read_File_Result){};
 	}
 	Platform_File_Offset file_length = Platform_Get_File_Length(file);
-	char *string_buffer = malloc(file_length + 1); // @TODO
+	char *string_buffer = (char *)malloc(file_length + 1); // @TODO
 	u8 read_result = Platform_Read_From_File(file, file_length, string_buffer);
 	if (!read_result) {
 		return (Read_File_Result){};
 	}
-	return (Read_File_Result){string_buffer, file_length};
+	return (Read_File_Result){string_buffer, (s32)file_length};
 }
 
 // Returns all but the last component of the path.
@@ -61,6 +61,6 @@ String_View Get_File_Extension(String filepath) {
 	}
 	return (String_View){
 		.data = filepath.data,
-		.length = filepath.length - dot_index,
+		.length = (u32)(filepath.length - dot_index),
 	};
 }

@@ -57,7 +57,7 @@ typedef struct Set_Entity_Model_Job_Parameter {
 } Set_Entity_Model_Job_Parameter;
 
 void Set_Entity_Model_Job(void *job_parameter_pointer) {
-	Set_Entity_Model_Job_Parameter *job_parameter = job_parameter_pointer;
+	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)job_parameter_pointer;
 	Mesh_Asset *asset = Get_Mesh_Asset(job_parameter->asset_id, job_parameter->assets, job_parameter->render_context);
 	job_parameter->meshes->instances[job_parameter->meshes->count] = (Mesh_Instance){
 		.transform = job_parameter->transform,
@@ -72,7 +72,7 @@ void Set_Entity_Model_Job(void *job_parameter_pointer) {
 }
 
 void Set_Entity_Model(Entity_ID entity_id, Asset_ID asset_id, Transform transform, Game_State *game_state) {
-	Set_Entity_Model_Job_Parameter *job_parameter = malloc(sizeof(Set_Entity_Model_Job_Parameter)); // @TODO
+	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)malloc(sizeof(Set_Entity_Model_Job_Parameter)); // @TODO
 	*job_parameter = (Set_Entity_Model_Job_Parameter){
 		.asset_id = asset_id,
 		.transform = transform,
@@ -80,7 +80,7 @@ void Set_Entity_Model(Entity_ID entity_id, Asset_ID asset_id, Transform transfor
 		.meshes = &game_state->entities.meshes,
 		.render_context = &game_state->render_context,
 	};
-	Job_Counter *job_counter = malloc(sizeof(Job_Counter)); // @TODO
+	Job_Counter *job_counter = (Job_Counter *)malloc(sizeof(Job_Counter)); // @TODO
 	Job_Declaration job_declaration = Create_Job(Set_Entity_Model_Job, job_parameter);
 	Run_Jobs(1, &job_declaration, NORMAL_JOB_PRIORITY, job_counter);
 }

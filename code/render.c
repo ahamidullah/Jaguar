@@ -129,7 +129,7 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	};
 	*/
 	GPU_Image shadow_map_image = Create_GPU_Device_Image(context, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
-	GPU_Image_View shadow_map_image_view = Render_API_Create_Image_View(&context->api_context, shadow_map_image, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
+	GPU_Image_View shadow_map_image_view = Render_API_Create_Image_View(&context->api_context, shadow_map_image, (VkFormat)SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
 	/*
 	GPU_Image_Creation_Parameters depth_buffer_image_creation_parameters = {
@@ -142,11 +142,11 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	};
 	*/
 	GPU_Image depth_buffer_image = Create_GPU_Device_Image(context, window_width, window_height, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
-	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
+	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, (VkFormat)DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
 	context->swapchain = Render_API_Create_Swapchain(&context->api_context);
 	context->swapchain_image_count = Render_API_Get_Swapchain_Image_Count(&context->api_context, context->swapchain);
-	GPU_Image_View *swapchain_image_views = malloc(context->swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
+	GPU_Image_View *swapchain_image_views = (GPU_Image_View *)malloc(context->swapchain_image_count * sizeof(GPU_Image_View)); // @TODO
 	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->swapchain, context->swapchain_image_count, swapchain_image_views);
 
 	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
@@ -159,7 +159,7 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 
 	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass(&context->api_context);
 
-	context->framebuffers = malloc(context->swapchain_image_count * sizeof(GPU_Framebuffer));
+	context->framebuffers = (VkFramebuffer *)malloc(context->swapchain_image_count * sizeof(GPU_Framebuffer));
 	for (s32 i = 0; i < context->swapchain_image_count; i++) {
 		GPU_Image_View attachments[] = {
 			swapchain_image_views[i],
@@ -169,10 +169,10 @@ void Initialize_Renderer(void *job_parameter_pointer) {
 	}
 
 	context->render_thread_count = game_state->jobs_context.worker_thread_count;
-	context->thread_local_contexts = malloc(context->render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
+	context->thread_local_contexts = (Thread_Local_Render_Context *)malloc(context->render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
 	for (s32 i = 0; i < context->render_thread_count; i++) {
 		context->thread_local_contexts[i].upload_command_pool = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
-		context->thread_local_contexts[i].command_pools = malloc(context->swapchain_image_count * sizeof(GPU_Command_Pool));
+		context->thread_local_contexts[i].command_pools = (VkCommandPool *)malloc(context->swapchain_image_count * sizeof(GPU_Command_Pool));
 		for (s32 j = 0; j < context->swapchain_image_count; j++) {
 			context->thread_local_contexts[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
 		}

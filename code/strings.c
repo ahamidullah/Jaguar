@@ -1,8 +1,8 @@
 #define STB_SPRINTF_IMPLEMENTATION
 #include "stb_sprintf.h"
 
-size_t C_String_Length(const char *c_string) {
-	size_t length = 0;
+u32 C_String_Length(const char *c_string) {
+	u32 length = 0;
 	while (*c_string++) {
 		length++;
 	}
@@ -10,7 +10,7 @@ size_t C_String_Length(const char *c_string) {
 }
 
 String S(const char *c_string) {
-	size_t length = C_String_Length(c_string);
+	u32 length = C_String_Length(c_string);
 	return (String){
 		.data = (char *)c_string,
 		.length = length,
@@ -22,7 +22,7 @@ String S(const char *c_string) {
 String Create_String(u32 capacity) {
 	// We still null-terminate our strings to ensure compatibility with libraries, debuggers, etc.
 	return (String){
-		.data = malloc(capacity + 1),
+		.data = (char *)malloc(capacity + 1),
 		.length = 0,
 		.capacity = capacity,
 		.is_constant = 0,
@@ -134,9 +134,9 @@ void Append_String_Range(String *destination, String source, u32 source_start_in
 }
 
 String Join_Strings(String a, String b) {
-	size_t result_length = a.length + b.length + 1;
+	u32 result_length = a.length + b.length + 1;
 	String result = {
-		.data = malloc(result_length),
+		.data = (char *)malloc(result_length),
 		.length = 0,
 		.capacity = result_length,
 	};

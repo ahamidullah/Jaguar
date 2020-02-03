@@ -12,7 +12,7 @@ GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(Render_Context *context, 
 	// @TODO: Try to allocate out of the freed allocations.
 	if (!allocator->active_block || allocator->active_block->frontier + allocation_requirements.size > allocator->block_size) {
 		// Need to allocate a new block.
-		GPU_Memory_Block *new_block = malloc(sizeof(GPU_Memory_Block)); // @TODO
+		auto new_block = (GPU_Memory_Block *)malloc(sizeof(GPU_Memory_Block)); // @TODO
 		if (!Render_API_Allocate_Memory(&context->api_context, allocator->block_size, allocator->memory_type, &new_block->memory)) {
 			free(new_block); // @TODO
 			return NULL;
@@ -37,8 +37,8 @@ GPU_Memory_Allocation *Allocate_From_GPU_Memory_Blocks(Render_Context *context, 
 	GPU_Memory_Allocation *new_allocation = &allocator->active_block->allocations[allocator->active_block->allocation_count++];
 	u32 allocation_start_offset = Align_U32(allocator->active_block->frontier, allocation_requirements.alignment);
 	*new_allocation = (GPU_Memory_Allocation){
-		.offset = allocation_start_offset,
 		.memory = allocator->active_block->memory,
+		.offset = allocation_start_offset,
 	};
 	if (allocator->memory_type & GPU_HOST_MEMORY) {
 		new_allocation->mapped_pointer = (char *)allocator->active_block->mapped_pointer + allocation_start_offset;

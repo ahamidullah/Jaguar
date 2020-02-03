@@ -83,8 +83,8 @@ void add_memory_arena_block(Memory_Arena *arena) {
 }
 
 // @TODO: Align allocated memory?
-#define allocate_array(arena, type, count) memory_arena_allocate(arena, sizeof(type) * (count))
-#define allocate_struct(arena, type) memory_arena_allocate(arena, sizeof(type))
+#define allocate_array(arena, type, count) ((type *)memory_arena_allocate(arena, sizeof(type) * (count)))
+#define allocate_struct(arena, type) ((type *)memory_arena_allocate(arena, sizeof(type)))
 
 void *memory_arena_allocate(Memory_Arena *arena, size_t size) {
 	void *result = (char *)arena->active_block + sizeof(Block_Header) + arena->active_block->bytes_used;

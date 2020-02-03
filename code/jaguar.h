@@ -413,7 +413,7 @@ typedef struct Double_Buffer {
 			container.write_buffer = &container.buffers[0]; \
 			container.read_buffer = &container.buffers[1]; \
 		} \
-		typeof(container.write_head) old_write_head = container.write_head; \
+		decltype(container.write_head) old_write_head = container.write_head; \
 		container.write_buffer->ready_count = 0; \
 		container.write_head = container.write_buffer->command_buffers; \
 		container.read_buffer_element_count = old_write_head - container.read_buffer->command_buffers; \

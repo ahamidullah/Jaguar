@@ -523,7 +523,8 @@ void Run_Fiber(void *fiber_creation_info_pointer) {
 	Platform_Fiber_Procedure procedure = fiber_creation_info->procedure;
 	void *parameter = fiber_creation_info->parameter;
 	if (!_setjmp(*fiber_creation_info->jump_buffer)) {
-		swapcontext(&(ucontext_t){}, fiber_creation_info->calling_context);
+		ucontext_t Context = {};
+		swapcontext(&Context, fiber_creation_info->calling_context);
 	}
 	procedure(parameter);
 	pthread_exit(NULL);
@@ -610,7 +611,9 @@ s32 main(s32 argc, char **argv) {
 	Window root_window = XRootWindow(linux_context.display, screen);
 	// Initialize XInput2, which we require for raw input.
 	{
-		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &(s32){0}, &(s32){0})) {
+		s32 FirstEventReturn = 0;
+		s32 FirstErrorReturn = 0;
+		if (!XQueryExtension(linux_context.display, "XInputExtension", &linux_context.xinput_opcode, &FirstEventReturn, &FirstErrorReturn)) {
 			Abort("The X server does not support the XInput extension");
 		}
 		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
@@ -643,13 +646,13 @@ s32 main(s32 argc, char **argv) {
 		};
 		s32 number_of_visuals;
 		XVisualInfo *visual_info = XGetVisualInfo(linux_context.display, VisualScreenMask, &visual_info_template, &number_of_visuals);
-		Assert(visual_info->class == TrueColor);
+		Assert(visual_info->c_class == TrueColor);
 		XSetWindowAttributes window_attributes = {
-			.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone),
 			.background_pixel = 0xFFFFFFFF,
 			.border_pixmap = None,
 			.border_pixel = 0,
 			.event_mask = StructureNotifyMask,
+			.colormap = XCreateColormap(linux_context.display, root_window, visual_info->visual, AllocNone),
 		};
 		s32 window_attributes_mask = CWBackPixel
 		                           | CWColormap
@@ -699,7 +702,7 @@ s32 main(s32 argc, char **argv) {
 		linux_context.blank_cursor = XCreatePixmapCursor(linux_context.display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
 		XFreePixmap(linux_context.display, pixmap);
 	}
-	linux_context.fiber_stack_memory = Platform_Allocate_Memory((JOB_FIBER_COUNT * FIBER_STACK_SIZE) + ((JOB_FIBER_COUNT + 1) * linux_context.page_size));
+	linux_context.fiber_stack_memory = (char *)Platform_Allocate_Memory((JOB_FIBER_COUNT * FIBER_STACK_SIZE) + ((JOB_FIBER_COUNT + 1) * linux_context.page_size));
 	for (s32 i = 0; i <= JOB_FIBER_COUNT; i++) {
 		mprotect(linux_context.fiber_stack_memory + ((i * FIBER_STACK_SIZE) + (i * linux_context.page_size)), linux_context.page_size, PROT_NONE);
 	}

@@ -1,0 +1,2 @@
+#!/bin/bash
+kstart -fullscreen vim.gtk -g -c "cd $PROJECT_DIRECTORY/Code" "$@" >& /dev/null

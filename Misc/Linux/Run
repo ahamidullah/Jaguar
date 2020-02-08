@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -e
+
+cd $PROJECT_DIRECTORY
+if [ "$1" = "ShaderPreprocessor" ]; then
+	build/ShaderPreprocessor
+else
+	build/$PROJECT_NAME
+fi
+cd - >& /dev/null

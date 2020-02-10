@@ -3,8 +3,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
-#include <stdbool.h>
-#include <math.h>
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -57,30 +55,3 @@ ScopeExit<F> MakeScopeExit(F f)
 #define DO_STRING_JOIN(arg1, arg2) arg1 ## arg2
 #define STRING_JOIN(arg1, arg2) DO_STRING_JOIN(arg1, arg2)
 #define Defer(code) auto STRING_JOIN(scope_exit_, __LINE__) = MakeScopeExit([=](){code;})
-
-struct IO_Buttons {
-	u8 *down;
-	u8 *pressed;
-	u8 *released;
-};
-
-struct Mouse {
-	s32 wheel;
-	s32 x, y;
-	s32 delta_x, delta_y;
-	f32 raw_delta_x, raw_delta_y;
-	f32 sensitivity;
-	IO_Buttons buttons;
-};
-
-struct Game_Input {
-	Mouse mouse;
-	IO_Buttons keyboard;
-};
-
-enum GameExecutionStatus {
-	GAME_RUNNING,
-	GAME_PAUSED,
-	GAME_EXITING,
-};
-

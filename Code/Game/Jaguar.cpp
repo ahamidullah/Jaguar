@@ -2,11 +2,8 @@
 #include "Platform/Window.cpp"
 #include "Platform/Threads.cpp"
 #include "Platform/Files.cpp"
-#include "Platform/Input.cpp"
 #include "Platform/Time.cpp"
 #include "Platform/Vulkan.cpp"
-#include "Platform/Semaphores.cpp"
-#include "Platform/Atomics.cpp"
 #include "Platform/Memory.cpp"
 
 #include "Common/Common.cpp"

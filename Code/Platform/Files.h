@@ -1,5 +1,13 @@
 #pragma once
 
+#if defined(__linux__)
+	#include "Platform/Linux/Files.h"
+#else
+	#error unsupported platform
+#endif
+
+#include "Common/Strings.h"
+
 struct PlatformOpenFileResult
 {
 	PlatformFileHandle file;
@@ -11,12 +19,6 @@ struct PlatformReadFileResult
 	String string;
 	bool error;
 };
-
-#if defined(__linux__)
-	#include "Platform/Linux/Files.h"
-#else
-	#error unsupported platform
-#endif
 
 bool PlatformIterateThroughDirectory(const char *path, PlatformDirectoryIteration *context);
 PlatformOpenFileResult PlatformOpenFile(const String &path, PlatformOpenFileFlags flags);

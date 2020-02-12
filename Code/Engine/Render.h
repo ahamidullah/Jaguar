@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gpu.h"
+#include "GPU.h"
 
 #define MAX_DEBUG_RENDER_OBJECTS 500
 #define MAX_ENTITY_MESHES 1000
@@ -20,12 +20,14 @@ typedef struct {
 	Render_Primitive render_primitive;
 } Debug_Render_Object;
 
-typedef struct GPU_Memory_Allocators {
-	GPU_Memory_Block_Allocator device_block_buffer;
-	GPU_Memory_Block_Allocator device_block_image;
-	GPU_Memory_Ring_Allocator staging_ring;
-	GPU_Memory_Block_Allocator staging_block;
-} GPU_Memory_Allocators;
+#if 0
+struct GPUMemoryAllocators {
+	GPU_Memory_Block_Allocator deviceBlockBuffer;
+	GPU_Memory_Block_Allocator deviceBlockImage;
+	GPU_Memory_Ring_Allocator stagingRing;
+	GPU_Memory_Block_Allocator stagingBlock;
+};
+#endif
 
 typedef struct GPU_Image_Creation_Parameters {
 	u32 width;
@@ -94,7 +96,6 @@ typedef struct Render_Context {
 	u32 debug_render_object_count;
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
 	u32 current_frame_index;
-	GPU_Memory_Allocators gpu_memory_allocators;
 	GPU_Swapchain swapchain;
 	u32 swapchain_image_count;
 	GPU_Framebuffer *framebuffers;

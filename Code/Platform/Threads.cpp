@@ -3,3 +3,5 @@
 #else
 	#error unsupported platform
 #endif
+
+__thread u32 threadIndex;

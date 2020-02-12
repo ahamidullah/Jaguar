@@ -1,3 +1,5 @@
+#include <execinfo.h>
+
 #include "Platform/Memory.h"
 
 #define MAP_ANONYMOUS 0x20
@@ -16,13 +18,13 @@ void PlatformFreeMemory(void *memory, size_t size)
 {
 	if (munmap(memory, size) == -1)
 	{
-		LogPrint(ERROR_LOG, "Failed to free platform memory: %s\n", PlatformGetError());
+		LogPrint(ERROR_LOG, "failed to free platform memory: %s\n", PlatformGetError());
 	}
 }
 
 size_t PlatformGetPageSize()
 {
-	return linuxContext.pageSize;
+	return sysconf(_SC_PAGESIZE);
 }
 
 void PlatformPrintStacktrace()
@@ -34,13 +36,13 @@ void PlatformPrintStacktrace()
 	s32 addressCount = backtrace(addresses, addressBufferSize);
 	if (addressCount == addressBufferSize)
 	{
-		LogPrint(ERROR_LOG, "Stack trace is probably truncated.\n");
+		LogPrint(ERROR_LOG, "stack trace is probably truncated.\n");
 	}
 
 	char **strings = backtrace_symbols(addresses, addressCount);
 	if (!strings)
 	{
-		LogPrint(ERROR_LOG, "Failed to get function names\n");
+		LogPrint(ERROR_LOG, "failed to get function names\n");
 		return;
 	}
 	for (s32 i = 0; i < addressCount; i++)
@@ -49,4 +51,3 @@ void PlatformPrintStacktrace()
 	}
 	free(strings);
 }
-

@@ -1,3 +1,5 @@
+#include <sys/stat.h>
+
 #include "Platform/Files.h"
 
 PlatformOpenFileResult PlatformOpenFile(const String &path, PlatformOpenFileFlags flags)
@@ -110,7 +112,7 @@ bool PlatformIterateThroughDirectory(const char *path, PlatformDirectoryIteratio
 			continue;
 		}
 		context->filename = context->dirent->d_name;
-		context->is_directory = (context->dirent->d_type == DT_DIR);
+		context->isDirectory = (context->dirent->d_type == DT_DIR);
 		return true;
 	}
 	return false;

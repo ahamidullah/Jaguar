@@ -1,3 +1,39 @@
+#include "Platform/Platform.h"
+
+#include <unistd.h>
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+#include <stdlib.h> // srand @TODO: Get rid of this.
+
+void PlatformExitProcess(s32 exitCode)
+{
+	_exit(exitCode);
+}
+
+void PlatformSignalDebugBreakpoint()
+{
+	raise(SIGTRAP);
+}
+
+const char *PlatformGetError()
+{
+	return strerror(errno);
+}
+
+void ApplicationEntry();
+
+s32 main(s32 argc, char *argv[])
+{
+	srand(time(0));
+
+	ApplicationEntry();
+
+	return 0;
+}
+
+#if 0
 #include "Platform.h"
 
 #include "Jaguar.cpp"
@@ -1009,4 +1045,5 @@ void *job_thread_start(void *job_thread_data);
 Thread_Handle create_thread(Thread_Procedure tp, void *thread_argument);
 
 void toggle_fullscreen();
+#endif
 #endif

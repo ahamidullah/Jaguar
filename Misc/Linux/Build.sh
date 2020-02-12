@@ -15,7 +15,7 @@ cd $PROJECT_DIRECTORY/Code
 
 DEVELOPMENT=true
 
-SHARED_COMPILER_FLAGS=" -std=c++17 -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers"
+SHARED_COMPILER_FLAGS=" -std=c++17 -I$PROJECT_DIRECTORY/Code -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers"
 if [ DEVELOPMENT ]; then
 	SHARED_COMPILER_FLAGS+=" -DDEBUG -DDEVELOPMENT -g -O0"
 else
@@ -33,7 +33,7 @@ elif [ "$1" = "" -o "$1" = "Game" ]; then
 	# @TODO: Vendor assimp library.
 	GAME_COMPILER_FLAGS=" -D_GNU_SOURCE -DUSE_VULKAN_RENDER_API -IDependencies/Vulkan/1.1.106.0/include"
 	GAME_LINKER_FLAGS=" -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread"
-	g++ $SHARED_COMPILER_FLAGS $GAME_COMPILER_FLAGS Game/Jaguar.cpp $GAME_LINKER_FLAGS -o $BUILD_DIRECTORY/$PROJECT_NAME
+	g++ $SHARED_COMPILER_FLAGS $GAME_COMPILER_FLAGS Engine/Jaguar.cpp $GAME_LINKER_FLAGS -o $BUILD_DIRECTORY/$PROJECT_NAME
 else
 	echo Unknown build parameter
 	exit

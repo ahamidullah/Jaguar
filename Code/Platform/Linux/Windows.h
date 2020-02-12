@@ -4,14 +4,24 @@
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 
-struct PlatformWindow {
+#if defined(USE_VULKAN_RENDER_API)
+
+#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_xlib.h> 
+
+#endif
+
+struct PlatformWindow
+{
 	Window x11;
 	Atom deleteWindowAtom;
 	Cursor blankCursor;
-	s32 height;
+	u32 height;
 };
 
-enum PlatformKeySymbol {
+enum PlatformKeySymbol
+{
 	W_KEY = XK_w,
 	A_KEY = XK_a,
 	S_KEY = XK_s,
@@ -36,16 +46,10 @@ enum PlatformKeySymbol {
 	ESCAPE_KEY = XK_Escape,
 };
 
-enum PlatformMouseButton {
+enum PlatformMouseButton
+{
 	MOUSE_BUTTON_LEFT = 0,
 	MOUSE_BUTTON_MIDDLE,
 	MOUSE_BUTTON_RIGHT,
 	MOUSE_BUTTON_COUNT
 };
-
-void PlatformCreateWindow(s32 windowWidth, s32 windowHeight, bool startFullscreen);
-void PlatformToggleFullscreen();
-void PlatformCaptureCursor();
-void PlatformUncaptureCursor();
-void PlatformCleanupDisplay();
-void PlatformProcessWindowEvents(PlatformWindow window, PlatformWindowEvents *windowEvents, PlatformInput *input);

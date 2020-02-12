@@ -1,4 +1,5 @@
 #include "Log.h"
+#include "Engine/Math.h"
 
 void ConsolePrintVarargs(const char *format, va_list argumentList) {
 	char buffer[4096];

@@ -81,8 +81,6 @@ Array<T> CreateInitializedArray(const T &first, const ElementPack... rest) {
 	return result;
 }
 
-void Copy_Memory(const void *source, void *destination, size_t size);
-
 template <typename T>
 Array<T> CreateArray(size_t DataCount, const T *DataPointer) {
 	Array<T> A = {
@@ -120,7 +118,7 @@ void Resize(Array<T> *A, size_t NewCount) {
 
 // @TODO: Make this variadic and take any number of new elements.
 template <typename T>
-void Append(Array<T> *A, const T &&NewElement) {
+void Append(Array<T> *A, const T &NewElement) {
 	size_t NewElementIndex = A->Count;
 	Resize(A, A->Count + 1);
 	Assert(A->Count <= A->Capacity);

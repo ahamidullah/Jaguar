@@ -6,7 +6,4 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h> 
 
-const char *PlatformGetRequiredVulkanSurfaceInstanceExtension();
-void PlatformCreateVulkanSurface(VkInstance instance, VkSurfaceKHR *surface);
-
 #endif

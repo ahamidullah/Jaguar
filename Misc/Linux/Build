@@ -1,2 +1,2 @@
 #!/bin/bash
-/usr/bin/time --format='Build time: %es' build.sh "$@"
+/usr/bin/time --format='Build time: %es' Build.sh "$@"

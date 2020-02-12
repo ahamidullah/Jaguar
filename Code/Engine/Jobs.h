@@ -12,19 +12,20 @@ enum JobPriority {
 struct JobFiber;
 
 struct JobCounter {
-	volatile s32 UnfinishedJobCount;
-	JobFiber *WaitingJobFiber;
+	volatile s32 unfinishedJobCount;
+	JobFiber *waitingJobFiber;
 };
 
 typedef void (*JobProcedure)(void *);
 
 struct JobDeclaration {
-	JobProcedure Procedure;
-	void *Parameter;
+	JobProcedure procedure;
+	void *parameter;
 };
 
-void InitializeJobs(GameState *game_state, JobProcedure initialJobProcedure, void *initialJobParameter);
+void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter);
 JobDeclaration CreateJob(JobProcedure procedure, void *parameter);
 void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority, JobCounter *counter);
-void WaitForJobCounter(JobCounter *Counter);
-void ClearJobCounter(JobCounter *Counter);
+void WaitForJobCounter(JobCounter *counter);
+void ClearJobCounter(JobCounter *counter);
+u32 GetWorkerThreadCount();

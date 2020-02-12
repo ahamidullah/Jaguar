@@ -73,7 +73,7 @@ bool PlatformWasMouseButtonReleased(PlatformMouseButton mouseButton, PlatformInp
 	return PlatformWasButtonReleased(mouseButton, &input->mouse.buttons);
 }
 
-void PlatformGetInput(PlatformWindow window, PlatformWindowEvents *windowEvents, PlatformInput *input) {
+void PlatformGetInput(PlatformWindow window, PlatformInput *input, PlatformWindowEvents *windowEvents) {
 	// Clear per-frame input.
 	SetMemory(input->mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
 	SetMemory(input->mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);

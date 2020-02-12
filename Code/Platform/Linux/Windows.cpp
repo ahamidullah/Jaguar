@@ -1,8 +1,10 @@
 #include <X11/X.h>
+#include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/XInput2.h>
 
 #include "Platform/Windows.h"
+#include "Common/Log.h"
 
 struct {
 	Display *display;
@@ -93,7 +95,7 @@ PlatformWindow PlatformCreateWindow(s32 width, s32 height, bool startFullscreen)
 	XFlush(linuxWindowsContext.display);
 
 	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
-	if ((linuxWindowsContext.deleteWindowAtom = XInternAtom(linuxWindowsContext.display, "WM_DELETE_WINDOW", 1))) {
+	if ((window.deleteWindowAtom = XInternAtom(linuxWindowsContext.display, "WM_DELETE_WINDOW", 1))) {
 		XSetWMProtocols(linuxWindowsContext.display, window.x11, &window.deleteWindowAtom, 1);
 	} else {
 		LogPrint(ERROR_LOG, "Unable to register deleteWindowAtom atom.\n");
@@ -102,7 +104,7 @@ PlatformWindow PlatformCreateWindow(s32 width, s32 height, bool startFullscreen)
 	// Get actual window dimensions without window borders.
 	{
 		s32 windowX, windowY;
-		s32 windowWidth;
+		u32 windowWidth;
 		u32 borderWidth, depth;
 		if (!XGetGeometry(linuxWindowsContext.display, window.x11, &rootWindow, &windowX, &windowY, &windowWidth, &window.height, &borderWidth, &depth)) {
 			Abort("failed to get the screen's geometry");
@@ -120,6 +122,9 @@ PlatformWindow PlatformCreateWindow(s32 width, s32 height, bool startFullscreen)
 
 	return window;
 }
+
+template <size_t Size> void PlatformPressButton(u32 buttonIndex, PlatformInputButtons<Size> *buttons);
+template <size_t Size> void PlatformReleaseButton(u32 buttonIndex, PlatformInputButtons<Size> *buttons);
 
 void PlatformProcessEvents(PlatformWindow window, PlatformWindowEvents *windowEvents, PlatformInput *input) {
 	XEvent event;
@@ -144,34 +149,43 @@ void PlatformProcessEvents(PlatformWindow window, PlatformWindowEvents *windowEv
 		}
 		rawEvent = (XIRawEvent *)cookie->data;
 		switch(rawEvent->evtype) {
-		case XI_RawMotion: {
+		case XI_RawMotion:
+		{
 			// @TODO: Check XIMaskIsSet(re->valuators.mask, 0) for x and XIMaskIsSet(re->valuators.mask, 1) for y.
-			input->mouse.raw_delta_x += rawEvent->raw_values[0];
-			input->mouse.raw_delta_y -= rawEvent->raw_values[1];
+			input->mouse.rawDeltaX += rawEvent->raw_values[0];
+			input->mouse.rawDeltaY -= rawEvent->raw_values[1];
 		} break;
-		case XI_RawKeyPress: {
+		case XI_RawKeyPress:
+		{
 			PlatformPressButton(rawEvent->detail, &input->keyboard);
 		} break;
-		case XI_RawKeyRelease: {
+		case XI_RawKeyRelease:
+		{
 			PlatformReleaseButton(rawEvent->detail, &input->keyboard);
 		} break;
-		case XI_RawButtonPress: {
+		case XI_RawButtonPress:
+		{
 			u32 buttonIndex = (event.xbutton.button - 1);
-			if (buttonIndex > MOUSE_BUTTON_COUNT) {
+			if (buttonIndex > MOUSE_BUTTON_COUNT)
+			{
 				break;
 			}
 			PlatformPressButton(buttonIndex, &input->mouse.buttons);
 		} break;
-		case XI_RawButtonRelease: {
+		case XI_RawButtonRelease:
+		{
 			u32 buttonIndex = (event.xbutton.button - 1);
-			if (buttonIndex > MOUSE_BUTTON_COUNT) {
+			if (buttonIndex > MOUSE_BUTTON_COUNT)
+			{
 				break;
 			}
 			PlatformReleaseButton(buttonIndex, &input->mouse.buttons);
 		} break;
-		case XI_FocusIn: {
+		case XI_FocusIn:
+		{
 		} break;
-		case XI_FocusOut: {
+		case XI_FocusOut:
+		{
 		} break;
 		}
 	}
@@ -187,7 +201,7 @@ void PlatformToggleFullscreen(PlatformWindow window) {
 			.data = {
 				.l = {
 					2,
-					XInternAtom(linuxWindowsContext.display, "_NET_WM_STATE_FULLSCREEN", True),
+					(long int)XInternAtom(linuxWindowsContext.display, "_NET_WM_STATE_FULLSCREEN", True),
 					0,
 					1,
 					0,
@@ -213,7 +227,7 @@ void PlatformDestroyWindow(PlatformWindow window) {
 	XCloseDisplay(linuxWindowsContext.display);
 }
 
-s32 X11ErrorHandler(Display *display, XErrorEvent *event) {
+s32 PlatformX11ErrorHandler(Display *display, XErrorEvent *event) {
 	char buffer[256];
 	XGetErrorText(linuxWindowsContext.display, event->error_code, buffer, sizeof(buffer));
 	Abort("X11 error: %s.", buffer);
@@ -239,3 +253,23 @@ void PlatformInitializeWindows() {
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
 	XSetErrorHandler(&PlatformX11ErrorHandler);
 }
+
+#if defined(USE_VULKAN_RENDER_API)
+
+const char *PlatformGetRequiredVulkanSurfaceInstanceExtension() {
+	return "VK_KHR_xlib_surface";
+}
+
+//VkResult vkCreateXlibSurfaceKHR(VkInstance, const VkXlibSurfaceCreateInfoKHR *, const VkAllocationCallbacks *, VkSurfaceKHR *);
+extern VkResult (*vkCreateXlibSurfaceKHR)(VkInstance, const VkXlibSurfaceCreateInfoKHR *, const VkAllocationCallbacks *, VkSurfaceKHR *);
+
+VkResult PlatformCreateVulkanSurface(PlatformWindow window, VkInstance instance, VkSurfaceKHR *surface) {
+	VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+		.dpy = linuxWindowsContext.display,
+		.window = window.x11,
+	};
+	return vkCreateXlibSurfaceKHR(instance, &surfaceCreateInfo, NULL, surface);
+}
+
+#endif

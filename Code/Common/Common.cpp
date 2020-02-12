@@ -1,5 +1,5 @@
+#include "Platform/Platform.h"
 #include "Common.h"
-#include "Platform.h"
 #include "Log.h"
 
 void Abort(const char *format, ...) {

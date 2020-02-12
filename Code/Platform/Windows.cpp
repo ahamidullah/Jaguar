@@ -1,30 +1,35 @@
 #include "Common/Memory.h"
 
 #if defined(__linux__)
-	#include "Platform/Linux/Window.cpp"
+	#include "Platform/Linux/Windows.cpp"
 #else
 	#error unsupported platform
 #endif
 
-void PlatformPressButton(u32 buttonIndex, PlatformInputButtons *buttons) {
+template <size_t Size>
+void PlatformPressButton(u32 buttonIndex, PlatformInputButtons<Size> *buttons) {
 	buttons->pressed[buttonIndex] = !buttons->down[buttonIndex];
 	buttons->down[buttonIndex] = true;
 }
 
-void PlatformReleaseButton(u32 buttonIndex, PlatformInputButtons *buttons) {
+template <size_t Size>
+void PlatformReleaseButton(u32 buttonIndex, PlatformInputButtons<Size> *buttons) {
 	buttons->released[buttonIndex] = buttons->down[buttonIndex];
 	buttons->down[buttonIndex] = false;
 }
 
-bool PlatformIsButtonDown(u32 buttonIndex, PlatformInputButtons *buttons) {
+template <size_t Size>
+bool PlatformIsButtonDown(u32 buttonIndex, PlatformInputButtons<Size> *buttons) {
 	return buttons->down[buttonIndex];
 }
 
-bool PlatformWasButtonPressed(u32 buttonIndex, PlatformInputButtons *buttons) {
+template <size_t Size>
+bool PlatformWasButtonPressed(u32 buttonIndex, PlatformInputButtons<Size> *buttons) {
 	return buttons->pressed[buttonIndex];
 }
 
-bool PlatformWasButtonReleased(u32 buttonIndex, PlatformInputButtons *buttons) {
+template <size_t Size>
+bool PlatformWasButtonReleased(u32 buttonIndex, PlatformInputButtons<Size> *buttons) {
 	return buttons->released[buttonIndex];
 }
 
@@ -73,7 +78,7 @@ bool PlatformWasMouseButtonReleased(PlatformMouseButton mouseButton, PlatformInp
 	return PlatformWasButtonReleased(mouseButton, &input->mouse.buttons);
 }
 
-void PlatformGetInput(PlatformWindow window, PlatformWindowEvents *windowEvents, PlatformInput *input) {
+void PlatformGetInput(PlatformWindow window, PlatformInput *input, PlatformWindowEvents *windowEvents) {
 	SetMemory(windowEvents, 0, sizeof(PlatformWindowEvents));
 	SetMemory(input->mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
 	SetMemory(input->mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
@@ -86,7 +91,7 @@ void PlatformGetInput(PlatformWindow window, PlatformWindowEvents *windowEvents,
 
 	s32 oldX = input->mouse.x;
 	s32 oldY = input->mouse.y;
-	PlatformGetMousePosition(&input->mouse.x, &input->mouse.y);
+	PlatformGetMousePosition(window, &input->mouse.x, &input->mouse.y);
 	input->mouse.deltaX = input->mouse.x - oldX;
 	input->mouse.deltaY = input->mouse.y - oldY;
 }

@@ -1,5 +1,9 @@
 #pragma once
 
+constexpr s32 PLATFORM_FAILURE_EXIT_CODE = 1;
+constexpr s32 PLATFORM_SUCCESS_EXIT_CODE = 0;
+
+#if 0
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
@@ -88,4 +92,4 @@ struct PlatformDirectoryIteration {
 	char *filename;
 	u8 is_directory;
 };
-
+#endif

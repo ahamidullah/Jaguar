@@ -50,12 +50,9 @@ struct Transform {
 	Quaternion rotation;
 };
 
-#define PrintF32(F) PrintF32Actual(#F, (F))
-#define PrintV3(V) PrintV3Actual(#V, (V))
-#define PrintM4(M) PrintM4Actual(#M, (M))
-
-constexpr f32 DEGREES_TO_RADIANS_MULTIPLIER = M_PI / 180.0;
-constexpr f32 RADIANS_TO_DEGREES_MULTIPLIER = 180.0 / M_PI;
+#define PI 3.14159265358979323846264338327950288
+constexpr f32 DEGREES_TO_RADIANS_MULTIPLIER = PI / 180.0;
+constexpr f32 RADIANS_TO_DEGREES_MULTIPLIER = 180.0 / PI;
 
 constexpr f32 DegreesToRadians(f32 Degrees) {
 	return Degrees * DEGREES_TO_RADIANS_MULTIPLIER;

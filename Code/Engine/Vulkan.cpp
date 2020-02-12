@@ -1,6 +1,6 @@
 #if defined(USE_VULKAN_RENDER_API)
 
-#include "vulkan.h"
+#include "Vulkan.h"
 
 // @TODO: Move this to render.c.
 #define SHADOW_MAP_WIDTH  1024
@@ -53,6 +53,15 @@
 // @TODO: Move vulkan_context into game_state somehow.
 // @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
 // @TODO: Move logging out of band?
+
+struct {
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
+	u32 graphicsQueueFamily;
+	u32 presentQueueFamily;
+	VkQueue graphicsQueue;
+	VkQueue presentQueue;
+} vulkanContext;
 
 #define VK_CHECK(x)\
 	do {\
@@ -136,7 +145,7 @@ const char *VkResultToString(VkResult result) {
 #define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
 #define VK_INSTANCE_FUNCTION(name) PFN_##name name = NULL;
 #define VK_DEVICE_FUNCTION(name) PFN_##name name = NULL;
-#include "vulkan_functions.h"
+#include "VulkanFunctions.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -203,7 +212,7 @@ typedef struct {
 	VkImage     images[VULKAN_MAX_TEXTURES];
 	VkImageView image_views[VULKAN_MAX_TEXTURES];
 	u32         image_memory_offsets[VULKAN_MAX_TEXTURES];
-	Texture_ID  id_generator;
+	//TextureID   id_generator;
 	u32         count;
 } GPU_Textures;
 
@@ -311,7 +320,7 @@ struct _Render_API_Context {
 	Shaders                   shaders[GPU_SHADER_COUNT];
 	VkDeviceSize              minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize              maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
-	Memory_Arena             *arena;
+	//Memory_Arena             *arena;
 	PlatformMutex mutex;
 
 	struct {
@@ -488,32 +497,32 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
     return 0;
 }
 
-VkCommandBuffer Render_API_Create_Command_Buffer(Render_API_Context *context, VkCommandPool command_pool) {
-    VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+VkCommandBuffer Render_API_Create_Command_Buffer(VkCommandPool commandPool) {
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = command_pool,
+		.commandPool = commandPool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
     };
-	VkCommandBuffer command_buffer;
-    vkAllocateCommandBuffers(context->device, &command_buffer_allocate_info, &command_buffer);
-	VkCommandBufferBeginInfo command_buffer_begin_info = {
+	VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(vulkanContext.device, &commandBufferAllocateInfo, &commandBuffer);
+	VkCommandBufferBeginInfo commandBufferBeginInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
-	vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-	return command_buffer;
+	vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+	return commandBuffer;
 }
 
-void Render_API_Submit_Command_Buffers(Render_API_Context *context, u32 count, VkCommandBuffer *command_buffers, GPU_Command_Queue_Type queue_type, VkFence fence) {
+void Render_API_Submit_Command_Buffers(u32 count, VkCommandBuffer *commandBuffers, GPU_Command_Queue_Type queueType, VkFence fence) {
 	VkSubmitInfo submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.commandBufferCount = count,
-		.pCommandBuffers = command_buffers,
+		.pCommandBuffers = commandBuffers,
 	};
-	switch (queue_type) {
+	switch (queueType) {
 	case GPU_GRAPHICS_COMMAND_QUEUE: {
-		VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info, fence));
+		VK_CHECK(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submit_info, fence));
 	} break;
 	default: {
 		InvalidCodePath();
@@ -542,25 +551,25 @@ void TEMPORARY_VULKAN_SUBMIT(Render_API_Context *context, GPU_Command_Buffer com
 	VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info, fence));
 }
 
-void Render_API_End_Command_Buffer(Render_API_Context *context, VkCommandBuffer command_buffer) {
-	VK_CHECK(vkEndCommandBuffer(command_buffer));
+void Render_API_End_Command_Buffer(VkCommandBuffer commandBuffer) {
+	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 }
 
-VkCommandPool Render_API_Create_Command_Pool(Render_API_Context *context, GPU_Command_Queue_Type queue_type) {
-	VkCommandPoolCreateInfo command_pool_create_info = {
+VkCommandPool RenderAPICreateCommandPool(GPU_Command_Queue_Type queueType) {
+	VkCommandPoolCreateInfo commandPoolCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		//.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	};
-	switch (queue_type) {
+	switch (queueType) {
 	case GPU_GRAPHICS_COMMAND_QUEUE: {
-		command_pool_create_info.queueFamilyIndex = context->graphics_queue_family;
+		commandPoolCreateInfo.queueFamilyIndex = vulkanContext.graphicsQueueFamily;
 	} break;
 	default: {
 		InvalidCodePath();
 	} break;
 	}
 	VkCommandPool pool;
-	VK_CHECK(vkCreateCommandPool(context->device, &command_pool_create_info, NULL, &pool));
+	VK_CHECK(vkCreateCommandPool(vulkanContext.device, &commandPoolCreateInfo, NULL, &pool));
 	return pool;
 }
 
@@ -568,66 +577,66 @@ void Render_API_Reset_Command_Pool(Render_API_Context *context, VkCommandPool co
 	vkResetCommandPool(context->device, command_pool, 0);
 }
 
-void Render_API_Record_Copy_Buffer_Command(Render_API_Context *context, VkCommandBuffer command_buffer, u32 size, VkBuffer source, VkBuffer destination, u32 source_offset, u32 destination_offset) {
-	VkBufferCopy buffer_copy = {
-		.srcOffset = source_offset,
-		.dstOffset = destination_offset,
+void Render_API_Record_Copy_Buffer_Command(VkCommandBuffer commandBuffer, u32 size, VkBuffer source, VkBuffer destination, u32 sourceOffset, u32 destinationOffset) {
+	VkBufferCopy bufferCopy = {
+		.srcOffset = sourceOffset,
+		.dstOffset = destinationOffset,
 		.size = size,
 	};
-	vkCmdCopyBuffer(command_buffer, source, destination, 1, &buffer_copy);
+	vkCmdCopyBuffer(commandBuffer, source, destination, 1, &bufferCopy);
 }
 
-GPU_Resource_Allocation_Requirements Render_API_Get_Buffer_Allocation_Requirements(Render_API_Context *context, GPU_Buffer buffer) {
-	VkMemoryRequirements memory_requirements;
-	vkGetBufferMemoryRequirements(context->device, buffer, &memory_requirements);
-	return memory_requirements;
+GPU_Resource_Allocation_Requirements Render_API_Get_Buffer_Allocation_Requirements(GPU_Buffer buffer) {
+	VkMemoryRequirements memoryRequirements;
+	vkGetBufferMemoryRequirements(vulkanContext.device, buffer, &memoryRequirements);
+	return memoryRequirements;
 }
 
-VkBuffer Render_API_Create_Buffer(Render_API_Context *context, u32 size, VkBufferUsageFlags usage_flags) {
-	VkBufferCreateInfo buffer_create_info = {
+VkBuffer Render_API_Create_Buffer(u32 size, VkBufferUsageFlags usageFlags) {
+	VkBufferCreateInfo bufferCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = size,
-		.usage = usage_flags,
+		.usage = usageFlags,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 	};
 	VkBuffer buffer;
-	VK_CHECK(vkCreateBuffer(context->device, &buffer_create_info, NULL, &buffer));
+	VK_CHECK(vkCreateBuffer(vulkanContext.device, &bufferCreateInfo, NULL, &buffer));
 	return buffer;
 }
 
-void Render_API_Bind_Buffer_Memory(Render_API_Context *context, GPU_Buffer buffer, GPU_Memory memory, u32 memory_offset) {
-	VK_CHECK(vkBindBufferMemory(context->device, buffer, memory, memory_offset));
+void Render_API_Bind_Buffer_Memory(GPU_Buffer buffer, GPU_Memory memory, u32 memoryOffset) {
+	VK_CHECK(vkBindBufferMemory(vulkanContext.device, buffer, memory, memoryOffset));
 }
 
 void Render_API_Destroy_Buffer(Render_API_Context *context, GPU_Buffer buffer) {
 	vkDestroyBuffer(context->device, buffer, NULL);
 }
 
-void *Render_API_Map_Memory(Render_API_Context *context, VkDeviceMemory memory, u32 size, u32 offset) {
+void *Render_API_Map_Memory(VkDeviceMemory memory, u32 size, u32 offset) {
 	void *pointer;
-	VK_CHECK(vkMapMemory(context->device, memory, offset, size, 0, &pointer));
+	VK_CHECK(vkMapMemory(vulkanContext.device, memory, offset, size, 0, &pointer));
 	return pointer;
 }
 
-bool Render_API_Allocate_Memory(Render_API_Context *context, u32 size, VkMemoryPropertyFlags memory_property_flags, VkDeviceMemory *memory) {
-	VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-	vkGetPhysicalDeviceMemoryProperties(context->physical_device, &physical_device_memory_properties);
-	s32 selected_memory_type_index = -1;
-	for (u32 i = 0; i < physical_device_memory_properties.memoryTypeCount; i++) {
-		if ((physical_device_memory_properties.memoryTypes[i].propertyFlags & memory_property_flags) == memory_property_flags) {
-			selected_memory_type_index = i;
+bool Render_API_Allocate_Memory(u32 size, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceMemory *memory) {
+	VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(vulkanContext.physicalDevice, &physicalDeviceMemoryProperties);
+	s32 selectedMemoryTypeIndex = -1;
+	for (u32 i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++) {
+		if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & memoryPropertyFlags) == memoryPropertyFlags) {
+			selectedMemoryTypeIndex = i;
 			break;
 		}
 	}
-	if (selected_memory_type_index < 0) {
+	if (selectedMemoryTypeIndex < 0) {
 		Abort("Failed to find suitable GPU memory type");
 	}
-	VkMemoryAllocateInfo memory_allocate_info = {
+	VkMemoryAllocateInfo memoryAllocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = size,
-		.memoryTypeIndex = (u32)selected_memory_type_index,
+		.memoryTypeIndex = (u32)selectedMemoryTypeIndex,
 	};
-	VkResult result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, memory);
+	VkResult result = vkAllocateMemory(vulkanContext.device, &memoryAllocateInfo, NULL, memory);
 	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
 		return false;
 	}
@@ -635,21 +644,22 @@ bool Render_API_Allocate_Memory(Render_API_Context *context, u32 size, VkMemoryP
 	return true;
 }
 
-VkFence Render_API_Create_Fence(Render_API_Context *context, bool start_signalled) {
-	VkFenceCreateInfo fence_create_info = {
+VkFence RenderAPICreateFence(bool startSignalled) {
+	VkFenceCreateInfo fenceCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 		.flags = 0,
 	};
-	if (start_signalled) {
-		fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	if (startSignalled)
+	{
+		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	}
 	VkFence fence;
-	vkCreateFence(context->device, &fence_create_info, NULL, &fence);
+	vkCreateFence(vulkanContext.device, &fenceCreateInfo, NULL, &fence);
 	return fence;
 }
 
-bool Render_API_Was_Fence_Signalled(Render_API_Context *context, VkFence fence) {
-	VkResult result = vkGetFenceStatus(context->device, fence);
+bool Render_API_Was_Fence_Signalled(VkFence fence) {
+	VkResult result = vkGetFenceStatus(vulkanContext.device, fence);
 	if (result == VK_SUCCESS) {
 		return true;
 	}
@@ -660,12 +670,12 @@ bool Render_API_Was_Fence_Signalled(Render_API_Context *context, VkFence fence) 
 	return false;
 }
 
-void Render_API_Wait_For_Fences(Render_API_Context *context, u32 count, VkFence *fences, bool wait_for_all_fences, u64 timeout) {
-	VK_CHECK(vkWaitForFences(context->device, count, fences, wait_for_all_fences, timeout));
+void Render_API_Wait_For_Fences(u32 count, VkFence *fences, bool wait_for_all_fences, u64 timeout) {
+	VK_CHECK(vkWaitForFences(vulkanContext.device, count, fences, wait_for_all_fences, timeout));
 }
 
-void Render_API_Reset_Fences(Render_API_Context *context, u32 count, VkFence *fences) {
-	VK_CHECK(vkResetFences(context->device, count, fences));
+void Render_API_Reset_Fences(u32 count, VkFence *fences) {
+	VK_CHECK(vkResetFences(vulkanContext.device, count, fences));
 }
 
 u32 Render_API_Acquire_Next_Swapchain_Image_Index(Render_API_Context *context, GPU_Swapchain swapchain, u32 current_frame_index) {
@@ -1689,14 +1699,14 @@ VkFramebuffer Render_API_Create_Framebuffer(Render_API_Context *context, VkRende
 	return framebuffer;
 }
 
-VkMemoryRequirements Render_API_Get_Image_Allocation_Requirements(Render_API_Context *context, GPU_Image image) {
-	VkMemoryRequirements image_memory_requirements;
-	vkGetImageMemoryRequirements(context->device, image, &image_memory_requirements);
-	return image_memory_requirements;
+VkMemoryRequirements Render_API_Get_Image_Allocation_Requirements(GPU_Image image) {
+	VkMemoryRequirements imageMemoryRequirements;
+	vkGetImageMemoryRequirements(vulkanContext.device, image, &imageMemoryRequirements);
+	return imageMemoryRequirements;
 }
 
-VkImage Render_API_Create_Image(Render_API_Context *context, u32 width, u32 height, GPU_Format format, GPU_Image_Layout initial_layout, GPU_Image_Usage_Flags usage_flags, GPU_Sample_Count_Flags sample_count_flags) {
-	VkImageCreateInfo image_create_info = {
+VkImage Render_API_Create_Image(u32 width, u32 height, GPU_Format format, GPU_Image_Layout initialLayout, GPU_Image_Usage_Flags usageFlags, GPU_Sample_Count_Flags sampleCountFlags) {
+	VkImageCreateInfo imageCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = (VkFormat)format,
@@ -1707,19 +1717,19 @@ VkImage Render_API_Create_Image(Render_API_Context *context, u32 width, u32 heig
 		},
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.samples = (VkSampleCountFlagBits)sample_count_flags,
+		.samples = (VkSampleCountFlagBits)sampleCountFlags,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.usage = usage_flags,
+		.usage = usageFlags,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.initialLayout = (VkImageLayout)initial_layout,
+		.initialLayout = (VkImageLayout)initialLayout,
 	};
 	GPU_Image image;
-	VK_CHECK(vkCreateImage(context->device, &image_create_info, NULL, &image));
+	VK_CHECK(vkCreateImage(vulkanContext.device, &imageCreateInfo, NULL, &image));
 	return image;
 }
 
-void Render_API_Bind_Image_Memory(Render_API_Context *context, VkImage image, VkDeviceMemory memory, u32 offset) {
-	VK_CHECK(vkBindImageMemory(context->device, image, memory, offset));
+void Render_API_Bind_Image_Memory(VkImage image, VkDeviceMemory memory, u32 offset) {
+	VK_CHECK(vkBindImageMemory(vulkanContext.device, image, memory, offset));
 }
 
 VkImageView Render_API_Create_Image_View(Render_API_Context *context, VkImage image, VkFormat format, VkImageUsageFlags usage_flags) {
@@ -1751,11 +1761,11 @@ VkImageView Render_API_Create_Image_View(Render_API_Context *context, VkImage im
 	return image_view;
 }
 
-void Render_API_Transition_Image_Layout(Render_API_Context *context, VkCommandBuffer command_buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) {
+void Render_API_Transition_Image_Layout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.oldLayout = old_layout,
-		.newLayout = new_layout,
+		.oldLayout = oldLayout,
+		.newLayout = newLayout,
 		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.image = image,
@@ -1766,7 +1776,7 @@ void Render_API_Transition_Image_Layout(Render_API_Context *context, VkCommandBu
 			.layerCount = 1,
 		},
 	};
-	if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+	if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) {
 			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -1774,30 +1784,30 @@ void Render_API_Transition_Image_Layout(Render_API_Context *context, VkCommandBu
 	} else {
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
-	VkPipelineStageFlags source_stage;
-	VkPipelineStageFlags destination_stage;
-	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+	VkPipelineStageFlags sourceStage;
+	VkPipelineStageFlags destinationStage;
+	if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-	} else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	} else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		destination_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 	} else {
-		Abort("Unsupported Vulkan image layout transition\n");
+		Abort("unsupported Vulkan image layout transition");
 	}
-	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
+	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
 }
 
-void Render_API_Record_Copy_Buffer_To_Image_Command(Render_API_Context *context, VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image, u32 image_width, u32 image_height) {
+void Render_API_Record_Copy_Buffer_To_Image_Command(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, u32 imageWidth, u32 imageHeight) {
 	VkBufferImageCopy region = {
 		.bufferOffset = 0,
 		.bufferRowLength = 0,
@@ -1810,12 +1820,12 @@ void Render_API_Record_Copy_Buffer_To_Image_Command(Render_API_Context *context,
 		},
 		.imageOffset = {},
 		.imageExtent = {
-			image_width,
-			image_height,
+			imageWidth,
+			imageHeight,
 			1,
 		},
 	};
-	vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 void Render_API_Present_Swapchain_Image(Render_API_Context *context, GPU_Swapchain swapchain, u32 swapchain_image_index, u32 currentFrame /* @TODO */) {
@@ -2851,8 +2861,8 @@ void vulkan_push_debug_vertices(void *vertices, u32 vertex_count, u32 sizeof_ver
 	vulkan_context.debug_index_memory_bytes_used += indices_size;
 }
 
-Texture_ID GPU_Upload_Texture(GPU_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GPU_Upload_Flags gpu_upload_flags) {
-	Texture_ID id = vulkan_context.textures.id_generator++;
+TextureID GPU_Upload_Texture(GPU_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GPU_Upload_Flags gpu_upload_flags) {
+	TextureID id = vulkan_context.textures.id_generator++;
 
 	VkImageCreateInfo image_create_info = {
 		.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -3033,7 +3043,7 @@ void Render_API_Draw_Indexed_Vertices(Render_API_Context *context, GPU_Command_B
 	vkCmdDrawIndexed(command_buffer, index_count, 1, first_index, 0, 0);
 }
 
-Texture_ID load_texture(String path);
+//TextureID load_texture(String path);
 
 typedef struct {
 	Shaders *shaders;
@@ -3051,7 +3061,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
-#include "vulkan_functions.h"
+#include "VulkanFunctions.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -3137,7 +3147,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 	name = (PFN_##name)vkGetInstanceProcAddr(context->instance, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_DEVICE_FUNCTION(name)
-#include "vulkan_functions.h"
+#include "VulkanFunctions.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -3147,7 +3157,8 @@ void Render_API_Initialize(Render_API_Context *context) {
 		VK_CHECK(vkCreateDebugUtilsMessengerEXT(context->instance, &debug_create_info, NULL, &context->debug_messenger));
 	}
 
-	PlatformCreateVulkanSurface(context->instance, &context->window_surface);
+	PlatformWindow window;
+	PlatformCreateVulkanSurface(window, context->instance, &context->window_surface);
 
 	// Select physical device.
 	// @TODO: Rank physical device and select the best one?
@@ -3249,8 +3260,11 @@ void Render_API_Initialize(Render_API_Context *context) {
 				}
 				if (graphics_queue_family != -1 && present_queue_family != -1) {
 					context->physical_device = available_physical_devices[i];
+					vulkanContext.physicalDevice = available_physical_devices[i];
 					context->graphics_queue_family = graphics_queue_family;
 					context->present_queue_family = present_queue_family;
+					vulkanContext.graphicsQueueFamily = graphics_queue_family;
+					vulkanContext.presentQueueFamily = present_queue_family;
 					context->window_surface_format = surface_format;
 					context->present_mode = present_mode;
 					context->minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
@@ -3310,6 +3324,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 			.pEnabledFeatures = &PhysicalDeviceFeatures,
 		};
 		VK_CHECK(vkCreateDevice(context->physical_device, &device_create_info, NULL, &context->device));
+		VK_CHECK(vkCreateDevice(context->physical_device, &device_create_info, NULL, &vulkanContext.device));
 	}
 
 #define VK_EXPORTED_FUNCTION(name)
@@ -3318,7 +3333,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 #define VK_DEVICE_FUNCTION(name) \
 	name = (PFN_##name)vkGetDeviceProcAddr(context->device, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
-#include "vulkan_functions.h"
+#include "VulkanFunctions.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -3326,6 +3341,9 @@ void Render_API_Initialize(Render_API_Context *context) {
 
 	vkGetDeviceQueue(context->device, context->graphics_queue_family, 0, &context->graphics_queue); // No return.
 	vkGetDeviceQueue(context->device, context->present_queue_family, 0, &context->present_queue); // No return.
+
+	vkGetDeviceQueue(vulkanContext.device, vulkanContext.graphicsQueueFamily, 0, &vulkanContext.graphicsQueue); // No return.
+	vkGetDeviceQueue(vulkanContext.device, vulkanContext.presentQueueFamily, 0, &vulkanContext.presentQueue); // No return.
 
 	// Create presentation semaphores.
 	{

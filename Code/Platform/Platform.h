@@ -1,5 +1,18 @@
 #pragma once
 
+#include "Common/Common.h"
+
+#if defined(__linux__)
+	#include "Platform/Linux/Platform.h"
+#else
+	#error unsupported platform
+#endif
+
+void PlatformExitProcess(s32 returnCode);
+void PlatformSignalDebugBreakpoint();
+const char *PlatformGetError();
+
+#if 0
 #include "Common.h"
 #include "Strings.h"
 
@@ -102,3 +115,4 @@ s32 PlatformCompareAndSwapS32(volatile s32 *destination, s32 oldValue, s32 newVa
 s64 PlatformCompareAndSwapS64(volatile s64 *destination, s64 oldValue, s64 newValue);
 void *PlatformCompareAndSwapPointers(void *volatile *target, void *oldValue, void *newValue);
 void *PlatformFetchAndSetPointer(void *volatile *target, void *value);
+#endif

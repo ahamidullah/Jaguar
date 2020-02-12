@@ -1,10 +1,9 @@
 #pragma once
 
-#include "Common.h"
 #include "Assets.h"
-#include "Array.h"
 
-struct Vertex1P1C1UV1N1T {
+struct Vertex1P1C1UV1N1T
+{
 	V3 position;
 	V3 color;
 	V2 uv;
@@ -12,36 +11,43 @@ struct Vertex1P1C1UV1N1T {
 	V3 tangent;
 };
 
-struct Vertex1P {
+struct Vertex1P
+{
 	V3 position;
 };
 
-struct BoundingSphere {
+struct BoundingSphere
+{
 	V3 center;
 	f32 radius;
 };
 
-struct Material {
-	union {
-		struct {
+struct Material
+{
+	union
+	{
+		struct
+		{
 			u32 albedo_map;
 			u32 normal_map;
 			u32 roughness_map;
 			u32 metallic_map;
 			u32 ambient_occlusion_map;
 		};
-		struct {
+		struct
+		{
 			V4 flat_color;
 		};
 	};
 };
 
-struct MeshAsset {
+struct MeshAsset
+{
 	// @TODO: Seperate hot and cold data?
 	// Hot. Potentially accessed every frame.
 	AssetLoadStatus loadStatus;
 	Array<u32> submeshIndexCounts;
-	GPU_Indexed_Geometry gpuMesh;
+	Renderer::GPUIndexedGeometry gpuMesh;
 	Array<Material> materials;
 
 	// Cold. Accessed when the asset is loaded.
@@ -50,7 +56,10 @@ struct MeshAsset {
 	BoundingSphere boundingSphere;
 };
 
-struct MeshInstance {
+struct MeshInstance
+{
 	Transform transform;
 	MeshAsset *asset;
 };
+
+//@TODO: MeshAsset *LoadMeshAsset(const String &path);

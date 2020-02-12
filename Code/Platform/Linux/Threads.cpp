@@ -1,3 +1,7 @@
+#include <sys/syscall.h>
+
+#include "Platform/Threads.h"
+
 s32 PlatformGetProcessorCount() {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }

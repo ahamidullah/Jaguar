@@ -1,3 +1,27 @@
+// @TODO: Use non-caching intrinsics?
+void SetMemory(void *destination, s8 setTo, size_t count) {
+	char *d = (char *)destination;
+	for (size_t i = 0; i < count; ++i) {
+		d[i] = setTo;
+	}
+}
+
+void *AllocateMemory(size_t size) {
+	return malloc(size); // @TODO
+}
+
+void Copy_Memory(const void *source, void *destination, size_t size) {
+	memcpy(destination, source, size);
+/*
+	const char *s = (const char *)source;
+	char *d = (char *)destination;
+	for (size_t i = 0; i < count; ++i) {
+		d[i] = s[i];
+	}
+*/
+}
+
+#if 0
 size_t platform_page_size;
 
 #define BLOCK_DATA_SIZE ((platform_page_size * 256) - sizeof(Block_Header))
@@ -128,3 +152,4 @@ void Set_Memory(void *destination, char set_to, size_t count) {
 		d[i] = set_to;
 	}
 }
+#endif

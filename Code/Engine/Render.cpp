@@ -1,7 +1,11 @@
-#include "render.h"
+#include "Render.h"
 #include "render_generated.h"
 #include "render_generated.c"
 #include "Mesh.h"
+#include "Camera.h"
+#include "Jobs.h"
+
+Render_Context renderContext;
 
 #define RANDOM_COLOR_TABLE_LENGTH 1024
 V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
@@ -68,8 +72,8 @@ V3 random_color() {
 // GPU_Memory_Allocation ????
 
 void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
-	f32 half_near_plane_height = focal_length * Tan(camera->field_of_view / 2.0f);
-	f32 half_near_plane_width = focal_length * Tan(camera->field_of_view / 2.0f) * aspect_ratio;
+	f32 half_near_plane_height = focal_length * Tan(camera->fov / 2.0f);
+	f32 half_near_plane_width = focal_length * Tan(camera->fov / 2.0f) * aspect_ratio;
 	V3 center_of_near_plane = focal_length * camera->forward;
 	enum {
 		RIGHT,
@@ -106,12 +110,13 @@ GPU_Buffer uniform_buffer;
 GPU_Fence matrix_fence;
 
 void InitializeRenderer(void *job_parameter_pointer) {
-	GameState *game_state = (GameState *)job_parameter_pointer;
-	Render_Context *context = &game_state->render_context;
+	//GameState *game_state = (GameState *)job_parameter_pointer;
+	//Render_Context *context = &game_state->render_context;
+	auto context = &renderContext;
 	Render_API_Initialize(&context->api_context);
-	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
-	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
-	Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
+	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
+	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
+	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
 	// Descriptor sets.
 	// Command Pools.
 	// Create shaders.
@@ -130,7 +135,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		.sample_count_flags = GPU_SAMPLE_COUNT_1,
 	};
 	*/
-	GPU_Image shadow_map_image = Create_GPU_Device_Image(context, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
+	GPU_Image shadow_map_image = Renderer::CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
 	GPU_Image_View shadow_map_image_view = Render_API_Create_Image_View(&context->api_context, shadow_map_image, (VkFormat)SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
 	/*
@@ -143,7 +148,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		.sample_count_flags = DEPTH_BUFFER_SAMPLE_COUNT_FLAGS,
 	};
 	*/
-	GPU_Image depth_buffer_image = Create_GPU_Device_Image(context, window_width, window_height, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
+	GPU_Image depth_buffer_image = Renderer::CreateGPUImage(window_width, window_height, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
 	GPU_Image_View depth_buffer_image_view = Render_API_Create_Image_View(&context->api_context, depth_buffer_image, (VkFormat)DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
 	context->swapchain = Render_API_Create_Swapchain(&context->api_context);
@@ -152,7 +157,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 	Render_API_Get_Swapchain_Image_Views(&context->api_context, context->swapchain, context->swapchain_image_count, swapchain_image_views);
 
 	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
-		context->inFlightFences[i] = Render_API_Create_Fence(&context->api_context, true);
+		context->inFlightFences[i] = RenderAPICreateFence(true);
 	}
 
 	Render_API_Load_Shaders(&context->api_context, context->shaders);
@@ -170,13 +175,13 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		context->framebuffers[i] = Render_API_Create_Framebuffer(&context->api_context, context->render_passes.scene, window_width, window_height, ArrayCount(attachments), attachments);
 	}
 
-	context->render_thread_count = game_state->jobsContext.workerThreadCount;
+	context->render_thread_count = GetWorkerThreadCount();
 	context->thread_local_contexts = (Thread_Local_Render_Context *)malloc(context->render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
 	for (s32 i = 0; i < context->render_thread_count; i++) {
-		context->thread_local_contexts[i].upload_command_pool = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+		context->thread_local_contexts[i].upload_command_pool = RenderAPICreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
 		context->thread_local_contexts[i].command_pools = (VkCommandPool *)malloc(context->swapchain_image_count * sizeof(GPU_Command_Pool));
 		for (s32 j = 0; j < context->swapchain_image_count; j++) {
-			context->thread_local_contexts[i].command_pools[j] = Render_API_Create_Command_Pool(&context->api_context, GPU_GRAPHICS_COMMAND_QUEUE);
+			context->thread_local_contexts[i].command_pools[j] = RenderAPICreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
 		}
 	}
 
@@ -219,7 +224,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 	vkUpdateDescriptorSets(context->api_context.device, write_count, descriptor_writes, 0, NULL);
 	#endif
 
-	matrix_fence = Render_API_Create_Fence(&context->api_context, false);
+	matrix_fence = RenderAPICreateFence(false);
 
 	for (s32 i = 0; i < context->swapchain_image_count; i++) {
 		M4 m = IdentityMatrix();
@@ -227,8 +232,8 @@ void InitializeRenderer(void *job_parameter_pointer) {
 			{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		};
 		Update_Descriptors(context, matrix_fence, i, &context->rrdescriptor_sets, ArrayCount(update_infos), update_infos);
-		Render_API_Wait_For_Fences(&context->api_context, 1, &matrix_fence, true, U32_MAX);
-		Render_API_Reset_Fences(&context->api_context, 1, &matrix_fence);
+		Render_API_Wait_For_Fences(1, &matrix_fence, true, U32_MAX);
+		Render_API_Reset_Fences(1, &matrix_fence);
 	}
 
 	// @TODO
@@ -325,12 +330,22 @@ void Gather_Submeshes_For_Render_Pass(void *job_parameter_pointer) {
 
 void FinalizeAssetUploadsToGPU(Render_API_Context *api_context);
 
+Array<MeshInstance> GetMeshInstances();
+
 // @TODO: Float up render passes, descriptor sets, pipelines, command lists.
-void Render(Render_Context *context, Camera *camera, Array<MeshInstance> *mesh_instances) {
+void Render() {
+	auto camera = GetCamera("main");
+	if (!camera) {
+		LogPrint(ERROR_LOG, "Render: could not get main camera");
+		return;
+	}
+	auto mesh_instances = GetMeshInstances();
+	auto context = &renderContext;
+
 	FinalizeAssetUploadsToGPU(&context->api_context);
 
-	Render_API_Wait_For_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
-	Render_API_Reset_Fences(&context->api_context, 1, &context->inFlightFences[context->currentFrame]);
+	Render_API_Wait_For_Fences(1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
+	Render_API_Reset_Fences(1, &context->inFlightFences[context->currentFrame]);
 	for (s32 i = 0; i < context->render_thread_count; i++) {
 		Render_API_Reset_Command_Pool(&context->api_context, context->thread_local_contexts[i].command_pools[context->currentFrame]);
 	}
@@ -340,18 +355,18 @@ void Render(Render_Context *context, Camera *camera, Array<MeshInstance> *mesh_i
 	#if 0
 	GPU_Staging_Buffer staging_buffer;
 	{
-		M4 scene_projection_view_matrix = multiply_m4(camera->projection_matrix, camera->view_matrix);
+		M4 scene_projection_view_matrix = multiply_m4(camera->projectionMatrix, camera->viewMatrix);
 		void *staging_memory;
 		staging_buffer = Create_GPU_Staging_Buffer(context, sizeof(M4), &staging_memory);
 		Copy_Memory(&scene_projection_view_matrix, staging_memory, sizeof(M4));
-		GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
+		GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
 		//Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, sizeof(M4), staging_buffer.buffer, uniform_buffer, staging_buffer.offset, sizeof(M4) * swapchain_image_index);
 		Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, sizeof(M4), staging_buffer.buffer, uniform_buffer, staging_buffer.offset, 0x100 * swapchain_image_index);
-		Render_API_End_Command_Buffer(&context->api_context, command_buffer);
+		Render_API_End_Command_Buffer(command_buffer);
 		Render_API_Submit_Command_Buffers(&context->api_context, 1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
 	}
 	#endif
-	M4 m = camera->projection_matrix * camera->view_matrix;
+	M4 m = camera->projectionMatrix * camera->viewMatrix;
 	GPU_Descriptor_Update_Info update_infos[] = {
 		{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		{COLOR_DESCRIPTOR, {.v4 = {}}},
@@ -371,7 +386,7 @@ void Render(Render_Context *context, Camera *camera, Array<MeshInstance> *mesh_i
 	//};
 	//Update_Descriptor_Sets(context, ArrayCount(descriptor_set_data), descriptor_set_data, camera);
 
-	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
+	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
 	Render_API_Record_Begin_Render_Pass_Command(&context->api_context, command_buffer, context->render_passes.scene, context->framebuffers[swapchain_image_index]);
 	Render_API_Record_Set_Viewport_Command(&context->api_context, command_buffer, window_width, window_height);
 	Render_API_Record_Set_Scissor_Command(&context->api_context, command_buffer, window_width, window_height);
@@ -394,16 +409,17 @@ void Render(Render_Context *context, Camera *camera, Array<MeshInstance> *mesh_i
 		}
 	}
 	Render_API_Record_End_Render_Pass_Command(&context->api_context, command_buffer);
-	Render_API_End_Command_Buffer(&context->api_context, command_buffer);
-	Render_API_Wait_For_Fences(&context->api_context, 1, &matrix_fence, true, U32_MAX);
+	Render_API_End_Command_Buffer(command_buffer);
+	Render_API_Wait_For_Fences(1, &matrix_fence, true, U32_MAX);
 	TEMPORARY_VULKAN_SUBMIT(&context->api_context, command_buffer, context->currentFrame, context->inFlightFences[context->currentFrame]);
 
 	Render_API_Present_Swapchain_Image(&context->api_context, context->swapchain, swapchain_image_index, context->currentFrame);
 
 	// @TODO: WRONG Asset system needs its own block allocator so it doesn't get messed up.
-	Render_API_Reset_Fences(&context->api_context, 1, &matrix_fence);
+	Render_API_Reset_Fences(1, &matrix_fence);
 	//Render_API_Destroy_Buffer(&context->api_context, staging_buffer.buffer);
-	Clear_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block);
+	// @TODO Renderer::ClearGPUMemoryBlockAllocator(&gpuContext.memoryAllocatory.stagingBlock); // @TODO
+	Renderer::ClearGPUMemoryBlockAllocator(); // @TODO
 
 	context->currentFrame = (context->currentFrame + 1) % GPU_MAX_FRAMES_IN_FLIGHT;
 #if 0

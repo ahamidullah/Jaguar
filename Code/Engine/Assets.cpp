@@ -7,13 +7,16 @@
 constexpr s32 MAX_UPLOAD_COMMAND_BUFFERS = 128;
 constexpr s32 MAX_UPLOAD_FENCES = 32;
 
-struct AssetUploadCounter {
+struct AssetUploadCounter
+{
 	s32 commandBufferCount;
 	AssetLoadStatus *loadStatus;
 };
 
-struct AssetUploadDoubleBuffer {
-	struct UploadBuffer {
+struct AssetUploadDoubleBuffer
+{
+	struct UploadBuffer
+	{
 		s32 readyCount = 0;
 		GPU_Command_Buffer commandBuffers[MAX_UPLOAD_COMMAND_BUFFERS];
 		AssetUploadCounter *uploadCounters[MAX_UPLOAD_COMMAND_BUFFERS];
@@ -25,9 +28,11 @@ struct AssetUploadDoubleBuffer {
 	s32 readBufferElementCount = 0;
 };
 
-void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPU_Command_Buffer commandBuffer, AssetUploadCounter *counter) {
+void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPU_Command_Buffer commandBuffer, AssetUploadCounter *counter)
+{
 	GPU_Command_Buffer *writePointer;
-	do {
+	do
+	{
 		writePointer = b->writeHead;
 		PlatformCompareAndSwapPointers((void *volatile *)&b->writeHead, writePointer, writePointer + 1);
 	} while (b->writeHead != writePointer + 1);
@@ -39,11 +44,15 @@ void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPU_Command_Buff
 	b->buffers[bufferIndex].readyCount += 1;
 }
 
-void SwitchAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b) {
-	if (b->writeBuffer == &b->buffers[0]) {
+void SwitchAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b)
+{
+	if (b->writeBuffer == &b->buffers[0])
+	{
 		b->writeBuffer = &b->buffers[1];
 		b->readBuffer = &b->buffers[0];
-	} else {
+	}
+	else
+	{
 		b->writeBuffer = &b->buffers[0];
 		b->readBuffer = &b->buffers[1];
 	}
@@ -51,20 +60,26 @@ void SwitchAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b) {
 	b->writeBuffer->readyCount = 0;
 	b->writeHead = b->writeBuffer->commandBuffers;
 	b->readBufferElementCount = oldWriteHead - b->readBuffer->commandBuffers;
-	while (b->readBufferElementCount != b->readBuffer->readyCount) {
+	while (b->readBufferElementCount != b->readBuffer->readyCount)
+	{
 		//
 	}
 }
 
-struct GameAssets {
+// @TODO
+#define ASSET_COUNT 100
+
+struct
+{
 	void *lookup[ASSET_COUNT]; // @TODO: Use a hash table.
+	AssetLoadStatus loadStatuses[ASSET_COUNT];
 	AssetUploadDoubleBuffer uploadCommandBuffers;
 	s32 uploadFenceCount;
 	GPU_Fence uploadFences[MAX_UPLOAD_COMMAND_BUFFERS];
 	s32 pendingUploadCounterCounts[MAX_UPLOAD_FENCES];
 	AssetUploadCounter *pendingUploadCountersPerFence[MAX_UPLOAD_FENCES][MAX_UPLOAD_COMMAND_BUFFERS];
 	GPU_Command_Pool gpu_upload_command_pool;
-} gameAssets;
+} assetsContext;
 
 // @TODO: Trying to load the same asset multiple times simultaneously?
 
@@ -72,39 +87,38 @@ struct GameAssets {
 //#define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 //#define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-GPU_Indexed_Geometry QueueIndexedGeometryUploadToGPU(Render_Context *context, u32 verticesByteSize, u32 indicesByteSize, GPU_Buffer sourceBuffer, AssetUploadCounter *counter) {
-	GPU_Buffer vertexBuffer = Create_GPU_Device_Buffer(context, verticesByteSize, (GPU_Buffer_Usage_Flags)(GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
-	GPU_Buffer indexBuffer = Create_GPU_Device_Buffer(context, indicesByteSize, (GPU_Buffer_Usage_Flags)(GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
-	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
-	Render_API_Record_Copy_Buffer_Command(&context->api_context, commandBuffer, verticesByteSize, sourceBuffer, vertexBuffer, 0, 0);
-	Render_API_Record_Copy_Buffer_Command(&context->api_context, commandBuffer, indicesByteSize, sourceBuffer, indexBuffer, verticesByteSize, 0);
-	Render_API_End_Command_Buffer(&context->api_context, commandBuffer);
-	WriteToAssetUploadDoubleBuffer(&gameAssets.uploadCommandBuffers, commandBuffer, counter);
-	return (GPU_Indexed_Geometry){
+Renderer::GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 indicesByteSize, GPU_Buffer sourceBuffer, AssetUploadCounter *counter) {
+	GPU_Buffer vertexBuffer = Renderer::CreateGPUBuffer(verticesByteSize, (GPU_Buffer_Usage_Flags)(GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
+	GPU_Buffer indexBuffer = Renderer::CreateGPUBuffer(indicesByteSize, (GPU_Buffer_Usage_Flags)(GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
+	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
+	Render_API_Record_Copy_Buffer_Command(commandBuffer, verticesByteSize, sourceBuffer, vertexBuffer, 0, 0);
+	Render_API_Record_Copy_Buffer_Command(commandBuffer, indicesByteSize, sourceBuffer, indexBuffer, verticesByteSize, 0);
+	Render_API_End_Command_Buffer(commandBuffer);
+	WriteToAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers, commandBuffer, counter);
+	return {
 		.vertex_buffer = vertexBuffer,
 		.index_buffer = indexBuffer,
 	};
 }
 
-GPU_Texture_ID QueueTextureUploadToGPU(Render_Context *context, u8 *pixels, s32 texturePixelWidth, s32 texturePixelHeight, AssetUploadCounter *counter) {
+u32 QueueTextureUploadToGPU(u8 *pixels, s32 texturePixelWidth, s32 texturePixelHeight, AssetUploadCounter *counter) {
 	// @TODO: Load texture directly into staging memory.
 	void *stagingMemory;
 	u32 textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
-	GPU_Buffer stagingBuffer = Create_GPU_Staging_Buffer(context, textureByteSize, &stagingMemory);
+	GPU_Buffer stagingBuffer = Renderer::CreateGPUStagingBuffer(textureByteSize, &stagingMemory);
 	Copy_Memory(pixels, stagingMemory, textureByteSize);
-	GPU_Image image = Create_GPU_Device_Image(context, texturePixelWidth, texturePixelHeight, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, (GPU_Image_Usage_Flags)(GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED), GPU_SAMPLE_COUNT_1);
-	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(&context->api_context, context->thread_local_contexts[thread_index].upload_command_pool);
-	Render_API_Transition_Image_Layout(&context->api_context, commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_UNDEFINED, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	Render_API_Record_Copy_Buffer_To_Image_Command(&context->api_context, commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
-	Render_API_Transition_Image_Layout(&context->api_context, commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (VkImageLayout)GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	Render_API_End_Command_Buffer(&context->api_context, commandBuffer);
-	WriteToAssetUploadDoubleBuffer(&gameAssets.uploadCommandBuffers, commandBuffer, counter);
+	GPU_Image image = Renderer::CreateGPUImage(texturePixelWidth, texturePixelHeight, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, (GPU_Image_Usage_Flags)(GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED), GPU_SAMPLE_COUNT_1);
+	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
+	Render_API_Transition_Image_Layout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_UNDEFINED, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	Render_API_Record_Copy_Buffer_To_Image_Command(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
+	Render_API_Transition_Image_Layout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (VkImageLayout)GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	Render_API_End_Command_Buffer(commandBuffer);
+	WriteToAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers, commandBuffer, counter);
 	return 0;
 }
 
 struct LoadTextureJobParameter {
 	String path;
-	Render_Context *render_context;
 	AssetUploadCounter *uploadCounter;
 	Texture_ID *outputTextureID;
 };
@@ -115,12 +129,12 @@ void LoadTexture(void *jobParameterPointer) {
 	u8 *pixels = stbi_load(&jobParameter->path[0], &texturePixelWidth, &texturePixelHeight, &textureChannels, STBI_rgb_alpha);
 	Assert(pixels);
 	Defer(free(pixels));
-	*jobParameter->outputTextureID = QueueTextureUploadToGPU(jobParameter->render_context, pixels, texturePixelWidth, texturePixelHeight, jobParameter->uploadCounter);
+	*jobParameter->outputTextureID = QueueTextureUploadToGPU(pixels, texturePixelWidth, texturePixelHeight, jobParameter->uploadCounter);
 }
 
 // @TODO @PREPROCESSOR: Generate these.
 struct {
-	Asset_ID asset_id;
+	AssetID asset_id;
 	const char *filepath;
 } asset_id_to_filepath_map[] = {
 	{ANVIL_ASSET, "data/models/anvil"},
@@ -128,9 +142,7 @@ struct {
 };
 
 struct LoadModelJobParameter {
-	Asset_ID assetID;
-	Render_Context *render_context;
-	Memory_Arena arena;
+	AssetID assetID;
 	void **outputMeshAssetAddress;
 };
 
@@ -175,31 +187,26 @@ void LoadModel(void *jobParameterPointer) {
 		LoadTextureJobParameter *load_texture_jobParameters = (LoadTextureJobParameter *)malloc(5 * sizeof(LoadTextureJobParameter)); // @TODO
 		load_texture_jobParameters[0] = (LoadTextureJobParameter){
 			.path = JoinFilepaths(modelDirectory, "albedo.png"),
-			.render_context = jobParameter->render_context,
 			.uploadCounter = uploadCounter,
 			.outputTextureID = &mesh->materials[i].albedo_map,
 		};
 		load_texture_jobParameters[1] = (LoadTextureJobParameter){
 			.path = JoinFilepaths(modelDirectory, "normal.png"),
-			.render_context = jobParameter->render_context,
 			.uploadCounter = uploadCounter,
 			.outputTextureID = &mesh->materials[i].normal_map,
 		};
 		load_texture_jobParameters[2] = (LoadTextureJobParameter){
 			.path = JoinFilepaths(modelDirectory, "roughness.png"),
-			.render_context = jobParameter->render_context,
 			.uploadCounter = uploadCounter,
 			.outputTextureID = &mesh->materials[i].roughness_map,
 		};
 		load_texture_jobParameters[3] = (LoadTextureJobParameter){
 			.path = JoinFilepaths(modelDirectory, "metallic.png"),
-			.render_context = jobParameter->render_context,
 			.uploadCounter = uploadCounter,
 			.outputTextureID = &mesh->materials[i].metallic_map,
 		};
 		load_texture_jobParameters[4] = (LoadTextureJobParameter){
 			.path = JoinFilepaths(modelDirectory, "ambient_occlusion.png"),
-			.render_context = jobParameter->render_context,
 			.uploadCounter = uploadCounter,
 			.outputTextureID = &mesh->materials[i].ambient_occlusion_map,
 		};
@@ -224,7 +231,7 @@ void LoadModel(void *jobParameterPointer) {
 	//mesh->submesh_count = submesh_count;
 	//mesh->submesh_index_counts = (u32 *)malloc(sizeof(u32) * mesh->submesh_count);; // @TODO
 	Resize(&mesh->submeshIndexCounts, submesh_count);
-	//jobParameter->gameAssets.lookup[asset_id] = mesh;
+	//jobParameter->assetsContext.lookup[asset_id] = mesh;
 	*(jobParameter->outputMeshAssetAddress) = mesh;
 
 	u32 mesh_vertex_offset = 0;
@@ -333,10 +340,10 @@ void LoadModel(void *jobParameterPointer) {
 		mesh_index_offset += mesh->submeshIndexCounts[i];
 
 		void *staging_memory;
-		GPU_Buffer staging_buffer = Create_GPU_Staging_Buffer(jobParameter->render_context, vertices_size + indices_size, &staging_memory);
+		GPU_Buffer staging_buffer = Renderer::CreateGPUStagingBuffer(vertices_size + indices_size, &staging_memory);
 		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
 		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
-		mesh->gpuMesh = QueueIndexedGeometryUploadToGPU(jobParameter->render_context, vertices_size, indices_size, staging_buffer, uploadCounter);
+		mesh->gpuMesh = QueueIndexedGeometryUploadToGPU(vertices_size, indices_size, staging_buffer, uploadCounter);
 
 
 		//mesh->load_status = ASSET_LOADED;
@@ -661,71 +668,71 @@ void LoadModel(void *jobParameterPointer) {
 	*/
 }
 
-// @TODO
-void *Acquire_Memory(size_t size, u64 tag) {
-	return malloc(size);
-}
-
-void Release_Memory(void *memory) {
-	free(memory);
-}
-
 // @TODO: Shouldn't we call Get_Model_Asset?
-MeshAsset *GetMeshAsset(Asset_ID assetID, Render_Context *render_context) {
-	if (gameAssets.lookup[assetID]) {
-		return (MeshAsset *)gameAssets.lookup[assetID];
+MeshAsset *GetMeshAsset(AssetID assetID)
+{
+	if (assetsContext.lookup[assetID])
+	{
+		return (MeshAsset *)assetsContext.lookup[assetID];
 	}
-	LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)Acquire_Memory(sizeof(LoadModelJobParameter), 0); // @TODO: Release memory.
+
+	// @TODO: Call load model asset. No outputMeshAssetAddress.
+	LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)malloc(sizeof(LoadModelJobParameter)); // @TODO
 	jobParameter->assetID = assetID;
-	jobParameter->arena = make_memory_arena();
-	jobParameter->render_context = render_context;
-	jobParameter->outputMeshAssetAddress = &gameAssets.lookup[assetID];
+	jobParameter->outputMeshAssetAddress = &assetsContext.lookup[assetID];
 	JobDeclaration jobDeclaration = CreateJob(LoadModel, jobParameter);
 	JobCounter jobCounter;
 	RunJobs(1, &jobDeclaration, NORMAL_PRIORITY_JOB, &jobCounter);
-	WaitForJobCounter(&jobCounter);
-	return (MeshAsset *)gameAssets.lookup[assetID];
+	WaitForJobCounter(&jobCounter); // @TODO: Get rid of this wait!
+
+	return (MeshAsset *)assetsContext.lookup[assetID];
+}
+
+bool IsAssetLoaded(AssetID assetID)
+{
+	return assetsContext.loadStatuses[assetID] == ASSET_LOADED;
 }
 
 void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 	// Submit queued asset upload commands.
-	SwitchAssetUploadDoubleBuffer(&gameAssets.uploadCommandBuffers);
-	if (gameAssets.uploadCommandBuffers.readBufferElementCount > 0) {
-		Render_API_Submit_Command_Buffers(api_context, gameAssets.uploadCommandBuffers.readBufferElementCount, gameAssets.uploadCommandBuffers.readBuffer->commandBuffers, GPU_GRAPHICS_COMMAND_QUEUE, gameAssets.uploadFences[gameAssets.uploadFenceCount]);
-		gameAssets.pendingUploadCounterCounts[gameAssets.uploadFenceCount] = gameAssets.uploadCommandBuffers.readBufferElementCount;
-		Copy_Memory(gameAssets.uploadCommandBuffers.readBuffer->uploadCounters, &gameAssets.pendingUploadCountersPerFence[gameAssets.uploadFenceCount], gameAssets.uploadCommandBuffers.readBufferElementCount * sizeof(AssetUploadCounter *));
-		gameAssets.uploadFenceCount += 1;
-		// @TODO: Render_API_Free_Command_Buffers(api_context, gameAssets.gpu_upload_command_pool, gameAssets.uploadCommandBuffers.readBufferElementCount, gameAssets.uploadCommandBuffers.read_buffer->command_buffers);
+	SwitchAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers);
+	if (assetsContext.uploadCommandBuffers.readBufferElementCount > 0) {
+		Render_API_Submit_Command_Buffers(assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.readBuffer->commandBuffers, GPU_GRAPHICS_COMMAND_QUEUE, assetsContext.uploadFences[assetsContext.uploadFenceCount]);
+		assetsContext.pendingUploadCounterCounts[assetsContext.uploadFenceCount] = assetsContext.uploadCommandBuffers.readBufferElementCount;
+		Copy_Memory(assetsContext.uploadCommandBuffers.readBuffer->uploadCounters, &assetsContext.pendingUploadCountersPerFence[assetsContext.uploadFenceCount], assetsContext.uploadCommandBuffers.readBufferElementCount * sizeof(AssetUploadCounter *));
+		assetsContext.uploadFenceCount += 1;
+		// @TODO: Render_API_Free_Command_Buffers(assetsContext.gpu_upload_command_pool, assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.read_buffer->command_buffers);
 	}
 
 	// Check whether submitted asset upload commands have finished.
-	for (s32 i = 0; i < gameAssets.uploadFenceCount; i++) {
-		if (!Render_API_Was_Fence_Signalled(api_context, gameAssets.uploadFences[i])) {
+	for (s32 i = 0; i < assetsContext.uploadFenceCount; i++) {
+		if (!Render_API_Was_Fence_Signalled(assetsContext.uploadFences[i])) {
 			continue;
 		}
-		Render_API_Reset_Fences(api_context, 1, &gameAssets.uploadFences[i]);
-		for (s32 j = 0; j < gameAssets.pendingUploadCounterCounts[i]; j++) {
-			gameAssets.pendingUploadCountersPerFence[i][j]->commandBufferCount -= 1;
-			if (gameAssets.pendingUploadCountersPerFence[i][j]->commandBufferCount == 0) {
-				*gameAssets.pendingUploadCountersPerFence[i][j]->loadStatus = ASSET_LOADED;
+		Render_API_Reset_Fences(1, &assetsContext.uploadFences[i]);
+		for (s32 j = 0; j < assetsContext.pendingUploadCounterCounts[i]; j++) {
+			assetsContext.pendingUploadCountersPerFence[i][j]->commandBufferCount -= 1;
+			if (assetsContext.pendingUploadCountersPerFence[i][j]->commandBufferCount == 0) {
+				*assetsContext.pendingUploadCountersPerFence[i][j]->loadStatus = ASSET_LOADED;
 			}
 		}
 		// Remove the fence.
-		gameAssets.uploadFenceCount -= 1;
-		if (i != gameAssets.uploadFenceCount) {
-			GPU_Fence temporary = gameAssets.uploadFences[i];
-			gameAssets.uploadFences[i] = gameAssets.uploadFences[gameAssets.uploadFenceCount];
-			gameAssets.uploadFences[gameAssets.uploadFenceCount] = temporary;
+		assetsContext.uploadFenceCount -= 1;
+		if (i != assetsContext.uploadFenceCount) {
+			GPU_Fence temporary = assetsContext.uploadFences[i];
+			assetsContext.uploadFences[i] = assetsContext.uploadFences[assetsContext.uploadFenceCount];
+			assetsContext.uploadFences[assetsContext.uploadFenceCount] = temporary;
 			i -= 1;
 		}
 	}
 }
 
-void InitializeAssets(void *job_parameter) {
-	GameState *game_state = (GameState *)job_parameter;
-	gameAssets.gpu_upload_command_pool = Render_API_Create_Command_Pool(&game_state->render_context.api_context, GPU_GRAPHICS_COMMAND_QUEUE);
-	for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++) {
-		gameAssets.uploadFences[i] = Render_API_Create_Fence(&game_state->render_context.api_context, false);
+void InitializeAssets(void *job_parameter)
+{
+	assetsContext.gpu_upload_command_pool = RenderAPICreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
+
+	for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++)
+	{
+		assetsContext.uploadFences[i] = RenderAPICreateFence(false);
 	}
-	//load_model("data/models/anvil", NANOSUIT_ASSET, &game_state->assets, &game_state->frame_arena); // @TODO @SUBARENA
 }

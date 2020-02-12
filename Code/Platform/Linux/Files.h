@@ -1,5 +1,8 @@
 #pragma once
 
+#include <dirent.h>
+#include <fcntl.h>
+
 struct PlatformDirectoryIteration
 {
 	DIR *dir;

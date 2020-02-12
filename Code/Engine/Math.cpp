@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "Math.h"
 
 f32 SquareRoot(f32 F) {
@@ -409,12 +411,12 @@ M4 ViewMatrix(V3 Position, V3 Forward, V3 Side, V3 Up) {
 	}};
 }
 
-M4 LookAt(V3 Position, V3 Target, V3 WorldUp) {
+M4 LookAt(V3 position, V3 target, V3 worldUp) {
 	// @TODO: Move this out to a create basis function.
-	V3 Forward = Normalize(Target - Position);
-	V3 Side = Normalize(CrossProduct(Forward, WorldUp));
-	V3 Up = Normalize(CrossProduct(Side, Forward));
-	return ViewMatrix(Position, Forward, Side, Up);
+	V3 forward = Normalize(target - position);
+	V3 side = Normalize(CrossProduct(forward, worldUp));
+	V3 up = Normalize(CrossProduct(side, forward));
+	return ViewMatrix(position, forward, side, up);
 }
 
 /*

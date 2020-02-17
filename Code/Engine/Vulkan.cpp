@@ -321,7 +321,7 @@ struct _Render_API_Context {
 	VkDeviceSize              minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize              maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
 	//Memory_Arena             *arena;
-	PlatformMutex mutex;
+	Mutex mutex;
 
 	struct {
 		// @TODO: Move vertex, index, uniform starts/frontiers into here.
@@ -459,19 +459,19 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 	switch (severity) {
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT: {
-		logType = INFO_LOG;
+		logType = LogType::INFO;
 		severityString = "Info";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: {
-		logType = ERROR_LOG;
+		logType = LogType::ERROR;
 		severityString = "Warning";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT: {
-		logType = ERROR_LOG;
+		logType = LogType::ERROR;
 		severityString = "Error";
 	} break;
 	default: {
-		logType = INFO_LOG;
+		logType = LogType::ERROR;
 		severityString = "Unknown";
 	};
 	}
@@ -491,8 +491,8 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 	};
 	}
 	LogPrint(logType, "Vulkan debug message: %s: %s: %s\n", severityString, typeString, callbackData->pMessage);
-	if (logType == ERROR_LOG) {
-		PlatformPrintStacktrace();
+	if (logType == LogType::ERROR) {
+		PrintStacktrace();
 	}
     return 0;
 }
@@ -3052,9 +3052,9 @@ typedef struct {
 } Create_Shader_Request;
 
 void Render_API_Initialize(Render_API_Context *context) {
-	PlatformDynamicLibraryHandle vulkan_library = PlatformOpenDynamicLibrary("libvulkan.so");
+	DLLHandle vulkan_library = OpenDLL("libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name) \
-	name = (PFN_##name)PlatformGetDynamicLibraryFunction(vulkan_library, #name); \
+	name = (PFN_##name)GetDLLFunction(vulkan_library, #name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_GLOBAL_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
@@ -3078,7 +3078,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 	};
 	const char *required_instance_extensions[] = {
 		"VK_KHR_surface",
-		PlatformGetRequiredVulkanSurfaceInstanceExtension(),
+		GetRequiredVulkanSurfaceInstanceExtension(),
 #if defined(DEBUG)
 		"VK_EXT_debug_utils",
 #endif
@@ -3089,7 +3089,7 @@ void Render_API_Initialize(Render_API_Context *context) {
 	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1)) {
 		Abort("Vulkan version 1.1 or greater required: version %d.%d.%d is installed");
 	}
-	LogPrint(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+	LogPrint(LogType::INFO, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {
 #if defined(DEBUG)
@@ -3106,17 +3106,17 @@ void Render_API_Initialize(Render_API_Context *context) {
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, NULL);
 		VkLayerProperties available_instance_layers[available_instance_layer_count];
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, available_instance_layers);
-		LogPrint(INFO_LOG, "Available Vulkan layers:\n");
+		LogPrint(LogType::INFO, "Available Vulkan layers:\n");
 		for (s32 i = 0; i < available_instance_layer_count; i++) {
-			LogPrint(INFO_LOG, "\t%s\n", available_instance_layers[i].layerName);
+			LogPrint(LogType::INFO, "\t%s\n", available_instance_layers[i].layerName);
 		}
 		u32 available_instance_extension_count = 0;
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, NULL));
 		VkExtensionProperties available_instance_extensions[available_instance_extension_count];
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, available_instance_extensions));
-		LogPrint(INFO_LOG, "Available Vulkan instance extensions:\n");
+		LogPrint(LogType::INFO, "Available Vulkan instance extensions:\n");
 		for (s32 i = 0; i < available_instance_extension_count; i++) {
-			LogPrint(INFO_LOG, "\t%s\n", available_instance_extensions[i].extensionName);
+			LogPrint(LogType::INFO, "\t%s\n", available_instance_extensions[i].extensionName);
 		}
 		auto ApplicationInfo = VkApplicationInfo{
 			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -3157,8 +3157,8 @@ void Render_API_Initialize(Render_API_Context *context) {
 		VK_CHECK(vkCreateDebugUtilsMessengerEXT(context->instance, &debug_create_info, NULL, &context->debug_messenger));
 	}
 
-	PlatformWindow window;
-	PlatformCreateVulkanSurface(window, context->instance, &context->window_surface);
+	WindowContext window;
+	CreateVulkanSurface(&window, context->instance, &context->window_surface);
 
 	// Select physical device.
 	// @TODO: Rank physical device and select the best one?
@@ -3270,9 +3270,9 @@ void Render_API_Initialize(Render_API_Context *context) {
 					context->minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
 					context->maximum_uniform_buffer_size = physical_device_properties.limits.maxUniformBufferRange;
 					found_suitable_physical_device = true;
-					LogPrint(INFO_LOG, "Available Vulkan device extensions:\n");
+					LogPrint(LogType::INFO, "Available Vulkan device extensions:\n");
 					for (s32 k = 0; k < available_device_extension_count; k++) {
-						LogPrint(INFO_LOG, "\t%s\n", available_device_extensions[k].extensionName);
+						LogPrint(LogType::INFO, "\t%s\n", available_device_extensions[k].extensionName);
 					}
 					break;
 				}
@@ -4160,7 +4160,7 @@ void GPU_Flush_Asset_Uploads() {
 }
 
 void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u32 visible_mesh_count, Render_Context *render_context, u32 swapchain_image_index) {
-	Platform_Lock_Mutex(&vulkan_context.mutex);
+	LockMutex(&vulkan_context.mutex);
 
 	//update_vulkan_uniforms(render_context->scene_projection, camera, meshes, visible_meshes, visible_mesh_count, swapchain_image_index);
 	//vkWaitForFences(vulkan_context.device, 1, &the_fence, 1, UINT64_MAX);
@@ -4229,7 +4229,7 @@ void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u
 	vulkan_context.debug_vertex_count = 0;
 	vulkan_context.debug_index_count = 0;
 
-	Platform_Unlock_Mutex(&vulkan_context.mutex);
+	UnlockMutex(&vulkan_context.mutex);
 }
 
 void Cleanup_Renderer() {

@@ -9,7 +9,7 @@ GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GPU_Memory_
 	allocator.activeBlock = NULL;
 	allocator.baseBlock = NULL;
 	allocator.memoryType = memoryType;
-	PlatformCreateMutex(&allocator.mutex);
+	CreateMutex(&allocator.mutex);
 	return allocator;
 }
 
@@ -23,7 +23,7 @@ struct {
 } gpuContext;
 
 GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *allocator, GPU_Resource_Allocation_Requirements allocationRequirements) {
-	PlatformLockMutex(&allocator->mutex);
+	LockMutex(&allocator->mutex);
 	Assert(allocationRequirements.size < allocator->blockSize);
 	// @TODO: Try to allocate out of the freed allocations.
 	if (!allocator->activeBlock || allocator->activeBlock->frontier + allocationRequirements.size > allocator->blockSize) {
@@ -64,18 +64,18 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 	Assert(allocator->activeBlock->allocationCount < GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
 	allocator->activeBlock->frontier = allocationStartOffset + allocationRequirements.size;
 	Assert(allocator->activeBlock->frontier <= allocator->blockSize);
-	PlatformUnlockMutex(&allocator->mutex);
+	UnlockMutex(&allocator->mutex);
 	return newAllocation;
 }
 
 //void ClearGPUMemoryBlockAllocator(GPUMemoryBlockAllocator *allocator) {
 void ClearGPUMemoryBlockAllocator() {
 	auto allocator = &gpuContext.memoryAllocators.stagingBlock;
-	PlatformLockMutex(&allocator->mutex);
+	LockMutex(&allocator->mutex);
 	allocator->activeBlock = allocator->baseBlock;
 	allocator->activeBlock->allocationCount = 0;
 	allocator->activeBlock->frontier = 0;
-	PlatformUnlockMutex(&allocator->mutex);
+	UnlockMutex(&allocator->mutex);
 }
 
 GPU_Buffer CreateGPUBuffer(u32 size, GPU_Buffer_Usage_Flags usage_flags) {

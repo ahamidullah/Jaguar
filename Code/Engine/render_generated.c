@@ -83,7 +83,7 @@ GPU_Shader_Descriptor_Sets Create_Descriptor_Sets_For_Shader(Render_Context *con
 void Update_Descriptors(Render_Context *context, GPU_Fence fence, s32 swapchain_image_index, GPU_Shader_Descriptor_Sets *sets, s32 update_count, GPU_Descriptor_Update_Info *update_infos) {
 	void *staging_memory;
 	GPU_Buffer staging_buffer = Renderer::CreateGPUStagingBuffer(sizeof(M4), &staging_memory);
-	Copy_Memory(&update_infos[0].data.m4, staging_memory, sizeof(M4));
+	CopyMemory(&update_infos[0].data.m4, staging_memory, sizeof(M4));
 	GPU_Command_Buffer command_buffer = Render_API_Create_Command_Buffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
 	Render_API_Record_Copy_Buffer_Command(command_buffer, sizeof(M4), staging_buffer, sets->buffer, 0, 0x100 * swapchain_image_index);
 	Render_API_End_Command_Buffer(command_buffer);

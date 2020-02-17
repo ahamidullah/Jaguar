@@ -40,7 +40,7 @@ struct GPUMemoryBlock
 
 struct GPUMemoryBlockAllocator
 {
-	PlatformMutex mutex;
+	Mutex mutex;
 	u32 blockSize;
 	GPUMemoryBlock *baseBlock;
 	GPUMemoryBlock *activeBlock;

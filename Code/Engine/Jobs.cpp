@@ -44,7 +44,7 @@ struct JobFiberParameter
 
 struct JobFiber
 {
-	PlatformFiber platformFiber;
+	Fiber platformFiber;
 	JobFiberParameter parameter;
 	struct JobFiber *next;
 };
@@ -56,7 +56,7 @@ struct WorkerThreadParameter
 
 struct WorkerThread
 {
-	PlatformThreadHandle platformThread;
+	ThreadHandle platformThread;
 	WorkerThreadParameter parameter;
 };
 
@@ -66,25 +66,25 @@ struct
 	AtomicLinkedList<JobFiber> idleJobFiberList;
 	AtomicRingBuffer<Job, MAX_JOBS_PER_QUEUE> jobQueues[JOB_PRIORITY_COUNT];
 	AtomicRingBuffer<JobFiber *, MAX_JOBS_PER_QUEUE> resumableJobQueues[JOB_PRIORITY_COUNT];
-	PlatformSemaphore jobsAvailableSemaphore;
+	Semaphore jobsAvailableSemaphore;
 } jobsContext;
 
 __thread struct
 {
-	PlatformFiber workerThreadFiber;
+	Fiber workerThreadFiber;
 	//Job_Fiber *activeJobFiber;
 	JobCounter *waitingJobCounter;
 } threadLocalJobsContext;
 
 void *WorkerThreadProcedure(void *parameter)
 {
-	PlatformConvertThreadToFiber(&threadLocalJobsContext.workerThreadFiber);
+	ConvertThreadToFiber(&threadLocalJobsContext.workerThreadFiber);
 	threadIndex = ((WorkerThreadParameter *)parameter)->threadIndex;
 
 	JobFiber *activeJobFiber = NULL;
 	while (1)
 	{
-		PlatformWaitOnSemaphore(&jobsContext.jobsAvailableSemaphore);
+		WaitOnSemaphore(&jobsContext.jobsAvailableSemaphore);
 		do
 		{
 			activeJobFiber = NULL;
@@ -112,7 +112,7 @@ void *WorkerThreadProcedure(void *parameter)
 			{
 				break;
 			}
-			PlatformSwitchToFiber(&activeJobFiber->platformFiber);
+			SwitchToFiber(&activeJobFiber->platformFiber);
 			Job *scheduledJob = &activeJobFiber->parameter.scheduledJob;
 			if (scheduledJob->finished)
 			{
@@ -122,13 +122,13 @@ void *WorkerThreadProcedure(void *parameter)
 					continue;
 				}
 				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
-				s32 unfinishedJobCount = PlatformAtomicAddS32(&scheduledJob->counterWaitingForThisJob->unfinishedJobCount, -1);
+				s32 unfinishedJobCount = AtomicAdd(&scheduledJob->counterWaitingForThisJob->unfinishedJobCount, -1);
 				if (unfinishedJobCount > 0)
 				{
 					continue;
 				}
 				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waitingJobFiber will be NULL.
-				JobFiber *waitingJobFiber = (JobFiber *)PlatformFetchAndSetPointer((void *volatile *)&scheduledJob->counterWaitingForThisJob->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
+				JobFiber *waitingJobFiber = (JobFiber *)AtomicFetchAndSet((void *volatile *)&scheduledJob->counterWaitingForThisJob->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waitingJobFiber)
 				{
 					continue;
@@ -138,7 +138,7 @@ void *WorkerThreadProcedure(void *parameter)
 			}
 			else
 			{
-				if (PlatformCompareAndSwapPointers((void *volatile *)&threadLocalJobsContext.waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
+				if (AtomicCompareAndSwap((void *volatile *)&threadLocalJobsContext.waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
 				{
 					// The waitingJobFiber was not NULL, hence all dependency jobs already finished. This job can resume immediately.
 					Write(&jobsContext.resumableJobQueues[scheduledJob->priority], activeJobFiber);
@@ -158,7 +158,7 @@ void JobFiberProcedure(void *parameterPointer)
 		activeJob = &parameter->scheduledJob;
 		activeJob->procedure(activeJob->parameter);
 		activeJob->finished = 1;
-		PlatformSwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
+		SwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
 	}
 }
 
@@ -186,7 +186,7 @@ void RunJobs(u32 jobCount, JobDeclaration *jobDeclarations, JobPriority priority
 			.counterWaitingForThisJob = counter,
 			.finished = 0,
 		});
-		PlatformSignalSemaphore(&jobsContext.jobsAvailableSemaphore);
+		SignalSemaphore(&jobsContext.jobsAvailableSemaphore);
 	}
 }
 
@@ -203,33 +203,33 @@ void WaitForJobCounter(JobCounter *counter)
 		return;
 	}
 	threadLocalJobsContext.waitingJobCounter = counter;
-	PlatformSwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
+	SwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
 }
 
 void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 {
 	for (u32 i = 0; i < JOB_FIBER_COUNT; i++)
 	{
-		JobFiber *newFiber = AllocateStructMemory(JobFiber);
-		PlatformCreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
+		JobFiber *newFiber = AllocateStruct(JobFiber);
+		CreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
 		newFiber->next = jobsContext.idleJobFiberList.head;
 		jobsContext.idleJobFiberList.head = newFiber;
 	}
-	jobsContext.jobsAvailableSemaphore = PlatformCreateSemaphore(0);
-	//GameState->jobsContext.workerThreadCount = PlatformGetProcessorCount();
+	jobsContext.jobsAvailableSemaphore = CreateSemaphore(0);
+	//GameState->jobsContext.workerThreadCount = GetProcessorCount();
 
-	auto workerThreadCount = PlatformGetProcessorCount();
+	auto workerThreadCount = GetProcessorCount();
 	jobsContext.workerThreads = CreateArray<WorkerThread>(workerThreadCount);
 	for (u32 i = 0; i < workerThreadCount - 1; i++)
 	{
 		jobsContext.workerThreads[i].parameter.threadIndex = i;
-		PlatformCreateThread(WorkerThreadProcedure, &jobsContext.workerThreads[i].parameter);
+		CreateThread(WorkerThreadProcedure, &jobsContext.workerThreads[i].parameter);
 	}
-	jobsContext.workerThreads[workerThreadCount - 1].platformThread = PlatformGetCurrentThread();
+	jobsContext.workerThreads[workerThreadCount - 1].platformThread = GetCurrentThread();
 
 	for (u32 i = 0; i < workerThreadCount; i++)
 	{
-		PlatformSetThreadProcessorAffinity(jobsContext.workerThreads[i].platformThread, i);
+		SetThreadProcessorAffinity(jobsContext.workerThreads[i].platformThread, i);
 	}
 
 	JobDeclaration initialJob = CreateJob(initialJobProcedure, initialJobParameter);

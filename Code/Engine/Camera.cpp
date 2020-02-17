@@ -65,10 +65,10 @@ Camera *GetCamera(const String &name) {
 	return result;
 }
 
-void UpdatePlayerControlledCamera(const String &name, PlatformInput *input) {
+void UpdatePlayerControlledCamera(const String &name, Input *input) {
 	auto camera = GetCamera(name);
 	if (!camera) {
-		LogPrint(ERROR_LOG, "got invalid camera name: %s\n", &name[0]);
+		LogPrint(LogType::ERROR, "got invalid camera name: %s\n", &name[0]);
 		return;
 	}
 
@@ -84,21 +84,21 @@ void UpdatePlayerControlledCamera(const String &name, PlatformInput *input) {
 		create_camera_basis(camera, calculate_camera_forward(camera->pitch, camera->yaw));
 	}
 
-	if (PlatformIsKeyDown(A_KEY, input)) {
+	if (IsKeyDown(A_KEY, input)) {
 		camera->position = camera->position - (camera->speed * camera->side);
-	} else if (PlatformIsKeyDown(D_KEY, input)) {
+	} else if (IsKeyDown(D_KEY, input)) {
 		camera->position = camera->position + (camera->speed * camera->side);
 	}
 
-	if (PlatformIsKeyDown(Q_KEY, input)) {
+	if (IsKeyDown(Q_KEY, input)) {
 		camera->position.Z -= camera->speed;
-	} else if (PlatformIsKeyDown(E_KEY, input)) {
+	} else if (IsKeyDown(E_KEY, input)) {
 		camera->position.Z += camera->speed;
 	}
 
-	if (PlatformIsKeyDown(W_KEY, input)) {
+	if (IsKeyDown(W_KEY, input)) {
 		camera->position = camera->position + (camera->speed * camera->forward);
-	} else if (PlatformIsKeyDown(S_KEY, input)) {
+	} else if (IsKeyDown(S_KEY, input)) {
 		camera->position = camera->position - (camera->speed * camera->forward);
 	}
 

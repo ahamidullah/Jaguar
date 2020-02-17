@@ -34,7 +34,7 @@ void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPU_Command_Buff
 	do
 	{
 		writePointer = b->writeHead;
-		PlatformCompareAndSwapPointers((void *volatile *)&b->writeHead, writePointer, writePointer + 1);
+		AtomicCompareAndSwap((void *volatile *)&b->writeHead, writePointer, writePointer + 1);
 	} while (b->writeHead != writePointer + 1);
 	*writePointer = commandBuffer;
 	s32 bufferIndex = (writePointer < b->buffers[1].commandBuffers) ? 0 : 1;
@@ -106,7 +106,7 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s32 texturePixelWidth, s32 texturePixelH
 	void *stagingMemory;
 	u32 textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
 	GPU_Buffer stagingBuffer = Renderer::CreateGPUStagingBuffer(textureByteSize, &stagingMemory);
-	Copy_Memory(pixels, stagingMemory, textureByteSize);
+	CopyMemory(pixels, stagingMemory, textureByteSize);
 	GPU_Image image = Renderer::CreateGPUImage(texturePixelWidth, texturePixelHeight, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, (GPU_Image_Usage_Flags)(GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED), GPU_SAMPLE_COUNT_1);
 	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
 	Render_API_Transition_Image_Layout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_UNDEFINED, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -169,7 +169,7 @@ void LoadModel(void *jobParameterPointer) {
 	String modelName = GetFilenameFromPath(modelDirectory);
 	String fbxFilename = Concatenate(modelName, ".fbx");
 	String fbxFilepath = JoinFilepaths(modelDirectory, fbxFilename);
-	const struct aiScene* assimp_scene = aiImportFile(&fbxFilepath.Data[0], aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
+	const struct aiScene* assimp_scene = aiImportFile(&fbxFilepath[0], aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimp_scene || assimp_scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimp_scene->mRootNode) {
 		Abort("assimp error: %s", aiGetErrorString());
 	}
@@ -341,8 +341,8 @@ void LoadModel(void *jobParameterPointer) {
 
 		void *staging_memory;
 		GPU_Buffer staging_buffer = Renderer::CreateGPUStagingBuffer(vertices_size + indices_size, &staging_memory);
-		Copy_Memory(vertex_buffer, staging_memory, vertices_size);
-		Copy_Memory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
+		CopyMemory(vertex_buffer, staging_memory, vertices_size);
+		CopyMemory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
 		mesh->gpuMesh = QueueIndexedGeometryUploadToGPU(vertices_size, indices_size, staging_buffer, uploadCounter);
 
 
@@ -699,7 +699,7 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 	if (assetsContext.uploadCommandBuffers.readBufferElementCount > 0) {
 		Render_API_Submit_Command_Buffers(assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.readBuffer->commandBuffers, GPU_GRAPHICS_COMMAND_QUEUE, assetsContext.uploadFences[assetsContext.uploadFenceCount]);
 		assetsContext.pendingUploadCounterCounts[assetsContext.uploadFenceCount] = assetsContext.uploadCommandBuffers.readBufferElementCount;
-		Copy_Memory(assetsContext.uploadCommandBuffers.readBuffer->uploadCounters, &assetsContext.pendingUploadCountersPerFence[assetsContext.uploadFenceCount], assetsContext.uploadCommandBuffers.readBufferElementCount * sizeof(AssetUploadCounter *));
+		CopyMemory(assetsContext.uploadCommandBuffers.readBuffer->uploadCounters, &assetsContext.pendingUploadCountersPerFence[assetsContext.uploadFenceCount], assetsContext.uploadCommandBuffers.readBufferElementCount * sizeof(AssetUploadCounter *));
 		assetsContext.uploadFenceCount += 1;
 		// @TODO: Render_API_Free_Command_Buffers(assetsContext.gpu_upload_command_pool, assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.read_buffer->command_buffers);
 	}

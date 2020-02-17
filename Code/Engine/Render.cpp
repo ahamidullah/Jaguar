@@ -336,7 +336,7 @@ Array<MeshInstance> GetMeshInstances();
 void Render() {
 	auto camera = GetCamera("main");
 	if (!camera) {
-		LogPrint(ERROR_LOG, "Render: could not get main camera");
+		LogPrint(LogType::ERROR, "Render: could not get main camera");
 		return;
 	}
 	auto mesh_instances = GetMeshInstances();
@@ -371,9 +371,9 @@ void Render() {
 		{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		{COLOR_DESCRIPTOR, {.v4 = {}}},
 	};
-	Copy_Memory(m.M, update_infos[0].data.m4, sizeof(m.M));
+	CopyMemory(m.M, update_infos[0].data.m4, sizeof(m.M));
 	V4 v = {1.0f, 0.0f, 0.0f, 1.0f};
-	Copy_Memory(&v, update_infos[1].data.v4, sizeof(v));
+	CopyMemory(&v, update_infos[1].data.v4, sizeof(v));
 	Update_Descriptors(context, matrix_fence, swapchain_image_index, &context->rrdescriptor_sets, ArrayCount(update_infos), update_infos);
 
 	//M4 scene_projection_view_matrix = multiply_m4(camera->projection_matrix, camera->view_matrix);

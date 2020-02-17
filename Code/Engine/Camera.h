@@ -20,5 +20,5 @@ struct Camera
 };
 
 void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov);
-void UpdatePlayerControlledCamera(const String &name, PlatformInput *input);
+void UpdatePlayerControlledCamera(const String &name, Input *input);
 Camera *GetCamera(const String &name);

@@ -1,11 +1,13 @@
 #pragma once
 
-struct OpenFileResult {
+struct OpenFileResult
+{
 	FileHandle file;
 	bool error;
 };
 
-struct ReadFileResult {
+struct ReadFileResult
+{
 	String string;
 	bool error;
 };

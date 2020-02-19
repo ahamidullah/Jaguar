@@ -40,16 +40,16 @@ String GetFilepathExtension(const String &path)
 	return fileExtension;
 }
 
-bool SetFilepathExtension(String *path, const String &newExtension)
+void SetFilepathExtension(String *path, const String &newExtension)
 {
 	auto dotIndex = FindLastIndex(*path, '.');
 	if (dotIndex < 0)
 	{
-		return false;
+		Append(path, newExtension);
+		return;
 	}
 	Resize(path, dotIndex + 1 + Length(newExtension));
 	CopyMemory(&newExtension[0], &(*path)[dotIndex + 1], Length(newExtension));
-	return true;
 }
 
 // Concatenates two strings and inserts a '/' between them.
@@ -59,5 +59,40 @@ String JoinFilepaths(const String &a, const String &b)
 	CopyMemory(&a[0], &result[0], Length(a));
 	result[Length(a)] = '/';
 	CopyMemory(&b[0], &result[0] + Length(a) + 1, Length(b));
+	return result;
+}
+
+// This is probably buggy/full of corner cases, but oh well!
+String CleanFilepath(const String &filepath)
+{
+	auto components = Split(filepath, '/');
+	for (auto i = 0; i < Length(components); i++)
+	{
+		if (components[i] == ".")
+		{
+			Remove(&components, i);
+		}
+		if (components[i] == "..")
+		{
+			Remove(&components, i);
+			if (i != 0)
+			{
+				Remove(&components, i - 1);
+			}
+		}
+	}
+	auto result = CreateString(0, Length(filepath));
+	if (Length(filepath) > 0 && filepath[0] == '/')
+	{
+		Append(&result, '/');
+	}
+	for (auto i = 0; i < Length(components); i++)
+	{
+		Append(&result, components[i]);
+		if (i != Length(components) - 1)
+		{
+			Append(&result, '/');
+		}
+	}
 	return result;
 }

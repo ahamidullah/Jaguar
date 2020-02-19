@@ -166,7 +166,7 @@ void LoadModel(void *jobParameterPointer) {
 	}
 	Assert(foundModel);
 
-	String modelName = GetFilenameFromPath(modelDirectory);
+	String modelName = GetFilepathFilename(modelDirectory);
 	String fbxFilename = Concatenate(modelName, ".fbx");
 	String fbxFilepath = JoinFilepaths(modelDirectory, fbxFilename);
 	const struct aiScene* assimp_scene = aiImportFile(&fbxFilepath[0], aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);

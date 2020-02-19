@@ -65,6 +65,15 @@ String CreateString(const String &copy)
 	return result;
 }
 
+String CreateString(const String &copy, size_t startIndex, size_t endIndex)
+{
+	Assert(endIndex >= startIndex);
+	auto length = endIndex - startIndex + 1;
+	auto result = CreateString(length);
+	CopyMemory(&copy[startIndex], &result[0], length);
+	return result;
+}
+
 void Resize(String *string, size_t newSize)
 {
 	Resize(&string->data, newSize + 1);
@@ -107,6 +116,13 @@ void Append(String *Destination, String Source, u32 RangeStartIndex, u32 RangeLe
 	///SetSize(&Destination->data, Length(Destination->data) - 1);
 	///Append(&Destination->data, &Source.data[RangeStartIndex], RangeLength);
 	///Append(&Destinaton->data, '\0');
+}
+
+void Append(String *s, char c)
+{
+	Resize(&s->data, Length(s) + 2);
+	s->data[Length(s->data) - 2] = c;
+	s->data[Length(s->data) - 1] = '\0';
 }
 
 size_t Length(const String *S)
@@ -194,4 +210,52 @@ s64 FindLastIndex(const String &s, char c)
 		}
 	}
 	return occurrence;
+}
+
+bool IsSpace(char c)
+{
+	if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+	{
+		return true;
+	}
+	return false;
+}
+
+void Trim(String *s, size_t leftIndex, size_t rightIndex)
+{
+	Assert(rightIndex > leftIndex);
+	auto length = rightIndex - (leftIndex + 1);
+	MoveMemory(&s->data[leftIndex + 1], &s->data[0], length);
+	Resize(s, length);
+}
+
+Array<String> Split(const String &s, char seperator)
+{
+	Array<String> result;
+	auto splitStartIndex = 0;
+	auto splitLength = 0;
+	for (auto i = 0; i < Length(s); i++)
+	{
+		if (s[i] == seperator)
+		{
+			if (splitLength > 0)
+			{
+				Append(&result, CreateString(s, splitStartIndex, i - 1));
+				splitLength = 0;
+			}
+		}
+		else
+		{
+			if (splitLength == 0)
+			{
+				splitStartIndex = i;
+			}
+			splitLength++;
+		}
+	}
+	if (splitLength > 0)
+	{
+		Append(&result, CreateString(s, splitStartIndex, Length(s) - 1));
+	}
+	return result;
 }

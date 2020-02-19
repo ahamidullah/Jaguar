@@ -1,7 +1,9 @@
-ReadFileResult ReadEntireFile(const String &path) {
+ReadFileResult ReadEntireFile(const String &path)
+{
 	auto [file, error] = OpenFile(path, OPEN_FILE_READ_ONLY);
-	if (error) {
-		ReadFileResult{};
+	if (error)
+	{
+		return ReadFileResult{.error = true};
 	}
 	Defer(CloseFile(file));
 	auto fileLength = GetFileLength(file);

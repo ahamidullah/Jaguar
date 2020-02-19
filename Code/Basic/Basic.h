@@ -77,5 +77,6 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 #include "File.h"
 #include "Log.h"
 #include "Filesystem.h"
+#include "Parser.h"
 
 void InitializeBasic(u32 fiberCount = 0);

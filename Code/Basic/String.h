@@ -6,12 +6,12 @@
 size_t Length(const char *s);
 
 // @TODO: Make this utf-8 by default?
-struct String {
+struct String
+{
 	Array<char> data;
 	String() = default;
 	String(const Array<char> &a) : data{a} {}
 	String(const char *cString) : data{CreateArray(Length(cString) + 1, cString)} {};
-	String(char *cString) : data{CreateArray(Length(cString) + 1, cString)} {};
 	char &operator[](size_t i);
 	char &operator[](size_t i) const;
 };
@@ -22,11 +22,20 @@ bool CStringsEqual(const char *a, const char *b);
 String CreateString(size_t length, size_t capacity);
 String CreateString(size_t length);
 String CreateString(const String &copy);
+String CreateString(const String &copy, size_t startIndex, size_t endIndex);
 size_t Length(const String &s);
 size_t Length(const String *s);
 void Append(String *destination, const String &source);
 void Append(String *destination, const char *source);
 void Append(String *destination, String source, u32 rangeStartIndex, u32 rangeLength);
+void Append(String *s, char c);
+String _FormatString(const char *format, ...);
+s32 FormatString(char *buffer, const char *format, va_list arguments);
+s32 FormatString(char *buffer, const char *format, ...);
+s64 FindFirstIndex(const String &s, char c);
+s64 FindLastIndex(const String &s, char c);
+bool IsSpace(char c);
+void Trim(String *s, size_t leftIndex, size_t rightIndex);
 
 template<typename... StringPack>
 size_t Length(const String& S, const StringPack... rest) {
@@ -67,9 +76,3 @@ String Concatenate(const T &first, const StringPack... rest) {
 	result.data[Length(result)] = '\0';
 	return result;
 }
-
-String _FormatString(const char *format, ...);
-s32 FormatString(char *buffer, const char *format, va_list arguments);
-s32 FormatString(char *buffer, const char *format, ...);
-s64 FindFirstIndex(const String &s, char c);
-s64 FindLastIndex(const String &s, char c);

@@ -21,6 +21,7 @@
 #include "Log.cpp"
 #include "String.cpp"
 #include "Filesystem.cpp"
+#include "Parser.cpp"
 
 void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName)
 {

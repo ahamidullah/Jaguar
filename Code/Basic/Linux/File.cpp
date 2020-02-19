@@ -24,7 +24,6 @@ bool CloseFile(FileHandle file)
 
 ReadFileResult ReadFile(FileHandle file, size_t numberOfBytesToRead)
 {
-	ReadFileResult result;
 	size_t totalBytesRead = 0;
 	ssize_t currentBytesRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
 	auto fileString = CreateString(numberOfBytesToRead);
@@ -38,18 +37,15 @@ ReadFileResult ReadFile(FileHandle file, size_t numberOfBytesToRead)
 	if (currentBytesRead == -1)
 	{
 		LogPrint(LogType::ERROR, "ReadFile failed: could not read from file: %s\n", GetPlatformError());
-		result.error = true;
-		return result;
+		return ReadFileResult{.error = true};
 	}
 	else if (totalBytesRead != numberOfBytesToRead)
 	{
 		// @TODO: Add file name to file handle.
 		LogPrint(LogType::ERROR, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested\n", totalBytesRead, numberOfBytesToRead);
-		result.error = true;
-		return result;
+		return ReadFileResult{.error = true};
 	}
-	result.string = fileString;
-	return result;
+	return ReadFileResult{.string = fileString};
 }
 
 bool WriteFile(FileHandle file, size_t count, const void *buffer)

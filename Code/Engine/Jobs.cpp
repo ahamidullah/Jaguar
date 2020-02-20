@@ -20,10 +20,6 @@
 // @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
 // @TODO: Move the jobs context into the game state (jobs_state?).
 
-#include "AtomicRingBuffer.h"
-#include "AtomicLinkedList.h"
-#include "Jobs.h"
-
 constexpr auto MAX_JOBS_PER_QUEUE = 100;
 
 #define JOB_FIBER_POINTER_SENTINEL ((JobFiber *)0xDEADBEEF)

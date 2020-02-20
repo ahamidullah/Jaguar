@@ -2,8 +2,6 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include "Assets.h"
-
 constexpr s32 MAX_UPLOAD_COMMAND_BUFFERS = 128;
 constexpr s32 MAX_UPLOAD_FENCES = 32;
 

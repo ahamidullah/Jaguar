@@ -8,5 +8,7 @@ struct ParserStream
 };
 
 bool CreateParserStream(ParserStream *parser, const String &filepath);
-String GetParserToken(ParserStream *stream);
-bool GetExpectedParserToken(ParserStream *stream, const char *expected);
+String GetToken(ParserStream *stream);
+bool GetExpectedToken(ParserStream *stream, const char *expected);
+char PeekAtNextCharacter(ParserStream *parser);
+void AdvanceParser(ParserStream *parser, u32 count);

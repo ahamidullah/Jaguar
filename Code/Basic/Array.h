@@ -45,6 +45,12 @@ bool operator==(const Array<T> &a, const Array<T> &b)
 }
 
 template <typename T>
+bool operator!=(const Array<T> &a, const Array<T> &b)
+{
+	return !(a == b);
+}
+
+template <typename T>
 Array<T> CreateArray(size_t count, size_t capacity)
 {
 	return {

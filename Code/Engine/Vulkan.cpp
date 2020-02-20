@@ -1,7 +1,5 @@
 #if defined(USE_VULKAN_RENDER_API)
 
-#include "Vulkan.h"
-
 // @TODO: Move this to render.c.
 #define SHADOW_MAP_WIDTH  1024
 #define SHADOW_MAP_HEIGHT 1024

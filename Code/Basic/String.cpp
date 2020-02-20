@@ -18,6 +18,11 @@ bool operator==(const String &a, const String &b)
 	return a.data == b.data;
 }
 
+bool operator!=(const String &a, const String &b)
+{
+	return a.data != b.data;
+}
+
 bool CStringsEqual(const char *a, const char *b)
 {
 	while (*a && *b)
@@ -179,7 +184,7 @@ s32 FormatString(char *buffer, const char *format, va_list arguments)
 
 String _FormatString(const char *format, ...)
 {
-	auto result = CreateString(500); // @TODO
+	auto result = CreateString(2056); // @TODO
 	va_list arguments;
 	va_start(arguments, format);
 	FormatString(&result[0], format, arguments);

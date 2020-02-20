@@ -1,6 +1,3 @@
-#include "GPU.h"
-#include "Render.h"
-
 namespace Renderer {
 
 GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GPU_Memory_Type memoryType) {

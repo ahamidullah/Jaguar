@@ -12,7 +12,7 @@ bool CreateParserStream(ParserStream *parser, const String &filepath)
 
 bool IsParserDelimiter(char c)
 {
-	const char *tokenDelimiters = " \t:;,(){}=-+\n";
+	const char *tokenDelimiters = " \t:;\",(){}=-+*/\n";
 	for (auto i = 0; i < Length(tokenDelimiters); i++)
 	{
 		if (c == tokenDelimiters[i])
@@ -23,14 +23,10 @@ bool IsParserDelimiter(char c)
 	return false;
 }
 
-String GetParserToken(ParserStream *stream)
+String GetToken(ParserStream *stream)
 {
-	while (stream->string[stream->index] && IsSpace(stream->string[stream->index]))
+	while (stream->string[stream->index] && (stream->string[stream->index] == ' ' || stream->string[stream->index] == '\t'))
 	{
-		if (stream->string[stream->index] == '\n')
-		{
-			stream->line++;
-		}
 		stream->index++;
 	}
 	if (!stream->string[stream->index])
@@ -53,7 +49,20 @@ String GetParserToken(ParserStream *stream)
 	return CreateString(stream->string, tokenStartIndex, stream->index - 1);
 }
 
-bool GetExpectedParserToken(ParserStream *stream, const String &expected)
+bool GetExpectedToken(ParserStream *parser, const String &expected)
 {
-	return expected == GetParserToken(stream);
+	return expected == GetToken(parser);
+}
+
+char PeekAtNextCharacter(ParserStream *parser)
+{
+	return parser->string[parser->index];
+}
+
+void AdvanceParser(ParserStream *parser, u32 count)
+{
+	for (auto i = 0; i < count && parser->string[parser->index]; i++)
+	{
+		parser->index++;
+	}
 }

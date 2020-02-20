@@ -1,5 +1,3 @@
-#include "Timer.h"
-
 void PrintPerformanceTimerActual(PerformanceTimer *timer)
 {
 	PlatformTime end = GetPlatformTime();

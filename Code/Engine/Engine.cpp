@@ -1,4 +1,4 @@
-#include "Media/Media.h"
+#include "Engine.h"
 
 THREAD_LOCAL u32 threadIndex; // @TODO
 u32 window_width, window_height;
@@ -7,7 +7,7 @@ u32 window_width, window_height;
 #include "Math.cpp"
 #include "Timer.cpp"
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "stb_image.h" // @TODO: Move this out of here.
 #include "Vulkan.cpp"
 #include "GPU.cpp"
 #include "Render.cpp"
@@ -15,12 +15,15 @@ u32 window_width, window_height;
 #include "Camera.cpp"
 #include "Entities.cpp"
 
+void GameLoop();
+
 bool Loop(Input *input)
 {
 	if (input->windowEvents.quit)
 	{
 		return false;
 	}
+	GameLoop();
 	return true;
 }
 
@@ -62,8 +65,4 @@ void ApplicationEntry()
 {
 	InitializeMedia(JOB_FIBER_COUNT);
 	InitializeJobs(RunGame, NULL);
-}
-
-s32 main(s32 argc, char *argv[])
-{
 }

@@ -1,9 +1,5 @@
-#include "Render.h"
 #include "render_generated.h"
 #include "render_generated.c"
-#include "Mesh.h"
-#include "Camera.h"
-#include "Jobs.h"
 
 Render_Context renderContext;
 

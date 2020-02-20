@@ -1,7 +1,5 @@
 #include <math.h>
 
-#include "Math.h"
-
 f32 SquareRoot(f32 F) {
 	return sqrt(F);
 }

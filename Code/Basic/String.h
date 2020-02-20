@@ -16,7 +16,8 @@ struct String
 	char &operator[](size_t i) const;
 };
 
-bool operator==(const String &A, const String &B);
+bool operator==(const String &a, const String &b);
+bool operator!=(const String &a, const String &b);
 bool CStringsEqual(const char *a, const char *b);
 
 String CreateString(size_t length, size_t capacity);

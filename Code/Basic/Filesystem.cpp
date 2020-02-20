@@ -45,6 +45,7 @@ void SetFilepathExtension(String *path, const String &newExtension)
 	auto dotIndex = FindLastIndex(*path, '.');
 	if (dotIndex < 0)
 	{
+		Append(path, ".");
 		Append(path, newExtension);
 		return;
 	}

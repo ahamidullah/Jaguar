@@ -21,22 +21,61 @@ bool GatherDependencies(const String &sourceFilepath, Array<String> *dependencie
 
 		auto directory = GetFilepathDirectory(queuedFiles[i]);
 
+		bool inBlockComment = false;
+		bool inLineComment = false;
 		String token;
-		for (token = GetParserToken(&parser); Length(token) > 0; token = GetParserToken(&parser))
+		for (token = GetToken(&parser); Length(token) > 0; token = GetToken(&parser))
 		{
-			if (token == "#include")
+			if (inLineComment && token == "\n")
 			{
-				token = GetParserToken(&parser);
-				Assert(Length(token) > 2);
-				if (token[0] != '"')
+				inLineComment = false;
+			}
+			else if (!inLineComment && !inBlockComment && token == "/")
+			{
+				auto nextChar = PeekAtNextCharacter(&parser);
+				if (nextChar == '/')
+				{
+					inLineComment = true;
+					AdvanceParser(&parser, 1);
+				}
+				else if (nextChar == '*')
+				{
+					inBlockComment = true;
+					AdvanceParser(&parser, 1);
+				}
+			}
+			else if (inBlockComment && token == "*")
+			{
+				auto nextChar = PeekAtNextCharacter(&parser);
+				if (nextChar == '/')
+				{
+					inBlockComment = false;
+					AdvanceParser(&parser, 1);
+				}
+			}
+			else if (!inBlockComment && !inLineComment && token == "#include")
+			{
+				token = GetToken(&parser);
+				if (token != "\"")
 				{
 					continue;
 				}
-				Trim(&token, 0, Length(token) - 1);
-				bool alreadyDone = false;
-				for (auto &file : finishedFiles)
+				String includePartialFilepath;
+				token = GetToken(&parser);
+				while (Length(token) > 0 && token != "\"")
 				{
-					if (file == token)
+					Append(&includePartialFilepath, token);
+					token = GetToken(&parser);
+				}
+				if (Length(token) == 0)
+				{
+					LogPrint(LogType::ERROR, "%s: unexpected end of include filepath: %s\n", &includePartialFilepath[0]);
+					return false;
+				}
+				bool alreadyDone = false;
+				for (auto &f : finishedFiles)
+				{
+					if (f == includePartialFilepath)
 					{
 						alreadyDone = true;
 						break;
@@ -45,8 +84,8 @@ bool GatherDependencies(const String &sourceFilepath, Array<String> *dependencie
 				if (!alreadyDone)
 				{
 					bool foundFile = false;
-					auto filepath = JoinFilepaths(directory, token);
-					if (FileExists(filepath))
+					auto includeFilepath = JoinFilepaths(directory, includePartialFilepath);
+					if (FileExists(includeFilepath))
 					{
 						foundFile = true;
 					}
@@ -54,8 +93,8 @@ bool GatherDependencies(const String &sourceFilepath, Array<String> *dependencie
 					{
 						for (auto &dir : includeSearchDirectories)
 						{
-							filepath = JoinFilepaths(dir, token);
-							if (FileExists(filepath))
+							includeFilepath = JoinFilepaths(dir, includePartialFilepath);
+							if (FileExists(includeFilepath))
 							{
 								foundFile = true;
 								break;
@@ -64,10 +103,10 @@ bool GatherDependencies(const String &sourceFilepath, Array<String> *dependencie
 					}
 					if (!foundFile)
 					{
-						LogPrint(LogType::ERROR, "failed to find file %s included from file %s\n", &token[0], &queuedFiles[i][0]);
+						LogPrint(LogType::ERROR, "failed to find file %s included from file %s\n", &includePartialFilepath[0], &queuedFiles[i][0]);
 						return false;
 					}
-					Append(&queuedFiles, CleanFilepath(filepath));
+					Append(&queuedFiles, CleanFilepath(includeFilepath));
 				}
 			}
 		}
@@ -108,8 +147,6 @@ struct BuildCommand
 
 void Build(const BuildCommand &command)
 {
-	LogPrint(LogType::INFO, "building:\n\tsourceFilepath: %s\n\tisLibrary: %d\n\tcompilerFlags: %s\n\tlinkerFlags: %s\n\tbinaryFilepath: %s\n", &command.sourceFilepath[0], command.isLibrary, &command.compilerFlags[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
-
 	auto objFilepath = CreateString(command.binaryFilepath);
 	SetFilepathExtension(&objFilepath, "o");
 
@@ -149,47 +186,49 @@ void BuildIfOutOfDate(const BuildCommand &command)
 	Assert(Length(directory) > 0);
 
 	Array<String> dependencies;
-	if (!GatherDependencies(command.sourceFilepath, &dependencies))
+	if (GatherDependencies(command.sourceFilepath, &dependencies))
 	{
-		return;
-	}
+		LogPrint(LogType::INFO, "command:\n\tsourceFilepath: %s\n\tisLibrary: %d\n\tcompilerFlags: %s\n\tlinkerFlags: %s\n\tbinaryFilepath: %s\n\n", &command.sourceFilepath[0], command.isLibrary, &command.compilerFlags[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
 
-	bool needsBuild = false;
-	if (FileExists(command.binaryFilepath))
-	{
-		auto [binaryFile, binaryOpenError] = OpenFile(command.binaryFilepath, OPEN_FILE_READ_ONLY);
-		Assert(!binaryOpenError);
-		auto binaryLastModifiedTime = GetFileLastModifiedTime(binaryFile);
-
-		for (auto &sourceFilename : dependencies)
+		bool needsBuild = false;
+		if (FileExists(command.binaryFilepath))
 		{
-			auto [sourceFile, sourceOpenError] = OpenFile(sourceFilename, OPEN_FILE_READ_ONLY);
-			Assert(!sourceOpenError);
-			Defer(CloseFile(sourceFile));
-			auto lastModifiedTime = GetFileLastModifiedTime(sourceFile);
-			if (lastModifiedTime > binaryLastModifiedTime)
+			auto [binaryFile, binaryOpenError] = OpenFile(command.binaryFilepath, OPEN_FILE_READ_ONLY);
+			Assert(!binaryOpenError);
+			auto binaryLastModifiedTime = GetFileLastModifiedTime(binaryFile);
+
+			for (auto &sourceFilename : dependencies)
 			{
-				LogPrint(LogType::INFO, "%s out of date, rebuilding...\n", &command.binaryFilepath[0]);
-				needsBuild = true;
-				break;
+				auto [sourceFile, sourceOpenError] = OpenFile(sourceFilename, OPEN_FILE_READ_ONLY);
+				Assert(!sourceOpenError);
+				Defer(CloseFile(sourceFile));
+				auto lastModifiedTime = GetFileLastModifiedTime(sourceFile);
+				if (lastModifiedTime > binaryLastModifiedTime)
+				{
+					LogPrint(LogType::INFO, "%s out of date, rebuilding...\n", &command.binaryFilepath[0]);
+					needsBuild = true;
+					break;
+				}
+			}
+
+			if (!needsBuild)
+			{
+				LogPrint(LogType::INFO, "%s is up to date, skipping build\n", &command.binaryFilepath[0]);
 			}
 		}
-
-		if (!needsBuild)
+		else
 		{
-			LogPrint(LogType::INFO, "%s is up to date, skipping build\n", &command.binaryFilepath[0]);
+			LogPrint(LogType::INFO, "%s does not exist, building...\n", &command.binaryFilepath[0]);
+			needsBuild = true;
+		}
+
+		if (needsBuild)
+		{
+			Build(command);
 		}
 	}
-	else
-	{
-		LogPrint(LogType::INFO, "%s does not exist, building...\n", &command.binaryFilepath[0]);
-		needsBuild = true;
-	}
 
-	if (needsBuild)
-	{
-		Build(command);
-	}
+	LogPrint(LogType::INFO, "\n-------------------------------------------------------------------------\n\n");
 }
 
 s32 main(s32 argc, char *argv[])
@@ -206,7 +245,7 @@ s32 main(s32 argc, char *argv[])
 
 	auto commonCompilerFlags = _FormatString(" -std=c++17 -DUSE_VULKAN_RENDER_API -I%s -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers", &codeDirectory[0]);
 	auto gameCompilerFlags = Concatenate(commonCompilerFlags, " -IDependencies/Vulkan/1.1.106.0/include");
-	auto gameLinkerFlags = _FormatString("%s/libMedia.so %s/libBasic.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread", &buildDirectory[0], &buildDirectory[0]);
+	auto gameLinkerFlags = _FormatString("%s/libEngine.so %s/libMedia.so %s/libBasic.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread", &buildDirectory[0], &buildDirectory[0], &buildDirectory[0]);
 	auto builderLinkerFlags = _FormatString("%s/libBasic.so", &buildDirectory[0]);
 
 	if (debug)
@@ -249,7 +288,7 @@ s32 main(s32 argc, char *argv[])
 		Append(&buildNames, String{"Basic"});
 		Append(&buildNames, String{"Media"});
 		Append(&buildNames, String{"Engine"});
-		//Append(buildRequests, "Game");
+		Append(&buildNames, String{"Game"});
 	}
 	else if (buildTarget == "Media")
 	{
@@ -288,11 +327,25 @@ s32 main(s32 argc, char *argv[])
 		{
 			Append(&buildCommands, BuildCommand{
 				.sourceFilepath = JoinFilepaths(codeDirectory, "Engine/Engine.cpp"),
+				.compilerFlags = commonCompilerFlags,
+				.linkerFlags = "-fPIC",
+				.binaryFilepath = JoinFilepaths(buildDirectory, "libEngine.so"),
+				.isLibrary = true,
+			});
+		}
+		else if (name == "Game")
+		{
+			Append(&buildCommands, BuildCommand{
+				.sourceFilepath = JoinFilepaths(codeDirectory, "Game/Game.cpp"),
 				.compilerFlags = gameCompilerFlags,
 				.linkerFlags = gameLinkerFlags,
-				.binaryFilepath = JoinFilepaths(buildDirectory, "Engine"),
+				.binaryFilepath = JoinFilepaths(buildDirectory, "Game"),
 				.isLibrary = false,
 			});
+		}
+		else
+		{
+			Abort("unknown build command name: %s", &name[0]);
 		}
 	}
 

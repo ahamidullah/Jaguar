@@ -1,7 +1,5 @@
 typedef u32 Entity_ID;
 
-#include "Mesh.h"
-
 struct EntityMeshes {
 	Array<MeshInstance> instances;
 	Array<BoundingSphere> boundingSpheres;

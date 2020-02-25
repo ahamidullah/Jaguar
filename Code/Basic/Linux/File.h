@@ -47,3 +47,4 @@ FileOffset SeekFile(FileHandle file, FileOffset offset, FileSeekRelative relativ
 bool IterateDirectory(const String &path, DirectoryIteration *context);
 PlatformTime GetFileLastModifiedTime(FileHandle file);
 bool FileExists(const String &path);
+bool CreateDirectoryIfItDoesNotExist(const String &path);

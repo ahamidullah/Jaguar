@@ -1,6 +1,6 @@
 namespace Renderer {
 
-GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GPU_Memory_Type memoryType) {
+GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GPUMemoryType memoryType) {
 	GPUMemoryBlockAllocator allocator = {};
 	allocator.blockSize = blockSize;
 	allocator.activeBlock = NULL;
@@ -19,29 +19,37 @@ struct {
 	} memoryAllocators;
 } gpuContext;
 
-GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *allocator, GPU_Resource_Allocation_Requirements allocationRequirements) {
+GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *allocator, GPUMemoryRequirements allocationRequirements) {
 	LockMutex(&allocator->mutex);
 	Assert(allocationRequirements.size < allocator->blockSize);
 	// @TODO: Try to allocate out of the freed allocations.
-	if (!allocator->activeBlock || allocator->activeBlock->frontier + allocationRequirements.size > allocator->blockSize) {
+	if (!allocator->activeBlock || allocator->activeBlock->frontier + allocationRequirements.size > allocator->blockSize)
+	{
 		// Need to allocate a new block.
 		auto newBlock = (GPUMemoryBlock *)malloc(sizeof(GPUMemoryBlock)); // @TODO
-		if (!Render_API_Allocate_Memory(allocator->blockSize, allocator->memoryType, &newBlock->memory)) {
+		if (!GPUAllocateMemory(allocator->blockSize, allocator->memoryType, &newBlock->memory))
+		{
 			free(newBlock); // @TODO
 			return NULL;
 		}
 		newBlock->frontier = 0;
 		newBlock->allocationCount = 0;
-		if (allocator->memoryType & GPU_HOST_MEMORY) {
-			newBlock->mappedPointer = Render_API_Map_Memory(newBlock->memory, allocator->blockSize, 0);
-		} else {
+		if (allocator->memoryType & GPU_HOST_MEMORY)
+		{
+			newBlock->mappedPointer = GPUMapMemory(newBlock->memory, allocator->blockSize, 0);
+		}
+		else
+		{
 			newBlock->mappedPointer = NULL;
 		}
 		newBlock->next = NULL;
-		if (allocator->baseBlock) {
+		if (allocator->baseBlock)
+		{
 			allocator->activeBlock->next = newBlock;
 			allocator->activeBlock = newBlock;
-		} else {
+		}
+		else
+		{
 			allocator->baseBlock = newBlock;
 			allocator->activeBlock = allocator->baseBlock;
 		}
@@ -75,32 +83,35 @@ void ClearGPUMemoryBlockAllocator() {
 	UnlockMutex(&allocator->mutex);
 }
 
-GPU_Buffer CreateGPUBuffer(u32 size, GPU_Buffer_Usage_Flags usage_flags) {
-	GPU_Buffer buffer = Render_API_Create_Buffer(size, usage_flags);
-	GPU_Resource_Allocation_Requirements allocationRequirements = Render_API_Get_Buffer_Allocation_Requirements(buffer);
-	GPUMemoryAllocation *allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockBuffer, allocationRequirements); // @TODO: Store these allocations so the resource can be freed.
+GPUBuffer CreateGPUBuffer(u32 size, GPUBufferUsageFlags usage_flags)
+{
+	auto buffer = GPUCreateBuffer(size, usage_flags);
+	auto allocationRequirements = GPUGetBufferAllocationRequirements(buffer);
+	auto allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockBuffer, allocationRequirements); // @TODO: Store these allocations so the resource can be freed.
 	Assert(allocation);
-	Render_API_Bind_Buffer_Memory(buffer, allocation->memory, allocation->offset);
+	GPUBindBufferMemory(buffer, allocation->memory, allocation->offset);
 	return buffer;
 }
 
-GPU_Image CreateGPUImage(u32 width, u32 height, GPU_Format format, GPU_Image_Layout initial_layout, GPU_Image_Usage_Flags usage_flags, GPU_Sample_Count_Flags sample_count_flags) {
-	GPU_Image image = Render_API_Create_Image(width, height, format, initial_layout, usage_flags, sample_count_flags);
-	GPU_Resource_Allocation_Requirements allocationRequirements = Render_API_Get_Image_Allocation_Requirements(image);
-	GPUMemoryAllocation *allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockImage, allocationRequirements); // @TODO: Store these allocations so the resource can be freed.
+GPUImage CreateGPUImage(u32 width, u32 height, GPUFormat format, GPUImageLayout initial_layout, GPUImageUsageFlags usage_flags, GPUSampleCount sample_count_flags)
+{
+	auto image = GPUCreateImage(width, height, format, initial_layout, usage_flags, sample_count_flags);
+	auto allocationRequirements = GPUGetImageAllocationRequirements(image);
+	auto allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockImage, allocationRequirements); // @TODO: Store these allocations so the resource can be freed.
 	Assert(allocation);
-	Render_API_Bind_Image_Memory(image, allocation->memory, allocation->offset);
+	GPUBindImageMemory(image, allocation->memory, allocation->offset);
 	//Render_API_Create_Image_View(image, format, usage_flags)
 	return image;
 }
 
-GPU_Buffer CreateGPUStagingBuffer(u32 size, void **mappedPointer) {
+GPUBuffer CreateGPUStagingBuffer(u32 size, void **mappedPointer)
+{
 	// @TODO: Use a staging ring buffer and block-bound buffers as a fallback for overflow.
-	GPU_Buffer buffer = Render_API_Create_Buffer(size, GPU_TRANSFER_SOURCE_BUFFER);
-	GPU_Resource_Allocation_Requirements allocationRequirements = Render_API_Get_Buffer_Allocation_Requirements(buffer);
-	GPUMemoryAllocation *allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.stagingBlock, allocationRequirements);
+	auto buffer = GPUCreateBuffer(size, GPU_TRANSFER_SOURCE_BUFFER);
+	auto allocationRequirements = GPUGetBufferAllocationRequirements(buffer);
+	auto allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.stagingBlock, allocationRequirements);
 	Assert(allocation);
-	Render_API_Bind_Buffer_Memory(buffer, allocation->memory, allocation->offset);
+	GPUBindBufferMemory(buffer, allocation->memory, allocation->offset);
 	*mappedPointer = allocation->mappedPointer;
 	return buffer;
 }

@@ -3,13 +3,6 @@
 set -e
 
 BUILD_DIRECTORY=$PROJECT_DIRECTORY/Build
-if [ ! -d $BUILD_DIRECTORY ]; then
-	mkdir $BUILD_DIRECTORY
-fi
-if [ ! -d $BUILD_DIRECTORY/ShaderPreprocessor ]; then
-	mkdir $BUILD_DIRECTORY/ShaderPreprocessor
-fi
-
 CODE_DIRECTORY=$PROJECT_DIRECTORY/Code
 
 pushd . >& /dev/null
@@ -18,20 +11,15 @@ cd $CODE_DIRECTORY
 DEVELOPMENT=true
 
 SHARED_COMPILER_FLAGS="-std=c++17 -DUSE_VULKAN_RENDER_API -I$PROJECT_DIRECTORY/Code -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers"
-if [ DEVELOPMENT ]; then
-	SHARED_COMPILER_FLAGS+=" -DDEBUG -DDEVELOPMENT -g -O0"
-else
-	SHARED_COMPILER_FLAGS+=" -O3"
-fi
 
-if [ "$1" = "Builder" ]; then
-	g++ -c $SHARED_COMPILER_FLAGS $CODE_DIRECTORY/Basic/Basic.cpp -o $BUILD_DIRECTORY/libBasic.o
+if [ $(stat -c %Y $CODE_DIRECTORY/Builder/Builder.cpp) > $(stat -c %Y $BUILD_DIRECTORY/Builder) ]; then
+	g++ -c $SHARED_COMPILER_FLAGS -DDEBUG -DDEVELOPMENT -g -O3 $CODE_DIRECTORY/Basic/Basic.cpp -o $BUILD_DIRECTORY/libBasic.o
 	ar rcs $BUILD_DIRECTORY/libBasic.a $BUILD_DIRECTORY/libBasic.o
 
-	g++ $SHARED_COMPILER_FLAGS $CODE_DIRECTORY/Builder/Builder.cpp $BUILD_DIRECTORY/libBasic.a -ldl -lpthread -o $BUILD_DIRECTORY/Builder
-else
-	Builder "$@"
+	g++ $SHARED_COMPILER_FLAGS -DDEBUG -DDEVELOPMENT -g -O3 $CODE_DIRECTORY/Builder/Builder.cpp $BUILD_DIRECTORY/libBasic.a -ldl -lpthread -o $BUILD_DIRECTORY/Builder
 fi
+
+Builder "$@"
 
 #if [ "$1" = "ShaderPreprocessor" ]; then
 	#g++ $SHARED_COMPILER_FLAGS ShaderPreprocessor/ShaderPreprocessor.cpp -o $BUILD_DIRECTORY/ShaderPreprocessor

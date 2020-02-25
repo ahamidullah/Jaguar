@@ -1,9 +1,14 @@
 #include "Engine/Engine.h"
 
-void GameLoop()
+void InitalizeGame()
 {
+	auto e = CreateEntity();
+	auto t = Transform{};
+	SetEntityTransform(e, t);
+	SetEntityModel(e, ANVIL_ASSET, t);
 }
 
-s32 main(s32 argc, char *argv[])
+void GameLoop(f32 deltaTime)
 {
+	ConsolePrint("WHAT\n");
 }

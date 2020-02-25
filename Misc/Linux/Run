@@ -3,9 +3,11 @@
 set -e
 
 cd $PROJECT_DIRECTORY
+
 if [ "$1" = "ShaderPreprocessor" ]; then
-	build/ShaderPreprocessor
+	Build/ShaderPreprocessor
 else
-	build/$PROJECT_NAME
+	Build/Game
 fi
+
 cd - >& /dev/null

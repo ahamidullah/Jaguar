@@ -9,7 +9,8 @@
 
 #include "Input.cpp"
 
-void InitializeMedia(u32 fiberCount) {
-	InitializeBasic(fiberCount);
-	InitializeWindow();
+void InitializeMedia(bool multithreaded, u32 maxFiberCount)
+{
+	InitializeBasic(maxFiberCount);
+	InitializeWindow(multithreaded);
 }

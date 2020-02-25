@@ -200,13 +200,13 @@ size_t Length(const Array<T> &a)
 }
 
 template <typename T>
-T *begin(Array<T> &a)
+T *begin(const Array<T> &a)
 {
 	return &a.elements[0];
 }
 
 template <typename T>
-T *end(Array<T> &a)
+T *end(const Array<T> &a)
 {
 	return &a.elements[a.count];
 }

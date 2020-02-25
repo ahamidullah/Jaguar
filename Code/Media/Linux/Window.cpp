@@ -3,34 +3,31 @@
 #include <X11/Xatom.h>
 #include <X11/extensions/XInput2.h>
 
-struct
-{
-	Display *display;
-	s32 xinputOpcode;
-} linuxWindowsContext;
+static Display *x11Display;
+static s32 xinputOpcode;
 
 WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 {
-	linuxWindowsContext.display = XOpenDisplay(NULL);
-	if (!linuxWindowsContext.display)
+	x11Display = XOpenDisplay(NULL);
+	if (!x11Display)
 	{
 		Abort("Failed to create display");
 	}
-	auto screen = XDefaultScreen(linuxWindowsContext.display);
-	auto rootWindow = XRootWindow(linuxWindowsContext.display, screen);
+	auto screen = XDefaultScreen(x11Display);
+	auto rootWindow = XRootWindow(x11Display, screen);
 
 	// Initialize XInput2, which we require for raw input.
 	{
 		s32 firstEventReturn = 0;
 		s32 firstErrorReturn = 0;
-		if (!XQueryExtension(linuxWindowsContext.display, "XInputExtension", &linuxWindowsContext.xinputOpcode, &firstEventReturn, &firstErrorReturn))
+		if (!XQueryExtension(x11Display, "XInputExtension", &xinputOpcode, &firstEventReturn, &firstErrorReturn))
 		{
 			Abort("The X server does not support the XInput extension");
 		}
 
 		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
 		s32 majorVersion = 2, minorVersion = 0;
-		XIQueryVersion(linuxWindowsContext.display, &majorVersion, &minorVersion);
+		XIQueryVersion(x11Display, &majorVersion, &minorVersion);
 		if (majorVersion < 2)
 		{
 			Abort("XInput version 2.0 or greater is required: version %d.%d is available", majorVersion, minorVersion);
@@ -49,7 +46,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 		XISetMask(mask, XI_RawKeyRelease);
 		XISetMask(mask, XI_FocusOut);
 		XISetMask(mask, XI_FocusIn);
-		if (XISelectEvents(linuxWindowsContext.display, rootWindow, &eventMask, 1) != Success)
+		if (XISelectEvents(x11Display, rootWindow, &eventMask, 1) != Success)
 		{
 			Abort("failed to select XInput events");
 		}
@@ -59,7 +56,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 		.screen = screen,
 	};
 	s32 numberOfVisuals;
-	XVisualInfo *visualInfo = XGetVisualInfo(linuxWindowsContext.display, VisualScreenMask, &visualInfoTemplate, &numberOfVisuals);
+	XVisualInfo *visualInfo = XGetVisualInfo(x11Display, VisualScreenMask, &visualInfoTemplate, &numberOfVisuals);
 	Assert(visualInfo->c_class == TrueColor);
 
 	XSetWindowAttributes windowAttributes = {
@@ -67,7 +64,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 		.border_pixmap = None,
 		.border_pixel = 0,
 		.event_mask = StructureNotifyMask,
-		.colormap = XCreateColormap(linuxWindowsContext.display, rootWindow, visualInfo->visual, AllocNone),
+		.colormap = XCreateColormap(x11Display, rootWindow, visualInfo->visual, AllocNone),
 	};
 	s32 windowAttributesMask = CWBackPixel
 							   | CWColormap
@@ -76,7 +73,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 	s32 requested_window_width = 1200;
 	s32 requested_window_height = 1000;
 	WindowContext window;
-	window.x11 = XCreateWindow(linuxWindowsContext.display,
+	window.x11 = XCreateWindow(x11Display,
 	                           rootWindow,
 	                           0,
 	                           0,
@@ -94,14 +91,14 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 	}
 
 	XFree(visualInfo);
-	XStoreName(linuxWindowsContext.display, window.x11, "Jaguar");
-	XMapWindow(linuxWindowsContext.display, window.x11);
-	XFlush(linuxWindowsContext.display);
+	XStoreName(x11Display, window.x11, "Jaguar");
+	XMapWindow(x11Display, window.x11);
+	XFlush(x11Display);
 
 	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
-	if ((window.deleteWindowAtom = XInternAtom(linuxWindowsContext.display, "WM_DELETE_WINDOW", 1)))
+	if ((window.deleteWindowAtom = XInternAtom(x11Display, "WM_DELETE_WINDOW", 1)))
 	{
-		XSetWMProtocols(linuxWindowsContext.display, window.x11, &window.deleteWindowAtom, 1);
+		XSetWMProtocols(x11Display, window.x11, &window.deleteWindowAtom, 1);
 	}
 	else
 	{
@@ -113,7 +110,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 		s32 windowX, windowY;
 		u32 windowWidth;
 		u32 borderWidth, depth;
-		if (!XGetGeometry(linuxWindowsContext.display, window.x11, &rootWindow, &windowX, &windowY, &windowWidth, &window.height, &borderWidth, &depth))
+		if (!XGetGeometry(x11Display, window.x11, &rootWindow, &windowX, &windowY, &windowWidth, &window.height, &borderWidth, &depth))
 		{
 			Abort("failed to get the screen's geometry");
 		}
@@ -123,9 +120,9 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 	{
 		XColor xcolor;
 		static char cursorPixels[] = {};
-		Pixmap pixmap = XCreateBitmapFromData(linuxWindowsContext.display, window.x11, cursorPixels, 1, 1);
-		window.blankCursor = XCreatePixmapCursor(linuxWindowsContext.display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
-		XFreePixmap(linuxWindowsContext.display, pixmap);
+		Pixmap pixmap = XCreateBitmapFromData(x11Display, window.x11, cursorPixels, 1, 1);
+		window.blankCursor = XCreatePixmapCursor(x11Display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
+		XFreePixmap(x11Display, pixmap);
 	}
 
 	return window;
@@ -136,9 +133,9 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 	XEvent event;
 	XGenericEventCookie *cookie = &event.xcookie;
 	XIRawEvent *rawEvent;
-	XFlush(linuxWindowsContext.display);
-	while (XPending(linuxWindowsContext.display)) {
-		XNextEvent(linuxWindowsContext.display, &event);
+	XFlush(x11Display);
+	while (XPending(x11Display)) {
+		XNextEvent(x11Display, &event);
 		if ((event.type == ClientMessage) && ((Atom)event.xclient.data.l[0] == window->deleteWindowAtom))
 		{
 			input->windowEvents.quit = true;
@@ -150,9 +147,9 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 			// @TODO Window resize.
 			continue;
 		}
-		if (!XGetEventData(linuxWindowsContext.display, cookie)
+		if (!XGetEventData(x11Display, cookie)
 		 || cookie->type != GenericEvent
-		 || cookie->extension != linuxWindowsContext.xinputOpcode)
+		 || cookie->extension != xinputOpcode)
 		{
 			continue;
 		}
@@ -206,12 +203,12 @@ void ToggleFullscreen(WindowContext *window)
 		.xclient = {
 			.type = ClientMessage,
 			.window = window->x11,
-			.message_type = XInternAtom(linuxWindowsContext.display, "_NET_WM_STATE", True),
+			.message_type = XInternAtom(x11Display, "_NET_WM_STATE", True),
 			.format = 32,
 			.data = {
 				.l = {
 					2,
-					(long int)XInternAtom(linuxWindowsContext.display, "_NET_WM_STATE_FULLSCREEN", True),
+					(long int)XInternAtom(x11Display, "_NET_WM_STATE_FULLSCREEN", True),
 					0,
 					1,
 					0,
@@ -219,40 +216,45 @@ void ToggleFullscreen(WindowContext *window)
 			},
 		},
 	};
-	XSendEvent(linuxWindowsContext.display, DefaultRootWindow(linuxWindowsContext.display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+	XSendEvent(x11Display, DefaultRootWindow(x11Display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
 }
 
 void CaptureCursor(WindowContext *window)
 {
-	XDefineCursor(linuxWindowsContext.display, window->x11, window->blankCursor);
-	XGrabPointer(linuxWindowsContext.display, window->x11, True, 0, GrabModeAsync, GrabModeAsync, None, window->blankCursor, CurrentTime);
+	XDefineCursor(x11Display, window->x11, window->blankCursor);
+	XGrabPointer(x11Display, window->x11, True, 0, GrabModeAsync, GrabModeAsync, None, window->blankCursor, CurrentTime);
 }
 
 void UncaptureCursor(WindowContext *window)
 {
-	XUndefineCursor(linuxWindowsContext.display, window->x11);
-	XUngrabPointer(linuxWindowsContext.display, CurrentTime);
+	XUndefineCursor(x11Display, window->x11);
+	XUngrabPointer(x11Display, CurrentTime);
 }
 
 void DestroyWindow(WindowContext *window)
 {
-	XDestroyWindow(linuxWindowsContext.display, window->x11);
-	XCloseDisplay(linuxWindowsContext.display);
+	XDestroyWindow(x11Display, window->x11);
+	XCloseDisplay(x11Display);
 }
 
 s32 X11ErrorHandler(Display *display, XErrorEvent *event)
 {
 	char buffer[256];
-	XGetErrorText(linuxWindowsContext.display, event->error_code, buffer, sizeof(buffer));
+	XGetErrorText(x11Display, event->error_code, buffer, sizeof(buffer));
 	Abort("X11 error: %s.", buffer);
 	return 0;
 }
 
-void InitializeWindow()
+void InitializeWindow(bool multithreaded)
 {
 	// Install a new error handler.
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
 	XSetErrorHandler(&X11ErrorHandler);
+
+	if (multithreaded)
+	{
+		XInitThreads();
+	}
 }
 
 #if defined(USE_VULKAN_RENDER_API)
@@ -268,7 +270,7 @@ VkResult CreateVulkanSurface(WindowContext *window, VkInstance instance, VkSurfa
 {
 	VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-		.dpy = linuxWindowsContext.display,
+		.dpy = x11Display,
 		.window = window->x11,
 	};
 	return vkCreateXlibSurfaceKHR(instance, &surfaceCreateInfo, NULL, surface);

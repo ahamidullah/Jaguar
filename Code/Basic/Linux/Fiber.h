@@ -11,7 +11,7 @@ struct Fiber
 
 typedef void (*FiberProcedure)(void *);
 
-void InitializeFiber(u32 fiberCount);
+void InitializeFiber(u32 maxFiberCount);
 void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter);
 void ConvertThreadToFiber(Fiber *fiber);
 void SwitchToFiber(Fiber *fiber);

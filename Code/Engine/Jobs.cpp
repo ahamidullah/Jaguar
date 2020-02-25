@@ -18,7 +18,6 @@
 //        We could create a function to mark the job as not rejoining.
 // @TODO: We could create some mechanism to detect zombie jobs.
 // @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
-// @TODO: Move the jobs context into the game state (jobs_state?).
 
 constexpr auto MAX_JOBS_PER_QUEUE = 100;
 
@@ -56,51 +55,44 @@ struct WorkerThread
 	WorkerThreadParameter parameter;
 };
 
-struct
-{
-	Array<WorkerThread> workerThreads;
-	AtomicLinkedList<JobFiber> idleJobFiberList;
-	AtomicRingBuffer<Job, MAX_JOBS_PER_QUEUE> jobQueues[JOB_PRIORITY_COUNT];
-	AtomicRingBuffer<JobFiber *, MAX_JOBS_PER_QUEUE> resumableJobQueues[JOB_PRIORITY_COUNT];
-	Semaphore jobsAvailableSemaphore;
-} jobsContext;
+static Array<WorkerThread> workerThreads;
+static AtomicLinkedList<JobFiber> idleJobFiberList;
+static AtomicRingBuffer<Job, MAX_JOBS_PER_QUEUE> jobQueues[JOB_PRIORITY_COUNT];
+static AtomicRingBuffer<JobFiber *, MAX_JOBS_PER_QUEUE> resumableJobQueues[JOB_PRIORITY_COUNT];
+static Semaphore jobsAvailableSemaphore;
 
-__thread struct
-{
-	Fiber workerThreadFiber;
-	//Job_Fiber *activeJobFiber;
-	JobCounter *waitingJobCounter;
-} threadLocalJobsContext;
+static THREAD_LOCAL Fiber workerThreadFiber;
+static THREAD_LOCAL JobCounter *waitingJobCounter;
 
 void *WorkerThreadProcedure(void *parameter)
 {
-	ConvertThreadToFiber(&threadLocalJobsContext.workerThreadFiber);
+	ConvertThreadToFiber(&workerThreadFiber);
 	threadIndex = ((WorkerThreadParameter *)parameter)->threadIndex;
 
 	JobFiber *activeJobFiber = NULL;
 	while (1)
 	{
-		WaitOnSemaphore(&jobsContext.jobsAvailableSemaphore);
+		WaitOnSemaphore(&jobsAvailableSemaphore);
 		do
 		{
 			activeJobFiber = NULL;
 			// Get the next job to run. Prefer higher priority jobs and resumable jobs.
 			for (s32 i = 0; i < JOB_PRIORITY_COUNT; i++)
 			{
-				if (Read(&jobsContext.resumableJobQueues[i], &activeJobFiber))
+				if (Read(&resumableJobQueues[i], &activeJobFiber))
 				{
 					break;
 				}
 				// Avoid copying the Job twice by getting the idle job fiber before we know if we have a job.
 				// If there are no more jobs left, just write the job fiber back to the idle job fiber list.
-				activeJobFiber = PopFromFront(&jobsContext.idleJobFiberList);
-				if (Read(&jobsContext.jobQueues[i], &activeJobFiber->parameter.scheduledJob))
+				activeJobFiber = PopFromFront(&idleJobFiberList);
+				if (Read(&jobQueues[i], &activeJobFiber->parameter.scheduledJob))
 				{
 					break;
 				}
 				else
 				{
-					PushToFront(&jobsContext.idleJobFiberList, activeJobFiber);
+					PushToFront(&idleJobFiberList, activeJobFiber);
 					activeJobFiber = NULL;
 				}
 			}
@@ -112,7 +104,7 @@ void *WorkerThreadProcedure(void *parameter)
 			Job *scheduledJob = &activeJobFiber->parameter.scheduledJob;
 			if (scheduledJob->finished)
 			{
-				PushToFront(&jobsContext.idleJobFiberList, activeJobFiber);
+				PushToFront(&idleJobFiberList, activeJobFiber);
 				if (!scheduledJob->counterWaitingForThisJob)
 				{
 					continue;
@@ -130,14 +122,14 @@ void *WorkerThreadProcedure(void *parameter)
 					continue;
 				}
 				// OK, the job finished, the counter reached zero, and the parent job started waiting on the counter. Now we can mark the parent job as resumable.
-				Write(&jobsContext.resumableJobQueues[waitingJobFiber->parameter.scheduledJob.priority], waitingJobFiber);
+				Write(&resumableJobQueues[waitingJobFiber->parameter.scheduledJob.priority], waitingJobFiber);
 			}
 			else
 			{
-				if (AtomicCompareAndSwap((void *volatile *)&threadLocalJobsContext.waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
+				if (AtomicCompareAndSwap((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
 				{
 					// The waitingJobFiber was not NULL, hence all dependency jobs already finished. This job can resume immediately.
-					Write(&jobsContext.resumableJobQueues[scheduledJob->priority], activeJobFiber);
+					Write(&resumableJobQueues[scheduledJob->priority], activeJobFiber);
 				}
 			}
 		} while (activeJobFiber);
@@ -154,7 +146,7 @@ void JobFiberProcedure(void *parameterPointer)
 		activeJob = &parameter->scheduledJob;
 		activeJob->procedure(activeJob->parameter);
 		activeJob->finished = 1;
-		SwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
+		SwitchToFiber(&workerThreadFiber);
 	}
 }
 
@@ -175,14 +167,14 @@ void RunJobs(u32 jobCount, JobDeclaration *jobDeclarations, JobPriority priority
 	}
 	for (u32 i = 0; i < jobCount; i++)
 	{
-		Write(&jobsContext.jobQueues[priority], (Job){
+		Write(&jobQueues[priority], (Job){
 			.procedure = jobDeclarations[i].procedure,
 			.parameter = jobDeclarations[i].parameter,
 			.priority = priority,
 			.counterWaitingForThisJob = counter,
 			.finished = 0,
 		});
-		SignalSemaphore(&jobsContext.jobsAvailableSemaphore);
+		SignalSemaphore(&jobsAvailableSemaphore);
 	}
 }
 
@@ -198,8 +190,8 @@ void WaitForJobCounter(JobCounter *counter)
 	{
 		return;
 	}
-	threadLocalJobsContext.waitingJobCounter = counter;
-	SwitchToFiber(&threadLocalJobsContext.workerThreadFiber);
+	waitingJobCounter = counter;
+	SwitchToFiber(&workerThreadFiber);
 }
 
 void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
@@ -208,32 +200,31 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 	{
 		JobFiber *newFiber = AllocateStruct(JobFiber);
 		CreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
-		newFiber->next = jobsContext.idleJobFiberList.head;
-		jobsContext.idleJobFiberList.head = newFiber;
+		newFiber->next = idleJobFiberList.head;
+		idleJobFiberList.head = newFiber;
 	}
-	jobsContext.jobsAvailableSemaphore = CreateSemaphore(0);
-	//GameState->jobsContext.workerThreadCount = GetProcessorCount();
+	jobsAvailableSemaphore = CreateSemaphore(0);
 
 	auto workerThreadCount = GetProcessorCount();
-	jobsContext.workerThreads = CreateArray<WorkerThread>(workerThreadCount);
+	workerThreads = CreateArray<WorkerThread>(workerThreadCount);
 	for (u32 i = 0; i < workerThreadCount - 1; i++)
 	{
-		jobsContext.workerThreads[i].parameter.threadIndex = i;
-		CreateThread(WorkerThreadProcedure, &jobsContext.workerThreads[i].parameter);
+		workerThreads[i].parameter.threadIndex = i;
+		workerThreads[i].platformThread = CreateThread(WorkerThreadProcedure, &workerThreads[i].parameter);
 	}
-	jobsContext.workerThreads[workerThreadCount - 1].platformThread = GetCurrentThread();
+	workerThreads[workerThreadCount - 1].platformThread = GetCurrentThread();
 
 	for (u32 i = 0; i < workerThreadCount; i++)
 	{
-		SetThreadProcessorAffinity(jobsContext.workerThreads[i].platformThread, i);
+		SetThreadProcessorAffinity(workerThreads[i].platformThread, i);
 	}
 
 	JobDeclaration initialJob = CreateJob(initialJobProcedure, initialJobParameter);
 	RunJobs(1, &initialJob, HIGH_PRIORITY_JOB, NULL);
-	WorkerThreadProcedure(&jobsContext.workerThreads[workerThreadCount - 1].parameter);
+	WorkerThreadProcedure(&workerThreads[workerThreadCount - 1].parameter);
 }
 
 u32 GetWorkerThreadCount()
 {
-	return Length(jobsContext.workerThreads);
+	return Length(workerThreads);
 }

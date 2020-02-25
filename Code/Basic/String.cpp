@@ -184,12 +184,12 @@ s32 FormatString(char *buffer, const char *format, va_list arguments)
 
 String _FormatString(const char *format, ...)
 {
-	auto result = CreateString(2056); // @TODO
+	char buffer[2056]; // @TODO
 	va_list arguments;
 	va_start(arguments, format);
-	FormatString(&result[0], format, arguments);
+	FormatString(buffer, format, arguments);
 	va_end(arguments);
-	return result;
+	return CreateString(buffer);
 }
 
 s64 FindFirstIndex(const String &s, char c)

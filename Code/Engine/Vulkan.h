@@ -8,37 +8,43 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xlib.h> 
 
-typedef VkBuffer GPU_Buffer;
-typedef VkDescriptorSet GPU_Descriptor_Set;
+typedef VkFlags GPUShaderStage;
+enum GPUShaderStageBits
+{
+	GPU_VERTEX_SHADER_STAGE = VK_SHADER_STAGE_VERTEX_BIT,
+	GPU_FRAGMENT_SHADER_STAGE = VK_SHADER_STAGE_FRAGMENT_BIT,
+	GPU_COMPUTE_SHADER_STAGE = VK_SHADER_STAGE_COMPUTE_BIT,
+};
 
-typedef enum GPU_Buffer_Usage_Flags {
+typedef VkFlags GPUBufferUsageFlags;
+enum GPUBufferUsageBits
+{
 	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 	GPU_TRANSFER_SOURCE_BUFFER = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 	GPU_VERTEX_BUFFER = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 	GPU_INDEX_BUFFER = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 	GPU_UNIFORM_BUFFER = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-} GPU_Buffer_Usage_Flags;
+};
 
-typedef struct Render_Context Render_Context;
-
-GPU_Buffer Create_GPU_Device_Buffer(Render_Context *context, u32 size, GPU_Buffer_Usage_Flags usage_flags);
-
-#include "vulkan_generated.h"
-
-typedef enum GPU_Filter {
+enum GPUFilter
+{
 	GPU_LINEAR_FILTER = VK_FILTER_LINEAR,
 	GPU_NEAREST_FILTER = VK_FILTER_NEAREST,
 	GPU_CUBIC_FILTER = VK_FILTER_CUBIC_IMG,
-} GPU_Filter;
+};
 
-typedef enum GPU_Color_Component_Flags {
+typedef VkFlags GPUColorComponent;
+enum GPUColorComponentBits
+{
 	GPU_COLOR_COMPONENT_RED = VK_COLOR_COMPONENT_R_BIT,
 	GPU_COLOR_COMPONENT_GREEN = VK_COLOR_COMPONENT_G_BIT,
 	GPU_COLOR_COMPONENT_BLUE = VK_COLOR_COMPONENT_B_BIT,
 	GPU_COLOR_COMPONENT_ALPHA = VK_COLOR_COMPONENT_A_BIT,
-} GPU_Color_Component_Flags;
+};
 
-typedef enum GPU_Image_Usage_Flags {
+typedef VkFlags GPUImageUsageFlags;
+enum GPUImageUsageBits
+{
 	GPU_IMAGE_USAGE_TRANSFER_SRC = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
 	GPU_IMAGE_USAGE_TRANSFER_DST = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 	GPU_IMAGE_USAGE_SAMPLED = VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -49,18 +55,11 @@ typedef enum GPU_Image_Usage_Flags {
 	GPU_IMAGE_USAGE_INPUT_ATTACHMENT = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
 	GPU_IMAGE_USAGE_SHADING_RATE_IMAGE_NV = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV,
 	GPU_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_EXT = VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT,
-} GPU_Image_Usage_Flags;
+};
 
-/*
-typedef enum GPU_Shader_Stage_Flags {
-	GPU_SHADER_STAGE_VERTEX = VK_SHADER_STAGE_VERTEX_BIT,
-	GPU_SHADER_STAGE_FRAGMENT = VK_SHADER_STAGE_VERTEX_BIT,
-
-	GPU_SHADER_STAGE_COUNT
-} GPU_Shader_Stage_Flags;
-*/
-
-typedef enum GPU_Sample_Count_Flags {
+typedef VkFlags GPUSampleCount;
+enum GPUSampleCountBits
+{
 	GPU_SAMPLE_COUNT_1 = VK_SAMPLE_COUNT_1_BIT,
 	GPU_SAMPLE_COUNT_2 = VK_SAMPLE_COUNT_2_BIT,
 	GPU_SAMPLE_COUNT_4 = VK_SAMPLE_COUNT_4_BIT,
@@ -68,47 +67,64 @@ typedef enum GPU_Sample_Count_Flags {
 	GPU_SAMPLE_COUNT_16 = VK_SAMPLE_COUNT_16_BIT,
 	GPU_SAMPLE_COUNT_32 = VK_SAMPLE_COUNT_32_BIT,
 	GPU_SAMPLE_COUNT_64 = VK_SAMPLE_COUNT_64_BIT,
-} GPU_Sample_Count_Flags;
+};
 
-typedef enum GPU_Blend_Factor {
+enum GPUBlendFactor
+{
 	GPU_BLEND_FACTOR_SRC_ALPHA = VK_BLEND_FACTOR_SRC_ALPHA,
 	GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 	GPU_BLEND_FACTOR_ONE = VK_BLEND_FACTOR_ONE,
 	GPU_BLEND_FACTOR_ZERO = VK_BLEND_FACTOR_ZERO,
-} GPU_Blend_Factor;
+};
 
-typedef enum GPU_Blend_Operation {
+enum GPUBlendOperation
+{
 	GPU_BLEND_OP_ADD = VK_BLEND_OP_ADD,
-} GPU_Blend_Operation;
+};
 
-typedef enum GPU_Vertex_Input_Rate {
+enum GPUVertexInputRate
+{
 	GPU_VERTEX_INPUT_RATE_VERTEX = VK_VERTEX_INPUT_RATE_VERTEX,
 	GPU_VERTEX_INPUT_RATE_INSTANCE = VK_VERTEX_INPUT_RATE_INSTANCE,
-} GPU_Vertex_Input_Rate;
+};
 
-typedef enum GPU_Format {
+typedef VkFormat GPUFormat;
+#define GPU_FORMAT_R32G32B32_SFLOAT VK_FORMAT_R32G32B32_SFLOAT
+#define GPU_FORMAT_R32_UINT VK_FORMAT_R32_UINT
+#define GPU_FORMAT_D32_SFLOAT_S8_UINT VK_FORMAT_D32_SFLOAT_S8_UINT
+#define GPU_FORMAT_R8G8B8A8_UNORM VK_FORMAT_R8G8B8A8_UNORM
+#define GPU_FORMAT_D16_UNORM VK_FORMAT_D16_UNORM
+#define GPU_FORMAT_UNDEFINED VK_FORMAT_UNDEFINED
+
+#if 0
+enum GPUFormat
+{
 	GPU_FORMAT_R32G32B32_SFLOAT = VK_FORMAT_R32G32B32_SFLOAT,
 	GPU_FORMAT_R32_UINT = VK_FORMAT_R32_UINT,
 	GPU_FORMAT_D32_SFLOAT_S8_UINT = VK_FORMAT_D32_SFLOAT_S8_UINT,
 	GPU_FORMAT_R8G8B8A8_UNORM = VK_FORMAT_R8G8B8A8_UNORM,
 	GPU_FORMAT_D16_UNORM = VK_FORMAT_D16_UNORM,
 	GPU_FORMAT_UNDEFINED = VK_FORMAT_UNDEFINED,
-} GPU_Format;
+};
+#endif
 
-typedef enum GPU_Descriptor_Type {
+enum GPUDescriptorType
+{
 	GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 	GPU_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 	GPU_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 	GPU_DESCRIPTOR_TYPE_SAMPLER = VK_DESCRIPTOR_TYPE_SAMPLER,
 	GPU_DESCRIPTOR_TYPE_SAMPLED_IMAGE = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-} GPU_Descriptor_Type;
+};
 
-typedef enum GPU_Pipeline_Topology {
+enum GPUPipelineTopology
+{
 	GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
 	GPU_PRIMITIVE_TOPOLOGY_LINE_LIST = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-} GPU_Pipeline_Topology;
+};
 
-typedef enum GPU_Compare_Operation {
+enum GPUCompareOperation
+{
 	GPU_COMPARE_OP_NEVER = VK_COMPARE_OP_NEVER,
 	GPU_COMPARE_OP_LESS = VK_COMPARE_OP_LESS,
 	GPU_COMPARE_OP_EQUAL = VK_COMPARE_OP_EQUAL,
@@ -117,9 +133,10 @@ typedef enum GPU_Compare_Operation {
 	GPU_COMPARE_OP_NOT_EQUAL = VK_COMPARE_OP_NOT_EQUAL,
 	GPU_COMPARE_OP_GREATER_OR_EQUAL = VK_COMPARE_OP_GREATER_OR_EQUAL,
 	GPU_COMPARE_OP_ALWAYS = VK_COMPARE_OP_ALWAYS,
-} GPU_Compare_Operation;
+};
 
-typedef enum GPU_Dynamic_Pipeline_State {
+enum GPUDynamicPipelineState
+{
 	GPU_DYNAMIC_PIPELINE_STATE_VIEWPORT = VK_DYNAMIC_STATE_VIEWPORT,
 	GPU_DYNAMIC_PIPELINE_STATE_SCISSOR = VK_DYNAMIC_STATE_SCISSOR,
 	GPU_DYNAMIC_PIPELINE_STATE_LINE_WIDTH = VK_DYNAMIC_STATE_LINE_WIDTH,
@@ -129,9 +146,28 @@ typedef enum GPU_Dynamic_Pipeline_State {
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_COMPARE_MASK = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_WRITE_MASK = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
 	GPU_DYNAMIC_PIPELINE_STATE_STENCIL_REFERENCE = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-} GPU_Dynamic_Pipeline_State;
+};
 
-typedef enum GPU_Image_Layout {
+typedef VkImageLayout GPUImageLayout;
+#define GPU_IMAGE_LAYOUT_UNDEFINED VK_IMAGE_LAYOUT_UNDEFINED
+#define GPU_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_GENERAL
+#define GPU_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+#define GPU_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+#define GPU_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+#define GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+#define GPU_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+#define GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+#define GPU_IMAGE_LAYOUT_PREINITIALIZED VK_IMAGE_LAYOUT_PREINITIALIZED
+#define GPU_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+#define GPU_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL
+#define GPU_IMAGE_LAYOUT_PRESENT_SRC VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+#define GPU_IMAGE_LAYOUT_SHARED_PRESENT VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR
+#define GPU_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV
+#define GPU_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT
+
+#if 0
+enum GPUImageLayout
+{
 	GPU_IMAGE_LAYOUT_UNDEFINED = VK_IMAGE_LAYOUT_UNDEFINED,
 	GPU_IMAGE_LAYOUT_GENERAL = VK_IMAGE_LAYOUT_GENERAL,
 	GPU_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -147,147 +183,118 @@ typedef enum GPU_Image_Layout {
 	GPU_IMAGE_LAYOUT_SHARED_PRESENT = VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
 	GPU_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV,
 	GPU_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT,
-} GPU_Image_Layout;
+};
+#endif
 
-typedef enum GPU_Sampler_Address_Mode {
+enum GPUSamplerAddressMode
+{
 	GPU_SAMPLER_ADDRESS_MODE_REPEAT = VK_SAMPLER_ADDRESS_MODE_REPEAT,
 	GPU_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
 	GPU_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 	GPU_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
 	GPU_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
-} GPU_Sampler_Address_Mode;
+};
 
-typedef enum GPU_Border_Color {
+enum GPUBorderColor
+{
 	GPU_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 	GPU_BORDER_COLOR_INT_TRANSPARENT_BLACK = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,
 	GPU_BORDER_COLOR_FLOAT_OPAQUE_BLACK = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
 	GPU_BORDER_COLOR_INT_OPAQUE_BLACK = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
 	GPU_BORDER_COLOR_FLOAT_OPAQUE_WHITE = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
 	GPU_BORDER_COLOR_INT_OPAQUE_WHITE = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
-} GPU_Border_Color;
+};
 
-typedef enum GPU_Command_Queue_Type {
+enum GPUCommandQueueType
+{
 	GPU_GRAPHICS_COMMAND_QUEUE,
 	GPU_COMPUTE_COMMAND_QUEUE,
 	GPU_TRANSFER_COMMAND_QUEUE,
-} GPU_Command_Queue_Type;
+};
 
-typedef enum GPU_Memory_Type {
+enum GPUMemoryType
+{
 	GPU_DEVICE_MEMORY = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 	GPU_HOST_MEMORY = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-} GPU_Memory_Type;
+};
 
-typedef struct Vulkan_Image {
-	VkImage image;
-	VkImageView view;
-	VkFormat format;
-	VkImageLayout layout;
-} Vulkan_Image;
-
-typedef struct Vulkan_Sampler_Filter {
+struct VulkanSamplerFilter
+{
 	VkFilter min;
 	VkFilter mag;
 	VkSamplerMipmapMode mipmap;
-} Vulkan_Sampler_Filter;
+};
 
 // @TODO: seperate the layout from the data by eg. hashing the data handle.
 
-typedef struct Vulkan_Descriptor_Set {
-	VkDescriptorSet descriptor_set;
-	VkDescriptorSetLayout layout;
-} Vulkan_Descriptor_Set;
-
-typedef struct Vulkan_Pipeline {
+struct VulkanPipeline
+{
 	VkPipelineLayout layout;
 	VkPipeline pipeline;
-} Vulkan_Pipeline;
+};
 
-typedef VkFence GPU_Fence;
-typedef VkCommandBuffer GPU_Command_Buffer;
-typedef VkCommandPool GPU_Command_Pool;
-typedef VkDeviceMemory GPU_Memory;
-typedef VkSampler GPU_Sampler;
-typedef VkShaderModule GPU_Shader_Module;
-typedef VkRenderPass GPU_Render_Pass;
-typedef VkDescriptorPool GPU_Descriptor_Pool;
-typedef VkFramebuffer GPU_Framebuffer;
-typedef VkSwapchainKHR GPU_Swapchain;
-typedef VkMemoryRequirements GPU_Resource_Allocation_Requirements;
-typedef VkImage GPU_Image;
-typedef VkImageView GPU_Image_View;
-typedef Vulkan_Sampler_Filter GPU_Sampler_Filter;
-typedef VkDescriptorSetLayout GPU_Descriptor_Set_Layout;
-typedef Vulkan_Pipeline GPU_Pipeline;
+typedef VkBuffer GPUBuffer;
+typedef VkDescriptorSetLayout GPUDescriptorSetLayout;
+typedef VkDescriptorSet GPUDescriptorSet;
+typedef VkFence GPUFence;
+typedef VkCommandBuffer GPUCommandBuffer;
+typedef VkCommandPool GPUCommandPool;
+typedef VkDeviceMemory GPUMemory;
+typedef VkSampler GPUSampler;
+typedef VkShaderModule GPUShaderModule;
+typedef VkRenderPass GPURenderPass;
+typedef VkDescriptorPool GPUDescriptorPool;
+typedef VkFramebuffer GPUFramebuffer;
+typedef VkSwapchainKHR GPUSwapchain;
+typedef VkMemoryRequirements GPUMemoryRequirements;
+typedef VkImage GPUImage;
+typedef VkImageView GPUImageView;
+typedef VulkanSamplerFilter GPUSamplerFilter;
+typedef VkDescriptorSetLayout GPUDescriptorSetLayout;
+typedef VulkanPipeline GPUPipeline;
 
-/*
-typedef VkFence GPU_Fence;
-typedef VkCommandBuffer GPU_Command_List;
-typedef VkCommandPool GPU_Command_List_Pool;
-typedef VkDeviceMemory GPU_Memory;
-typedef VkBuffer GPU_Buffer;
-typedef VkSampler GPU_Sampler;
-typedef u32 Texture_ID;
-typedef VkBlendFactor GPU_Blend_Factor;
-typedef VkBlendOp GPU_Blend_Operation;
-typedef VkColorComponentFlags GPU_Color_Component_Flags;
-typedef VkVertexInputRate GPU_Vertex_Input_Rate;
-typedef VkFormat GPU_Format;
-typedef VkShaderStageFlags GPU_Shader_Stage_Flags;
-typedef VkShaderModule GPU_Shader_Module;
-typedef VkRenderPass GPU_Render_Pass;
-typedef VkDescriptorPool GPU_Descriptor_Pool;
-typedef VkDescriptorType GPU_Descriptor_Type;
-typedef VkPrimitiveTopology GPU_Pipeline_Topology;
-typedef VkCompareOp GPU_Compare_Operation;
-typedef VkDynamicState GPU_Dynamic_Pipeline_State;
-typedef VkFramebuffer GPU_Framebuffer;
-typedef VkSampleCountFlags GPU_Sample_Count;
-typedef VkImageLayout GPU_Image_Layout;
-typedef VkImageUsageFlags GPU_Image_Usage_Flags;
-typedef VkSamplerAddressMode GPU_Sampler_Address_Mode;
-typedef VkBorderColor GPU_Border_Color;
+GPUCommandBuffer GPUCreateCommandBuffer(GPUCommandPool commandPool);
+void GPUSubmitCommandBuffers(u32 count, GPUCommandBuffer *commandBuffers, GPUCommandQueueType queueType, GPUFence fence);
+void GPUFreeCommandBuffers(GPUCommandPool pool, s32 count, GPUCommandBuffer *buffers);
+void GPUEndCommandBuffer(GPUCommandBuffer buffer);
 
-typedef struct GPU_Resource_Allocation_Requirements {
-	u32 size;
-	u32 alignment;
-} GPU_Resource_Allocation_Requirements;
+GPUCommandPool GPUCreateCommandPool(GPUCommandQueueType queueType);
+void GPUResetCommandPool(GPUCommandPool pool);
 
-typedef enum GPU_Buffer_Usage_Flags {
-	GPU_TRANSFER_DESTINATION_BUFFER = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-	GPU_TRANSFER_SOURCE_BUFFER = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-	GPU_VERTEX_BUFFER = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-	GPU_INDEX_BUFFER = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-	GPU_UNIFORM_BUFFER = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-} GPU_Buffer_Usage_Flags;
+GPUBuffer GPUCreateBuffer(u32 size, GPUBufferUsageFlags usage);
+void GPUDestroyBuffer(GPUBuffer buffer);
+void GPURecordCopyBufferCommand(GPUCommandBuffer buffer, u32 size, GPUBuffer source, GPUBuffer destination, u32 sourceOffset, u32 destinationOffset);
+GPUMemoryRequirements GPUGetBufferAllocationRequirements(GPUBuffer buffer);
+void GPUBindBufferMemory(GPUBuffer buffer, GPUMemory memory, u32 memoryOffset);
 
-typedef enum GPU_Memory_Type {
-	GPU_DEVICE_MEMORY = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-	GPU_HOST_MEMORY = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-} GPU_Memory_Type;
+bool GPUAllocateMemory(u32 size, GPUMemoryType memoryType, GPUMemory *memory);
+void *GPUMapMemory(GPUMemory memory, u32 size, u32 offset);
 
-typedef struct GPU_Image {
-	VkImage image;
-	VkImageView view;
-	VkFormat format;
-	VkImageLayout layout;
-} GPU_Image;
+GPUShaderModule GPUCreateShaderModule(GPUShaderStage stage, const String &spirv);
 
-typedef struct GPU_Sampler_Filter {
-	VkFilter min;
-	VkFilter mag;
-	VkSamplerMipmapMode mipmap;
-} GPU_Sampler_Filter;
+GPUFence GPUCreateFence(bool startSignalled);
+bool GPUWasFenceSignalled(GPUFence fence);
+void GPUWaitForFences(u32 count, GPUFence *fences, bool waitForAllFences, u64 timeout);
+void GPUResetFences(u32 count, GPUFence *fences);
 
-typedef struct GPU_Descriptor_Set {
-	VkDescriptorSet descriptor_set;
-	VkDescriptorSetLayout layout;
-} GPU_Descriptor_Set;
+GPUSwapchain GPUCreateSwapchain();
+u32 GPUAcquireNextSwapchainImage(GPUSwapchain swapchain, u32 currentFrameIndex);
+u32 GPUGetSwapchainImageCount(GPUSwapchain swapchain);
+void GPUGetSwapchainImageViews(GPUSwapchain swapchain, u32 count, GPUImageView *imageViews);
+void GPUPresentSwapchainImage(GPUSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame);
 
-typedef struct GPU_Pipeline {
-	VkPipelineLayout layout;
-	VkPipeline pipeline;
-} GPU_Pipeline;
-*/
+GPUDescriptorPool GPUCreateDescriptorPool(u32 swapchainImageCount);
+
+GPUFramebuffer GPUCreateFramebuffer(GPURenderPass renderPass, u32 width, u32 height, u32 attachmentCount, GPUImageView *attachments);
+
+GPUMemoryRequirements GPUGetImageAllocationRequirements(GPUImage image);
+GPUImage GPUCreateImage(u32 width, u32 height, GPUFormat format, GPUImageLayout initialLayout, GPUImageUsageFlags usage, VkSampleCountFlagBits sampleCount);
+void GPUBindImageMemory(GPUImage image, GPUMemory memory, u32 offset);
+GPUImageView GPUCreateImageView(GPUImage image, GPUFormat format, GPUImageUsageFlags usage);
+void GPUTransitionImageLayout(GPUCommandBuffer commandBuffer, GPUImage image, GPUFormat format, GPUImageLayout oldLayout, GPUImageLayout newLayout);
+void GPURecordCopyBufferToImageCommand(GPUCommandBuffer commandBuffer, GPUBuffer buffer, GPUImage image, u32 imageWidth, u32 imageHeight);
+
+#define GPU_DESCRIPTOR_SET_COUNT 1
 
 typedef struct Render_API_Context {
 	VkPhysicalDevice physical_device;
@@ -301,7 +308,7 @@ typedef struct Render_API_Context {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 	VkPresentModeKHR present_mode;
-	VkDescriptorSetLayout descriptor_set_layouts[GPU_DESCRIPTOR_SET_LAYOUT_COUNT];
+	VkDescriptorSetLayout descriptor_set_layouts[GPU_DESCRIPTOR_SET_COUNT];
 
 	//u32 descriptor_set_count;
 	//Vulkan_Descriptor_Set_Layouts descriptor_set_layouts;

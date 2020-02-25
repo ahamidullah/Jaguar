@@ -2,7 +2,7 @@
 
 DLLHandle OpenDLL(const char *filename)
 {
-	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL);
+	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
 	if (!library)
 	{
 		Abort("failed to load shared library: %s", dlerror());

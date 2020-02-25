@@ -27,6 +27,12 @@ typedef double f64;
 
 #define InvalidCodePath() Abort("%s: %s: line %d: invalid code path\n", __FILE__, __func__, __LINE__);
 
+#if defined(DEVELOPMENT)
+	constexpr bool development = true;
+#else
+	constexpr bool development = false;
+#endif
+
 #if defined(DEBUG)
 	constexpr bool debug = true;
 #else
@@ -78,5 +84,6 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 #include "Log.h"
 #include "Filesystem.h"
 #include "Parser.h"
+//#include "RNG.h"
 
 void InitializeBasic(u32 fiberCount = 0);

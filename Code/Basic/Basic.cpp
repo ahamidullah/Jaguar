@@ -1,6 +1,7 @@
 #include "Basic.h"
 
 #if defined(__linux__)
+	#include "Linux/Start.cpp"
 	#include "Linux/Memory.cpp"
 	#include "Linux/Process.cpp"
 	#include "Linux/File.cpp"
@@ -22,6 +23,7 @@
 #include "String.cpp"
 #include "Filesystem.cpp"
 #include "Parser.cpp"
+//#include "RNG.cpp"
 
 void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName)
 {
@@ -48,7 +50,7 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 	ExitProcess(ProcessExitCode::FAILURE);
 }
 
-void InitializeBasic(u32 fiberCount)
+void InitializeBasic(u32 maxFiberCount)
 {
-	InitializeFiber(fiberCount);
+	InitializeFiber(maxFiberCount);
 }

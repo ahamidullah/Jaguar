@@ -1,6 +1,5 @@
-typedef u32 Entity_ID;
-
-struct EntityMeshes {
+struct EntityMeshes
+{
 	Array<MeshInstance> instances;
 	Array<BoundingSphere> boundingSpheres;
 
@@ -18,12 +17,12 @@ struct EntityMeshes {
 };
 
 // @TODO: Use sparse arrays to store entity attributes.
-struct {
+struct
+{
 	Transform transforms[100]; // @TODO
 	u32 transform_count;
 
 	EntityMeshes meshes;
-//	Array<ShaderEntityParameters> shaderParameters;
 
 	u32 ids[100]; // @TODO
 	u32 id_count;
@@ -34,22 +33,26 @@ u32 nanosuit_id;
 
 // @TODO: Multithreading?
 
-Entity_ID Create_Entity() {
-	Entity_ID id = entitiesContext.id_count;
+EntityID CreateEntity()
+{
+	auto id = entitiesContext.id_count;
 	entitiesContext.ids[entitiesContext.id_count++] = id;
 	return id;
 }
 
-void Set_Entity_Transform(Entity_ID entity_id, Transform transform) {
+void SetEntityTransform(EntityID entity_id, Transform transform)
+{
 	entitiesContext.transforms[entity_id] = transform;
 }
 
-struct Set_Entity_Model_Job_Parameter {
+struct Set_Entity_Model_Job_Parameter
+{
 	AssetID asset_id;
 	Transform transform;
 };
 
-void Set_Entity_Model_Job(void *job_parameter_pointer) {
+void Set_Entity_Model_Job(void *job_parameter_pointer)
+{
 	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)job_parameter_pointer;
 	MeshAsset *asset = GetMeshAsset(job_parameter->asset_id);
 	Append(&entitiesContext.meshes.instances, (MeshInstance){
@@ -62,7 +65,8 @@ void Set_Entity_Model_Job(void *job_parameter_pointer) {
 	});
 }
 
-void Set_Entity_Model(Entity_ID entity_id, AssetID asset_id, Transform transform) {
+void SetEntityModel(EntityID entity_id, AssetID asset_id, Transform transform)
+{
 	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)malloc(sizeof(Set_Entity_Model_Job_Parameter)); // @TODO
 	*job_parameter = (Set_Entity_Model_Job_Parameter){
 		.asset_id = asset_id,
@@ -73,13 +77,17 @@ void Set_Entity_Model(Entity_ID entity_id, AssetID asset_id, Transform transform
 	RunJobs(1, &job_declaration, NORMAL_PRIORITY_JOB, job_counter);
 }
 
-Array<MeshInstance> GetMeshInstances() {
+Array<MeshInstance> GetMeshInstances()
+{
 	return entitiesContext.meshes.instances;
 }
 
-void InitializeEntities() {
-	nanosuit_id = Create_Entity();
+void InitializeEntities()
+{
+/*
+	nanosuit_id = CreateEntity();
 	Transform t = {.translation = {0.0f, 0.0f, 0.0f}};
-	Set_Entity_Transform(nanosuit_id, t);
-	Set_Entity_Model(nanosuit_id, ANVIL_ASSET, t);
+	SetEntityTransform(nanosuit_id, t);
+	SetEntityModel(nanosuit_id, ANVIL_ASSET, t);
+*/
 }

@@ -14,7 +14,7 @@ struct WindowContext
 
 struct Input;
 
-WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen);
+WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen = false);
 void ProcessWindowEvents(WindowContext *window, Input *input);
 void ToggleFullscreen(WindowContext *window);
 void CaptureCursor(WindowContext *window);

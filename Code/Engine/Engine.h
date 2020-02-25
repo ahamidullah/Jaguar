@@ -11,7 +11,9 @@
 #include "Vulkan.h"
 #endif
 #include "GPU.h"
+#include "Renderer/Shader.h"
 #include "Mesh.h"
 #include "Camera.h"
 #include "Render.h"
 #include "Assets.h"
+#include "Entity.h"

@@ -32,16 +32,16 @@ struct GPUMemoryAllocators {
 typedef struct GPU_Image_Creation_Parameters {
 	u32 width;
 	u32 height;
-	GPU_Format format;
-	GPU_Image_Layout initial_layout;
-	GPU_Image_Usage_Flags usage_flags;
-	GPU_Sample_Count_Flags sample_count_flags;
+	GPUFormat format;
+	GPUImageLayout initial_layout;
+	GPUImageUsageFlags usage_flags;
+	GPUSampleCount sample_count_flags;
 } GPU_Image_Creation_Parameters;
 
 typedef struct Render_Pass_Transient_Attachment_Creation_Parameters {
 	u32 width;
 	u32 height;
-	GPU_Format format;
+	GPUFormat format;
 	u32 samples;
 	bool depth;
 } Render_Pass_Transient_Attachment_Creation_Parameters;
@@ -67,7 +67,7 @@ typedef struct Render_Pass_Description {
 
 typedef struct Render_Graph_External_Attachment {
 	u32 id;
-	GPU_Image image;
+	GPUImage image;
 } Render_Graph_External_Attachment;
 
 typedef struct Render_Graph_Description {
@@ -82,8 +82,8 @@ typedef enum Render_API_ID {
 } Render_API_ID;
 
 typedef struct Thread_Local_Render_Context {
-	GPU_Command_Pool *command_pools;
-	GPU_Command_Pool upload_command_pool; // @TODO: Double buffer and wait for one pool to empty to free it.
+	GPUCommandPool *command_pools;
+	GPUCommandPool upload_command_pool; // @TODO: Double buffer and wait for one pool to empty to free it.
 } Thread_Local_Render_Context;
 
 typedef struct Render_Context {
@@ -96,21 +96,21 @@ typedef struct Render_Context {
 	u32 debug_render_object_count;
 	Debug_Render_Object debug_render_objects[MAX_DEBUG_RENDER_OBJECTS];
 	u32 current_frame_index;
-	GPU_Swapchain swapchain;
+	GPUSwapchain swapchain;
 	u32 swapchain_image_count;
-	GPU_Framebuffer *framebuffers;
-	GPU_Shader shaders[GPU_SHADER_COUNT];
-	GPU_Descriptor_Pool descriptor_pool;
-	GPU_Pipeline pipelines[GPU_SHADER_COUNT];
-	GPU_Command_Pool asset_upload_command_pool;
-	GPU_Shader_Descriptor_Sets rrdescriptor_sets;
+	GPUFramebuffer *framebuffers;
+	//GPU_Shader shaders[GPU_SHADER_COUNT];
+	GPUDescriptorPool descriptor_pool;
+	GPUPipeline pipelines[SHADER_COUNT];
+	GPUCommandPool asset_upload_command_pool;
+	//GPU_Shader_Descriptor_Sets rrdescriptor_sets;
 	u32 descriptor_set_count;
 	VkDescriptorSet descriptor_sets[100]; // @TODO
 	struct {
-		GPU_Render_Pass scene;
+		GPURenderPass scene;
 	} render_passes;
 
 	u32 currentFrame;
 	u32 nextFrame;
-	GPU_Fence inFlightFences[GPU_MAX_FRAMES_IN_FLIGHT];
+	GPUFence inFlightFences[GPU_MAX_FRAMES_IN_FLIGHT];
 } Render_Context;

@@ -25,7 +25,7 @@ void InitializeCameras(void *parameter) {//Camera *camera, V3 position, V3 forwa
 	camera->view_matrix = ViewMatrix(camera->position, camera->forward, camera->side, camera->up);
 	camera->field_of_view = DegreesToRadians(90.0f);
 	camera->focal_length = 0.01f;
-	camera->projection_matrix = InfinitePerspectiveProjection(camera->field_of_view, window_width / (f32)window_height); // @TODO
+	camera->projection_matrix = InfinitePerspectiveProjection(camera->field_of_view, windowWidth / (f32)windowHeight); // @TODO
 }
 #endif
 
@@ -40,7 +40,7 @@ void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov
 	camera.viewMatrix = ViewMatrix(camera.position, camera.forward, camera.side, camera.up);
 	camera.fov = DegreesToRadians(fov);
 	camera.focalLength = 0.01f;
-	camera.projectionMatrix = InfinitePerspectiveProjection(camera.fov, window_width / (f32)window_height); // @TODO
+	camera.projectionMatrix = InfinitePerspectiveProjection(camera.fov, windowWidth / (f32)windowHeight); // @TODO
 	Append(&camerasContext.cameras, camera);
 }
 

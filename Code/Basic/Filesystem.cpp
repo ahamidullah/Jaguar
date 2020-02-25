@@ -34,9 +34,9 @@ String GetFilepathExtension(const String &path)
 	{
 		return "";
 	}
-	auto fileExtensionLength = Length(path) - (dotIndex + 1);
+	auto fileExtensionLength = Length(path) - dotIndex;
 	auto fileExtension = CreateString(fileExtensionLength);
-	CopyMemory(&path[0] + (dotIndex + 1), &fileExtension[0], fileExtensionLength);
+	CopyMemory(&path[0] + dotIndex, &fileExtension[0], fileExtensionLength);
 	return fileExtension;
 }
 

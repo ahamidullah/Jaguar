@@ -1,7 +1,7 @@
 #include "Engine.h"
 
 THREAD_LOCAL u32 threadIndex; // @TODO
-u32 window_width, window_height;
+u32 windowWidth, windowHeight;
 
 #include "Jobs.cpp"
 #include "Math.cpp"
@@ -13,9 +13,10 @@ u32 window_width, window_height;
 #include "Render.cpp"
 #include "Assets.cpp"
 #include "Camera.cpp"
-#include "Entities.cpp"
+#include "Entity.cpp"
+#include "Renderer/Shader.cpp"
 
-void GameLoop();
+void GameLoop(f32 deltaTime);
 
 bool Loop(Input *input)
 {
@@ -23,7 +24,7 @@ bool Loop(Input *input)
 	{
 		return false;
 	}
-	GameLoop();
+	GameLoop(0.0f);
 	return true;
 }
 
@@ -33,8 +34,13 @@ bool Update(Input *input)
 	return running;
 }
 
-void RunGame(void *Parameter) {
-	InitializeRenderer(NULL);
+void RunGame(void *Parameter)
+{
+	windowWidth = 800;
+	windowHeight = 600;
+	auto window = CreateWindow(windowWidth, windowHeight);
+
+	InitializeRenderer(&window);
 	{
 		JobDeclaration jobs[] = {
 			CreateJob(InitializeAssets, NULL),
@@ -47,7 +53,6 @@ void RunGame(void *Parameter) {
 	}
 	InitializeEntities(); // @TODO
 
-	WindowContext window;
 	Input input;
 	bool running = true;
 	while (running)
@@ -61,8 +66,11 @@ void RunGame(void *Parameter) {
 	ExitProcess(ProcessExitCode::SUCCESS);
 }
 
-void ApplicationEntry()
+s32 ApplicationEntry(s32 argc, char *argv[])
 {
-	InitializeMedia(JOB_FIBER_COUNT);
+	InitializeMedia(true, JOB_FIBER_COUNT);
 	InitializeJobs(RunGame, NULL);
+
+	InvalidCodePath();
+	return 0;
 }

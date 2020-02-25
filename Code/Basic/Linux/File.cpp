@@ -132,3 +132,17 @@ bool FileExists(const String &path)
 	}
 	return false;
 }
+
+bool CreateDirectoryIfItDoesNotExist(const String &path)
+{
+	if (FileExists(path))
+	{
+		return true;
+	}
+	if (mkdir(&path[0], 0700) == -1)
+	{
+		LogPrint(LogType::ERROR, "failed to create directory %s: %s\n", &path[0], GetPlatformError());
+		return false;
+	}
+	return true;
+}

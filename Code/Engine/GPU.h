@@ -7,20 +7,20 @@ namespace Renderer
 
 struct GPUMemoryAllocation
 {
-	GPU_Memory memory;
+	GPUMemory memory;
 	u32 offset;
 	void *mappedPointer;
 };
 
 struct GPUSubbuffer
 {
-	GPU_Buffer buffer;
+	GPUBuffer buffer;
 	u32 *offset;
 };
 
 struct GPUImageAllocation
 {
-	GPU_Memory memory;
+	GPUMemory memory;
 	u32 *offset;
 };
 
@@ -30,7 +30,7 @@ struct GPUImageAllocation
 
 struct GPUMemoryBlock
 {
-	GPU_Memory memory;
+	GPUMemory memory;
 	void *mappedPointer;
 	u32 frontier;
 	u32 allocationCount;
@@ -44,12 +44,12 @@ struct GPUMemoryBlockAllocator
 	u32 blockSize;
 	GPUMemoryBlock *baseBlock;
 	GPUMemoryBlock *activeBlock;
-	GPU_Memory_Type memoryType;
+	GPUMemoryType memoryType;
 };
 
 struct GPUMemoryRingAllocator
 {
-	GPU_Memory memory;
+	GPUMemory memory;
 	void *mappedPointer;
 	u32 size;
 	u32 readIndex;
@@ -58,8 +58,8 @@ struct GPUMemoryRingAllocator
 
 struct GPUIndexedGeometry
 {
-	GPU_Buffer vertex_buffer;
-	GPU_Buffer index_buffer;
+	GPUBuffer vertex_buffer;
+	GPUBuffer index_buffer;
 };
 
 }

@@ -16,19 +16,19 @@ struct AssetUploadDoubleBuffer
 	struct UploadBuffer
 	{
 		s32 readyCount = 0;
-		GPU_Command_Buffer commandBuffers[MAX_UPLOAD_COMMAND_BUFFERS];
+		GPUCommandBuffer commandBuffers[MAX_UPLOAD_COMMAND_BUFFERS];
 		AssetUploadCounter *uploadCounters[MAX_UPLOAD_COMMAND_BUFFERS];
 	};
 	UploadBuffer buffers[2];
-	GPU_Command_Buffer *writeHead = buffers[0].commandBuffers;
+	GPUCommandBuffer *writeHead = buffers[0].commandBuffers;
 	UploadBuffer *writeBuffer = &buffers[0];
 	UploadBuffer *readBuffer = &buffers[1];
 	s32 readBufferElementCount = 0;
 };
 
-void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPU_Command_Buffer commandBuffer, AssetUploadCounter *counter)
+void WriteToAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b, GPUCommandBuffer commandBuffer, AssetUploadCounter *counter)
 {
-	GPU_Command_Buffer *writePointer;
+	GPUCommandBuffer *writePointer;
 	do
 	{
 		writePointer = b->writeHead;
@@ -54,7 +54,7 @@ void SwitchAssetUploadDoubleBuffer(AssetUploadDoubleBuffer *b)
 		b->writeBuffer = &b->buffers[0];
 		b->readBuffer = &b->buffers[1];
 	}
-	GPU_Command_Buffer *oldWriteHead = b->writeHead;
+	auto *oldWriteHead = b->writeHead;
 	b->writeBuffer->readyCount = 0;
 	b->writeHead = b->writeBuffer->commandBuffers;
 	b->readBufferElementCount = oldWriteHead - b->readBuffer->commandBuffers;
@@ -73,10 +73,10 @@ struct
 	AssetLoadStatus loadStatuses[ASSET_COUNT];
 	AssetUploadDoubleBuffer uploadCommandBuffers;
 	s32 uploadFenceCount;
-	GPU_Fence uploadFences[MAX_UPLOAD_COMMAND_BUFFERS];
+	GPUFence uploadFences[MAX_UPLOAD_COMMAND_BUFFERS];
 	s32 pendingUploadCounterCounts[MAX_UPLOAD_FENCES];
 	AssetUploadCounter *pendingUploadCountersPerFence[MAX_UPLOAD_FENCES][MAX_UPLOAD_COMMAND_BUFFERS];
-	GPU_Command_Pool gpu_upload_command_pool;
+	GPUCommandPool gpu_upload_command_pool;
 } assetsContext;
 
 // @TODO: Trying to load the same asset multiple times simultaneously?
@@ -85,13 +85,13 @@ struct
 //#define DEFAULT_DIFFUSE_COLOR (V3){0.0f, 1.00f, 0.00f}
 //#define DEFAULT_SPECULAR_COLOR (V3){1.0f, 1.0f, 1.0f}
 
-Renderer::GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 indicesByteSize, GPU_Buffer sourceBuffer, AssetUploadCounter *counter) {
-	GPU_Buffer vertexBuffer = Renderer::CreateGPUBuffer(verticesByteSize, (GPU_Buffer_Usage_Flags)(GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
-	GPU_Buffer indexBuffer = Renderer::CreateGPUBuffer(indicesByteSize, (GPU_Buffer_Usage_Flags)(GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
-	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
-	Render_API_Record_Copy_Buffer_Command(commandBuffer, verticesByteSize, sourceBuffer, vertexBuffer, 0, 0);
-	Render_API_Record_Copy_Buffer_Command(commandBuffer, indicesByteSize, sourceBuffer, indexBuffer, verticesByteSize, 0);
-	Render_API_End_Command_Buffer(commandBuffer);
+Renderer::GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 indicesByteSize, GPUBuffer sourceBuffer, AssetUploadCounter *counter) {
+	auto vertexBuffer = Renderer::CreateGPUBuffer(verticesByteSize, (GPUBufferUsageFlags)(GPU_VERTEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
+	auto indexBuffer = Renderer::CreateGPUBuffer(indicesByteSize, (GPUBufferUsageFlags)(GPU_INDEX_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER));
+	auto commandBuffer = GPUCreateCommandBuffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
+	GPURecordCopyBufferCommand(commandBuffer, verticesByteSize, sourceBuffer, vertexBuffer, 0, 0);
+	GPURecordCopyBufferCommand(commandBuffer, indicesByteSize, sourceBuffer, indexBuffer, verticesByteSize, 0);
+	GPUEndCommandBuffer(commandBuffer);
 	WriteToAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers, commandBuffer, counter);
 	return {
 		.vertex_buffer = vertexBuffer,
@@ -103,14 +103,14 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s32 texturePixelWidth, s32 texturePixelH
 	// @TODO: Load texture directly into staging memory.
 	void *stagingMemory;
 	u32 textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
-	GPU_Buffer stagingBuffer = Renderer::CreateGPUStagingBuffer(textureByteSize, &stagingMemory);
+	auto stagingBuffer = Renderer::CreateGPUStagingBuffer(textureByteSize, &stagingMemory);
 	CopyMemory(pixels, stagingMemory, textureByteSize);
-	GPU_Image image = Renderer::CreateGPUImage(texturePixelWidth, texturePixelHeight, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, (GPU_Image_Usage_Flags)(GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED), GPU_SAMPLE_COUNT_1);
-	GPU_Command_Buffer commandBuffer = Render_API_Create_Command_Buffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
-	Render_API_Transition_Image_Layout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_UNDEFINED, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	Render_API_Record_Copy_Buffer_To_Image_Command(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
-	Render_API_Transition_Image_Layout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (VkImageLayout)GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	Render_API_End_Command_Buffer(commandBuffer);
+	auto image = Renderer::CreateGPUImage(texturePixelWidth, texturePixelHeight, GPU_FORMAT_R8G8B8A8_UNORM, GPU_IMAGE_LAYOUT_UNDEFINED, (GPUImageUsageFlags)(GPU_IMAGE_USAGE_TRANSFER_DST | GPU_IMAGE_USAGE_SAMPLED), GPU_SAMPLE_COUNT_1);
+	auto commandBuffer = GPUCreateCommandBuffer(renderContext.thread_local_contexts[threadIndex].upload_command_pool);
+	GPUTransitionImageLayout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_UNDEFINED, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	GPURecordCopyBufferToImageCommand(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
+	GPUTransitionImageLayout(commandBuffer, image, (VkFormat)GPU_FORMAT_R8G8B8A8_UNORM, (VkImageLayout)GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (VkImageLayout)GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	GPUEndCommandBuffer(commandBuffer);
 	WriteToAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers, commandBuffer, counter);
 	return 0;
 }
@@ -338,7 +338,7 @@ void LoadModel(void *jobParameterPointer) {
 		mesh_index_offset += mesh->submeshIndexCounts[i];
 
 		void *staging_memory;
-		GPU_Buffer staging_buffer = Renderer::CreateGPUStagingBuffer(vertices_size + indices_size, &staging_memory);
+		GPUBuffer staging_buffer = Renderer::CreateGPUStagingBuffer(vertices_size + indices_size, &staging_memory);
 		CopyMemory(vertex_buffer, staging_memory, vertices_size);
 		CopyMemory(index_buffer, (char *)staging_memory + vertices_size, indices_size);
 		mesh->gpuMesh = QueueIndexedGeometryUploadToGPU(vertices_size, indices_size, staging_buffer, uploadCounter);
@@ -695,7 +695,7 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 	// Submit queued asset upload commands.
 	SwitchAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers);
 	if (assetsContext.uploadCommandBuffers.readBufferElementCount > 0) {
-		Render_API_Submit_Command_Buffers(assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.readBuffer->commandBuffers, GPU_GRAPHICS_COMMAND_QUEUE, assetsContext.uploadFences[assetsContext.uploadFenceCount]);
+		GPUSubmitCommandBuffers(assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.readBuffer->commandBuffers, GPU_GRAPHICS_COMMAND_QUEUE, assetsContext.uploadFences[assetsContext.uploadFenceCount]);
 		assetsContext.pendingUploadCounterCounts[assetsContext.uploadFenceCount] = assetsContext.uploadCommandBuffers.readBufferElementCount;
 		CopyMemory(assetsContext.uploadCommandBuffers.readBuffer->uploadCounters, &assetsContext.pendingUploadCountersPerFence[assetsContext.uploadFenceCount], assetsContext.uploadCommandBuffers.readBufferElementCount * sizeof(AssetUploadCounter *));
 		assetsContext.uploadFenceCount += 1;
@@ -704,10 +704,10 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 
 	// Check whether submitted asset upload commands have finished.
 	for (s32 i = 0; i < assetsContext.uploadFenceCount; i++) {
-		if (!Render_API_Was_Fence_Signalled(assetsContext.uploadFences[i])) {
+		if (!GPUWasFenceSignalled(assetsContext.uploadFences[i])) {
 			continue;
 		}
-		Render_API_Reset_Fences(1, &assetsContext.uploadFences[i]);
+		GPUResetFences(1, &assetsContext.uploadFences[i]);
 		for (s32 j = 0; j < assetsContext.pendingUploadCounterCounts[i]; j++) {
 			assetsContext.pendingUploadCountersPerFence[i][j]->commandBufferCount -= 1;
 			if (assetsContext.pendingUploadCountersPerFence[i][j]->commandBufferCount == 0) {
@@ -717,7 +717,7 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 		// Remove the fence.
 		assetsContext.uploadFenceCount -= 1;
 		if (i != assetsContext.uploadFenceCount) {
-			GPU_Fence temporary = assetsContext.uploadFences[i];
+			GPUFence temporary = assetsContext.uploadFences[i];
 			assetsContext.uploadFences[i] = assetsContext.uploadFences[assetsContext.uploadFenceCount];
 			assetsContext.uploadFences[assetsContext.uploadFenceCount] = temporary;
 			i -= 1;
@@ -727,10 +727,10 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context) {
 
 void InitializeAssets(void *job_parameter)
 {
-	assetsContext.gpu_upload_command_pool = RenderAPICreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
+	assetsContext.gpu_upload_command_pool = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
 
 	for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++)
 	{
-		assetsContext.uploadFences[i] = RenderAPICreateFence(false);
+		assetsContext.uploadFences[i] = GPUCreateFence(false);
 	}
 }

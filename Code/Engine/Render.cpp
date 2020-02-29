@@ -70,7 +70,7 @@ V3 random_color() {
 void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
 	f32 half_near_plane_height = focal_length * Tan(camera->fov / 2.0f);
 	f32 half_near_plane_width = focal_length * Tan(camera->fov / 2.0f) * aspect_ratio;
-	V3 center_of_near_plane = focal_length * camera->forward;
+	V3 center_of_near_plane = focal_length * CalculateTransformForward(&camera->transform);
 	enum {
 		RIGHT,
 		LEFT,
@@ -78,18 +78,20 @@ void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, 
 		BOTTOM,
 		FRUSTUM_PLANE_COUNT,
 	};
+	auto right = CalculateTransformRight(&camera->transform);
+	auto up = CalculateTransformUp(&camera->transform);
 	V3 frustum_plane_normals[] = {
-		[RIGHT] = CrossProduct(Normalize(center_of_near_plane + (half_near_plane_width * camera->side)), camera->up),
-		[LEFT] = CrossProduct(camera->up, Normalize(center_of_near_plane - half_near_plane_width * camera->side)),
-		[TOP] = CrossProduct(camera->side, Normalize(center_of_near_plane + half_near_plane_height * camera->up)),
-		[BOTTOM] = CrossProduct(Normalize(center_of_near_plane - (half_near_plane_height * camera->up)), camera->side),
+		[RIGHT] = CrossProduct(Normalize(center_of_near_plane + (half_near_plane_width * right)), up),
+		[LEFT] = CrossProduct(up, Normalize(center_of_near_plane - half_near_plane_width * right)),
+		[TOP] = CrossProduct(right, Normalize(center_of_near_plane + half_near_plane_height * up)),
+		[BOTTOM] = CrossProduct(Normalize(center_of_near_plane - (half_near_plane_height * up)), right),
 	};
 	for (u32 i = 0; i < mesh_bounding_sphere_count; i++) {
 		//Draw_Wire_Sphere(mesh_bounding_spheres[i].center, mesh_bounding_spheres[i].radius, v3_to_v4(random_color_table[i % RANDOM_COLOR_TABLE_LENGTH], 1.0f));
-		if ((DotProduct(frustum_plane_normals[RIGHT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[RIGHT], camera->position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[LEFT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[LEFT], camera->position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[TOP], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[TOP], camera->position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[BOTTOM], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[BOTTOM], camera->position) <= mesh_bounding_spheres[i].radius)) {
+		if ((DotProduct(frustum_plane_normals[RIGHT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[RIGHT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[LEFT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[LEFT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[TOP], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[TOP], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[BOTTOM], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[BOTTOM], camera->transform.position) <= mesh_bounding_spheres[i].radius)) {
 		 	Assert(*visible_mesh_count < MAX_VISIBLE_ENTITY_MESHES);
 			visible_meshes[(*visible_mesh_count)++] = i;
 		}
@@ -105,12 +107,106 @@ enum {
 GPUBuffer uniform_buffer;
 GPUFence matrix_fence;
 
+void CreateGraphicsPipelines(GPURenderPass renderPass, GPUPipeline *pipelines)
+{
+	GPUFramebufferAttachmentColorBlendDescription colorBlendDescription =
+	{
+			.enable_blend = true,
+			.source_color_blend_factor = GPU_BLEND_FACTOR_SRC_ALPHA,
+			.destination_color_blend_factor = GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			//.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+			//.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.color_blend_operation = GPU_BLEND_OP_ADD ,
+			.source_alpha_blend_factor = GPU_BLEND_FACTOR_ONE,
+			.destination_alpha_blend_factor = GPU_BLEND_FACTOR_ZERO,
+			.alpha_blend_operation = GPU_BLEND_OP_ADD,
+			.color_write_mask = GPU_COLOR_COMPONENT_RED | GPU_COLOR_COMPONENT_GREEN | GPU_COLOR_COMPONENT_BLUE | GPU_COLOR_COMPONENT_ALPHA,
+	};
+	GPUPipelineVertexInputAttributeDescription vertexInputAttributeDescriptions[] =
+	{
+		{
+			.format = GPU_FORMAT_R32G32B32_SFLOAT,
+			.binding = GPU_VERTEX_BUFFER_BIND_ID,
+			.location = 0,
+			.offset = 0,
+		},
+	};
+	GPUPipelineVertexInputBindingDescription vertexInputBindingDescriptions[] =
+	{
+		{
+			.binding = GPU_VERTEX_BUFFER_BIND_ID,
+			.stride = sizeof(V3),
+			.input_rate = GPU_VERTEX_INPUT_RATE_VERTEX,
+		},
+	};
+	GPUDynamicPipelineState dynamicStates[] =
+	{
+		GPU_DYNAMIC_PIPELINE_STATE_VIEWPORT,
+		GPU_DYNAMIC_PIPELINE_STATE_SCISSOR,
+	};
+	auto shader = GetShader(FLAT_COLOR_SHADER);
+	GPUPipelineDescription pipelineDescription =
+	{
+		.descriptor_set_layout_count = 1,
+		.descriptor_set_layouts = &renderContext.descriptorSets[FLAT_COLOR_SHADER].layout,
+		.push_constant_count = 0,
+		.push_constant_descriptions = NULL,
+		.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		.viewport_width = (f32)windowWidth,
+		.viewport_height = (f32)windowHeight,
+		.scissor_width = windowWidth,
+		.scissor_height = windowHeight,
+		.depth_compare_operation = GPU_COMPARE_OP_LESS,
+		.framebuffer_attachment_color_blend_count = 1,
+		.framebuffer_attachment_color_blend_descriptions = &colorBlendDescription,
+		.vertex_input_attribute_count = 1,
+		.vertex_input_attribute_descriptions = vertexInputAttributeDescriptions,
+		.vertex_input_binding_count = 1,
+		.vertex_input_binding_descriptions = vertexInputBindingDescriptions,
+		.dynamic_state_count = ArrayCount(dynamicStates),
+		.dynamic_states = dynamicStates,
+		.shader = shader,
+		.render_pass = renderPass,
+		.enable_depth_bias = false,
+	};
+	pipelines[FLAT_COLOR_SHADER] = GPUCreatePipeline(&pipelineDescription);
+}
+
+#define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE Megabyte(1)
+
+void CreateDescriptorSets(GPUDescriptorPool pool, u32 swapchainImageCount, ShaderDescriptorSets *sets)
+{
+	DescriptorSetBindingInfo bindingInfos[] =
+	{
+		{
+			.binding = 0,
+			.descriptorType = GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stage = GPU_VERTEX_SHADER_STAGE,
+		},
+	};
+	sets[FLAT_COLOR_SHADER].layout = GPUCreateDescriptorSetLayout(ArrayCount(bindingInfos), bindingInfos);
+	sets[FLAT_COLOR_SHADER].sets = AllocateArray(GPUDescriptorSet, swapchainImageCount);
+	sets[FLAT_COLOR_SHADER].buffers = AllocateArray(GPUBuffer, swapchainImageCount);
+	GPUCreateDescriptorSets(pool, sets[FLAT_COLOR_SHADER].layout, swapchainImageCount, sets[FLAT_COLOR_SHADER].sets);
+	for (auto i = 0; i < swapchainImageCount; i++)
+	{
+		sets[FLAT_COLOR_SHADER].buffers[i] = Renderer::CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	}
+}
+
 void InitializeRenderer(void *job_parameter_pointer) {
 	//GameState *game_state = (GameState *)job_parameter_pointer;
 	auto window = (WindowContext *)job_parameter_pointer;
 	//Render_Context *context = &game_state->render_context;
 	auto context = &renderContext;
 	Render_API_Initialize(&context->api_context, window);
+
+	context->swapchain = GPUCreateSwapchain();
+	context->swapchain_image_count = GPUGetSwapchainImageCount(context->swapchain);
+	GPUImageView *swapchain_image_views = (GPUImageView *)malloc(context->swapchain_image_count * sizeof(GPUImageView)); // @TODO
+	GPUGetSwapchainImageViews(context->swapchain, context->swapchain_image_count, swapchain_image_views);
+
 	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
 	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
 	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
@@ -148,11 +244,6 @@ void InitializeRenderer(void *job_parameter_pointer) {
 	auto depth_buffer_image = Renderer::CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
 	auto depth_buffer_image_view = GPUCreateImageView(depth_buffer_image, (VkFormat)DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
 
-	context->swapchain = GPUCreateSwapchain();
-	context->swapchain_image_count = GPUGetSwapchainImageCount(context->swapchain);
-	GPUImageView *swapchain_image_views = (GPUImageView *)malloc(context->swapchain_image_count * sizeof(GPUImageView)); // @TODO
-	GPUGetSwapchainImageViews(context->swapchain, context->swapchain_image_count, swapchain_image_views);
-
 	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
 		context->inFlightFences[i] = GPUCreateFence(true);
 	}
@@ -162,7 +253,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 
 	context->descriptor_pool = GPUCreateDescriptorPool(context->swapchain_image_count);
 
-	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass(&context->api_context);
+	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass();
 
 	context->framebuffers = (VkFramebuffer *)malloc(context->swapchain_image_count * sizeof(GPUFramebuffer));
 	for (s32 i = 0; i < context->swapchain_image_count; i++) {
@@ -183,7 +274,8 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		}
 	}
 
-	//Create_Material_Pipelines(&context->api_context, context->shaders, context->render_passes.scene, context->pipelines);
+	CreateDescriptorSets(context->descriptor_pool, context->swapchain_image_count, context->descriptorSets);
+	CreateGraphicsPipelines(context->render_passes.scene, context->pipelines);
 
 	context->aspect_ratio = windowWidth / (f32)windowHeight;
 	//context->focal_length = 0.1f;
@@ -224,12 +316,25 @@ void InitializeRenderer(void *job_parameter_pointer) {
 
 	matrix_fence = GPUCreateFence(false);
 
-	for (s32 i = 0; i < context->swapchain_image_count; i++) {
+	for (s32 i = 0; i < context->swapchain_image_count; i++)
+	{
 		M4 m = IdentityMatrix();
 		//GPU_Descriptor_Update_Info update_infos[] = {
 			//{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		//};
 		//Update_Descriptors(context, matrix_fence, i, &context->rrdescriptor_sets, ArrayCount(update_infos), update_infos);
+		void *staging_memory;
+		GPUBuffer staging_buffer = Renderer::CreateGPUStagingBuffer(sizeof(M4), &staging_memory);
+		CopyMemory(&m, staging_memory, sizeof(M4));
+		ConsolePrint("obj = %u\n", context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
+		ConsolePrint("threadIndex = %u\n", threadIndex);
+		ConsolePrint("currentFrame = %u\n", context->currentFrame);
+		GPUCommandBuffer command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
+		GPURecordCopyBufferCommand(command_buffer, sizeof(M4), staging_buffer, renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[i], 0, 0);
+		GPUEndCommandBuffer(command_buffer);
+		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
+		GPUUpdateDescriptorSets(renderContext.descriptorSets[FLAT_COLOR_SHADER].sets[i], renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[i], GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+
 		GPUWaitForFences(1, &matrix_fence, true, U32_MAX);
 		GPUResetFences(1, &matrix_fence);
 	}
@@ -331,12 +436,15 @@ void FinalizeAssetUploadsToGPU(Render_API_Context *api_context);
 Array<MeshInstance> GetMeshInstances();
 
 // @TODO: Float up render passes, descriptor sets, pipelines, command lists.
-void Render() {
+void Render()
+{
 	auto camera = GetCamera("main");
-	if (!camera) {
+	if (!camera)
+	{
 		LogPrint(LogType::ERROR, "Render: could not get main camera");
 		return;
 	}
+
 	auto mesh_instances = GetMeshInstances();
 	auto context = &renderContext;
 
@@ -364,7 +472,19 @@ void Render() {
 		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
 	}
 	#endif
-	M4 m = camera->projectionMatrix * camera->viewMatrix;
+	auto projectionMatrix = InfinitePerspectiveProjection(camera->fov, windowWidth / (f32)windowHeight);
+	auto viewMatrix = ViewMatrix(camera->transform.position, CalculateTransformForward(&camera->transform));
+	M4 m = projectionMatrix * viewMatrix;
+	{
+		void *staging_memory;
+		auto staging_buffer = Renderer::CreateGPUStagingBuffer(sizeof(M4), &staging_memory);
+		CopyMemory(&m, staging_memory, sizeof(M4));
+		auto command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
+		GPURecordCopyBufferCommand(command_buffer, sizeof(M4), staging_buffer, renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[swapchain_image_index], 0, 0);
+		GPUEndCommandBuffer(command_buffer);
+		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
+		GPUUpdateDescriptorSets(renderContext.descriptorSets[FLAT_COLOR_SHADER].sets[swapchain_image_index], renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[swapchain_image_index], GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+	}
 	//GPU_Descriptor_Update_Info update_infos[] = {
 		//{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		//{COLOR_DESCRIPTOR, {.v4 = {}}},
@@ -388,15 +508,16 @@ void Render() {
 	GPURecordBeginRenderPassCommand(command_buffer, context->render_passes.scene, context->framebuffers[swapchain_image_index]);
 	GPURecordSetViewportCommand(command_buffer, windowWidth, windowHeight);
 	GPURecordSetScissorCommand(command_buffer, windowWidth, windowHeight);
-	//GPURecordBindPipelineCommand(command_buffer, context->pipelines[RUSTED_IRON_SHADER]);
+	GPURecordBindPipelineCommand(command_buffer, context->pipelines[FLAT_COLOR_SHADER]);
 	for (auto &mesh : mesh_instances) {
 		// @TODO
 		if (mesh.asset->loadStatus != ASSET_LOADED) {
 			continue;
 		}
+		ConsolePrint("NOT_SKIPPING\n");
 		//Render_API_Set_Per_Object_Shader_Parameters(&context->api_context);
 		//Bind_Shader_Per_Object_Descriptor_Sets(context, RUSTED_IRON_SHADER);
-		//vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelines[RUSTED_IRON_SHADER].layout, 0, 1, &context->rrdescriptor_sets.sets[swapchain_image_index], 0, NULL);
+		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelines[FLAT_COLOR_SHADER].layout, 0, 1, &context->descriptorSets[FLAT_COLOR_SHADER].sets[swapchain_image_index], 0, NULL);
 		GPURecordBindVertexBufferCommand(command_buffer, mesh.asset->gpuMesh.vertex_buffer);
 		GPURecordBindIndexBufferCommand(command_buffer, mesh.asset->gpuMesh.index_buffer);
 		u32 total_mesh_index_count = 0;

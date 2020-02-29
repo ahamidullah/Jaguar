@@ -10,13 +10,11 @@ void CreateShader(const Array<CreateShaderInfo> &infos, Shader *shader)
 {
 	for (auto i : infos)
 	{
-		Append(
-			&shader->modules,
-			ShaderModule{
-				.stage = i.stage,
-				.module = GPUCreateShaderModule(i.stage, i.spirv),
-			}
-		);
+		Append(&shader->modules,
+		{
+			.stage = i.stage,
+			.module = GPUCreateShaderModule(i.stage, i.spirv),
+		});
 	}
 }
 
@@ -42,7 +40,7 @@ void LoadShaders()
 		while (IterateDirectory(shaderDirectory, &iteration))
 		{
 			auto sourceFilepath = JoinFilepaths(shaderDirectory, iteration.filename);
-			RunProcess(_FormatString("ShaderPreprocessor %s", &sourceFilepath[0]));
+			RunProcess(_FormatString("ShaderCompiler %s", &sourceFilepath[0]));
 			String moduleNames[] = {
 				"vert",
 				"frag",
@@ -52,7 +50,7 @@ void LoadShaders()
 			for (auto &module : moduleNames)
 			{
 				auto binaryFilepath = JoinFilepaths(binaryDirectory, iteration.filename);
-				SetFilepathExtension(&binaryFilepath, _FormatString(".%s.%s", &module[0]), &binaryFilenameExtension[0]);
+				SetFilepathExtension(&binaryFilepath, _FormatString(".%s.%s", &module[0], &binaryFilenameExtension[0]));
 				if (!FileExists(binaryFilepath))
 				{
 					continue;
@@ -92,4 +90,9 @@ void LoadShaders()
 	{
 		InvalidCodePath(); // Should just load the binaries from somewhere...
 	}
+}
+
+Shader *GetShader(ShaderID id)
+{
+	return &shaders[id];
 }

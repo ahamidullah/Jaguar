@@ -30,3 +30,5 @@ struct Shader {
 	GPU_Shader gpu;
 	Array<GPUDescriptorSet> descriptorSets;
 };
+
+Shader *GetShader(ShaderID id);

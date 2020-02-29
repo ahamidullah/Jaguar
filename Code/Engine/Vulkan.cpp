@@ -738,9 +738,10 @@ GPUSwapchain GPUCreateSwapchain()
 	VkSurfaceCapabilitiesKHR surfaceCapabilities;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanContext.physicalDevice, vulkanContext.surface, &surfaceCapabilities));
 	VkExtent2D swapchainImageExtent;
-	if (surfaceCapabilities.currentExtent.width != U32_MAX)
+	if (surfaceCapabilities.currentExtent.width == U32_MAX && surfaceCapabilities.currentExtent.height == U32_MAX) // Indicates Vulkan will accept any extent dimension.
 	{
-		swapchainImageExtent = surfaceCapabilities.currentExtent;
+		swapchainImageExtent.width = windowWidth;
+		swapchainImageExtent.height = windowHeight;
 	}
 	else
 	{
@@ -748,9 +749,10 @@ GPUSwapchain GPUCreateSwapchain()
 		swapchainImageExtent.height = Maximum(surfaceCapabilities.minImageExtent.height, Minimum(surfaceCapabilities.maxImageExtent.height, windowHeight));
 	}
 	// @TODO: Why is this a problem?
-	//if (swapchainImageExtent.width != windowWidth && swapchainImageExtent.height != windowHeight) {
-		//Abort("Swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u\n", swapchainImageExtent.width, swapchainImageExtent.height, windowWidth, windowHeight);
-	//}
+	if (swapchainImageExtent.width != windowWidth && swapchainImageExtent.height != windowHeight)
+	{
+		Abort("swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u\n", swapchainImageExtent.width, swapchainImageExtent.height, windowWidth, windowHeight);
+	}
 	u32 desiredSwapchainImageCount = surfaceCapabilities.minImageCount + 1;
 	if (surfaceCapabilities.maxImageCount > 0 && (desiredSwapchainImageCount > surfaceCapabilities.maxImageCount))
 	{
@@ -1018,8 +1020,39 @@ GPUDescriptorPool GPUCreateDescriptorPool(u32 swapchainImageCount)
 	return descriptorPool;
 }
 
-void GPUCreateDescriptorSets(GPUDescriptorPool pool, u32 setCount, GPUDescriptorSetLayout *layouts, GPUDescriptorSet *sets)
+GPUDescriptorSetLayout GPUCreateDescriptorSetLayout(u32 bindingCount, DescriptorSetBindingInfo *bindingInfos)
 {
+	VkDescriptorSetLayoutBinding bindings[bindingCount];
+	for (auto i = 0; i < bindingCount; i++)
+	{
+		bindings[i] =
+		VkDescriptorSetLayoutBinding{
+			.binding = bindingInfos[i].binding,
+			.descriptorType = bindingInfos[i].descriptorType,
+			.descriptorCount = bindingInfos[i].descriptorCount,
+			.stageFlags = bindingInfos[i].stage,
+			.pImmutableSamplers = NULL,
+		};
+	};
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+		.bindingCount = bindingCount,
+		.pBindings = bindings,
+	};
+	VkDescriptorSetLayout layout;
+	VK_CHECK(vkCreateDescriptorSetLayout(vulkanContext.device, &descriptorSetLayoutCreateInfo, NULL, &layout));
+	return layout;
+}
+
+void GPUCreateDescriptorSets(GPUDescriptorPool pool, GPUDescriptorSetLayout layout, u32 setCount, GPUDescriptorSet *sets)
+{
+	VkDescriptorSetLayout layouts[setCount];
+	for (auto i = 0; i < setCount; i++)
+	{
+		layouts[i] = layout;
+	}
 	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1028,6 +1061,27 @@ void GPUCreateDescriptorSets(GPUDescriptorPool pool, u32 setCount, GPUDescriptor
 		.pSetLayouts = layouts,
 	};
 	VK_CHECK(vkAllocateDescriptorSets(vulkanContext.device, &descriptorSetAllocateInfo, sets));
+}
+
+void GPUUpdateDescriptorSets(GPUDescriptorSet set, GPUBuffer buffer, GPUDescriptorType descriptorType, u32 binding, u32 offset, u32 range)
+{
+	VkDescriptorBufferInfo bufferInfo =
+	{
+		.buffer = buffer,
+		.offset = 0,
+		.range  = range,
+	};
+	VkWriteDescriptorSet descriptorWrite =
+	{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = set,
+		.dstBinding = binding,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = descriptorType,
+		.pBufferInfo = &bufferInfo,
+	};
+	vkUpdateDescriptorSets(vulkanContext.device, 1, &descriptorWrite, 0, NULL);
 }
 
 #if 0
@@ -1174,13 +1228,15 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 de
 }
 #endif
 
-typedef struct Push_Constant_Description {
+struct GPUPushConstantDescription
+{
 	u32 offset;
 	u32 size;
 	GPUShaderStage shader_stage;
-} Push_Constant_Description;
+};
 
-typedef struct GPU_Framebuffer_Attachment_Color_Blend_Description {
+struct GPUFramebufferAttachmentColorBlendDescription
+{
 	bool enable_blend;
 	GPUBlendFactor source_color_blend_factor;
 	GPUBlendFactor destination_color_blend_factor;
@@ -1189,20 +1245,22 @@ typedef struct GPU_Framebuffer_Attachment_Color_Blend_Description {
 	GPUBlendFactor destination_alpha_blend_factor;
 	GPUBlendOperation alpha_blend_operation;
 	GPUColorComponent color_write_mask;
-} GPU_Framebuffer_Attachment_Color_Blend_Description;
+};
 
-typedef struct GPU_Pipeline_Vertex_Input_Attribute_Description {
+struct GPUPipelineVertexInputAttributeDescription
+{
 	GPUFormat format;
 	u32 binding;
 	u32 location;
 	u32 offset;
-} GPU_Pipeline_Vertex_Input_Attribute_Description;
+};
 
-typedef struct GPU_Pipeline_Vertex_Input_Binding_Description {
+struct GPUPipelineVertexInputBindingDescription
+{
 	u32 binding;
 	u32 stride;
 	GPUVertexInputRate input_rate;
-} GPU_Pipeline_Vertex_Input_Binding_Description;
+};
 
 /*
 typedef struct GPU_Shader_Stage_Description {
@@ -1211,11 +1269,12 @@ typedef struct GPU_Shader_Stage_Description {
 } GPU_Shader_Stage_Description;
 */
 
-typedef struct GPU_Pipeline_Description {
+struct GPUPipelineDescription
+{
 	u32 descriptor_set_layout_count;
 	GPUDescriptorSetLayout *descriptor_set_layouts;
 	u32 push_constant_count;
-	Push_Constant_Description *push_constant_descriptions;
+	GPUPushConstantDescription *push_constant_descriptions;
 	GPUPipelineTopology topology;
 	f32 viewport_width;
 	f32 viewport_height;
@@ -1223,20 +1282,20 @@ typedef struct GPU_Pipeline_Description {
 	u32 scissor_height;
 	GPUCompareOperation depth_compare_operation;
 	u32 framebuffer_attachment_color_blend_count;
-	GPU_Framebuffer_Attachment_Color_Blend_Description *framebuffer_attachment_color_blend_descriptions;
+	GPUFramebufferAttachmentColorBlendDescription *framebuffer_attachment_color_blend_descriptions;
 	u32 vertex_input_attribute_count;
-	GPU_Pipeline_Vertex_Input_Attribute_Description *vertex_input_attribute_descriptions;
+	GPUPipelineVertexInputAttributeDescription *vertex_input_attribute_descriptions;
 	u32 vertex_input_binding_count;
-	GPU_Pipeline_Vertex_Input_Binding_Description *vertex_input_binding_descriptions;
+	GPUPipelineVertexInputBindingDescription *vertex_input_binding_descriptions;
 	u32 dynamic_state_count;
 	GPUDynamicPipelineState *dynamic_states;
-	Shader shader;
+	Shader *shader;
 	GPURenderPass render_pass;
 	bool enable_depth_bias;
-} GPU_Pipeline_Description;
+};
 
 // @TODO: Fix formatting.
-GPUPipeline GPUCreatePipeline(GPU_Pipeline_Description *pipeline_description)
+GPUPipeline GPUCreatePipeline(GPUPipelineDescription *pipeline_description)
 {
 	GPUPipeline pipeline;
 	VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
@@ -1353,18 +1412,18 @@ GPUPipeline GPUCreatePipeline(GPU_Pipeline_Description *pipeline_description)
 		.dynamicStateCount = pipeline_description->dynamic_state_count,
 		.pDynamicStates = (VkDynamicState *)pipeline_description->dynamic_states,
 	};
-	VkPipelineShaderStageCreateInfo shader_stage_create_infos[Length(pipeline_description->shader.modules)];
-	for (s32 i = 0; i < Length(pipeline_description->shader.modules); i++) {
+	VkPipelineShaderStageCreateInfo shader_stage_create_infos[Length(pipeline_description->shader->modules)];
+	for (s32 i = 0; i < Length(pipeline_description->shader->modules); i++) {
 		shader_stage_create_infos[i] = (VkPipelineShaderStageCreateInfo){
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = (VkShaderStageFlagBits)pipeline_description->shader.modules[i].stage,
-			.module = pipeline_description->shader.modules[i].module,
+			.stage = (VkShaderStageFlagBits)pipeline_description->shader->modules[i].stage,
+			.module = pipeline_description->shader->modules[i].module,
 			.pName = "main",
 		};
 	}
 	VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		.stageCount = (u32)Length(pipeline_description->shader.modules),
+		.stageCount = (u32)Length(pipeline_description->shader->modules),
 		.pStages = shader_stage_create_infos,
 		.pVertexInputState = &vertex_input_state_create_info,
 		.pInputAssemblyState = &input_assembly_create_info,
@@ -1669,10 +1728,10 @@ void _Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage ima
 	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
 }
 
-VkRenderPass TEMPORARY_Render_API_Create_Render_Pass(Render_API_Context *context) {
+VkRenderPass TEMPORARY_Render_API_Create_Render_Pass() {
 	VkAttachmentDescription attachments[] = {
 		{
-			.format = context->window_surface_format.format,
+			.format = vulkanContext.surfaceFormat.format,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1724,7 +1783,7 @@ VkRenderPass TEMPORARY_Render_API_Create_Render_Pass(Render_API_Context *context
 		.pDependencies = &SubpassDependency,
 	};
 	VkRenderPass render_pass;
-	VK_CHECK(vkCreateRenderPass(context->device, &render_pass_create_info, NULL, &render_pass));
+	VK_CHECK(vkCreateRenderPass(vulkanContext.device, &render_pass_create_info, NULL, &render_pass));
 	return render_pass;
 }
 

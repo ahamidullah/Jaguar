@@ -21,242 +21,215 @@ u32 DivideAndRoundUp(u32 A, u32 B) {
 }
 
 bool NotNAN(V3 V) {
-	return (V.X != NAN) && (V.Y != NAN) && (V.Z != NAN);
+	return (V.x != NAN) && (V.y != NAN) && (V.z != NAN);
 }
 
-bool NotZero(V3 V) {
-	return (V.X != 0.0f) || (V.Y != 0.0f) || (V.Z != 0.0f);
+bool Notzero(V3 V) {
+	return (V.x != 0.0f) || (V.y != 0.0f) || (V.z != 0.0f);
 }
 
-V4 V3ToV4(V3 V, f32 W) {
+V4 V3ToV4(V3 V, f32 w) {
 	return {
-		V.X,
-		V.Y,
-		V.Z,
-		W,
+		V.x,
+		V.y,
+		V.z,
+		w,
 	};
 }
 
 V2 operator-(V2 A, V2 B) {
 	return {
-		A.X - B.X,
-		A.Y - B.Y,
+		A.x - B.x,
+		A.y - B.y,
 	};
 }
 
 bool operator==(const V3 &A, const V3 &B) {
-	return A.X == B.X && A.Y == B.Y && A.Z == B.Z;
+	return A.x == B.x && A.y == B.y && A.z == B.z;
 }
 
 V3 operator-(V3 V) {
 	return {
-		-V.X,
-		-V.Y,
-		-V.Z,
+		-V.x,
+		-V.y,
+		-V.z,
 	};
 }
 
-V3 operator*(f32 S, V3 V) {
-	return {
-		S * V.X,
-		S * V.Y,
-		S * V.Z,
-	};
-}
-
-V3 operator/(V3 V, f32 S) {
-	S = 1.0f / S;
-	return {
-		S * V.X,
-		S * V.Y,
-		S * V.Z,
-	};
-}
-
-V3 operator+(V3 A, V3 B) {
-	return {
-		A.X + B.X,
-		A.Y + B.Y,
-		A.Z + B.Z,
-	};
-}
-
-V3 operator-(V3 A, V3 B) {
-	return {
-		A.X - B.X,
-		A.Y - B.Y,
-		A.Z - B.Z,
-	};
-}
-
-V3 &operator+=(V3 &A, V3 B) {
-	A = A + B;
-	return A;
-}
-
-V3 &operator-=(V3 &A, V3 B) {
-	A = A - B;
-	return A;
-}
-
-// @TODO: USE A SWITCH!
-f32 V3::operator[](int I) const {
-	Assert(I >= 0 && I <= 2);
-	if (I == 0)  return X;
-	if (I == 1)  return Y;
-	return Z;
-}
-
-// @TODO: USE A SWITCH!
-f32 &V3::operator[](int I) {
-	Assert(I >= 0 && I <= 2);
-	if (I == 0)  return X;
-	if (I == 1)  return Y;
-	return Z;
-}
-
-// @TODO: USE A SWITCH!
-f32 &V2::operator[](int I) {
-	Assert(I >= 0 && I <= 1);
-	if (I == 0)  return X;
-	return Y;
-}
-
-V4 operator/(V4 V, f32 S) {
-	return {
-		V.X / S,
-		V.Y / S,
-		V.Z / S,
-		V.W / S,
-	};
-}
-
-V4 operator+(V4 A, V4 B) {
-	return {
-		A.X + B.X,
-		A.Y + B.Y,
-		A.Z + B.Z,
-		A.W + B.W,
-	};
-}
-
-V4 &operator/=(V4 &V, f32 S) {
-	V = V / S;
-	return V;
-}
-
-V4 operator*(f32 S, V4 V) {
-	return {
-		S * V.X,
-		S * V.Y,
-		S * V.Z,
-		S * V.W,
-	};
-}
-
-// @TODO: USE A SWITCH!
-f32 V4::operator[](int I) const {
-	Assert(I >= 0 && I <= 3);
-	if (I == 0)  return X;
-	if (I == 1)  return Y;
-	if (I == 2)  return Z;
-	return W;
-}
-
-// @TODO: USE A SWITCH!
-f32 &V4::operator[](int I) {
-	Assert(I >= 0 && I <= 3);
-	if (I == 0)  return X;
-	if (I == 1)  return Y;
-	if (I == 2)  return Z;
-	return W;
-}
-
-V3 &M3::operator[](int I) {
-	return *(V3 *)M[I];
-}
-
-V4 &M4::operator[](int I) {
-	return *(V4 *)M[I];
-}
-
-M4 IdentityMatrix() {
-	return {{
-		{1.0f, 0.0f, 0.0f, 0.0f},
-		{0.0f, 1.0f, 0.0f, 0.0f},
-		{0.0f, 0.0f, 1.0f, 0.0f},
-		{0.0f, 0.0f, 0.0f, 1.0f},
-	}};
-}
-
-M4 operator*(M4 A, M4 B) {
-	M4 Result;
-	for (s32 I = 0; I < 4; I++) {
-		for (s32 J = 0; J < 4; J++) {
-			Result.M[I][J] = A.M[I][0] * B.M[0][J]
-			               + A.M[I][1] * B.M[1][J]
-			               + A.M[I][2] * B.M[2][J]
-			               + A.M[I][3] * B.M[3][J];
-		}
-	}
-	return Result;
-}
-
-M4 operator*(f32 S, M4 M) {
-	return {
-		S * M.M[0][0], S * M.M[0][1], S * M.M[0][2], S * M.M[0][3],
-		S * M.M[1][0], S * M.M[1][1], S * M.M[1][2], S * M.M[1][3],
-		S * M.M[2][0], S * M.M[2][1], S * M.M[2][2], S * M.M[2][3],
-		S * M.M[3][0], S * M.M[3][1], S * M.M[3][2], S * M.M[3][3]
-	};
-}
-
-V4 operator*(M4 M, V4 V) {
-	return {
-		V.X*M[0][0] + V.Y*M[0][1] + V.Z*M[0][2]  + V.W*M[0][3],
-		V.X*M[1][0] + V.Y*M[1][1] + V.Z*M[1][2]  + V.W*M[1][3],
-		V.X*M[2][0] + V.Y*M[2][1] + V.Z*M[2][2]  + V.W*M[2][3],
-		V.X*M[3][0] + V.Y*M[3][1] + V.Z*M[3][2]  + V.W*M[3][3],
-	};
-}
-
-f32 LengthSquared(V3 V) {
-	return V.X*V.X + V.Y*V.Y + V.Z*V.Z;
-}
-
-f32 Length(V3 V) {
-	return SquareRoot(V.X * V.X + V.Y * V.Y + V.Z * V.Z);
-}
-
-#if 0
-V3 subtract_v3(V3 a, V3 b) {
-	return (V3){
-		a.x - b.x,
-		a.y - b.y,
-		a.z - b.z,
-	};
-}
-
-V3 add_v3(V3 a, V3 b) {
-	return (V3){
-		a.x + b.x,
-		a.y + b.y,
-		a.z + b.z,
-	};
-}
-
-V3 scale_v3(f32 s, V3 v) {
-	return (V3){
+V3 operator*(f32 s, V3 v)
+{
+	return
+	{
 		s * v.x,
 		s * v.y,
 		s * v.z,
 	};
 }
 
-M4 multiply_m4(M4 a, M4 b) {
+V3 operator/(V3 V, f32 S) {
+	S = 1.0f / S;
+	return {
+		S * V.x,
+		S * V.y,
+		S * V.z,
+	};
+}
+
+V3 operator+(V3 A, V3 B) {
+	return {
+		A.x + B.x,
+		A.y + B.y,
+		A.z + B.z,
+	};
+}
+
+V3 operator-(V3 A, V3 B) {
+	return {
+		A.x - B.x,
+		A.y - B.y,
+		A.z - B.z,
+	};
+}
+
+V3 &operator+=(V3 &a, V3 b)
+{
+	a = a + b;
+	return a;
+}
+
+V3 &operator-=(V3 &a, V3 b)
+{
+	a = a - b;
+	return a;
+}
+
+// @TODO: USE A SWITCH?
+f32 V3::operator[](int i) const
+{
+	Assert(i >= 0 && i <= 2);
+	if (i == 0)
+	{
+		return x;
+	}
+	if (i == 1)
+	{
+		return y;
+	}
+	return z;
+}
+
+// @TODO: USE A SwITCH!
+f32 &V3::operator[](int i)
+{
+	Assert(i >= 0 && i <= 2);
+	if (i == 0)
+	{
+		return x;
+	}
+	if (i == 1)
+	{
+		return y;
+	}
+	return z;
+}
+
+// @TODO: USE A SwITCH!
+f32 &V2::operator[](int i)
+{
+	Assert(i >= 0 && i <= 1);
+	if (i == 0)
+	{
+		return x;
+	}
+	return y;
+}
+
+V4 operator/(V4 v, f32 s)
+{
+	return
+	{
+		v.x / s,
+		v.y / s,
+		v.z / s,
+		v.w / s,
+	};
+}
+
+V4 operator+(V4 a, V4 b)
+{
+	return
+	{
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z,
+		a.w + b.w,
+	};
+}
+
+V4 &operator/=(V4 &v, f32 s)
+{
+	v = v / s;
+	return v;
+}
+
+V4 operator*(f32 s, V4 v)
+{
+	return
+	{
+		s * v.x,
+		s * v.y,
+		s * v.z,
+		s * v.w,
+	};
+}
+
+// @TODO: USE A SwITCH!
+f32 V4::operator[](int i) const
+{
+	Assert(i >= 0 && i <= 3);
+	if (i == 0)  return x;
+	if (i == 1)  return y;
+	if (i == 2)  return z;
+	return w;
+}
+
+// @TODO: USE A SwITCH!
+f32 &V4::operator[](int i)
+{
+	Assert(i >= 0 && i <= 3);
+	if (i == 0)  return x;
+	if (i == 1)  return y;
+	if (i == 2)  return z;
+	return w;
+}
+
+V3 &M3::operator[](int I)
+{
+	return *(V3 *)m[I];
+}
+
+V4 &M4::operator[](int I)
+{
+	return *(V4 *)m[I];
+}
+
+M4 IdentityMatrix()
+{
+	return
+	{
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f,
+	};
+}
+
+M4 operator*(M4 a, M4 b) {
 	M4 result;
-	for (s32 i = 0; i < 4; i++) {
-		for (s32 j = 0; j < 4; j++) {
+	for (auto i = 0; i < 4; i++)
+	{
+		for (auto j = 0; j < 4; j++)
+		{
 			result.m[i][j] = a.m[i][0] * b.m[0][j]
 			               + a.m[i][1] * b.m[1][j]
 			               + a.m[i][2] * b.m[2][j]
@@ -265,25 +238,58 @@ M4 multiply_m4(M4 a, M4 b) {
 	}
 	return result;
 }
-#endif
 
-V3 Normalize(V3 V) {
+M4 operator*(f32 s, M4 m)
+{
+	return
+	{
+		s * m.m[0][0], s * m.m[0][1], s * m.m[0][2], s * m.m[0][3],
+		s * m.m[1][0], s * m.m[1][1], s * m.m[1][2], s * m.m[1][3],
+		s * m.m[2][0], s * m.m[2][1], s * m.m[2][2], s * m.m[2][3],
+		s * m.m[3][0], s * m.m[3][1], s * m.m[3][2], s * m.m[3][3]
+	};
+}
+
+V4 operator*(M4 m, V4 v)
+{
+	return
+	{
+		v.x*m[0][0] + v.y*m[0][1] + v.z*m[0][2]  + v.w*m[0][3],
+		v.x*m[1][0] + v.y*m[1][1] + v.z*m[1][2]  + v.w*m[1][3],
+		v.x*m[2][0] + v.y*m[2][1] + v.z*m[2][2]  + v.w*m[2][3],
+		v.x*m[3][0] + v.y*m[3][1] + v.z*m[3][2]  + v.w*m[3][3],
+	};
+}
+
+f32 LengthSquared(V3 V) {
+	return V.x*V.x + V.y*V.y + V.z*V.z;
+}
+
+f32 Length(V3 V) {
+	return SquareRoot(V.x * V.x + V.y * V.y + V.z * V.z);
+}
+
+V3 Normalize(V3 V)
+{
 	V3 Result = (1 / Length(V)) * V;
 	Assert(NotNAN(Result));
 	return Result;
 }
 
-f32 DotProduct(V3 A, V3 B) {
-	return A.X*B.X + A.Y*B.Y + A.Z*B.Z;
+f32 DotProduct(V3 A, V3 B)
+{
+	return A.x*B.x + A.y*B.y + A.z*B.z;
 }
 
-V3 CrossProduct(V3 A, V3 B) {
-	V3 Result = (V3){
-		A.Y*B.Z - B.Y*A.Z,
-		A.Z*B.X - B.Z*A.X,
-		A.X*B.Y - B.X*A.Y,
+V3 CrossProduct(V3 A, V3 B)
+{
+	V3 Result =
+	{
+		A.y*B.z - B.y*A.z,
+		A.z*B.x - B.z*A.x,
+		A.x*B.y - B.x*A.y,
 	};
-	Assert(NotZero(Result));
+	Assert(Notzero(Result));
 	return Result;
 }
 
@@ -325,96 +331,113 @@ M4 inverse(M4 m) {
 }
 */
 
-void SetRotation(M4 *M, M3 R) {
-	M->M[0][0] = R.M[0][0];
-	M->M[0][1] = R.M[0][1];
-	M->M[0][2] = R.M[0][2];
-	M->M[1][0] = R.M[1][0];
-	M->M[1][1] = R.M[1][1];
-	M->M[1][2] = R.M[1][2];
-	M->M[2][0] = R.M[2][0];
-	M->M[2][1] = R.M[2][1];
-	M->M[2][2] = R.M[2][2];
+void SetRotation(M4 *m, M3 r)
+{
+	m->m[0][0] = r.m[0][0];
+	m->m[0][1] = r.m[0][1];
+	m->m[0][2] = r.m[0][2];
+	m->m[1][0] = r.m[1][0];
+	m->m[1][1] = r.m[1][1];
+	m->m[1][2] = r.m[1][2];
+	m->m[2][0] = r.m[2][0];
+	m->m[2][1] = r.m[2][1];
+	m->m[2][2] = r.m[2][2];
 }
 
-void SetTranslation(M4 *M, V3 T) {
-	M->M[0][3] = T.X;
-	M->M[1][3] = T.Y;
-	M->M[2][3] = T.Z;
+void SetTranslation(M4 *m, V3 t)
+{
+	m->m[0][3] = t.x;
+	m->m[1][3] = t.y;
+	m->m[2][3] = t.z;
 }
 
-void SetScale(M4 *M, V3 S) {
-	for (s32 I = 0; I < 4; I++) {
-		M->M[I][0] *= S.X;
-		M->M[I][1] *= S.Y;
-		M->M[I][2] *= S.Z;
+void SetScale(M4 *m, V3 s)
+{
+	for (s32 i = 0; i < 4; i++)
+	{
+		m->m[i][0] *= s.x;
+		m->m[i][1] *= s.y;
+		m->m[i][2] *= s.z;
 	}
 }
 
-V3 GetTranslation(M4 M) {
-	return {
-		M.M[0][3],
-		M.M[1][3],
-		M.M[2][3]
+V3 GetTranslation(M4 m)
+{
+	return
+	{
+		m.m[0][3],
+		m.m[1][3],
+		m.m[2][3],
 	};
 }
 
-M4 Transpose(M4 M) {
-	return {{
-		{M.M[0][0], M.M[1][0], M.M[2][0], M.M[3][0]},
-		{M.M[0][1], M.M[1][1], M.M[2][1], M.M[3][1]},
-		{M.M[0][2], M.M[1][2], M.M[2][2], M.M[3][2]},
-		{M.M[0][3], M.M[1][3], M.M[2][3], M.M[3][3]},
-	}};
+M4 Transpose(M4 m)
+{
+	return
+	{
+		m.m[0][0], m.m[1][0], m.m[2][0], m.m[3][0],
+		m.m[0][1], m.m[1][1], m.m[2][1], m.m[3][1],
+		m.m[0][2], m.m[1][2], m.m[2][2], m.m[3][2],
+		m.m[0][3], m.m[1][3], m.m[2][3], m.m[3][3],
+	};
 }
 
-M4 PerspectiveProjection(f32 VerticalFOV, f32 AspectRatio, f32 Near, f32 Far) {
-	f32 FocalLength = 1.0f / tanf(VerticalFOV / 2.0f);
-	return {{
-		{FocalLength / AspectRatio,   0.0f,           0.0f,                 0.0f},
-		{0.0f,                        -FocalLength,   0.0f,                 0.0f},
-		{0.0f,                        0.0f,           Far / (Near - Far),   -(Far * Near) / (Far - Near)},
-		{0.0f,                        0.0f,           -1.0f,                0.0f},
-	}};
+M4 PerspectiveProjection(f32 verticalFOV, f32 aspectRatio, f32 near, f32 far)
+{
+	f32 focalLength = 1.0f / tanf(verticalFOV / 2.0f);
+	return
+	{
+		focalLength / aspectRatio,   0.0f,           0.0f,                 0.0f,
+		0.0f,                        -focalLength,   0.0f,                 0.0f,
+		0.0f,                        0.0f,           far / (near - far),   -(far * near) / (far - near),
+		0.0f,                        0.0f,           -1.0f,                0.0f,
+	};
 }
 
 // Assumes near is 0.01f and far is infinity.
-M4 InfinitePerspectiveProjection(f32 VerticalFOV, f32 AspectRatio) {
-	constexpr f32 Near = 0.01f;
-	f32 FocalLength = 1 / Tan(VerticalFOV / 2);
-	return {{
-		{FocalLength,   0.0f,                         0.0f,     0.0f},
-		{0.0f,          -FocalLength * AspectRatio,   0.0f,     0.0f},
-		{0.0f,          0.0f,                         -1.0f,    -2.0f * Near},
-		{0.0f,          0.0f,                         -1.0f,    0.0f},
-	}};
+M4 InfinitePerspectiveProjection(f32 verticalFOV, f32 aspectRatio)
+{
+	constexpr f32 near = 0.01f;
+	f32 focalLength = 1 / Tan(verticalFOV / 2);
+	return
+	{
+		focalLength,   0.0f,                         0.0f,     0.0f,
+		0.0f,          -focalLength * aspectRatio,   0.0f,     0.0f,
+		0.0f,          0.0f,                         -1.0f,    -2.0f * near,
+		0.0f,          0.0f,                         -1.0f,    0.0f,
+	};
 }
 
 // Assumes near is -1.0f and far is 1.0f.
-M4 OrthographicProjection(f32 Left, f32 Right, f32 Bottom, f32 Top, f32 Near, f32 Far) {
-	return (M4){{
-		{2.0f / (Right - Left),   0.0f,                     0.0f,                   -(Right + Left) / (Right - Left)},
-	    {0.0f,                    -2.0f / (Top - Bottom),   0.0f,                   -(Top + Bottom) / (Top - Bottom)},
-	    {0.0f,                    0.0f,                     -1.0f / (Far - Near),   -Near / (Far - Near)},
-	    {0.0f,                    0.0f,                     0.0f,                   1.0f},
-	}};
+M4 OrthographicProjection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far)
+{
+	return
+	{
+		2.0f / (right - left),   0.0f,                     0.0f,                   -(right + left) / (right - left),
+	    0.0f,                    -2.0f / (top - bottom),   0.0f,                   -(top + bottom) / (top - bottom),
+	    0.0f,                    0.0f,                     -1.0f / (far - near),   -near / (far - near),
+	    0.0f,                    0.0f,                     0.0f,                   1.0f,
+	};
 }
 
-M4 ViewMatrix(V3 Position, V3 Forward, V3 Side, V3 Up) {
-	return (M4){{
-		{Side.X,       Side.Y,       Side.Z,       -DotProduct(Side, Position)},
-		{Up.X,         Up.Y,         Up.Z,         -DotProduct(Up, Position)},
-		{-Forward.X,   -Forward.Y,   -Forward.Z,   DotProduct(Forward, Position)},
-		{0,            0,            0,            1.0f},
-	}};
+M4 ViewMatrix(V3 position, V3 forward)
+{
+	const V3 worldUp = {0.0f, 0.0f, 1.0f};
+	forward = Normalize(forward);
+	auto right = Normalize(CrossProduct(forward, worldUp));
+	auto up = Normalize(CrossProduct(right, forward));
+	return
+	{
+		right.x,      right.y,      right.z,      -DotProduct(right, position),
+		up.x,         up.y,         up.z,         -DotProduct(up, position),
+		-forward.x,   -forward.y,   -forward.z,   DotProduct(forward, position),
+		0,            0,            0,            1.0f,
+	};
 }
 
-M4 LookAt(V3 position, V3 target, V3 worldUp) {
-	// @TODO: Move this out to a create basis function.
-	V3 forward = Normalize(target - position);
-	V3 side = Normalize(CrossProduct(forward, worldUp));
-	V3 up = Normalize(CrossProduct(side, forward));
-	return ViewMatrix(position, forward, side, up);
+M4 LookAt(V3 position, V3 target)
+{
+	return ViewMatrix(position, target - position);
 }
 
 /*

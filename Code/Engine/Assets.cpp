@@ -135,8 +135,8 @@ struct {
 	AssetID asset_id;
 	const char *filepath;
 } asset_id_to_filepath_map[] = {
-	{ANVIL_ASSET, "data/models/anvil"},
-	{GUY_ASSET, "data/models/guy"},
+	{ANVIL_ASSET, "Data/Model/Anvil"},
+	{GUY_ASSET, "Data/Model/Guy"},
 };
 
 struct LoadModelJobParameter {
@@ -212,6 +212,7 @@ void LoadModel(void *jobParameterPointer) {
 		for (s32 j = 0; j < ArrayCount(load_texture_job_declarations); j++) {
 			load_texture_job_declarations[j] = CreateJob(LoadTexture, &load_texture_jobParameters[j]);
 		}
+		ConsolePrint("loading textures\n");
 		RunJobs(ArrayCount(load_texture_job_declarations), load_texture_job_declarations, NORMAL_PRIORITY_JOB, NULL);
 	}
 
@@ -252,10 +253,11 @@ void LoadModel(void *jobParameterPointer) {
 			V3 *v = &vertex_buffer[mesh_vertex_offset + j];
 			//v->position = (V3){
 			*v = {
-				.X = assimp_mesh->mVertices[j].x,
-				.Y = assimp_mesh->mVertices[j].y,
-				.Z = assimp_mesh->mVertices[j].z,
+				assimp_mesh->mVertices[j].x,
+				assimp_mesh->mVertices[j].y,
+				assimp_mesh->mVertices[j].z,
 			};
+			ConsolePrint("V %f %f %f\n", (*v)[0], (*v)[1], (*v)[2]);
 #if 0
 			if (v->position.x > assimp_mesh->mVertices[max_x_vertex].x) {
 				max_x_vertex = j;
@@ -664,6 +666,7 @@ void LoadModel(void *jobParameterPointer) {
 		}
 	}
 	*/
+	ConsolePrint("done\n");
 }
 
 // @TODO: Shouldn't we call Get_Model_Asset?

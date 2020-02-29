@@ -4,7 +4,7 @@
 
 layout (location = 0) in vec3 vertexPosition;
 
-layout(std140, set = 2, binding = 0) uniform View
+layout(std140, set = 0, binding = 0) uniform View
 {
 	layout(row_major) mat4 modelViewProjection[];
 } views[];

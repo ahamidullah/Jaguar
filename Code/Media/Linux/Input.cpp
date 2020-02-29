@@ -5,7 +5,7 @@ s32 KeySymbolToScancode(KeySymbol keySymbol)
 	return scancode;
 }
 
-void GetMousePosition(WindowContext *window, s32 *x, s32 *y)
+void QueryMousePosition(WindowContext *window, s32 *x, s32 *y)
 {
 	s32 screenX, screenY;
 	Window root, child;

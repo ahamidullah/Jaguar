@@ -86,6 +86,23 @@ typedef struct Thread_Local_Render_Context {
 	GPUCommandPool upload_command_pool; // @TODO: Double buffer and wait for one pool to empty to free it.
 } Thread_Local_Render_Context;
 
+#define DESCRIPTOR_SET_COUNT (SHADER_COUNT * GPU_MAX_FRAMES_IN_FLIGHT)
+
+struct ShaderDescriptorSets
+{
+	GPUDescriptorSetLayout layout;
+	GPUDescriptorSet *sets;
+	GPUBuffer *buffers;
+};
+
+struct DescriptorSetBindingInfo
+{
+	u32 binding;
+	GPUDescriptorType descriptorType;
+	u32 descriptorCount;
+	GPUShaderStage stage;
+};
+
 typedef struct Render_Context {
 	s32 render_thread_count;
 	Thread_Local_Render_Context *thread_local_contexts;
@@ -99,13 +116,12 @@ typedef struct Render_Context {
 	GPUSwapchain swapchain;
 	u32 swapchain_image_count;
 	GPUFramebuffer *framebuffers;
-	//GPU_Shader shaders[GPU_SHADER_COUNT];
 	GPUDescriptorPool descriptor_pool;
 	GPUPipeline pipelines[SHADER_COUNT];
 	GPUCommandPool asset_upload_command_pool;
 	//GPU_Shader_Descriptor_Sets rrdescriptor_sets;
 	u32 descriptor_set_count;
-	VkDescriptorSet descriptor_sets[100]; // @TODO
+	ShaderDescriptorSets descriptorSets[SHADER_COUNT]; // @TODO
 	struct {
 		GPURenderPass scene;
 	} render_passes;

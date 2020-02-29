@@ -55,12 +55,14 @@ void Set_Entity_Model_Job(void *job_parameter_pointer)
 {
 	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)job_parameter_pointer;
 	MeshAsset *asset = GetMeshAsset(job_parameter->asset_id);
-	Append(&entitiesContext.meshes.instances, (MeshInstance){
+	Append(&entitiesContext.meshes.instances,
+	{
 		.transform = job_parameter->transform,
 		.asset = asset,
 	});
-	Append(&entitiesContext.meshes.boundingSpheres, (BoundingSphere){
-		.center = asset->boundingSphere.center + job_parameter->transform.translation,
+	Append(&entitiesContext.meshes.boundingSpheres,
+	{
+		.center = asset->boundingSphere.center + job_parameter->transform.position,
 		.radius = asset->boundingSphere.radius,
 	});
 }
@@ -86,7 +88,7 @@ void InitializeEntities()
 {
 /*
 	nanosuit_id = CreateEntity();
-	Transform t = {.translation = {0.0f, 0.0f, 0.0f}};
+	Transform t = {.position = {0.0f, 0.0f, 0.0f}};
 	SetEntityTransform(nanosuit_id, t);
 	SetEntityModel(nanosuit_id, ANVIL_ASSET, t);
 */

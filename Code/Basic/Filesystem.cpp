@@ -49,8 +49,8 @@ void SetFilepathExtension(String *path, const String &newExtension)
 		Append(path, newExtension);
 		return;
 	}
-	Resize(path, dotIndex + 1 + Length(newExtension));
-	CopyMemory(&newExtension[0], &(*path)[dotIndex + 1], Length(newExtension));
+	Resize(path, dotIndex + Length(newExtension));
+	CopyMemory(&newExtension[0], &(*path)[dotIndex], Length(newExtension));
 }
 
 // Concatenates two strings and inserts a '/' between them.

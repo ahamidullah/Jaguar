@@ -15,12 +15,14 @@ u32 windowWidth, windowHeight;
 #include "Camera.cpp"
 #include "Entity.cpp"
 #include "Renderer/Shader.cpp"
+#include "Transform.cpp"
 
+void InitializeGame();
 void GameLoop(f32 deltaTime);
 
-bool Loop(Input *input)
+bool Update()
 {
-	if (input->windowEvents.quit)
+	if (QuitWindowEvent())
 	{
 		return false;
 	}
@@ -28,16 +30,10 @@ bool Loop(Input *input)
 	return true;
 }
 
-bool Update(Input *input)
+void RunGame(void *)
 {
-	bool running = Loop(input);
-	return running;
-}
-
-void RunGame(void *Parameter)
-{
-	windowWidth = 800;
-	windowHeight = 600;
+	windowWidth = 1200;
+	windowHeight = 1000;
 	auto window = CreateWindow(windowWidth, windowHeight);
 
 	InitializeRenderer(&window);
@@ -53,16 +49,16 @@ void RunGame(void *Parameter)
 	}
 	InitializeEntities(); // @TODO
 
-	Input input;
+	InitializeGame();
+
 	bool running = true;
 	while (running)
 	{
-		GetPlatformInput(&window, &input);
-		running = Update(&input);
+		GetPlatformInput(&window);
+		running = Update();
 		Render();
 	}
 
-	//Cleanup_Renderer();
 	ExitProcess(ProcessExitCode::SUCCESS);
 }
 

@@ -196,7 +196,7 @@ void WaitForJobCounter(JobCounter *counter)
 
 void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 {
-	for (u32 i = 0; i < JOB_FIBER_COUNT; i++)
+	for (auto i = 0; i < JOB_FIBER_COUNT; i++)
 	{
 		JobFiber *newFiber = AllocateStruct(JobFiber);
 		CreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
@@ -207,14 +207,15 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 
 	auto workerThreadCount = GetProcessorCount();
 	workerThreads = CreateArray<WorkerThread>(workerThreadCount);
-	for (u32 i = 0; i < workerThreadCount - 1; i++)
+	for (auto i = 0; i < workerThreadCount - 1; i++)
 	{
 		workerThreads[i].parameter.threadIndex = i;
 		workerThreads[i].platformThread = CreateThread(WorkerThreadProcedure, &workerThreads[i].parameter);
 	}
+	workerThreads[workerThreadCount - 1].parameter.threadIndex = workerThreadCount - 1;
 	workerThreads[workerThreadCount - 1].platformThread = GetCurrentThread();
 
-	for (u32 i = 0; i < workerThreadCount; i++)
+	for (auto i = 0; i < workerThreadCount; i++)
 	{
 		SetThreadProcessorAffinity(workerThreads[i].platformThread, i);
 	}

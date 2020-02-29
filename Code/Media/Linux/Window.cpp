@@ -70,15 +70,13 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 							   | CWColormap
 							   | CWBorderPixel
 							   | CWEventMask;
-	s32 requested_window_width = 1200;
-	s32 requested_window_height = 1000;
 	WindowContext window;
 	window.x11 = XCreateWindow(x11Display,
 	                           rootWindow,
 	                           0,
 	                           0,
-	                           requested_window_width,
-	                           requested_window_height,
+	                           width,
+	                           height,
 	                           0,
 	                           visualInfo->depth,
 	                           InputOutput,
@@ -128,7 +126,7 @@ WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen)
 	return window;
 }
 
-void ProcessWindowEvents(WindowContext *window, Input *input)
+void ProcessWindowEvents(WindowContext *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents)
 {
 	XEvent event;
 	XGenericEventCookie *cookie = &event.xcookie;
@@ -138,7 +136,7 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 		XNextEvent(x11Display, &event);
 		if ((event.type == ClientMessage) && ((Atom)event.xclient.data.l[0] == window->deleteWindowAtom))
 		{
-			input->windowEvents.quit = true;
+			windowEvents->quit = true;
 			break;
 		}
 		if (event.type == ConfigureNotify)
@@ -158,16 +156,16 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 		case XI_RawMotion:
 		{
 			// @TODO: Check XIMaskIsSet(re->valuators.mask, 0) for x and XIMaskIsSet(re->valuators.mask, 1) for y.
-			input->mouse.rawDeltaX += rawEvent->raw_values[0];
-			input->mouse.rawDeltaY -= rawEvent->raw_values[1];
+			mouse->rawDeltaX += rawEvent->raw_values[0];
+			mouse->rawDeltaY -= rawEvent->raw_values[1];
 		} break;
 		case XI_RawKeyPress:
 		{
-			PressButton(rawEvent->detail, &input->keyboard);
+			PressButton(rawEvent->detail, keyboard);
 		} break;
 		case XI_RawKeyRelease:
 		{
-			ReleaseButton(rawEvent->detail, &input->keyboard);
+			ReleaseButton(rawEvent->detail, keyboard);
 		} break;
 		case XI_RawButtonPress:
 		{
@@ -176,7 +174,7 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 			{
 				break;
 			}
-			PressButton(buttonIndex, &input->mouse.buttons);
+			PressButton(buttonIndex, &mouse->buttons);
 		} break;
 		case XI_RawButtonRelease:
 		{
@@ -185,7 +183,7 @@ void ProcessWindowEvents(WindowContext *window, Input *input)
 			{
 				break;
 			}
-			ReleaseButton(buttonIndex, &input->mouse.buttons);
+			ReleaseButton(buttonIndex, &mouse->buttons);
 		} break;
 		case XI_FocusIn:
 		{

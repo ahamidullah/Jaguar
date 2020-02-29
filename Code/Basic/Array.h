@@ -143,15 +143,16 @@ void Resize(Array<T> *a, size_t newCount)
 	a->count = newCount;
 }
 
-// @TODO: Make this variadic and take any number of new elements.
 template <typename T>
 void Append(Array<T> *a, const T &newElement)
 {
+	// We want to write the element and then bump the count so that this works when one thread is writing and another thread is reading.
 	size_t newElementIndex = a->count;
-	Resize(a, a->count + 1);
+	SetMinimumCapacity(a, a->count + 1);
 	Assert(a->count <= a->capacity);
-	Assert(newElementIndex < a->count);
+	Assert(newElementIndex < a->capacity);
 	a->elements[newElementIndex] = newElement;
+	a->count += 1;
 }
 
 template <typename T>

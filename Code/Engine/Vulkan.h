@@ -1,6 +1,10 @@
 #pragma once
 
+// @TODO: Switch all enums to match Vulkan name.
+
 #if defined(USE_VULKAN_RENDER_API)
+
+constexpr bool usingVulkanAPI = true;
 
 #define GPU_MAX_FRAMES_IN_FLIGHT 2
 
@@ -108,14 +112,12 @@ enum GPUFormat
 };
 #endif
 
-enum GPUDescriptorType
-{
-	GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-	GPU_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-	GPU_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-	GPU_DESCRIPTOR_TYPE_SAMPLER = VK_DESCRIPTOR_TYPE_SAMPLER,
-	GPU_DESCRIPTOR_TYPE_SAMPLED_IMAGE = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-};
+typedef VkDescriptorType GPUDescriptorType;
+#define GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+#define GPU_DESCRIPTOR_TYPE_DYNAMIC_UNIFORM_BUFFER VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+#define GPU_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+#define GPU_DESCRIPTOR_TYPE_SAMPLER VK_DESCRIPTOR_TYPE_SAMPLER
+#define GPU_DESCRIPTOR_TYPE_SAMPLED_IMAGE VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
 
 enum GPUPipelineTopology
 {
@@ -250,7 +252,6 @@ typedef VkMemoryRequirements GPUMemoryRequirements;
 typedef VkImage GPUImage;
 typedef VkImageView GPUImageView;
 typedef VulkanSamplerFilter GPUSamplerFilter;
-typedef VkDescriptorSetLayout GPUDescriptorSetLayout;
 typedef VulkanPipeline GPUPipeline;
 
 GPUCommandBuffer GPUCreateCommandBuffer(GPUCommandPool commandPool);
@@ -320,5 +321,9 @@ typedef struct Render_API_Context {
 	VkSemaphore image_available_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
 	VkSemaphore render_finished_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
 } Render_API_Context;
+
+#else
+
+constexpr bool usingVulkanAPI = false;
 
 #endif

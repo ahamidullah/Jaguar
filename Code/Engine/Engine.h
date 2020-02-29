@@ -6,6 +6,7 @@
 #include "AtomicLinkedList.h"
 #include "Jobs.h"
 #include "Math.h"
+#include "Transform.h"
 #include "Timer.h"
 #if defined(USE_VULKAN_RENDER_API)
 #include "Vulkan.h"

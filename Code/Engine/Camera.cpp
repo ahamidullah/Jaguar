@@ -1,10 +1,12 @@
 // @TODO: Rename to cameras?
 #include "Camera.h"
 
-struct {
+struct
+{
 	Array<Camera> cameras;
-} camerasContext;
+} cameraGlobals;
 
+#if 0
 void create_camera_basis(Camera *camera, V3 forward) {
 	// @TODO: Move this out to a create basis function.
 	const V3 world_up = {0.0f, 0.0f, 1.0f};
@@ -12,6 +14,7 @@ void create_camera_basis(Camera *camera, V3 forward) {
 	camera->side = Normalize(CrossProduct(camera->forward, world_up));
 	camera->up = Normalize(CrossProduct(camera->side, camera->forward));
 }
+#endif
 
 #if 0
 void InitializeCameras(void *parameter) {//Camera *camera, V3 position, V3 forward, f32 speed, f32 field_of_view)
@@ -29,35 +32,43 @@ void InitializeCameras(void *parameter) {//Camera *camera, V3 position, V3 forwa
 }
 #endif
 
-void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov) {
-	Camera camera;
-	camera.name = name;
-	create_camera_basis(&camera, lookAt - position);
-	camera.speed = speed;
-	camera.position = position;
-	camera.yaw = 0.0f;
-	camera.pitch = 0.0f;
-	camera.viewMatrix = ViewMatrix(camera.position, camera.forward, camera.side, camera.up);
-	camera.fov = DegreesToRadians(fov);
-	camera.focalLength = 0.01f;
-	camera.projectionMatrix = InfinitePerspectiveProjection(camera.fov, windowWidth / (f32)windowHeight); // @TODO
-	Append(&camerasContext.cameras, camera);
+void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov)
+{
+	Camera camera =
+	{
+		.name = name,
+		.transform =
+		{
+			.position = position,
+			//.rotation = ,
+		},
+		.fov = fov,
+		.focalLength = 0.01f,
+		.speed = speed,
+	};
+	//create_camera_basis(&camera, lookAt - position);
+	Append(&cameraGlobals.cameras, camera);
 }
 
-V3 calculate_camera_forward(f32 pitch, f32 yaw) {
+V3 CalculateCameraForward(f32 pitch, f32 yaw)
+{
 	f32 pitch_radians = DegreesToRadians(pitch);
 	f32 yaw_radians = DegreesToRadians(yaw);
-	return {
+	return
+	{
 		Cos(pitch_radians) * Cos(yaw_radians),
 		Cos(pitch_radians) * Sin(yaw_radians),
 		Sin(pitch_radians),
 	};
 }
 
-Camera *GetCamera(const String &name) {
+Camera *GetCamera(const String &name)
+{
 	Camera *result = NULL;
-	for (auto &camera : camerasContext.cameras) {
-		if (camera.name == name) {
+	for (auto &camera : cameraGlobals.cameras)
+	{
+		if (camera.name == name)
+		{
 			result = &camera;
 			break;
 		}
@@ -65,42 +76,58 @@ Camera *GetCamera(const String &name) {
 	return result;
 }
 
-void UpdatePlayerControlledCamera(const String &name, Input *input) {
+#if 0
+void UpdatePlayerControlledCamera(const String &name)
+{
 	auto camera = GetCamera(name);
-	if (!camera) {
+	if (!camera)
+	{
 		LogPrint(LogType::ERROR, "got invalid camera name: %s\n", &name[0]);
 		return;
 	}
 
-	if (input->mouse.rawDeltaX != 0 || input->mouse.rawDeltaY != 0) {
-		camera->yaw += -input->mouse.rawDeltaX * input->mouse.sensitivity;
-		camera->pitch += input->mouse.rawDeltaY * input->mouse.sensitivity;
-		if (camera->pitch > 89.0f) {
+	if (GetMouseDeltaX() != 0 || GetMouseDeltaY() != 0)
+	{
+		camera->yaw += -GetMouseDeltaX() * input->mouse.sensitivity;
+		camera->pitch += GetMouseDeltaY() * input->mouse.sensitivity;
+		if (camera->pitch > 89.0f)
+		{
 			camera->pitch = 89.0f;
 		}
-		if (camera->pitch < -89.0f) {
+		if (camera->pitch < -89.0f)
+		{
 			camera->pitch = -89.0f;
 		}
-		create_camera_basis(camera, calculate_camera_forward(camera->pitch, camera->yaw));
+		create_camera_basis(camera, CalculateCameraForward(camera->pitch, camera->yaw));
 	}
 
-	if (IsKeyDown(A_KEY, input)) {
+	if (IsKeyDown(A_KEY))
+	{
 		camera->position = camera->position - (camera->speed * camera->side);
-	} else if (IsKeyDown(D_KEY, input)) {
+	}
+	else if (IsKeyDown(D_KEY))
+	{
 		camera->position = camera->position + (camera->speed * camera->side);
 	}
 
-	if (IsKeyDown(Q_KEY, input)) {
+	if (IsKeyDown(Q_KEY))
+	{
 		camera->position.Z -= camera->speed;
-	} else if (IsKeyDown(E_KEY, input)) {
+	}
+	else if (IsKeyDown(E_KEY))
+	{
 		camera->position.Z += camera->speed;
 	}
 
-	if (IsKeyDown(W_KEY, input)) {
+	if (IsKeyDown(W_KEY))
+	{
 		camera->position = camera->position + (camera->speed * camera->forward);
-	} else if (IsKeyDown(S_KEY, input)) {
+	}
+	else if (IsKeyDown(S_KEY))
+	{
 		camera->position = camera->position - (camera->speed * camera->forward);
 	}
 
 	camera->viewMatrix = ViewMatrix(camera->position, camera->forward, camera->side, camera->up);
 }
+#endif

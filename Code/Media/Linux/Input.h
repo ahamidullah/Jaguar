@@ -39,4 +39,4 @@ enum MouseButton
 };
 
 s32 KeySymbolToScancode(KeySymbol keySymbol);
-void GetMousePosition(WindowContext *window, s32 *x, s32 *y);
+void QueryMousePosition(WindowContext *window, s32 *x, s32 *y);

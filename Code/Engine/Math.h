@@ -1,38 +1,45 @@
 #pragma once
 
-struct V2 {
-	f32 X, Y;
-	f32 &operator[](int I);
+struct V2
+{
+	f32 x, y;
+	f32 &operator[](int i);
 };
 
-struct V2s {
-	s32 X, Y;
+struct V2s
+{
+	s32 x, y;
 };
 
-struct V2u {
-	u32 X, Y;
+struct V2u
+{
+	u32 x, y;
 };
 
-struct V3 {
-	f32 X, Y, Z;
-	f32 operator[](int I) const;
-	f32 &operator[](int I);
+struct V3
+{
+	f32 x, y, z;
+	f32 operator[](int i) const;
+	f32 &operator[](int i);
 };
 
-struct V4 {
-	f32 X, Y, Z, W;
-	f32 operator[](int I) const;
-	f32 &operator[](int I);
+struct V4
+{
+	f32 x, y, z, w;
+	f32 operator[](int i) const;
+	f32 &operator[](int i);
 };
 
-struct M3 {
-	f32 M[3][3];
-	V3 &operator[](int I);
+struct M3
+{
+	f32 m[3][3];
+	V3 &operator[](int i);
 };
 
-struct M4 {
-	f32 M[4][4];
-	V4 &operator[](int I);
+struct M4
+{
+	f32 m[4][4];
+	V4 &operator[](int i);
 };
 
 struct Quaternion {
@@ -45,47 +52,52 @@ struct Quaternion {
 	f32 x, y, z, w;
 };
 
-struct Transform {
-	V3 translation;
-	Quaternion rotation;
-};
-
 #define PI 3.14159265358979323846264338327950288
 constexpr f32 DEGREES_TO_RADIANS_MULTIPLIER = PI / 180.0;
 constexpr f32 RADIANS_TO_DEGREES_MULTIPLIER = 180.0 / PI;
 
-constexpr f32 DegreesToRadians(f32 Degrees) {
-	return Degrees * DEGREES_TO_RADIANS_MULTIPLIER;
+constexpr f32 DegreesToRadians(f32 degrees)
+{
+	return degrees * DEGREES_TO_RADIANS_MULTIPLIER;
 }
 
-constexpr f32 RadiansToDegrees(f32 Radians) {
-	return Radians * RADIANS_TO_DEGREES_MULTIPLIER;
-}
-
-template <typename T>
-T Minimum(T A, T B) {
-	if (A < B) {
-		return A;
-	}
-	return B;
+constexpr f32 RadiansToDegrees(f32 radians)
+{
+	return radians * RADIANS_TO_DEGREES_MULTIPLIER;
 }
 
 template <typename T>
-T Maximum(T A, T B) {
-	if (A > B) {
-		return A;
+T Minimum(T a, T b)
+{
+	if (a < b)
+	{
+		return a;
 	}
-	return B;
+	return b;
 }
 
-u32 DivideAndRoundUp(u32 A, u32 B);
-bool NotNAN(V3 V);
-bool NotZero(V3 V);
-V4 V3ToV4(V3 V, f32 W);
+template <typename T>
+T Maximum(T a, T b)
+{
+	if (a > b)
+	{
+		return a;
+	}
+	return b;
+}
+
+V3 operator*(f32 s, V3 v);
+V3 &operator+=(V3 &a, V3 b);
+V3 &operator-=(V3 &a, V3 b);
+
+u32 DivideAndRoundUp(u32 a, u32 b);
+bool NotNAN(V3 v);
+bool NotZero(V3 v);
+V4 V3ToV4(V3 v, f32 w);
 M4 IdentityMatrix();
-f32 Length(V3 V);
-f32 LengthSquared(V3 V);
-V3 Normalize(V3 V);
-f32 DotProduct(V3 A, V3 B);
-V3 CrossProduct(V3 A, V3 B);
+f32 Length(V3 v);
+f32 LengthSquared(V3 v);
+V3 Normalize(V3 v);
+f32 DotProduct(V3 a, V3 b);
+V3 CrossProduct(V3 a, V3 b);
 f32 SquareRoot();

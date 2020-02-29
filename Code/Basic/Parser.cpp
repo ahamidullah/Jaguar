@@ -3,7 +3,6 @@ bool CreateParserStream(ParserStream *parser, const String &filepath)
 	auto [string, error] = ReadEntireFile(filepath);
 	if (error)
 	{
-		LogPrint(LogType::ERROR, "failed to create parser stream\n");
 		return false;
 	}
 	parser->string = string;

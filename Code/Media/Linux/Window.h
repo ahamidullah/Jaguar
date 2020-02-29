@@ -12,10 +12,12 @@ struct WindowContext
 	u32 height;
 };
 
-struct Input;
+struct InputButtons;
+struct Mouse;
+struct WindowEvents;
 
 WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen = false);
-void ProcessWindowEvents(WindowContext *window, Input *input);
+void ProcessWindowEvents(WindowContext *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents);
 void ToggleFullscreen(WindowContext *window);
 void CaptureCursor(WindowContext *window);
 void UncaptureCursor(WindowContext *window);

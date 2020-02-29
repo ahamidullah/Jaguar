@@ -18,3 +18,4 @@ struct Shader
 };
 
 void LoadShaders();
+Shader *GetShader(ShaderID id);

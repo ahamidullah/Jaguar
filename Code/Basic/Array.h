@@ -1,17 +1,35 @@
 #pragma once
 
+#include <initializer_list>
 #include <stdlib.h> // realloc @TODO
 
 template <typename T>
 struct Array
 {
-	size_t count = 0;
-	size_t capacity = 0;
-	T *elements = NULL;
+	size_t count;
+	size_t capacity;
+	T *elements;
 
+	Array(std::initializer_list<T> list);
 	T &operator[](size_t i);
 	T &operator[](size_t i) const;
 };
+
+template <typename T>
+Array(std::initializer_list<T> list)
+{
+	Array<T> a =
+	{
+		.count = list.size(),
+		.capacity = list.size(),
+		.elements = AllocateArrayMemory(T, a.capacity),
+	};
+	for (auto i = 0; i < list.size(), i++)
+	{
+		a[i] = list[i];
+	}
+	return a;
+}
 
 template <typename T>
 T &Array<T>::operator[](size_t i)
@@ -51,72 +69,42 @@ bool operator!=(const Array<T> &a, const Array<T> &b)
 }
 
 template <typename T>
-Array<T> CreateArray(size_t count, size_t capacity)
-{
-	return {
-		.count = count,
-		.capacity = capacity,
-		.elements = AllocateArray(T, capacity),
-	};
-}
-
-template <typename T>
 Array<T> CreateArray(size_t count)
 {
-	return {
+	return
+	{
 		.count = count,
 		.capacity = count,
-		.elements = AllocateArray(T, count),
+		.elements = AllocateArrayMemory(T, count),
 	};
-}
-
-template<typename T>
-size_t ArrayArgumentCount(const T&)
-{
-    return 1;
-}
-
-template<typename T, typename... ElementPack>
-size_t ArrayArgumentCount(const T& first, const ElementPack... rest)
-{
-    return 1 + ArrayArgumentCount(rest...);
-}
-
-template<typename T>
-void CopyArrayArguments(size_t writeIndex, Array<T> *result, const T &newElement)
-{
-	result->elements[writeIndex] = newElement;
-}
-
-template<typename T, typename... ElementPack>
-void CopyArrayArguments(size_t writeIndex, Array<T> *result, const T &first, const ElementPack... rest)
-{
-	result->elements[writeIndex] = first;
-	CopyArrayArguments(writeIndex + 1, result, rest...);
-}
-
-template<typename T, typename... ElementPack>
-Array<T> CreateInitializedArray(const T &first, const ElementPack... rest)
-{
-	Array<T> result = CreateArray<T>(ArrayArgumentCount(first, rest...));
-	CopyArrayArguments(0, &result, first, rest...);
-	return result;
 }
 
 template <typename T>
-Array<T> CreateArray(size_t dataCount, const T *dataPointer)
+Array<T> CreateArrayWithCapacity(size_t count, size_t capacity)
 {
-	Array<T> a = {
-		.count = dataCount,
-		.capacity = dataCount,
-		.elements = AllocateArray(T, dataCount),
+	return
+	{
+		.count = count,
+		.capacity = capacity,
+		.elements = AllocateArrayMemory(T, capacity),
 	};
-	CopyMemory(dataPointer, a.elements, dataCount * sizeof(T));
+}
+
+template <typename T>
+Array<T> CreateArrayFromMemory(size_t count, const T *pointer)
+{
+	Array<T> a =
+	{
+		.count = count,
+		.capacity = count,
+		.elements = AllocateArrayMemory(T, count),
+	};
+	CopyMemory(pointer, a.elements, count * sizeof(T));
 	return a;
 }
 
 template <typename T>
-void SetMinimumCapacity(Array<T> *a, size_t minimumCapacity)
+void SetMinimumArrayCapacity(Array<T> *a, size_t minimumCapacity)
 {
 	if (a->capacity >= minimumCapacity)
 	{
@@ -128,27 +116,29 @@ void SetMinimumCapacity(Array<T> *a, size_t minimumCapacity)
 	}
 	if (!a->elements)
 	{
-		a->elements = (T *)malloc(sizeof(T) * a->capacity); // @TODO
+		a->elements = AllocateArrayMemory(T, a->capacity);
 	}
 	else
 	{
-		a->elements = (T *)realloc(a->elements, sizeof(T) * a->capacity); // @TODO
+		auto oldElements = a->elements;
+		a->elements = AllocateArrayMemory(T, a->capacity);
+		CopyMemory(oldElements, a->elements, a->count  * sizeof(T));
+		free(oldElements); // @TODO
 	}
 }
 
 template <typename T>
-void Resize(Array<T> *a, size_t newCount)
+void ResizeArray(Array<T> *a, size_t newCount)
 {
-	SetMinimumCapacity(a, newCount);
+	SetMinimumArrayCapacity(a, newCount);
 	a->count = newCount;
 }
 
 template <typename T>
-void Append(Array<T> *a, const T &newElement)
+void ArrayAppend(Array<T> *a, const T &newElement)
 {
-	// We want to write the element and then bump the count so that this works when one thread is writing and another thread is reading.
 	size_t newElementIndex = a->count;
-	SetMinimumCapacity(a, a->count + 1);
+	SetMinimumArrayCapacity(a, a->count + 1);
 	Assert(a->count <= a->capacity);
 	Assert(newElementIndex < a->capacity);
 	a->elements[newElementIndex] = newElement;
@@ -156,13 +146,13 @@ void Append(Array<T> *a, const T &newElement)
 }
 
 template <typename T>
-void SetSize(Array<T> *a, size_t newCount)
+void SetArraySize(Array<T> *a, size_t newCount)
 {
 	a->count = newCount;
 }
 
 template <typename T>
-void Append(Array<T> *destination, const T *source, size_t sourceCount)
+void ArrayAppendMemory(Array<T> *destination, const T *source, size_t sourceCount)
 {
 	size_t oldDestinationCount = destination->count;
 	size_t newDestinationCount = destination->count + sourceCount;
@@ -171,19 +161,19 @@ void Append(Array<T> *destination, const T *source, size_t sourceCount)
 }
 
 template <typename T>
-void Append(Array<T> *destination, const Array<T> &source)
+void ArrayAppendArray(Array<T> *destination, const Array<T> &source)
 {
 	Append(destination, source.elements, source.count);
 }
 
 template <typename T>
-void Append(Array<T> *destination, const Array<T> &source, size_t sourceCount)
+void ArrayAppendArrayRange(Array<T> *destination, const Array<T> &source, size_t sourceCount)
 {
 	Append(destination, source.elements, sourceCount);
 }
 
 template <typename T>
-void Remove(Array<T> *a, size_t index)
+void RemoveArrayElement(Array<T> *a, size_t index)
 {
 	if (index == a->count - 1)
 	{
@@ -195,7 +185,7 @@ void Remove(Array<T> *a, size_t index)
 }
 
 template <typename T>
-size_t Length(const Array<T> &a)
+size_t ArrayCount(const Array<T> &a)
 {
 	return a.count;
 }

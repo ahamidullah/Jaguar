@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Assets.h"
+#include "Asset.h"
 
 struct Vertex1P1C1UV1N1T
 {
@@ -14,6 +14,12 @@ struct Vertex1P1C1UV1N1T
 struct Vertex1P
 {
 	V3 position;
+};
+
+struct Vertex1P1N
+{
+	V3 position;
+	V3 normal;
 };
 
 struct BoundingSphere
@@ -46,8 +52,14 @@ struct MeshAsset
 	// @TODO: Seperate hot and cold data?
 	// Hot. Potentially accessed every frame.
 	AssetLoadStatus loadStatus;
-	Array<u32> submeshIndexCounts;
-	Renderer::GPUIndexedGeometry gpuMesh;
+	GPUIndexedGeometry gpuGeometry;
+	struct Submesh
+	{
+		u32 indexCount;
+		u32 firstIndex;
+		u32 vertexOffset;
+	};
+	Array<Submesh> submeshes;
 	Array<Material> materials;
 
 	// Cold. Accessed when the asset is loaded.

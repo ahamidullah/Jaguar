@@ -3,34 +3,34 @@
 // @TODO: Move this to render.c.
 #define SHADOW_MAP_WIDTH  1024
 #define SHADOW_MAP_HEIGHT 1024
-#define SHADOW_MAP_INITIAL_LAYOUT GPU_IMAGE_LAYOUT_UNDEFINED
-#define SHADOW_MAP_FORMAT GPU_FORMAT_D16_UNORM
-#define SHADOW_MAP_IMAGE_USAGE_FLAGS ((GPUImageUsageFlags)(GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GPU_IMAGE_USAGE_SAMPLED))
-#define SHADOW_MAP_SAMPLE_COUNT_FLAGS GPU_SAMPLE_COUNT_1
+#define SHADOW_MAP_INITIAL_LAYOUT GFX_IMAGE_LAYOUT_UNDEFINED
+#define SHADOW_MAP_FORMAT GFX_FORMAT_D16_UNORM
+#define SHADOW_MAP_IMAGE_USAGE_FLAGS ((GfxImageUsage)(GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GFX_IMAGE_USAGE_SAMPLED))
+#define SHADOW_MAP_SAMPLE_COUNT_FLAGS GFX_SAMPLE_COUNT_1
 // Depth bias and slope are used to avoid shadowing artifacts.
 // Constant depth bias factor is always applied.
 #define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
 // Slope depth bias factor is applied depending on the polygon's slope.
 #define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
-#define SHADOW_MAP_FILTER GPU_LINEAR_FILTER
+#define SHADOW_MAP_FILTER GFX_LINEAR_FILTER
 
-#define DEPTH_BUFFER_INITIAL_LAYOUT GPU_IMAGE_LAYOUT_UNDEFINED
-#define DEPTH_BUFFER_FORMAT GPU_FORMAT_D32_SFLOAT_S8_UINT
-#define DEPTH_BUFFER_IMAGE_USAGE_FLAGS GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT
-#define DEPTH_BUFFER_SAMPLE_COUNT_FLAGS GPU_SAMPLE_COUNT_1
+#define DEPTH_BUFFER_INITIAL_LAYOUT GFX_IMAGE_LAYOUT_UNDEFINED
+#define DEPTH_BUFFER_FORMAT GFX_FORMAT_D32_SFLOAT_S8_UINT
+#define DEPTH_BUFFER_IMAGE_USAGE_FLAGS GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT
+#define DEPTH_BUFFER_SAMPLE_COUNT_FLAGS GFX_SAMPLE_COUNT_1
 
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
 // @TODO: Do eg.
-//        typedef VImageLayout GPU_Image_Layout;
-//        #define GPU_IMAGE_LAYOUT_1 VK_IMAGE_LAYOUT_1
+//        typedef VImageLayout GFX_Image_Layout;
+//        #define GFX_IMAGE_LAYOUT_1 VK_IMAGE_LAYOUT_1
 //        etc... That will save us from having to convert between the two values.
-// @TODO: Some kind of memory protection for the GPU buffer!
+// @TODO: Some kind of memory protection for the Gfx buffer!
 // @TODO: Better texture descriptor set update scheme.
 // @TODO: Move any uniform data that's updated per-frame to shared memory.
 // @TODO: Scene stuff should be pbr?
 // @TODO: Shouldn't per-swapchain resources actually be per-frame?
 // @TODO: Query available VRAM and allocate based on that.
-// @TODO: Switch to dynamic memory segments for vulkan GPU memory.
+// @TODO: Switch to dynamic memory segments for vulkan Gfx memory.
 //        If more VRAM becomes available while the game is running, the game should use it!
 // @TODO: Change 'model' to local? E.g. 'model_to_world_space' -> 'local_to_world_space'.
 // @TODO: Avoid VK_SHARING_MODE_CONCURRENT? "Go for VK_SHARING_MODE_EXCLUSIVE and do explicit queue family ownership barriers."
@@ -44,27 +44,34 @@
 //        Staging = stack allocator, shared memory, per-stage lifetime
 //        Per-frame memory (debug/gui vertices/indices/uvs) = stack allocator, shared memory, per-frame lifetime
 //        (Pool of blocks for shared memory)
-// @TODO: GPU memory defragmenting.
+// @TODO: Gfx memory defragmenting.
 // @TODO: Debug clear freed memory?
 // @TODO: Debug memory protection?
-// @TODO: Read image pixels and mesh verices/indices directly into GPU accessable staging memory.
+// @TODO: Read image pixels and mesh verices/indices directly into Gfx accessable staging memory.
 // @TODO: Move vulkan_context into game_state somehow.
 // @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
 // @TODO: Move logging out of band?
 
-struct {
+struct
+{
+	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
+	VkDebugUtilsMessengerEXT debugMessenger;
 	u32 graphicsQueueFamily;
 	u32 presentQueueFamily;
+	u32 transferQueueFamily;
+	u32 computeQueueFamily;
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
+	VkQueue transferQueue;
+	VkQueue computeQueue;
 	VkPresentModeKHR presentMode;
 	VkSurfaceKHR surface;
 	VkSurfaceFormatKHR surfaceFormat;
-	VkSemaphore imageAvailableSemaphores[GPU_MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore renderFinishedSemaphores[GPU_MAX_FRAMES_IN_FLIGHT];
-} vulkanContext;
+	VkSemaphore imageAvailableSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore renderFinishedSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+} vulkanGlobals;
 
 #define VK_CHECK(x)\
 	do {\
@@ -148,22 +155,26 @@ const char *VkResultToString(VkResult result) {
 #define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
 #define VK_INSTANCE_FUNCTION(name) PFN_##name name = NULL;
 #define VK_DEVICE_FUNCTION(name) PFN_##name name = NULL;
-#include "VulkanFunctions.h"
+#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
+
+
+
+#if 0
 //#include "vulkan_generated.c"
 
 #define VULKAN_MEMORY_BLOCK_SIZE MEGABYTE(256)
 
-// GPU Memory
+// Gfx Memory
 #define VULKAN_VERTEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_INDEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE MEGABYTE(50)
-#define VULKAN_GPU_ALLOCATION_SIZE (VULKAN_VERTEX_MEMORY_SEGMENT_SIZE + VULKAN_INDEX_MEMORY_SEGMENT_SIZE + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE + VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE)
+#define VULKAN_GFX_ALLOCATION_SIZE (VULKAN_VERTEX_MEMORY_SEGMENT_SIZE + VULKAN_INDEX_MEMORY_SEGMENT_SIZE + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE + VULKAN_INSTANCE_MEMORY_SEGMENT_SIZE)
 
 // @TODO: Move per-frame uniforms to the shared memory segment?
 // Shared Memory
@@ -171,7 +182,7 @@ const char *VkResultToString(VkResult result) {
 #define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_STAGING_MEMORY_SEGMENT_SIZE MEGABYTE(50)
 #define VULKAN_STAGING_MEMORY_SIZE MEGABYTE(50)
-#define VULKAN_SHARED_ALLOCATION_SIZE ((GPU_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE) + (GPU_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE) + VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
+#define VULKAN_SHARED_ALLOCATION_SIZE ((GFX_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE) + (GFX_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_INDEX_MEMORY_SEGMENT_SIZE) + VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
 
 // Image Memory
 #define VULKAN_IMAGE_ALLOCATION_SIZE MEGABYTE(400)
@@ -183,13 +194,13 @@ const char *VkResultToString(VkResult result) {
 #define VULKAN_INSTANCE_MEMORY_SEGMENT_OFFSET (VULKAN_UNIFORM_MEMORY_SEGMENT_OFFSET + VULKAN_UNIFORM_MEMORY_SEGMENT_SIZE)
 #define VULKAN_STAGING_MEMORY_SEGMENT_OFFSET 0
 #define VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET (VULKAN_STAGING_MEMORY_SEGMENT_SIZE)
-#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET (VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (GPU_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE))
+#define VULKAN_FRAME_INDEX_MEMORY_SEGMENT_OFFSET (VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_OFFSET + (GFX_MAX_FRAMES_IN_FLIGHT * VULKAN_FRAME_VERTEX_MEMORY_SEGMENT_SIZE))
 
 #define VULKAN_MAX_TEXTURES 100
 #define VULKAN_MAX_MATERIALS 100
 
-#define GPU_VERTEX_BUFFER_BIND_ID 0
-#define GPU_INSTANCE_BUFFER_BIND_ID 1
+#define GFX_VERTEX_BUFFER_BIND_ID 0
+#define GFX_INSTANCE_BUFFER_BIND_ID 1
 
 struct Instance_Data {
 	u32 material_id;
@@ -217,7 +228,7 @@ typedef struct {
 	u32         image_memory_offsets[VULKAN_MAX_TEXTURES];
 	//TextureID   id_generator;
 	u32         count;
-} GPU_Textures;
+} GFX_Textures;
 
 typedef struct {
 	s32 normal_map;
@@ -243,8 +254,6 @@ typedef struct {
 /*
 typedef struct {
 	VkRenderPass render_pass;
-	VkPipelineLayout pipeline_layout;
-	VkPipeline pipeline;
 	struct {
 		VkShaderModule module;
 		VkShaderStageFlagBits stage;
@@ -290,22 +299,22 @@ struct _Render_API_Context {
 	VkDescriptorPool          descriptor_pool;
 	VkCommandPool             command_pool;
 	VkCommandBuffer           command_buffers[3];
-	VkSemaphore               image_available_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore               render_finished_semaphores[GPU_MAX_FRAMES_IN_FLIGHT];
-	VkFence                   inFlightFences[GPU_MAX_FRAMES_IN_FLIGHT];
-	VkFence                   assetFences[GPU_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore               image_available_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore               render_finished_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+	VkFence                   inFlightFences[GFX_MAX_FRAMES_IN_FLIGHT];
+	VkFence                   assetFences[GFX_MAX_FRAMES_IN_FLIGHT];
 	u32                       currentFrame;
 	u32                       nextFrame;
-	GPU_Textures              textures;
+	GFX_Textures              textures;
 	VkSampler                 textureSampler;
 	VkImage                   depthImage;
 	VkDeviceMemory            depthImageMemory;
 	VkImageView               depthImageView;
 	VkDeviceMemory            shared_memory;
 	VkDeviceMemory            gpu_memory;
-	//GPU_Memory_Allocator _gpu_memory;
-	//GPU_Memory_Allocator _shared_memory;
-	//GPU_Memory_Allocation *_staging_memory;
+	//GFX_Memory_Allocator _gpu_memory;
+	//GFX_Memory_Allocator _shared_memory;
+	//GFX_Memory_Allocation *_staging_memory;
 	u32 _staging_memory_bytes_used;
 	VkDeviceMemory            image_memory;
 	u32                       image_memory_bytes_used;
@@ -320,7 +329,7 @@ struct _Render_API_Context {
 	u32                       debug_index_count; // @TODO: Frame?
 	VkBuffer                  gpu_buffer;
 	VkBuffer                  staging_buffer;
-	Shaders                   shaders[SHADER_COUNT];
+	Shaders                   shaders[0];
 	VkDeviceSize              minimum_uniform_buffer_offset_alignment; // Any uniform or dynamic uniform buffer's offset inside a Vulkan memory block must be a multiple of this byte count.
 	VkDeviceSize              maximum_uniform_buffer_size;             // Maximum size of any uniform buffer (including dynamic uniform buffers). @TODO: Move to sizes struct?
 	//Memory_Arena             *arena;
@@ -436,20 +445,40 @@ typedef struct {
 
 Shadow_Map_UBO shadow_map_ubo;
 
-u32 Align_U32(u32 number, u32 alignment) {
-	u32 remainder = number % alignment;
-	if (remainder == 0) {
-		return number;
-	}
-	return number + alignment - remainder;
-}
-
 u32 align_to(u32 size, u32 alignment) {
 	u32 remainder = size % alignment;
 	if (remainder == 0) {
 		return size;
 	}
 	return size + alignment - remainder;
+}
+
+#endif
+
+
+
+
+
+
+
+u32 AlignU32(u32 number, u32 alignment)
+{
+	u32 remainder = number % alignment;
+	if (remainder == 0)
+	{
+		return number;
+	}
+	return number + alignment - remainder;
+}
+
+u32 AlignmentOffset(u32 number, u32 alignment)
+{
+	u32 remainder = number % alignment;
+	if (remainder == 0)
+	{
+		return 0;
+	}
+	return alignment - remainder;
 }
 
 u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *callbackData, void *userData)
@@ -502,25 +531,33 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 	};
 	}
 
+	if (CStringsEqual(severityString, "Error"))
+	{
+		Abort("Vulkan debug message: %s: %s: %s\n", severityString, typeString, callbackData->pMessage);
+	}
+
 	LogPrint(logType, "Vulkan debug message: %s: %s: %s\n", severityString, typeString, callbackData->pMessage);
-	if (logType == LogType::ERROR) {
+	if (logType == LogType::ERROR)
+	{
 		PrintStacktrace();
 	}
 
     return 0;
 }
 
-GPUCommandBuffer GPUCreateCommandBuffer(GPUCommandPool commandPool)
+GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool)
 {
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo =
+    {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.commandPool = commandPool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
     };
 	VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(vulkanContext.device, &commandBufferAllocateInfo, &commandBuffer);
-	VkCommandBufferBeginInfo commandBufferBeginInfo = {
+    vkAllocateCommandBuffers(vulkanGlobals.device, &commandBufferAllocateInfo, &commandBuffer);
+	VkCommandBufferBeginInfo commandBufferBeginInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
@@ -528,18 +565,23 @@ GPUCommandBuffer GPUCreateCommandBuffer(GPUCommandPool commandPool)
 	return commandBuffer;
 }
 
-void GPUSubmitCommandBuffers(u32 count, GPUCommandBuffer *commandBuffers, GPUCommandQueueType queueType, GPUFence fence)
+void GfxSubmitCommands(GfxCommandQueueType queueType, const GfxQueueSubmitInfo &submitInfo, GfxFence fence)
 {
-	VkSubmitInfo submit_info = {
+	VkSubmitInfo submitInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.commandBufferCount = count,
-		.pCommandBuffers = commandBuffers,
+		.commandBufferCount = Length(submitInfo.commandBuffers),
+		.pCommandBuffers = &submitInfo.commandBuffers[0],
+		.waitSemaphoreCount = Length(submitInfo.waitSemaphores),
+		.pWaitSemaphores = &submitInfo.waitSemaphores[0],
+		.signalSemaphoreCount = Length(submitInfo.signalSemaphores),
+		.pSignalSemaphores = &submitInfo.signalSemaphores[0],
 	};
 	switch (queueType)
 	{
-	case GPU_GRAPHICS_COMMAND_QUEUE:
+	case GFX_GRAPHICS_COMMAND_QUEUE:
 	{
-		VK_CHECK(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submit_info, fence));
+		VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &submitInfo, fence));
 	} break;
 	default:
 	{
@@ -548,16 +590,18 @@ void GPUSubmitCommandBuffers(u32 count, GPUCommandBuffer *commandBuffers, GPUCom
 	}
 }
 
-void GPUFreeCommandBuffers(GPUCommandPool pool, s32 count, GPUCommandBuffer *buffers)
+void GfxFreeCommandBuffers(GfxCommandPool pool, s32 count, GfxCommandBuffer *buffers)
 {
-	vkFreeCommandBuffers(vulkanContext.device, pool, count, buffers);
+	vkFreeCommandBuffers(vulkanGlobals.device, pool, count, buffers);
 }
 
-void TEMPORARY_VULKAN_SUBMIT(GPUCommandBuffer command_buffer, s32 current_frame_index, GPUFence fence) {
-	VkSemaphore wait_semaphores[] = {vulkanContext.imageAvailableSemaphores[current_frame_index]};
+void TEMPORARY_VULKAN_SUBMIT(GfxCommandBuffer command_buffer, s32 current_frame_index, GfxFence fence)
+{
+	VkSemaphore wait_semaphores[] = {vulkanGlobals.imageAvailableSemaphores[current_frame_index]};
 	VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	VkSemaphore signal_semaphores[] = {vulkanContext.renderFinishedSemaphores[current_frame_index]};
-	VkSubmitInfo submit_info = {
+	VkSemaphore signal_semaphores[] = {vulkanGlobals.renderFinishedSemaphores[current_frame_index]};
+	VkSubmitInfo submit_info =
+	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = ArrayCount(wait_semaphores),
 		.pWaitSemaphores = wait_semaphores,
@@ -567,25 +611,34 @@ void TEMPORARY_VULKAN_SUBMIT(GPUCommandBuffer command_buffer, s32 current_frame_
 		.signalSemaphoreCount = ArrayCount(signal_semaphores),
 		.pSignalSemaphores = signal_semaphores,
 	};
-	VK_CHECK(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submit_info, fence));
+	VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &submit_info, fence));
 }
 
-void GPUEndCommandBuffer(GPUCommandBuffer buffer)
+void GfxEndCommandBuffer(GfxCommandBuffer buffer)
 {
 	VK_CHECK(vkEndCommandBuffer(buffer));
 }
 
-GPUCommandPool GPUCreateCommandPool(GPUCommandQueueType queueType)
+GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType)
 {
-	VkCommandPoolCreateInfo commandPoolCreateInfo = {
+	VkCommandPoolCreateInfo commandPoolCreateInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		//.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	};
 	switch (queueType)
 	{
-	case GPU_GRAPHICS_COMMAND_QUEUE:
+	case GFX_GRAPHICS_COMMAND_QUEUE:
 	{
-		commandPoolCreateInfo.queueFamilyIndex = vulkanContext.graphicsQueueFamily;
+		commandPoolCreateInfo.queueFamilyIndex = vulkanGlobals.graphicsQueueFamily;
+	} break;
+	case GFX_TRANSFER_COMMAND_QUEUE:
+	{
+		commandPoolCreateInfo.queueFamilyIndex = vulkanGlobals.transferQueueFamily;
+	} break;
+	case GFX_COMPUTE_COMMAND_QUEUE:
+	{
+		commandPoolCreateInfo.queueFamilyIndex = vulkanGlobals.computeQueueFamily;
 	} break;
 	default:
 	{
@@ -593,36 +646,38 @@ GPUCommandPool GPUCreateCommandPool(GPUCommandQueueType queueType)
 	} break;
 	}
 	VkCommandPool pool;
-	VK_CHECK(vkCreateCommandPool(vulkanContext.device, &commandPoolCreateInfo, NULL, &pool));
+	VK_CHECK(vkCreateCommandPool(vulkanGlobals.device, &commandPoolCreateInfo, NULL, &pool));
 	return pool;
 }
 
-void GPUResetCommandPool(GPUCommandPool pool)
+void GfxResetCommandPool(GfxCommandPool pool)
 {
-	VK_CHECK(vkResetCommandPool(vulkanContext.device, pool, 0));
+	VK_CHECK(vkResetCommandPool(vulkanGlobals.device, pool, 0));
 }
 
-GPUBuffer GPUCreateBuffer(u32 size, GPUBufferUsageFlags usage)
+GfxBuffer GfxCreateBuffer(u32 size, GfxBufferUsageFlags usage)
 {
-	VkBufferCreateInfo bufferCreateInfo = {
+	VkBufferCreateInfo bufferCreateInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = size,
 		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 	};
 	VkBuffer buffer;
-	VK_CHECK(vkCreateBuffer(vulkanContext.device, &bufferCreateInfo, NULL, &buffer));
+	VK_CHECK(vkCreateBuffer(vulkanGlobals.device, &bufferCreateInfo, NULL, &buffer));
 	return buffer;
 }
 
-void GPUDestroyBuffer(GPUBuffer buffer)
+void GfxDestroyBuffer(GfxBuffer buffer)
 {
-	vkDestroyBuffer(vulkanContext.device, buffer, NULL);
+	vkDestroyBuffer(vulkanGlobals.device, buffer, NULL);
 }
 
-void GPURecordCopyBufferCommand(GPUCommandBuffer commandBuffer, u32 size, GPUBuffer source, GPUBuffer destination, u32 sourceOffset, u32 destinationOffset)
+void GfxRecordCopyBufferCommand(GfxCommandBuffer commandBuffer, u32 size, GfxBuffer source, GfxBuffer destination, u32 sourceOffset, u32 destinationOffset)
 {
-	VkBufferCopy bufferCopy = {
+	VkBufferCopy bufferCopy =
+	{
 		.srcOffset = sourceOffset,
 		.dstOffset = destinationOffset,
 		.size = size,
@@ -630,22 +685,22 @@ void GPURecordCopyBufferCommand(GPUCommandBuffer commandBuffer, u32 size, GPUBuf
 	vkCmdCopyBuffer(commandBuffer, source, destination, 1, &bufferCopy);
 }
 
-GPUMemoryRequirements GPUGetBufferAllocationRequirements(GPUBuffer buffer)
+GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer)
 {
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(vulkanContext.device, buffer, &memoryRequirements);
+	vkGetBufferMemoryRequirements(vulkanGlobals.device, buffer, &memoryRequirements);
 	return memoryRequirements;
 }
 
-void GPUBindBufferMemory(GPUBuffer buffer, GPUMemory memory, u32 memoryOffset)
+void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, u32 memoryOffset)
 {
-	VK_CHECK(vkBindBufferMemory(vulkanContext.device, buffer, memory, memoryOffset));
+	VK_CHECK(vkBindBufferMemory(vulkanGlobals.device, buffer, memory, memoryOffset));
 }
 
-bool GPUAllocateMemory(u32 size, GPUMemoryType memoryType, GPUMemory *memory)
+bool GfxAllocateMemory(u32 size, GfxMemoryType memoryType, GfxMemory *memory)
 {
 	VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(vulkanContext.physicalDevice, &physicalDeviceMemoryProperties);
+	vkGetPhysicalDeviceMemoryProperties(vulkanGlobals.physicalDevice, &physicalDeviceMemoryProperties);
 	s32 selectedMemoryTypeIndex = -1;
 	for (u32 i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
 	{
@@ -657,7 +712,7 @@ bool GPUAllocateMemory(u32 size, GPUMemoryType memoryType, GPUMemory *memory)
 	}
 	if (selectedMemoryTypeIndex < 0)
 	{
-		Abort("Failed to find suitable GPU memory type");
+		Abort("Failed to find suitable Gfx memory type");
 	}
 
 	VkMemoryAllocateInfo memoryAllocateInfo =
@@ -666,7 +721,7 @@ bool GPUAllocateMemory(u32 size, GPUMemoryType memoryType, GPUMemory *memory)
 		.allocationSize = size,
 		.memoryTypeIndex = (u32)selectedMemoryTypeIndex,
 	};
-	VkResult result = vkAllocateMemory(vulkanContext.device, &memoryAllocateInfo, NULL, memory);
+	VkResult result = vkAllocateMemory(vulkanGlobals.device, &memoryAllocateInfo, NULL, memory);
 	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
 	{
 		return false;
@@ -676,26 +731,27 @@ bool GPUAllocateMemory(u32 size, GPUMemoryType memoryType, GPUMemory *memory)
 	return true;
 }
 
-void *GPUMapMemory(GPUMemory memory, u32 size, u32 offset)
+void *GfxMapMemory(GfxMemory memory, u32 size, u32 offset)
 {
 	void *pointer;
-	VK_CHECK(vkMapMemory(vulkanContext.device, memory, offset, size, 0, &pointer));
+	VK_CHECK(vkMapMemory(vulkanGlobals.device, memory, offset, size, 0, &pointer));
 	return pointer;
 }
 
-GPUShaderModule GPUCreateShaderModule(GPUShaderStage stage, const String &spirv)
+GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, const String &spirv)
 {
 	VkShaderModule module;
-	VkShaderModuleCreateInfo shaderModuleCreateInfo = {
+	VkShaderModuleCreateInfo shaderModuleCreateInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 		.codeSize = Length(spirv),
 		.pCode = (u32 *)&spirv[0],
 	};
-	VK_CHECK(vkCreateShaderModule(vulkanContext.device, &shaderModuleCreateInfo, NULL, &module));
+	VK_CHECK(vkCreateShaderModule(vulkanGlobals.device, &shaderModuleCreateInfo, NULL, &module));
 	return module;
 }
 
-GPUFence GPUCreateFence(bool startSignalled)
+GfxFence GfxCreateFence(bool startSignalled)
 {
 	VkFenceCreateInfo fenceCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -706,13 +762,13 @@ GPUFence GPUCreateFence(bool startSignalled)
 		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	}
 	VkFence fence;
-	VK_CHECK(vkCreateFence(vulkanContext.device, &fenceCreateInfo, NULL, &fence));
+	VK_CHECK(vkCreateFence(vulkanGlobals.device, &fenceCreateInfo, NULL, &fence));
 	return fence;
 }
 
-bool GPUWasFenceSignalled(GPUFence fence)
+bool GfxWasFenceSignalled(GfxFence fence)
 {
-	VkResult result = vkGetFenceStatus(vulkanContext.device, fence);
+	VkResult result = vkGetFenceStatus(vulkanGlobals.device, fence);
 	if (result == VK_SUCCESS) {
 		return true;
 	}
@@ -723,20 +779,31 @@ bool GPUWasFenceSignalled(GPUFence fence)
 	return false;
 }
 
-void GPUWaitForFences(u32 count, GPUFence *fences, bool waitForAllFences, u64 timeout)
+void GfxWaitForFences(u32 count, GfxFence *fences, bool waitForAllFences, u64 timeout)
 {
-	VK_CHECK(vkWaitForFences(vulkanContext.device, count, fences, waitForAllFences, timeout));
+	VK_CHECK(vkWaitForFences(vulkanGlobals.device, count, fences, waitForAllFences, timeout));
 }
 
-void GPUResetFences(u32 count, GPUFence *fences)
+void GfxResetFences(u32 count, GfxFence *fences)
 {
-	VK_CHECK(vkResetFences(vulkanContext.device, count, fences));
+	VK_CHECK(vkResetFences(vulkanGlobals.device, count, fences));
 }
 
-GPUSwapchain GPUCreateSwapchain()
+GfxSemaphore GfxCreateSemaphore()
+{
+	VkSemaphoreCreateInfo semaphoreCreateInfo =
+	{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+	};
+	VkSemaphore semaphore;
+	VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &semaphore));
+	return semaphore;
+}
+
+GfxSwapchain GfxCreateSwapchain()
 {
 	VkSurfaceCapabilitiesKHR surfaceCapabilities;
-	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanContext.physicalDevice, vulkanContext.surface, &surfaceCapabilities));
+	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanGlobals.physicalDevice, vulkanGlobals.surface, &surfaceCapabilities));
 	VkExtent2D swapchainImageExtent;
 	if (surfaceCapabilities.currentExtent.width == U32_MAX && surfaceCapabilities.currentExtent.height == U32_MAX) // Indicates Vulkan will accept any extent dimension.
 	{
@@ -761,25 +828,25 @@ GPUSwapchain GPUCreateSwapchain()
 	VkSwapchainCreateInfoKHR swapchainCreateInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		.surface = vulkanContext.surface,
+		.surface = vulkanGlobals.surface,
 		.minImageCount = desiredSwapchainImageCount,
-		.imageFormat = vulkanContext.surfaceFormat.format,
-		.imageColorSpace = vulkanContext.surfaceFormat.colorSpace,
+		.imageFormat = vulkanGlobals.surfaceFormat.format,
+		.imageColorSpace = vulkanGlobals.surfaceFormat.colorSpace,
 		.imageExtent = swapchainImageExtent,
 		.imageArrayLayers = 1,
 		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		.preTransform = surfaceCapabilities.currentTransform,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-		.presentMode = vulkanContext.presentMode,
+		.presentMode = vulkanGlobals.presentMode,
 		.clipped = 1,
 		.oldSwapchain = NULL,
 	};
 	u32 queueFamilyIndices[] =
 	{
-		vulkanContext.graphicsQueueFamily,
-		vulkanContext.presentQueueFamily,
+		vulkanGlobals.graphicsQueueFamily,
+		vulkanGlobals.presentQueueFamily,
 	};
-	if (vulkanContext.graphicsQueueFamily != vulkanContext.presentQueueFamily)
+	if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
 	{
 		swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapchainCreateInfo.queueFamilyIndexCount = ArrayCount(queueFamilyIndices);
@@ -790,35 +857,35 @@ GPUSwapchain GPUCreateSwapchain()
 		swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	}
 	VkSwapchainKHR swapchain;
-	VK_CHECK(vkCreateSwapchainKHR(vulkanContext.device, &swapchainCreateInfo, NULL, &swapchain));
+	VK_CHECK(vkCreateSwapchainKHR(vulkanGlobals.device, &swapchainCreateInfo, NULL, &swapchain));
 	return swapchain;
 }
 
-u32 GPUAcquireNextSwapchainImage(GPUSwapchain swapchain, u32 currentFrameIndex)
+u32 GfxAcquireNextSwapchainImage(GfxSwapchain swapchain, u32 currentFrameIndex)
 {
 	u32 swapchainImageIndex = 0;
-	VK_CHECK(vkAcquireNextImageKHR(vulkanContext.device, swapchain, UINT64_MAX, vulkanContext.imageAvailableSemaphores[currentFrameIndex], NULL, &swapchainImageIndex));
+	VK_CHECK(vkAcquireNextImageKHR(vulkanGlobals.device, swapchain, UINT64_MAX, vulkanGlobals.imageAvailableSemaphores[currentFrameIndex], NULL, &swapchainImageIndex));
 	return swapchainImageIndex;
 }
 
-u32 GPUGetSwapchainImageCount(GPUSwapchain swapchain)
+u32 GfxGetSwapchainImageCount(GfxSwapchain swapchain)
 {
 	u32 swapchainImageCount;
-	VK_CHECK(vkGetSwapchainImagesKHR(vulkanContext.device, swapchain, &swapchainImageCount, NULL));
+	VK_CHECK(vkGetSwapchainImagesKHR(vulkanGlobals.device, swapchain, &swapchainImageCount, NULL));
 	return swapchainImageCount;
 }
 
-void GPUGetSwapchainImageViews(GPUSwapchain swapchain, u32 count, GPUImageView *imageViews)
+void GfxGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *imageViews)
 {
 	VkImage images[count];
-	VK_CHECK(vkGetSwapchainImagesKHR(vulkanContext.device, swapchain, &count, images));
+	VK_CHECK(vkGetSwapchainImagesKHR(vulkanGlobals.device, swapchain, &count, images));
 	for (auto i = 0; i < count; i++)
 	{
 		VkImageViewCreateInfo imageViewCreateInfo = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.image = images[i],
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = vulkanContext.surfaceFormat.format,
+			.format = vulkanGlobals.surfaceFormat.format,
 			.components = {
 				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -833,38 +900,38 @@ void GPUGetSwapchainImageViews(GPUSwapchain swapchain, u32 count, GPUImageView *
 				.layerCount = 1,
 			},
 		};
-		VK_CHECK(vkCreateImageView(vulkanContext.device, &imageViewCreateInfo, NULL, &imageViews[i]));
+		VK_CHECK(vkCreateImageView(vulkanGlobals.device, &imageViewCreateInfo, NULL, &imageViews[i]));
 	}
 }
 
 // @TODO: Better abstraction for render passes.
 
-typedef VkAttachmentDescription GPU_Framebuffer_Attachment_Description;
-typedef VkSubpassDescription GPU_Subpass_Description;
-typedef VkSubpassDependency GPU_Subpass_Dependency;
+typedef VkAttachmentDescription GFX_Framebuffer_Attachment_Description;
+typedef VkSubpassDescription GFX_Subpass_Description;
+typedef VkSubpassDependency GFX_Subpass_Dependency;
 
-typedef struct GPU_Attachment_Description {
-} GPU_Attachment_Description;
+typedef struct GFX_Attachment_Description {
+} GFX_Attachment_Description;
 
 /*
 typedef struct xRender_Pass {
 	u32 subpass_dependency_count;
-	GPU_Subpass_Dependency *subpass_dependencies;
+	GFX_Subpass_Dependency *subpass_dependencies;
 	u32 subpass_count;
-	GPU_Subpass_Description *subpass_descriptions;
+	GFX_Subpass_Description *subpass_descriptions;
 	u32 attachment_count;
-	GPU_Attachment_Description *attachment_descriptions;
+	GFX_Attachment_Description *attachment_descriptions;
 } xRender_Pass;
 */
 
 #if 0
-typedef struct GPU_Render_Graph {
+typedef struct GFX_Render_Graph {
 	u32 render_pass_count;
 	VkRenderPass *render_passes;
-} GPU_Render_Graph;
+} GFX_Render_Graph;
 
-GPU_Render_Graph GPU_Compile_Render_Graph(Render_API_Context *context, Render_Graph_Description *render_graph_description) {
-	GPU_Render_Graph render_graph = {
+GFX_Render_Graph GFX_Compile_Render_Graph(Render_API_Context *context, Render_Graph_Description *render_graph_description) {
+	GFX_Render_Graph render_graph = {
 		.render_pass_count = 2,
 		.render_passes = (VkRenderPass *)malloc(2 * sizeof(VkRenderPass)), // @TODO
 	};
@@ -974,7 +1041,7 @@ GPU_Render_Graph GPU_Compile_Render_Graph(Render_API_Context *context, Render_Gr
 #endif
 
 /*
-GPU_Render_Graph GPU_Compile_Render_Pass(GPU_Context *context, xRender_Pass *render_pass) {
+GFX_Render_Graph GFX_Compile_Render_Pass(GFX_Context *context, xRender_Pass *render_pass) {
 	VkSubpassDependency subpass_dependencies[render_pass->subpass_dependency_count];
 	for (u32 i = 0; i < render_pass->subpass_dependency_count; i++) {
 		subpass_dependencies[i] = render_pass->subpass_dependencies[i];
@@ -996,13 +1063,13 @@ GPU_Render_Graph GPU_Compile_Render_Pass(GPU_Context *context, xRender_Pass *ren
 		subpass_descriptions[i] = render_pass->subpass_descriptions[i];
 	}
 	render_pass_create_info.pSubpasses = subpass_descriptions;
-	GPU_Render_Pass gpu_render_pass;
+	GFX_Render_Pass gpu_render_pass;
 	VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &gpu_render_pass));
 	return gpu_render_pass;
 }
 */
 
-GPUDescriptorPool GPUCreateDescriptorPool(u32 swapchainImageCount)
+GfxDescriptorPool GfxCreateDescriptorPool(u32 swapchainImageCount)
 {
 	VkDescriptorPoolSize descriptorPoolSize = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1016,11 +1083,11 @@ GPUDescriptorPool GPUCreateDescriptorPool(u32 swapchainImageCount)
 		.pPoolSizes = &descriptorPoolSize,
 	};
 	VkDescriptorPool descriptorPool;
-	VK_CHECK(vkCreateDescriptorPool(vulkanContext.device, &descriptorPoolCreateInfo, NULL, &descriptorPool));
+	VK_CHECK(vkCreateDescriptorPool(vulkanGlobals.device, &descriptorPoolCreateInfo, NULL, &descriptorPool));
 	return descriptorPool;
 }
 
-GPUDescriptorSetLayout GPUCreateDescriptorSetLayout(u32 bindingCount, DescriptorSetBindingInfo *bindingInfos)
+GfxDescriptorSetLayout GfxCreateDescriptorSetLayout(u32 bindingCount, DescriptorSetBindingInfo *bindingInfos)
 {
 	VkDescriptorSetLayoutBinding bindings[bindingCount];
 	for (auto i = 0; i < bindingCount; i++)
@@ -1030,7 +1097,7 @@ GPUDescriptorSetLayout GPUCreateDescriptorSetLayout(u32 bindingCount, Descriptor
 			.binding = bindingInfos[i].binding,
 			.descriptorType = bindingInfos[i].descriptorType,
 			.descriptorCount = bindingInfos[i].descriptorCount,
-			.stageFlags = bindingInfos[i].stage,
+			.stageFlags = bindingInfos[i].stageFlags,
 			.pImmutableSamplers = NULL,
 		};
 	};
@@ -1042,11 +1109,11 @@ GPUDescriptorSetLayout GPUCreateDescriptorSetLayout(u32 bindingCount, Descriptor
 		.pBindings = bindings,
 	};
 	VkDescriptorSetLayout layout;
-	VK_CHECK(vkCreateDescriptorSetLayout(vulkanContext.device, &descriptorSetLayoutCreateInfo, NULL, &layout));
+	VK_CHECK(vkCreateDescriptorSetLayout(vulkanGlobals.device, &descriptorSetLayoutCreateInfo, NULL, &layout));
 	return layout;
 }
 
-void GPUCreateDescriptorSets(GPUDescriptorPool pool, GPUDescriptorSetLayout layout, u32 setCount, GPUDescriptorSet *sets)
+void GfxCreateDescriptorSets(GfxDescriptorPool pool, GfxDescriptorSetLayout layout, u32 setCount, GfxDescriptorSet *sets)
 {
 	VkDescriptorSetLayout layouts[setCount];
 	for (auto i = 0; i < setCount; i++)
@@ -1060,10 +1127,10 @@ void GPUCreateDescriptorSets(GPUDescriptorPool pool, GPUDescriptorSetLayout layo
 		.descriptorSetCount = setCount,
 		.pSetLayouts = layouts,
 	};
-	VK_CHECK(vkAllocateDescriptorSets(vulkanContext.device, &descriptorSetAllocateInfo, sets));
+	VK_CHECK(vkAllocateDescriptorSets(vulkanGlobals.device, &descriptorSetAllocateInfo, sets));
 }
 
-void GPUUpdateDescriptorSets(GPUDescriptorSet set, GPUBuffer buffer, GPUDescriptorType descriptorType, u32 binding, u32 offset, u32 range)
+void GfxUpdateDescriptorSets(GfxDescriptorSet set, GfxBuffer buffer, GfxDescriptorType descriptorType, u32 binding, u32 offset, u32 range)
 {
 	VkDescriptorBufferInfo bufferInfo =
 	{
@@ -1081,11 +1148,16 @@ void GPUUpdateDescriptorSets(GPUDescriptorSet set, GPUBuffer buffer, GPUDescript
 		.descriptorType = descriptorType,
 		.pBufferInfo = &bufferInfo,
 	};
-	vkUpdateDescriptorSets(vulkanContext.device, 1, &descriptorWrite, 0, NULL);
+	vkUpdateDescriptorSets(vulkanGlobals.device, 1, &descriptorWrite, 0, NULL);
+}
+
+void GfxRecordBindDescriptorSetsCommand(GfxCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, u32 firstSetNumber, u32 setCount, GfxDescriptorSet *sets)
+{
+	vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, pipelineLayout, firstSetNumber, setCount, sets, 0, NULL);
 }
 
 #if 0
-void Render_API_Update_Descriptor_Sets(Render_API_Context *context, s32 swapchain_image_index, GPU_Descriptor_Set set, GPU_Buffer buffer) {
+void Render_API_Update_Descriptor_Sets(Render_API_Context *context, s32 swapchain_image_index, GFX_Descriptor_Set set, GFX_Buffer buffer) {
 	VkDescriptorBufferInfo buffer_info = {
 		.buffer = buffer,
 		.offset = (u64)(swapchain_image_index * 0x100),
@@ -1103,10 +1175,10 @@ void Render_API_Update_Descriptor_Sets(Render_API_Context *context, s32 swapchai
 	vkUpdateDescriptorSets(context->device, 1, &descriptor_write, 0, NULL);
 }
 
-GPU_Descriptor_Set Render_API_Create_Shader_Descriptor_Sets(Render_API_Context *context, GPU_Shader_ID shader_id) {
+GFX_Descriptor_Set Render_API_Create_Shader_Descriptor_Sets(Render_API_Context *context, GFX_Shader_ID shader_id) {
 	VkWriteDescriptorSet descriptor_writes[10]; // @TODO
 	s32 write_count = 0;
-	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * context->swapchain_image_count + 0x100 * context->swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	uniform_buffer = Create_GFX_Device_Buffer(context, sizeof(M4) * context->swapchain_image_count + 0x100 * context->swapchain_image_count, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER);
 	VkDescriptorBufferInfo buffer_infos[context->swapchain_image_count];
 	s32 buffer_info_count = 0;
 	for (s32 i = 0; i < context->swapchain_image_count; i++) {
@@ -1130,34 +1202,34 @@ GPU_Descriptor_Set Render_API_Create_Shader_Descriptor_Sets(Render_API_Context *
 }
 #endif
 
-typedef struct GPU_Image_Descriptor_Write {
-	GPUImageLayout layout;
-	GPUImageView view;
-	GPUSampler sampler;
-} GPU_Image_Descriptor_Write;
+typedef struct GFX_Image_Descriptor_Write {
+	GfxImageLayout layout;
+	GfxImageView view;
+	GfxSampler sampler;
+} GFX_Image_Descriptor_Write;
 
-typedef struct GPU_Buffer_Descriptor_Write {
-	GPUBuffer buffer;
+typedef struct GFX_Buffer_Descriptor_Write {
+	GfxBuffer buffer;
 	u32 offset;
 	u32 range;
-} GPU_Buffer_Descriptor_Write;
+} GFX_Buffer_Descriptor_Write;
 
-typedef struct GPU_Descriptor_Write {
-	GPU_Image_Descriptor_Write *image;
-	GPU_Buffer_Descriptor_Write *buffer;
-} GPU_Descriptor_Write;
+typedef struct GFX_Descriptor_Write {
+	GFX_Image_Descriptor_Write *image;
+	GFX_Buffer_Descriptor_Write *buffer;
+} GFX_Descriptor_Write;
 
-typedef struct GPU_Descriptor_Description {
+typedef struct GFX_Descriptor_Description {
 	u32 count;
 	u32 binding;
-	GPUDescriptorType type;
-	GPUShaderStage stage;
-	GPU_Descriptor_Write write; 
+	GfxDescriptorType type;
+	GfxShaderStage stage;
+	GFX_Descriptor_Write write; 
 	u32 flags;
-} GPU_Descriptor_Description;
+} GFX_Descriptor_Description;
 
 #if 0
-void GPU_Create_Descriptor_Sets(Render_API_Context *context, s32 count, GPU_Descriptor_Pool descriptor_pool, GPU_Descriptor_Set *sets) {
+void GFX_Create_Descriptor_Sets(Render_API_Context *context, s32 count, GFX_Descriptor_Pool descriptor_pool, GFX_Descriptor_Set *sets) {
 	VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = descriptor_pool,
@@ -1167,8 +1239,8 @@ void GPU_Create_Descriptor_Sets(Render_API_Context *context, s32 count, GPU_Desc
 	VK_CHECK(vkAllocateDescriptorSets(context->device, &descriptor_set_allocate_info, &descriptor_set.descriptor_set));
 }
 
-GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 descriptor_count, GPU_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
-	GPU_Descriptor_Set descriptor_set;
+GFX_Descriptor_Set GFX_Create_Descriptor_Set(Render_API_Context *context, u32 descriptor_count, GFX_Descriptor_Description *descriptor_descriptions, u32 flags, VkDescriptorPool descriptor_pool) {
+	GFX_Descriptor_Set descriptor_set;
 	VkDescriptorSetLayoutBinding bindings[descriptor_count];
 	for (u32 i = 0; i < descriptor_count; i++) {
 		bindings[i] = (VkDescriptorSetLayoutBinding){
@@ -1228,109 +1300,114 @@ GPU_Descriptor_Set GPU_Create_Descriptor_Set(Render_API_Context *context, u32 de
 }
 #endif
 
-struct GPUPushConstantDescription
+GfxPipelineLayout GfxCreatePipelineLayout(u32 layoutCount, GfxDescriptorSetLayout *layouts)
+{
+	VkPipelineLayoutCreateInfo layoutCreateInfo =
+	{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = layoutCount,
+		.pSetLayouts = layouts,
+		.pushConstantRangeCount = 0,
+	};
+	/* @TODO
+	VkPushConstantRange push_constant_ranges[pipeline_description.push_constant_count];
+	for (u32 i = 0; i < pipeline_description.push_constant_count; i++) {
+		push_constant_ranges[i] = (VkPushConstantRange){
+			.stageFlags = pipeline_description.push_constant_descriptions[i].shader_stage,
+			.offset = pipeline_description.push_constant_descriptions[i].offset,
+			.size = pipeline_description.push_constant_descriptions[i].offset,
+		};
+	}
+	layoutCreateInfo.pPushConstantRanges = push_constant_ranges;
+	*/
+	GfxPipelineLayout layout;
+	VK_CHECK(vkCreatePipelineLayout(vulkanGlobals.device, &layoutCreateInfo, NULL, &layout));
+	return layout;
+}
+
+struct GfxPushConstantDescription
 {
 	u32 offset;
 	u32 size;
-	GPUShaderStage shader_stage;
+	GfxShaderStage shader_stage;
 };
 
-struct GPUFramebufferAttachmentColorBlendDescription
+struct GfxFramebufferAttachmentColorBlendDescription
 {
 	bool enable_blend;
-	GPUBlendFactor source_color_blend_factor;
-	GPUBlendFactor destination_color_blend_factor;
-	GPUBlendOperation color_blend_operation;
-	GPUBlendFactor source_alpha_blend_factor;
-	GPUBlendFactor destination_alpha_blend_factor;
-	GPUBlendOperation alpha_blend_operation;
-	GPUColorComponent color_write_mask;
+	GfxBlendFactor source_color_blend_factor;
+	GfxBlendFactor destination_color_blend_factor;
+	GfxBlendOperation color_blend_operation;
+	GfxBlendFactor source_alpha_blend_factor;
+	GfxBlendFactor destination_alpha_blend_factor;
+	GfxBlendOperation alpha_blend_operation;
+	GfxColorComponentFlags color_write_mask;
 };
 
-struct GPUPipelineVertexInputAttributeDescription
+struct GfxPipelineVertexInputAttributeDescription
 {
-	GPUFormat format;
+	GfxFormat format;
 	u32 binding;
 	u32 location;
 	u32 offset;
 };
 
-struct GPUPipelineVertexInputBindingDescription
+struct GfxPipelineVertexInputBindingDescription
 {
 	u32 binding;
 	u32 stride;
-	GPUVertexInputRate input_rate;
+	GfxVertexInputRate input_rate;
 };
 
 /*
-typedef struct GPU_Shader_Stage_Description {
-	 GPU_Shader_Stage_Flags stage_flags;
-	 GPU_Shader_Module module;
-} GPU_Shader_Stage_Description;
+typedef struct GFX_Shader_Stage_Description {
+	 GFX_Shader_Stage_Flags stage_flags;
+	 GFX_Shader_Module module;
+} GFX_Shader_Stage_Description;
 */
 
-struct GPUPipelineDescription
+struct GfxPipelineDescription
 {
-	u32 descriptor_set_layout_count;
-	GPUDescriptorSetLayout *descriptor_set_layouts;
-	u32 push_constant_count;
-	GPUPushConstantDescription *push_constant_descriptions;
-	GPUPipelineTopology topology;
+	GfxPipelineLayout layout;
+	GfxPipelineTopology topology;
 	f32 viewport_width;
 	f32 viewport_height;
 	u32 scissor_width;
 	u32 scissor_height;
-	GPUCompareOperation depth_compare_operation;
+	GfxCompareOperation depth_compare_operation;
 	u32 framebuffer_attachment_color_blend_count;
-	GPUFramebufferAttachmentColorBlendDescription *framebuffer_attachment_color_blend_descriptions;
+	GfxFramebufferAttachmentColorBlendDescription *framebuffer_attachment_color_blend_descriptions;
 	u32 vertex_input_attribute_count;
-	GPUPipelineVertexInputAttributeDescription *vertex_input_attribute_descriptions;
+	GfxPipelineVertexInputAttributeDescription *vertex_input_attribute_descriptions;
 	u32 vertex_input_binding_count;
-	GPUPipelineVertexInputBindingDescription *vertex_input_binding_descriptions;
+	GfxPipelineVertexInputBindingDescription *vertex_input_binding_descriptions;
 	u32 dynamic_state_count;
-	GPUDynamicPipelineState *dynamic_states;
-	Shader *shader;
-	GPURenderPass render_pass;
+	GfxDynamicPipelineState *dynamic_states;
+	Array<GfxShaderStage> shaderStages;
+	Array<GfxShaderModule> shaderModules;
+	GfxRenderPass render_pass;
 	bool enable_depth_bias;
 };
 
 // @TODO: Fix formatting.
-GPUPipeline GPUCreatePipeline(GPUPipelineDescription *pipeline_description)
+GfxPipeline GfxCreatePipeline(GfxPipelineDescription pipeline_description)
 {
-	GPUPipeline pipeline;
-	VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = pipeline_description->descriptor_set_layout_count,
-		.pSetLayouts = pipeline_description->descriptor_set_layouts,
-		.pushConstantRangeCount = pipeline_description->push_constant_count,
-	};
-	VkPushConstantRange push_constant_ranges[pipeline_description->push_constant_count];
-	for (u32 i = 0; i < pipeline_description->push_constant_count; i++) {
-		push_constant_ranges[i] = (VkPushConstantRange){
-			.stageFlags = pipeline_description->push_constant_descriptions[i].shader_stage,
-			.offset = pipeline_description->push_constant_descriptions[i].offset,
-			.size = pipeline_description->push_constant_descriptions[i].offset,
-		};
-	}
-	pipeline_layout_create_info.pPushConstantRanges = push_constant_ranges;
-	VK_CHECK(vkCreatePipelineLayout(vulkanContext.device, &pipeline_layout_create_info, NULL, &pipeline.layout));
-
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		.topology = (VkPrimitiveTopology)pipeline_description->topology,
+		.topology = (VkPrimitiveTopology)pipeline_description.topology,
 		.primitiveRestartEnable = VK_FALSE,
 	};
 	VkViewport viewport = {
 		.x = 0.0f,
 		.y = 0.0f,
-		.width = pipeline_description->viewport_width,
-		.height = pipeline_description->viewport_height,
+		.width = pipeline_description.viewport_width,
+		.height = pipeline_description.viewport_height,
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f,
 	};
 	VkRect2D scissor = {
 		.offset = {0, 0},
-		.extent = (VkExtent2D){pipeline_description->scissor_width, pipeline_description->scissor_height},
+		.extent = (VkExtent2D){pipeline_description.scissor_width, pipeline_description.scissor_height},
 	};
 	VkPipelineViewportStateCreateInfo viewport_state_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -1346,7 +1423,7 @@ GPUPipeline GPUCreatePipeline(GPUPipelineDescription *pipeline_description)
 		.polygonMode = VK_POLYGON_MODE_FILL,
 		.cullMode = VK_CULL_MODE_BACK_BIT,
 		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-		.depthBiasEnable = pipeline_description->enable_depth_bias,
+		.depthBiasEnable = pipeline_description.enable_depth_bias,
 		.lineWidth = 1.0f,
 	};
 	VkPipelineMultisampleStateCreateInfo multisample_state_create_info = {
@@ -1358,72 +1435,76 @@ GPUPipeline GPUCreatePipeline(GPUPipelineDescription *pipeline_description)
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 		.depthTestEnable = VK_TRUE,
 		.depthWriteEnable = VK_TRUE,
-		.depthCompareOp = (VkCompareOp)pipeline_description->depth_compare_operation,
+		.depthCompareOp = (VkCompareOp)pipeline_description.depth_compare_operation,
 		.depthBoundsTestEnable = VK_FALSE,
 		.stencilTestEnable = VK_FALSE,
 	};
-	VkPipelineColorBlendAttachmentState color_blend_attachment_states[pipeline_description->framebuffer_attachment_color_blend_count];
-	for (u32 i = 0; i < pipeline_description->framebuffer_attachment_color_blend_count; i++) {
+	VkPipelineColorBlendAttachmentState color_blend_attachment_states[pipeline_description.framebuffer_attachment_color_blend_count];
+	for (u32 i = 0; i < pipeline_description.framebuffer_attachment_color_blend_count; i++) {
 		color_blend_attachment_states[i] = (VkPipelineColorBlendAttachmentState){
-			.blendEnable = pipeline_description->framebuffer_attachment_color_blend_descriptions[i].enable_blend,
-			.srcColorBlendFactor = (VkBlendFactor)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].source_color_blend_factor,
-			.dstColorBlendFactor = (VkBlendFactor)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].destination_color_blend_factor,
-			.colorBlendOp = (VkBlendOp)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].color_blend_operation,
-			.srcAlphaBlendFactor = (VkBlendFactor)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].source_alpha_blend_factor,
-			.dstAlphaBlendFactor = (VkBlendFactor)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].destination_alpha_blend_factor,
-			.alphaBlendOp = (VkBlendOp)pipeline_description->framebuffer_attachment_color_blend_descriptions[i].alpha_blend_operation,
-			.colorWriteMask = pipeline_description->framebuffer_attachment_color_blend_descriptions[i].color_write_mask,
+			.blendEnable = pipeline_description.framebuffer_attachment_color_blend_descriptions[i].enable_blend,
+			.srcColorBlendFactor = (VkBlendFactor)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].source_color_blend_factor,
+			.dstColorBlendFactor = (VkBlendFactor)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].destination_color_blend_factor,
+			.colorBlendOp = (VkBlendOp)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].color_blend_operation,
+			.srcAlphaBlendFactor = (VkBlendFactor)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].source_alpha_blend_factor,
+			.dstAlphaBlendFactor = (VkBlendFactor)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].destination_alpha_blend_factor,
+			.alphaBlendOp = (VkBlendOp)pipeline_description.framebuffer_attachment_color_blend_descriptions[i].alpha_blend_operation,
+			.colorWriteMask = pipeline_description.framebuffer_attachment_color_blend_descriptions[i].color_write_mask,
 		};
 	}
 	VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		.logicOpEnable = VK_FALSE,
 		.logicOp = VK_LOGIC_OP_COPY,
-		.attachmentCount = pipeline_description->framebuffer_attachment_color_blend_count,
+		.attachmentCount = pipeline_description.framebuffer_attachment_color_blend_count,
 		.pAttachments = color_blend_attachment_states,
 		.blendConstants = {},
 	};
-	VkVertexInputAttributeDescription vertex_input_attribute_descriptions[pipeline_description->vertex_input_attribute_count];
-	for (u32 i = 0; i < pipeline_description->vertex_input_attribute_count; i++) {
+	VkVertexInputAttributeDescription vertex_input_attribute_descriptions[pipeline_description.vertex_input_attribute_count];
+	for (u32 i = 0; i < pipeline_description.vertex_input_attribute_count; i++) {
 		vertex_input_attribute_descriptions[i] = (VkVertexInputAttributeDescription){
-			.location = pipeline_description->vertex_input_attribute_descriptions[i].location,
-			.binding = pipeline_description->vertex_input_attribute_descriptions[i].binding,
-			.format = (VkFormat)pipeline_description->vertex_input_attribute_descriptions[i].format,
-			.offset = pipeline_description->vertex_input_attribute_descriptions[i].offset,
+			.location = pipeline_description.vertex_input_attribute_descriptions[i].location,
+			.binding = pipeline_description.vertex_input_attribute_descriptions[i].binding,
+			.format = (VkFormat)pipeline_description.vertex_input_attribute_descriptions[i].format,
+			.offset = pipeline_description.vertex_input_attribute_descriptions[i].offset,
 		};
 	}
-	VkVertexInputBindingDescription vertex_input_binding_descriptions[pipeline_description->vertex_input_binding_count];
-	for (u32 i = 0; i < pipeline_description->vertex_input_binding_count; i++) {
+	VkVertexInputBindingDescription vertex_input_binding_descriptions[pipeline_description.vertex_input_binding_count];
+	for (u32 i = 0; i < pipeline_description.vertex_input_binding_count; i++) {
 		vertex_input_binding_descriptions[i] = (VkVertexInputBindingDescription){
-			.binding = pipeline_description->vertex_input_binding_descriptions[i].binding,
-			.stride = pipeline_description->vertex_input_binding_descriptions[i].stride,
-			.inputRate = (VkVertexInputRate)pipeline_description->vertex_input_binding_descriptions[i].input_rate,
+			.binding = pipeline_description.vertex_input_binding_descriptions[i].binding,
+			.stride = pipeline_description.vertex_input_binding_descriptions[i].stride,
+			.inputRate = (VkVertexInputRate)pipeline_description.vertex_input_binding_descriptions[i].input_rate,
 		};
 	}
 	VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.vertexBindingDescriptionCount = pipeline_description->vertex_input_binding_count,
+		.vertexBindingDescriptionCount = pipeline_description.vertex_input_binding_count,
 		.pVertexBindingDescriptions = vertex_input_binding_descriptions,
-		.vertexAttributeDescriptionCount = pipeline_description->vertex_input_attribute_count,
+		.vertexAttributeDescriptionCount = pipeline_description.vertex_input_attribute_count,
 		.pVertexAttributeDescriptions = vertex_input_attribute_descriptions,
 	};
 	VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		.dynamicStateCount = pipeline_description->dynamic_state_count,
-		.pDynamicStates = (VkDynamicState *)pipeline_description->dynamic_states,
+		.dynamicStateCount = pipeline_description.dynamic_state_count,
+		.pDynamicStates = (VkDynamicState *)pipeline_description.dynamic_states,
 	};
-	VkPipelineShaderStageCreateInfo shader_stage_create_infos[Length(pipeline_description->shader->modules)];
-	for (s32 i = 0; i < Length(pipeline_description->shader->modules); i++) {
-		shader_stage_create_infos[i] = (VkPipelineShaderStageCreateInfo){
+	Assert(Length(pipeline_description.shaderStages) == Length(pipeline_description.shaderModules));
+	VkPipelineShaderStageCreateInfo shader_stage_create_infos[Length(pipeline_description.shaderStages)];
+	for (auto i = 0; i < Length(pipeline_description.shaderStages); i++)
+	{
+		shader_stage_create_infos[i] =
+		(VkPipelineShaderStageCreateInfo){
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = (VkShaderStageFlagBits)pipeline_description->shader->modules[i].stage,
-			.module = pipeline_description->shader->modules[i].module,
+			.stage = pipeline_description.shaderStages[i],
+			.module = pipeline_description.shaderModules[i],
 			.pName = "main",
 		};
 	}
-	VkGraphicsPipelineCreateInfo graphics_pipeline_create_info = {
+	VkGraphicsPipelineCreateInfo graphics_pipeline_create_info =
+	{
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		.stageCount = (u32)Length(pipeline_description->shader->modules),
+		.stageCount = (u32)Length(pipeline_description.shaderStages),
 		.pStages = shader_stage_create_infos,
 		.pVertexInputState = &vertex_input_state_create_info,
 		.pInputAssemblyState = &input_assembly_create_info,
@@ -1433,17 +1514,18 @@ GPUPipeline GPUCreatePipeline(GPUPipelineDescription *pipeline_description)
 		.pDepthStencilState = &depth_stencil_state_create_info,
 		.pColorBlendState = &color_blend_state_create_info,
 		.pDynamicState = &dynamic_state_create_info,
-		.layout = pipeline.layout,
-		.renderPass = pipeline_description->render_pass,
+		.layout = pipeline_description.layout,
+		.renderPass = pipeline_description.render_pass,
 		.subpass = 0,
 		.basePipelineHandle = VK_NULL_HANDLE,
 		.basePipelineIndex = -1,
 	};
-	VK_CHECK(vkCreateGraphicsPipelines(vulkanContext.device, NULL, 1, &graphics_pipeline_create_info, NULL, &pipeline.pipeline));
+	VkPipeline pipeline;
+	VK_CHECK(vkCreateGraphicsPipelines(vulkanGlobals.device, NULL, 1, &graphics_pipeline_create_info, NULL, &pipeline));
 	return pipeline;
 }
 
-GPUFramebuffer GPUCreateFramebuffer(GPURenderPass renderPass, u32 width, u32 height, u32 attachmentCount, GPUImageView *attachments)
+GfxFramebuffer GfxCreateFramebuffer(GfxRenderPass renderPass, u32 width, u32 height, u32 attachmentCount, GfxImageView *attachments)
 {
 	VkFramebufferCreateInfo framebufferCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -1455,47 +1537,49 @@ GPUFramebuffer GPUCreateFramebuffer(GPURenderPass renderPass, u32 width, u32 hei
 		.layers = 1,
 	};
 	VkFramebuffer framebuffer;
-	VK_CHECK(vkCreateFramebuffer(vulkanContext.device, &framebufferCreateInfo, NULL, &framebuffer));
+	VK_CHECK(vkCreateFramebuffer(vulkanGlobals.device, &framebufferCreateInfo, NULL, &framebuffer));
 	return framebuffer;
 }
 
-GPUMemoryRequirements GPUGetImageAllocationRequirements(GPUImage image)
+GfxMemoryRequirements GfxGetImageMemoryRequirements(GfxImage image)
 {
 	VkMemoryRequirements imageMemoryRequirements;
-	vkGetImageMemoryRequirements(vulkanContext.device, image, &imageMemoryRequirements);
+	vkGetImageMemoryRequirements(vulkanGlobals.device, image, &imageMemoryRequirements);
 	return imageMemoryRequirements;
 }
 
-GPUImage GPUCreateImage(u32 width, u32 height, GPUFormat format, GPUImageLayout initialLayout, GPUImageUsageFlags usageFlags, GPUSampleCount sampleCount)
+GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount)
 {
-	VkImageCreateInfo imageCreateInfo = {
+	VkImageCreateInfo imageCreateInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 		.imageType = VK_IMAGE_TYPE_2D,
 		.format = (VkFormat)format,
-		.extent = {
+		.extent =
+		{
 			.width = width,
 			.height = height,
 			.depth = 1,
 		},
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.samples = (VkSampleCountFlagBits)sampleCount,
+		.samples = sampleCount,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.usage = usageFlags,
+		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.initialLayout = (VkImageLayout)initialLayout,
 	};
-	GPUImage image;
-	VK_CHECK(vkCreateImage(vulkanContext.device, &imageCreateInfo, NULL, &image));
+	GfxImage image;
+	VK_CHECK(vkCreateImage(vulkanGlobals.device, &imageCreateInfo, NULL, &image));
 	return image;
 }
 
-void GPUBindImageMemory(GPUImage image, GPUMemory memory, u32 offset)
+void GfxBindImageMemory(GfxImage image, GfxMemory memory, u32 offset)
 {
-	VK_CHECK(vkBindImageMemory(vulkanContext.device, image, memory, offset));
+	VK_CHECK(vkBindImageMemory(vulkanGlobals.device, image, memory, offset));
 }
 
-GPUImageView GPUCreateImageView(GPUImage image, GPUFormat format, GPUImageUsageFlags usageFlags)
+GfxImageView GfxCreateImageView(GfxImage image, GfxFormat format, GfxImageUsage usage)
 {
 	VkImageViewCreateInfo imageViewCreateInfo =
 	{
@@ -1518,7 +1602,7 @@ GPUImageView GPUCreateImageView(GPUImage image, GPUFormat format, GPUImageUsageF
 			.layerCount = 1,
 		},
 	};
-	if (usageFlags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+	if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
 	{
 		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	}
@@ -1527,11 +1611,11 @@ GPUImageView GPUCreateImageView(GPUImage image, GPUFormat format, GPUImageUsageF
 		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
 	VkImageView imageView;
-	VK_CHECK(vkCreateImageView(vulkanContext.device, &imageViewCreateInfo, NULL, &imageView));
+	VK_CHECK(vkCreateImageView(vulkanGlobals.device, &imageViewCreateInfo, NULL, &imageView));
 	return imageView;
 }
 
-void GPUTransitionImageLayout(GPUCommandBuffer commandBuffer, GPUImage image, GPUFormat format, GPUImageLayout oldLayout, GPUImageLayout newLayout)
+void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout)
 {
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1589,7 +1673,7 @@ void GPUTransitionImageLayout(GPUCommandBuffer commandBuffer, GPUImage image, GP
 	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
 }
 
-void GPURecordCopyBufferToImageCommand(GPUCommandBuffer commandBuffer, GPUBuffer buffer, GPUImage image, u32 imageWidth, u32 imageHeight)
+void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight)
 {
 	VkBufferImageCopy region = {
 		.bufferOffset = 0,
@@ -1611,13 +1695,14 @@ void GPURecordCopyBufferToImageCommand(GPUCommandBuffer commandBuffer, GPUBuffer
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void GPUPresentSwapchainImage(GPUSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame /* @TODO */)
+void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame /* @TODO */)
 {
-	VkSemaphore waitSemaphores[] = {vulkanContext.imageAvailableSemaphores[currentFrame]};
+	VkSemaphore waitSemaphores[] = {vulkanGlobals.imageAvailableSemaphores[currentFrame]};
 	VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	VkSemaphore signalSemaphores[] = {vulkanContext.renderFinishedSemaphores[currentFrame]};
+	VkSemaphore signalSemaphores[] = {vulkanGlobals.renderFinishedSemaphores[currentFrame]};
 	VkSwapchainKHR swapchains[] = {swapchain};
-	VkPresentInfoKHR presentInfo = {
+	VkPresentInfoKHR presentInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = ArrayCount(signalSemaphores),
 		.pWaitSemaphores = signalSemaphores,
@@ -1625,17 +1710,17 @@ void GPUPresentSwapchainImage(GPUSwapchain swapchain, u32 swapchainImageIndex, u
 		.pSwapchains = swapchains,
 		.pImageIndices = &swapchainImageIndex,
 	};
-	VK_CHECK(vkQueuePresentKHR(vulkanContext.presentQueue, &presentInfo));
+	VK_CHECK(vkQueuePresentKHR(vulkanGlobals.presentQueue, &presentInfo));
 }
 
 #if 0
-GPU_Image GPU_Create_Image(GPU_Context *context, Render_Image_Creation_Parameters *parameters, GPU_Memory memory, u32 offset) {
-	GPU_Image image = {
+GFX_Image GFX_Create_Image(GFX_Context *context, Render_Image_Creation_Parameters *parameters, GFX_Memory memory, u32 offset) {
+	GFX_Image image = {
 		.format = parameters->format,
 		.layout = parameters->initial_layout,
 	};
 	image.image = Vulkan_Create_Image(context, parameters);
-	// Bind the image to GPU memory.
+	// Bind the image to Gfx memory.
 	{
 		// @TODO: Should this check be debug only?
 		// Check that this image type is compatible with this memory type.
@@ -1728,10 +1813,12 @@ void _Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage ima
 	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
 }
 
-VkRenderPass TEMPORARY_Render_API_Create_Render_Pass() {
-	VkAttachmentDescription attachments[] = {
+GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass()
+{
+	VkAttachmentDescription attachments[] =
+	{
 		{
-			.format = vulkanContext.surfaceFormat.format,
+			.format = vulkanGlobals.surfaceFormat.format,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1751,53 +1838,64 @@ VkRenderPass TEMPORARY_Render_API_Create_Render_Pass() {
 			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		},
 	};
-	VkAttachmentReference ColorAttachment = {
-		.attachment = 0,
-		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+	VkAttachmentReference colorAttachments[] =
+	{
+		{
+			.attachment = 0,
+			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		},
 	};
-	VkAttachmentReference StencilAttachment = {
+	VkAttachmentReference stencilAttachment =
+	{
 		.attachment = 1,
 		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 	};
-	VkSubpassDescription SubpassDescription = {
-		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &ColorAttachment,
-		.pDepthStencilAttachment = &StencilAttachment,
+	VkSubpassDescription subpassDescriptions[] =
+	{
+		{
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.colorAttachmentCount = ArrayCount(colorAttachments),
+			.pColorAttachments = colorAttachments,
+			.pDepthStencilAttachment = &stencilAttachment,
+		},
 	};
-	VkSubpassDependency SubpassDependency = {
-		.srcSubpass = VK_SUBPASS_EXTERNAL,
-		.dstSubpass = 0,
-		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.srcAccessMask = 0,
-		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+	VkSubpassDependency subpassDependencies[] =
+	{
+		{
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		},
 	};
-	VkRenderPassCreateInfo render_pass_create_info = {
+	VkRenderPassCreateInfo renderPassCreateInfo =
+	{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 		.attachmentCount = ArrayCount(attachments),
 		.pAttachments = attachments,
-		.subpassCount = 1,
-		.pSubpasses = &SubpassDescription,
-		.dependencyCount = 1,
-		.pDependencies = &SubpassDependency,
+		.subpassCount = ArrayCount(subpassDescriptions),
+		.pSubpasses = subpassDescriptions,
+		.dependencyCount = ArrayCount(subpassDependencies),
+		.pDependencies = subpassDependencies,
 	};
-	VkRenderPass render_pass;
-	VK_CHECK(vkCreateRenderPass(vulkanContext.device, &render_pass_create_info, NULL, &render_pass));
-	return render_pass;
+	VkRenderPass renderPass;
+	VK_CHECK(vkCreateRenderPass(vulkanGlobals.device, &renderPassCreateInfo, NULL, &renderPass));
+	return renderPass;
 }
 
-typedef struct GPU_Sampler_Description {
-	GPUSamplerFilter filter;
-	GPUSamplerAddressMode address_mode_u;
-	GPUSamplerAddressMode address_mode_v;
-	GPUSamplerAddressMode address_mode_w;
+typedef struct GFX_Sampler_Description {
+	GfxSamplerFilter filter;
+	GfxSamplerAddressMode address_mode_u;
+	GfxSamplerAddressMode address_mode_v;
+	GfxSamplerAddressMode address_mode_w;
 	f32 mipmap_lod_bias;
 	u32 max_anisotropy;
 	f32 min_lod;
 	f32 max_lod;
-	GPUBorderColor border_color;
-} GPU_Sampler_Description;
+	GfxBorderColor border_color;
+} GFX_Sampler_Description;
 
 VkSampler Vulkan_Create_Sampler(Render_API_Context *context, VkSamplerCreateInfo *sampler_create_info) {
 	VkSampler sampler;
@@ -2526,7 +2624,7 @@ void stage_vulkan_data(void *data, u32 size) {
 }
 
 void transfer_staged_vulkan_data(u32 offset) {
-	Assert(vulkan_context.staging_memory_bytes_used + offset < VULKAN_GPU_ALLOCATION_SIZE);
+	Assert(vulkan_context.staging_memory_bytes_used + offset < VULKAN_GFX_ALLOCATION_SIZE);
 
 	// @TODO: Try to create a reusable command buffer for copying?
     VkCommandBufferAllocateInfo command_buffer_allocate_info = {
@@ -2645,7 +2743,7 @@ void vulkan_push_debug_vertices(void *vertices, u32 vertex_count, u32 sizeof_ver
 	vulkan_context.debug_index_memory_bytes_used += indices_size;
 }
 
-TextureID GPU_Upload_Texture(GPU_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GPU_Upload_Flags gpu_upload_flags) {
+TextureID GFX_Upload_Texture(GFX_Context *context, u8 *pixels, s32 texture_width, s32 texture_height, GFX_Upload_Flags gpu_upload_flags) {
 	TextureID id = vulkan_context.textures.id_generator++;
 
 	VkImageCreateInfo image_create_info = {
@@ -2691,7 +2789,7 @@ TextureID GPU_Upload_Texture(GPU_Context *context, u8 *pixels, s32 texture_width
 	Copy_Vulkan_Buffer_To_Image(command_buffer, stagingBuffer, image, texture_width, texture_height);
 	Transition_Vulkan_Image_Layout(command_buffer, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	VkFence fence;
-	if (gpu_upload_flags & GPU_UPLOAD_AS_SOON_AS_POSSIBLE) {
+	if (gpu_upload_flags & GFX_UPLOAD_AS_SOON_AS_POSSIBLE) {
 		Assert(0);
 		// @TODO: BROKEN. Can still submit on multiple threads at the same time.
 		fence = Submit_Single_Use_Vulkan_Command_Buffer(command_buffer);
@@ -2763,7 +2861,7 @@ TextureID GPU_Upload_Texture(GPU_Context *context, u8 *pixels, s32 texture_width
 }
 #endif
 
-void GPURecordBeginRenderPassCommand(GPUCommandBuffer commandBuffer, GPURenderPass renderPass, GPUFramebuffer framebuffer)
+void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer)
 {
 	VkClearValue clearColor = {{{0.04f, 0.19f, 0.34f, 1.0f}}};
 	VkClearValue clearDepthStencil = {{{1.0f, 0.0f}}};
@@ -2788,12 +2886,12 @@ void GPURecordBeginRenderPassCommand(GPUCommandBuffer commandBuffer, GPURenderPa
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void GPURecordEndRenderPassCommand(GPUCommandBuffer commandBuffer)
+void GfxRecordEndRenderPassCommand(GfxCommandBuffer commandBuffer)
 {
 	vkCmdEndRenderPass(commandBuffer);
 }
 
-void GPURecordSetViewportCommand(GPUCommandBuffer commandBuffer, s32 width, s32 height)
+void GfxRecordSetViewportCommand(GfxCommandBuffer commandBuffer, s32 width, s32 height)
 {
 	VkViewport viewport =
 	{
@@ -2807,7 +2905,7 @@ void GPURecordSetViewportCommand(GPUCommandBuffer commandBuffer, s32 width, s32 
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 }
 
-void GPURecordSetScissorCommand(GPUCommandBuffer commandBuffer, u32 width, u32 height)
+void GfxRecordSetScissorCommand(GfxCommandBuffer commandBuffer, u32 width, u32 height)
 {
 	VkRect2D scissor =
 	{
@@ -2817,37 +2915,31 @@ void GPURecordSetScissorCommand(GPUCommandBuffer commandBuffer, u32 width, u32 h
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
-void GPURecordBindPipelineCommand(GPUCommandBuffer commandBuffer, GPUPipeline pipeline)
+void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline)
 {
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 #define VULKAN_VERTEX_BUFFER_BIND_ID 0
 
-void GPURecordBindVertexBufferCommand(GPUCommandBuffer commandBuffer, GPUBuffer vertexBuffer)
+void GfxRecordBindVertexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer vertexBuffer)
 {
-	VkDeviceSize deviceSize = 0;
-	vkCmdBindVertexBuffers(commandBuffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &vertexBuffer, &deviceSize);
+	VkDeviceSize offset = 0;
+	vkCmdBindVertexBuffers(commandBuffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &vertexBuffer, &offset);
 }
 
-void GPURecordBindIndexBufferCommand(GPUCommandBuffer commandBuffer, GPUBuffer indexBuffer)
+void GfxRecordBindIndexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer indexBuffer)
 {
 	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 }
 
-void GPUDrawIndexedVertices(GPUCommandBuffer commandBuffer, u32 indexCount, u32 firstIndex) {
-	vkCmdDrawIndexed(commandBuffer, indexCount, 1, firstIndex, 0, 0);
+void GfxDrawIndexedVertices(GfxCommandBuffer commandBuffer, u32 indexCount, u32 firstIndex, u32 vertexOffset)
+{
+	vkCmdDrawIndexed(commandBuffer, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
-//TextureID load_texture(String path);
-
-typedef struct {
-	Shaders *shaders;
-	const char **paths;
-	u32 shader_module_count;
-} Create_Shader_Request;
-
-void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
+void GfxInitialize(WindowContext *window)
+{
 	DLLHandle vulkan_library = OpenDLL("libvulkan.so");
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)GetDLLFunction(vulkan_library, #name); \
@@ -2857,13 +2949,14 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
-#include "VulkanFunctions.h"
+#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	const char *required_device_extensions[] = {
+	const char *required_device_extensions[] =
+	{
 		"VK_KHR_swapchain",
 		"VK_EXT_descriptor_indexing",
 	};
@@ -2934,51 +3027,54 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 			.enabledExtensionCount = ArrayCount(required_instance_extensions),
 			.ppEnabledExtensionNames = required_instance_extensions,
 		};
-		VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &context->instance));
+		VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &vulkanGlobals.instance));
 	}
 
 #define VK_EXPORTED_FUNCTION(name)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name) \
-	name = (PFN_##name)vkGetInstanceProcAddr(context->instance, (const char *)#name); \
+	name = (PFN_##name)vkGetInstanceProcAddr(vulkanGlobals.instance, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_DEVICE_FUNCTION(name)
-#include "VulkanFunctions.h"
+#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	if (debug) {
-		VK_CHECK(vkCreateDebugUtilsMessengerEXT(context->instance, &debug_create_info, NULL, &context->debug_messenger));
+	if (debug)
+	{
+		VK_CHECK(vkCreateDebugUtilsMessengerEXT(vulkanGlobals.instance, &debug_create_info, NULL, &vulkanGlobals.debugMessenger));
 	}
 
-	CreateVulkanSurface(window, context->instance, &context->window_surface);
-	vulkanContext.surface = context->window_surface;
+	CreateVulkanSurface(window, vulkanGlobals.instance, &vulkanGlobals.surface);
 
 	// Select physical device.
 	// @TODO: Rank physical device and select the best one?
 	{
 		bool found_suitable_physical_device = false;
-		u32 available_physical_device_count = 0;
-		VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &available_physical_device_count, NULL));
-		if (available_physical_device_count == 0) {
+		u32 availablePhysicalDeviceCount = 0;
+		VK_CHECK(vkEnumeratePhysicalDevices(vulkanGlobals.instance, &availablePhysicalDeviceCount, NULL));
+		if (availablePhysicalDeviceCount == 0)
+		{
 			Abort("Could not find any physical devices.");
 		}
-		VkPhysicalDevice available_physical_devices[available_physical_device_count];
-		VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &available_physical_device_count , available_physical_devices));
-		for (s32 i = 0; i < available_physical_device_count; i++) {
+		VkPhysicalDevice availablePhysicalDevices[availablePhysicalDeviceCount];
+		VK_CHECK(vkEnumeratePhysicalDevices(vulkanGlobals.instance, &availablePhysicalDeviceCount, availablePhysicalDevices));
+		for (auto i = 0; i < availablePhysicalDeviceCount; i++)
+		{
 			VkPhysicalDeviceProperties physical_device_properties;
-			vkGetPhysicalDeviceProperties(available_physical_devices[i], &physical_device_properties);
+			vkGetPhysicalDeviceProperties(availablePhysicalDevices[i], &physical_device_properties);
 			VkPhysicalDeviceFeatures physical_device_features;
-			vkGetPhysicalDeviceFeatures(available_physical_devices[i], &physical_device_features);
-			if (!physical_device_features.samplerAnisotropy || !physical_device_features.shaderSampledImageArrayDynamicIndexing) {
+			vkGetPhysicalDeviceFeatures(availablePhysicalDevices[i], &physical_device_features);
+			if (!physical_device_features.samplerAnisotropy || !physical_device_features.shaderSampledImageArrayDynamicIndexing)
+			{
 				continue;
 			}
 			u32 available_device_extension_count = 0;
-			VK_CHECK(vkEnumerateDeviceExtensionProperties(available_physical_devices[i], NULL, &available_device_extension_count, NULL));
+			VK_CHECK(vkEnumerateDeviceExtensionProperties(availablePhysicalDevices[i], NULL, &available_device_extension_count, NULL));
 			VkExtensionProperties available_device_extensions[available_device_extension_count];
-			VK_CHECK(vkEnumerateDeviceExtensionProperties(available_physical_devices[i], NULL, &available_device_extension_count, available_device_extensions));
+			VK_CHECK(vkEnumerateDeviceExtensionProperties(availablePhysicalDevices[i], NULL, &available_device_extension_count, available_device_extensions));
 			bool missing_required_device_extension = false;
 			for (s32 j = 0; j < ArrayCount(required_device_extensions); j++) {
 				bool found = false;
@@ -3000,15 +3096,15 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 			// If we have at least one supported surface format and present mode, we will consider the device.
 			// @TODO: Should we die if error, or just skip this physical device?
 			u32 available_surface_format_count = 0;
-			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->window_surface, &available_surface_format_count, NULL));
+			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(availablePhysicalDevices[i], vulkanGlobals.surface, &available_surface_format_count, NULL));
 			u32 available_present_mode_count = 0;
-			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->window_surface, &available_present_mode_count, NULL));
+			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(availablePhysicalDevices[i], vulkanGlobals.surface, &available_present_mode_count, NULL));
 			if (available_surface_format_count == 0 || available_present_mode_count == 0) {
 				continue;
 			}
 			// Select the best swap chain settings.
 			VkSurfaceFormatKHR available_surface_formats[available_surface_format_count];
-			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(available_physical_devices[i], context->window_surface, &available_surface_format_count, available_surface_formats));
+			VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(availablePhysicalDevices[i], vulkanGlobals.surface, &available_surface_format_count, available_surface_formats));
 			VkSurfaceFormatKHR surface_format = available_surface_formats[0];
 			if (available_surface_format_count == 1 && available_surface_formats[0].format == VK_FORMAT_UNDEFINED) {
 				// No preferred format, so we get to pick our own.
@@ -3028,136 +3124,168 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 			// In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be immediately displayed, even though that may mean some tearing.
 			VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
 			VkPresentModeKHR available_present_modes[available_present_mode_count];
-			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(available_physical_devices[i], context->window_surface, &available_present_mode_count, available_present_modes));
+			VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(availablePhysicalDevices[i], vulkanGlobals.surface, &available_present_mode_count, available_present_modes));
 			for (s32 j = 0; j < available_present_mode_count; j++) {
 				if (available_present_modes[j] == VK_PRESENT_MODE_MAILBOX_KHR) {
 					present_mode = available_present_modes[j];
 					break;
 				}
 			}
-			u32 queue_family_count = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties(available_physical_devices[i], &queue_family_count, NULL);
-			VkQueueFamilyProperties queue_families[queue_family_count];
-			vkGetPhysicalDeviceQueueFamilyProperties(available_physical_devices[i], &queue_family_count, queue_families);
+			u32 queueFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties(availablePhysicalDevices[i], &queueFamilyCount, NULL);
+			VkQueueFamilyProperties queueFamilies[queueFamilyCount];
+			vkGetPhysicalDeviceQueueFamilyProperties(availablePhysicalDevices[i], &queueFamilyCount, queueFamilies);
 			// @TODO: Search for an transfer exclusive queue VK_QUEUE_TRANSFER_BIT.
-			s32 graphics_queue_family = -1;
-			s32 present_queue_family = -1;
-			for (s32 j = 0; j < queue_family_count; j++) {
-				if (queue_families[j].queueCount == 0) {
+			auto graphicsQueueFamily = -1;
+			auto presentQueueFamily = -1;
+			auto computeQueueFamily = -1;
+			auto dedicatedTransferQueueFamily = -1;
+			for (auto j = 0; j < queueFamilyCount; j++)
+			{
+				if (queueFamilies[j].queueCount == 0)
+				{
 					continue;
 				}
-				if (queue_families[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-					graphics_queue_family = j;
+				if (queueFamilies[j].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				{
+					graphicsQueueFamily = j;
 				}
-				u32 present_support = 0;
-				VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(available_physical_devices[i], j, context->window_surface, &present_support));
-				if (present_support) {
-					present_queue_family = j;
+				if (queueFamilies[j].queueFlags & VK_QUEUE_COMPUTE_BIT)
+				{
+					computeQueueFamily = j;
 				}
-				if (graphics_queue_family != -1 && present_queue_family != -1) {
-					context->physical_device = available_physical_devices[i];
-					vulkanContext.physicalDevice = available_physical_devices[i];
-					context->graphics_queue_family = graphics_queue_family;
-					context->present_queue_family = present_queue_family;
-					vulkanContext.graphicsQueueFamily = graphics_queue_family;
-					vulkanContext.presentQueueFamily = present_queue_family;
-					context->window_surface_format = surface_format;
-					vulkanContext.surfaceFormat = surface_format;
-					context->present_mode = present_mode;
-					vulkanContext.presentMode = present_mode;
-					context->minimum_uniform_buffer_offset_alignment = physical_device_properties.limits.minUniformBufferOffsetAlignment;
-					context->maximum_uniform_buffer_size = physical_device_properties.limits.maxUniformBufferRange;
-					found_suitable_physical_device = true;
-					LogPrint(LogType::INFO, "Available Vulkan device extensions:\n");
-					for (s32 k = 0; k < available_device_extension_count; k++) {
-						LogPrint(LogType::INFO, "\t%s\n", available_device_extensions[k].extensionName);
-					}
-					break;
+				if ((queueFamilies[j].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFamilies[j].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+				{
+					dedicatedTransferQueueFamily = j;
+				}
+				u32 presentSupport = 0;
+				VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(availablePhysicalDevices[i], j, vulkanGlobals.surface, &presentSupport));
+				if (presentSupport)
+				{
+					presentQueueFamily = j;
 				}
 			}
-			if (found_suitable_physical_device) {
+			if (graphicsQueueFamily != -1 && presentQueueFamily != -1 && computeQueueFamily != -1)
+			{
+				vulkanGlobals.physicalDevice = availablePhysicalDevices[i];
+				vulkanGlobals.graphicsQueueFamily = graphicsQueueFamily;
+				vulkanGlobals.presentQueueFamily = presentQueueFamily;
+				if (dedicatedTransferQueueFamily != -1)
+				{
+					vulkanGlobals.transferQueueFamily = dedicatedTransferQueueFamily;
+				}
+				else
+				{
+					vulkanGlobals.transferQueueFamily = graphicsQueueFamily;
+				}
+				vulkanGlobals.computeQueueFamily = computeQueueFamily;
+				vulkanGlobals.surfaceFormat = surface_format;
+				vulkanGlobals.presentMode = present_mode;
+				found_suitable_physical_device = true;
+
+				LogPrint(LogType::INFO, "Available Vulkan device extensions:\n");
+				for (auto k = 0; k < available_device_extension_count; k++)
+				{
+					LogPrint(LogType::INFO, "\t%s\n", available_device_extensions[k].extensionName);
+				}
+
 				break;
 			}
 		}
-		if (!found_suitable_physical_device) {
+		if (!found_suitable_physical_device)
+		{
 			Abort("Could not find suitable physical device.\n");
 		}
 	}
 
 	// Create logical device.
 	{
-		u32 unique_queue_family_count = (context->graphics_queue_family == context->present_queue_family) ? 1 : 2;
-		f32 queue_priority = 1.0f;
-		VkDeviceQueueCreateInfo device_queue_create_info[unique_queue_family_count];
-		device_queue_create_info[0] = (VkDeviceQueueCreateInfo){
-			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			.queueFamilyIndex = context->graphics_queue_family,
-			.queueCount = 1,
-			.pQueuePriorities = &queue_priority,
-		};
-		if (unique_queue_family_count > 1) {
-			device_queue_create_info[1] = (VkDeviceQueueCreateInfo){
+		auto queuePriority = 1.0f;
+		Array<VkDeviceQueueCreateInfo> deviceQueueCreateInfos;
+		Append(
+			&deviceQueueCreateInfos,
+			VkDeviceQueueCreateInfo{
 				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				.queueFamilyIndex = context->present_queue_family,
+				.queueFamilyIndex = vulkanGlobals.graphicsQueueFamily,
 				.queueCount = 1,
-				.pQueuePriorities = &queue_priority,
-			};
+				.pQueuePriorities = &queuePriority,
+			}
+		);
+		if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
+		{
+			Append(
+				&deviceQueueCreateInfos,
+				VkDeviceQueueCreateInfo{
+					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+					.queueFamilyIndex = vulkanGlobals.presentQueueFamily,
+					.queueCount = 1,
+					.pQueuePriorities = &queuePriority,
+				}
+			);
 		}
-		auto PhysicalDeviceFeatures = VkPhysicalDeviceFeatures{
+		if (vulkanGlobals.transferQueueFamily != vulkanGlobals.graphicsQueueFamily)
+		{
+			Append(
+				&deviceQueueCreateInfos,
+				VkDeviceQueueCreateInfo{
+					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+					.queueFamilyIndex = vulkanGlobals.transferQueueFamily,
+					.queueCount = 1,
+					.pQueuePriorities = &queuePriority,
+				}
+			);
+		}
+		VkPhysicalDeviceFeatures physicalDeviceFeatures =
+		{
 			.samplerAnisotropy = VK_TRUE,
 		};
-		auto DescriptorIndexingFeatures = VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
+		VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures =
+		{
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
 			.runtimeDescriptorArray = VK_TRUE,
 		};
-		VkDeviceCreateInfo device_create_info = {
+		VkDeviceCreateInfo device_create_info =
+		{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-			.pNext = &DescriptorIndexingFeatures,
-			.queueCreateInfoCount = unique_queue_family_count,
-			.pQueueCreateInfos = device_queue_create_info,
+			.pNext = &descriptorIndexingFeatures,
+			.queueCreateInfoCount = (u32)Length(deviceQueueCreateInfos),
+			.pQueueCreateInfos = &deviceQueueCreateInfos[0],
 			.enabledLayerCount = ArrayCount(required_instance_layers),
 			.ppEnabledLayerNames = required_instance_layers,
 			.enabledExtensionCount = ArrayCount(required_device_extensions),
 			.ppEnabledExtensionNames = required_device_extensions,
-			.pEnabledFeatures = &PhysicalDeviceFeatures,
+			.pEnabledFeatures = &physicalDeviceFeatures,
 		};
-		VK_CHECK(vkCreateDevice(context->physical_device, &device_create_info, NULL, &context->device));
-		VK_CHECK(vkCreateDevice(context->physical_device, &device_create_info, NULL, &vulkanContext.device));
+		VK_CHECK(vkCreateDevice(vulkanGlobals.physicalDevice, &device_create_info, NULL, &vulkanGlobals.device));
 	}
 
 #define VK_EXPORTED_FUNCTION(name)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
-	name = (PFN_##name)vkGetDeviceProcAddr(context->device, (const char *)#name); \
+	name = (PFN_##name)vkGetDeviceProcAddr(vulkanGlobals.device, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
-#include "VulkanFunctions.h"
+#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	vkGetDeviceQueue(context->device, context->graphics_queue_family, 0, &context->graphics_queue); // No return.
-	vkGetDeviceQueue(context->device, context->present_queue_family, 0, &context->present_queue); // No return.
-
-	vkGetDeviceQueue(vulkanContext.device, vulkanContext.graphicsQueueFamily, 0, &vulkanContext.graphicsQueue); // No return.
-	vkGetDeviceQueue(vulkanContext.device, vulkanContext.presentQueueFamily, 0, &vulkanContext.presentQueue); // No return.
+	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.graphicsQueueFamily, 0, &vulkanGlobals.graphicsQueue); // No return.
+	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.presentQueueFamily, 0, &vulkanGlobals.presentQueue); // No return.
+	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.transferQueueFamily, 0, &vulkanGlobals.transferQueue); // No return.
+	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.computeQueueFamily, 0, &vulkanGlobals.computeQueue); // No return.
 
 	// Create presentation semaphores.
 	{
-		VkSemaphoreCreateInfo semaphore_create_info = {
+		VkSemaphoreCreateInfo semaphoreCreateInfo =
+		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 		};
-		VkFenceCreateInfo fence_create_info = {
-			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
-		};
-		for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
-			VK_CHECK(vkCreateSemaphore(context->device, &semaphore_create_info, NULL, &context->image_available_semaphores[i]));
-			VK_CHECK(vkCreateSemaphore(context->device, &semaphore_create_info, NULL, &context->render_finished_semaphores[i]));
-
-			VK_CHECK(vkCreateSemaphore(vulkanContext.device, &semaphore_create_info, NULL, &vulkanContext.imageAvailableSemaphores[i]));
-			VK_CHECK(vkCreateSemaphore(vulkanContext.device, &semaphore_create_info, NULL, &vulkanContext.renderFinishedSemaphores[i]));
+		for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &vulkanGlobals.imageAvailableSemaphores[i]));
+			VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &vulkanGlobals.renderFinishedSemaphores[i]));
 		}
 	}
 
@@ -3344,11 +3472,11 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 
 	create_vulkan_display_objects(temporary_arena);
 
-	// GPU vertex/index/uniform resources.
+	// Gfx vertex/index/uniform resources.
 	{
 		VkBufferCreateInfo buffer_create_info = {};
 		buffer_create_info.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_create_info.size        = VULKAN_GPU_ALLOCATION_SIZE;
+		buffer_create_info.size        = VULKAN_GFX_ALLOCATION_SIZE;
 		buffer_create_info.usage       = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -3397,13 +3525,13 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
         };
-        for (u32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
+        for (u32 i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++) {
 			VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.image_available_semaphores[i]));
 			VK_CHECK(vkCreateSemaphore(vulkan_context.device, &semaphore_create_info, NULL, &vulkan_context.render_finished_semaphores[i]));
 			VK_CHECK(vkCreateFence(vulkan_context.device, &fence_create_info, NULL, &vulkan_context.inFlightFences[i]));
         }
         fence_create_info.flags = 0;
-        for (u32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
+        for (u32 i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++) {
 			VK_CHECK(vkCreateFence(vulkan_context.device, &fence_create_info, NULL, &vulkan_context.assetFences[i]));
         }
 	}
@@ -3655,7 +3783,7 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 	// @TODO: Try to allocate more than one chunk at startup? Would need to back off if it failed.
 	//vulkan_context.base_gpu_memory_chunk = allocate_struct(permanent_arena, Vulkan_Memory_Chunk);
 	if (!initialize_vulkan_dynamic_memory_allocator(&vulkan_context._gpu_memory, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-		_abort("Failed to initialize Vulkan GPU memory allocator: not enough memory for base memory block");
+		_abort("Failed to initialize Vulkan Gfx memory allocator: not enough memory for base memory block");
 	}
 	//vulkan_context.base_shared_memory_chunk = allocate_struct(permanent_arena, Vulkan_Memory_Chunk);
 	if (!initialize_vulkan_dynamic_memory_allocator(&vulkan_context._shared_memory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
@@ -3665,9 +3793,9 @@ void Render_API_Initialize(Render_API_Context *context, WindowContext *window) {
 		_abort("Failed to allocate Vulkan staging memory");
 	}
 
-	game_state->gpu_context.thread_local = malloc(game_state->jobs_context.worker_thread_count * sizeof(GPU_Thread_Local_Context));
+	game_state->gpu_context.thread_local = malloc(game_state->jobs_context.worker_thread_count * sizeof(GFX_Thread_Local_Context));
 	for (u32 i = 0; i < game_state->jobs_context.worker_thread_count; i++) {
-		for (u32 j = 0; j < GPU_MAX_FRAMES_IN_FLIGHT; j++) {
+		for (u32 j = 0; j < GFX_MAX_FRAMES_IN_FLIGHT; j++) {
 			VkCommandPoolCreateInfo command_pool_create_info = {
 				.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 				.queueFamilyIndex = vulkan_context.graphics_queue_family,
@@ -3897,9 +4025,9 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 }
 
 // @TODO: A way to wait for the next frame without blocking? Or maybe we wait to see if there is any more work and then wait?
-u32 GPU_Wait_For_Available_Frame(GPU_Context *context) {
+u32 GFX_Wait_For_Available_Frame(GFX_Context *context) {
 	vulkan_context.currentFrame = vulkan_context.nextFrame;
-	vulkan_context.nextFrame = (vulkan_context.nextFrame + 1) % GPU_MAX_FRAMES_IN_FLIGHT;
+	vulkan_context.nextFrame = (vulkan_context.nextFrame + 1) % GFX_MAX_FRAMES_IN_FLIGHT;
 	vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame], 1, UINT64_MAX);
 	vkResetFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[vulkan_context.currentFrame]);
 	vkResetCommandPool(vulkan_context.device, context->thread_local[thread_index].command_pools[vulkan_context.currentFrame], 0);
@@ -3908,7 +4036,7 @@ u32 GPU_Wait_For_Available_Frame(GPU_Context *context) {
 	return swapchain_image_index;
 }
 
-void GPU_Transfer_Data(void *source, GPU_Memory_Location destination, u32 size) {
+void GFX_Transfer_Data(void *source, GFX_Memory_Location destination, u32 size) {
 	//Platform_Lock_Mutex(&vulkan_context.mutex);
 	stage_vulkan_data(source, size);
 	transfer_staged_vulkan_data(destination.offset);
@@ -3916,12 +4044,12 @@ void GPU_Transfer_Data(void *source, GPU_Memory_Location destination, u32 size) 
 	//transfer_staged_vulkan_data(vulkan_context.buffer_offsets.instance_memory_segment + offset_inside_instance_memory_segment);
 }
 
-GPU_Memory_Allocation *GPU_Acquire_Memory(GPU_Memory_Allocator *allocator, u32 size) {
+GFX_Memory_Allocation *GFX_Acquire_Memory(GFX_Memory_Allocator *allocator, u32 size) {
 	for (u32 i = 0; i < allocator->active_block->freed_allocation_count; i++) {
 		Assert(0); // @TODO
 	}
-	GPU_Memory_Allocation *new_allocation = &allocator->active_block->active_allocations[allocator->active_block->active_allocation_count];
-	*new_allocation = (GPU_Memory_Allocation){
+	GFX_Memory_Allocation *new_allocation = &allocator->active_block->active_allocations[allocator->active_block->active_allocation_count];
+	*new_allocation = (GFX_Memory_Allocation){
 		.block          = allocator->active_block,
 		.size           = size,
 		.mapped_pointer = allocator->active_block->mapped_pointer,
@@ -3935,7 +4063,7 @@ GPU_Memory_Allocation *GPU_Acquire_Memory(GPU_Memory_Allocator *allocator, u32 s
 	return new_allocation;
 }
 
-void GPU_Flush_Asset_Uploads() {
+void GFX_Flush_Asset_Uploads() {
 /*
 	u32 count = vulkan_context.asset_upload_command_buffers.ring_buffer.write_index - vulkan_context.asset_upload_command_buffers.ring_buffer.read_index; // @TODO BROKEN
 	if (count == 0) {
@@ -4046,7 +4174,7 @@ void Cleanup_Renderer() {
 		}
 	}
 
-	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
+	for (s32 i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++) {
         vkWaitForFences(vulkan_context.device, 1, &vulkan_context.inFlightFences[i], VK_TRUE, UINT64_MAX);
 		vkDestroyFence(vulkan_context.device, vulkan_context.inFlightFences[i], NULL);
 		vkDestroySemaphore(vulkan_context.device, vulkan_context.image_available_semaphores[i], NULL);

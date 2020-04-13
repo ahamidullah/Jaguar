@@ -1,4 +1,4 @@
-bool CreateParserStream(ParserStream *parser, const String &filepath)
+bool CreateParserStreamFromFile(ParserStream *parser, const String &filepath)
 {
 	auto [string, error] = ReadEntireFile(filepath);
 	if (error)
@@ -51,6 +51,26 @@ String GetToken(ParserStream *stream)
 bool GetExpectedToken(ParserStream *parser, const String &expected)
 {
 	return expected == GetToken(parser);
+}
+
+bool GetLine(ParserStream *parser, String *line)
+{
+	Resize(line, 0);
+	if (!parser->string[parser->index])
+	{
+		return false;
+	}
+	while (parser->string[parser->index] && parser->string[parser->index] != '\n')
+	{
+		Append(line, parser->string[parser->index]);
+		parser->index++;
+	}
+	if (parser->string[parser->index] == '\n')
+	{
+		Append(line, parser->string[parser->index]);
+		parser->index++;
+	}
+	return true;
 }
 
 char PeekAtNextCharacter(ParserStream *parser)

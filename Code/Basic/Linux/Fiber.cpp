@@ -10,12 +10,20 @@
 // to the calling context.  Now when we want to switch to the fiber we can _longjmp directly into
 // the fiber's context. 
 
-static char *fiberStackMemory;
-static volatile s32 fiberCount;
-static size_t pageSize;
+struct ThreadLocalFibersContext
+{
+	Fiber threadFiber;
+	Fiber *activeFiber;
+};
 
-static THREAD_LOCAL Fiber threadFiber;
-static THREAD_LOCAL Fiber *activeFiber;
+struct FibersContext
+{
+	char *fiberStackMemory;
+	volatile s32 fiberCount;
+	size_t pageSize;
+
+	Array<ThreadLocalFibersContext> threadLocal;
+} fibersContext;
 
 struct FiberCreationInfo
 {
@@ -27,9 +35,9 @@ struct FiberCreationInfo
 
 void RunFiber(void *fiberCreationInfoPointer)
 {
-	FiberCreationInfo *fiberCreationInfo = (FiberCreationInfo *)fiberCreationInfoPointer;
-	FiberProcedure procedure = fiberCreationInfo->procedure;
-	void *parameter = fiberCreationInfo->parameter;
+	auto *fiberCreationInfo = (FiberCreationInfo *)fiberCreationInfoPointer;
+	auto procedure = fiberCreationInfo->procedure;
+	auto *parameter = fiberCreationInfo->parameter;
 	if (!_setjmp(*fiberCreationInfo->jumpBuffer))
 	{
 		ucontext_t context = {};
@@ -41,16 +49,16 @@ void RunFiber(void *fiberCreationInfoPointer)
 
 #define FIBER_STACK_SIZE 81920
 
-// @TODO: Rather than mprotecting memory, we should just check to see if the stack pointer is out-of-bound.
 void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 {
 	getcontext(&fiber->context);
-	s32 fiberIndex = AtomicFetchAndAdd(&fiberCount, 1);
+	auto fiberIndex = AtomicFetchAndAddS32(&fiberCount, 1);
 	fiber->context.uc_stack.ss_sp = fiberStackMemory + ((fiberIndex * FIBER_STACK_SIZE) + ((fiberIndex + 1) * pageSize));
 	fiber->context.uc_stack.ss_size = FIBER_STACK_SIZE;
 	fiber->context.uc_link = 0;
 	ucontext_t temporaryContext;
-	FiberCreationInfo fiberCreationInfo = {
+	FiberCreationInfo fiberCreationInfo =
+	{
 		.procedure = procedure,
 		.parameter = parameter,
 		.jumpBuffer = &fiber->jumpBuffer,
@@ -62,30 +70,33 @@ void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 
 void ConvertThreadToFiber(Fiber *fiber)
 {
-	activeFiber = fiber;
+	fibersContext.threadLocal[GetThreadIndex()].activeFiber = fiber;
 }
 
 // @TODO: Prevent two fibers from running at the same time.
 void SwitchToFiber(Fiber *fiber)
 {
-	if (!_setjmp(activeFiber->jumpBuffer))
+	if (!_setjmp(fibersContext.threadLocal[GetThreadIndex()].activeFiber->jumpBuffer))
 	{
-		activeFiber = fiber;
+		fibersContext.threadLocal[GetThreadIndex()].activeFiber = fiber;
 		_longjmp(fiber->jumpBuffer, 1);
 	}
 }
 
 Fiber *GetCurrentFiber()
 {
-	return activeFiber;
+	return fibersContext.threadLocal[GetThreadIndex()].activeFiber;
 }
 
 void InitializeFiber(u32 maxFiberCount)
 {
-	pageSize = GetPageSize();
-	fiberStackMemory = (char *)AllocateMemory((maxFiberCount * FIBER_STACK_SIZE) + ((maxFiberCount + 1) * pageSize));
-	for (s32 i = 0; i <= maxFiberCount; i++)
+	fibersContext.pageSize = GetPageSize();
+	fibersContext.fiberCount = 0;
+	fibersContext.fiberStackMemory = (char *)AllocateMemory((maxFiberCount * FIBER_STACK_SIZE) + ((maxFiberCount + 1) * fibersContext.pageSize));
+	for (auto i = 0; i <= maxFiberCount; i++)
 	{
-		mprotect(fiberStackMemory + ((i * FIBER_STACK_SIZE) + (i * pageSize)), pageSize, PROT_NONE);
+		mprotect(fiberStackMemory + ((i * FIBER_STACK_SIZE) + (i * fibersContext.pageSize)), fibersContext.pageSize, PROT_NONE);
 	}
+
+	ResizeArray(&fibersContext.threadLocal, GetThreadCount());
 }

@@ -1,300 +1,445 @@
-//#include "render_generated.h"
-//#include "render_generated.c"
+// @TODO: Need caching for:
+//        render passes
+//        pipelines
+//        framebuffers
 
-Render_Context renderContext;
+#include "ShaderGlobal.h"
 
-#define RANDOM_COLOR_TABLE_LENGTH 1024
-V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
-
-void Add_Debug_Render_Object(Render_Context *context, void *vertices, u32 vertex_count, size_t sizeof_vertex, u32 *indices, u32 index_count, V4 color, Render_Primitive primitive) {
-	Debug_Render_Object *object = &context->debug_render_objects[context->debug_render_object_count++];
-	*object = (Debug_Render_Object){
-		.index_count = index_count,
-		.color = color,
-		.render_primitive = primitive,
-	};
-	//vulkan_push_debug_vertices(vertices, vertex_count, sizeof_vertex, indices, index_count, &object->vertex_offset, &object->first_index);
-	Assert(context->debug_render_object_count < MAX_DEBUG_RENDER_OBJECTS);
-}
-
-void Draw_Wire_Sphere(Render_Context *context, V3 center, f32 radius, V4 color) {
-	const u32 sector_count = 30;
-	const u32 stack_count  = 15;
-	f32 sector_step = 2.0f * M_PI / (f32)sector_count;
-	f32 stack_step = M_PI / (f32)stack_count;
-	f32 sector_angle, stack_angle;
-	f32 x, y, z, xy;
-	Vertex1P vertices[((sector_count + 1) * (stack_count + 1))];
-	u32 vertex_count = 0;
-	for (u32 i = 0; i <= stack_count; ++i) {
-		stack_angle = M_PI / 2 - i * stack_step; // From pi/2 to -pi/2.
-		xy = radius * cosf(stack_angle); // r * cos(u)
-		z = radius * sinf(stack_angle); // r * sin(u)
-		for (u32 j = 0; j <= sector_count; ++j) {
-			sector_angle = j * sector_step; // From 0 to 2pi.
-			x = xy * cosf(sector_angle); // r * cos(u) * cos(v)
-			y = xy * sinf(sector_angle); // r * cos(u) * sin(v)
-			vertices[vertex_count++].position = (V3){x, y, z} + center;
-		}
-	}
-	u32 indices[4 * stack_count * sector_count];
-	u32 index_count = 0;
-	u32 k1, k2;
-	for (u32 i = 0; i < stack_count; ++i) {
-		k1 = i * (sector_count + 1);
-		k2 = k1 + sector_count + 1;
-		for (u32 j = 0; j < sector_count; ++j, ++k1, ++k2) {
-			indices[index_count++] = k1;
-			indices[index_count++] = k2;
-			if (i != 0) {
-				indices[index_count++] = k1;
-				indices[index_count++] = k1 + 1;
-			}
-		}
-	}
-	Add_Debug_Render_Object(context, vertices, vertex_count, sizeof(vertices[0]), indices, index_count, color, LINE_PRIMITIVE);
-}
-
-V3 random_color() {
-	float r = rand() / (f32)RAND_MAX;
-	float g = rand() / (f32)RAND_MAX;
-	float b = rand() / (f32)RAND_MAX;
-	return (V3){r, g, b};
-}
-
-#define MAX_VISIBLE_ENTITY_MESHES MAX_ENTITY_MESHES
-
-// Render_Memory_Allocation ???
-// GPU_Memory_Allocation ????
-
-void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
-	f32 half_near_plane_height = focal_length * Tan(camera->fov / 2.0f);
-	f32 half_near_plane_width = focal_length * Tan(camera->fov / 2.0f) * aspect_ratio;
-	V3 center_of_near_plane = focal_length * CalculateTransformForward(&camera->transform);
-	enum {
-		RIGHT,
-		LEFT,
-		TOP,
-		BOTTOM,
-		FRUSTUM_PLANE_COUNT,
-	};
-	auto right = CalculateTransformRight(&camera->transform);
-	auto up = CalculateTransformUp(&camera->transform);
-	V3 frustum_plane_normals[] = {
-		[RIGHT] = CrossProduct(Normalize(center_of_near_plane + (half_near_plane_width * right)), up),
-		[LEFT] = CrossProduct(up, Normalize(center_of_near_plane - half_near_plane_width * right)),
-		[TOP] = CrossProduct(right, Normalize(center_of_near_plane + half_near_plane_height * up)),
-		[BOTTOM] = CrossProduct(Normalize(center_of_near_plane - (half_near_plane_height * up)), right),
-	};
-	for (u32 i = 0; i < mesh_bounding_sphere_count; i++) {
-		//Draw_Wire_Sphere(mesh_bounding_spheres[i].center, mesh_bounding_spheres[i].radius, v3_to_v4(random_color_table[i % RANDOM_COLOR_TABLE_LENGTH], 1.0f));
-		if ((DotProduct(frustum_plane_normals[RIGHT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[RIGHT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[LEFT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[LEFT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[TOP], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[TOP], camera->transform.position) <= mesh_bounding_spheres[i].radius)
-		 && (DotProduct(frustum_plane_normals[BOTTOM], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[BOTTOM], camera->transform.position) <= mesh_bounding_spheres[i].radius)) {
-		 	Assert(*visible_mesh_count < MAX_VISIBLE_ENTITY_MESHES);
-			visible_meshes[(*visible_mesh_count)++] = i;
-		}
-	}
-}
-
-enum {
-	SHADOW_MAP_ATTACHMENT_ID,
-	DEPTH_BUFFER_ATTACHMENT_ID,
-	SWAPCHAIN_IMAGE_ATTACHMENT_ID,
-};
-
-GPUBuffer uniform_buffer;
-GPUFence matrix_fence;
-
-void CreateGraphicsPipelines(GPURenderPass renderPass, GPUPipeline *pipelines)
-{
-	GPUFramebufferAttachmentColorBlendDescription colorBlendDescription =
-	{
-			.enable_blend = true,
-			.source_color_blend_factor = GPU_BLEND_FACTOR_SRC_ALPHA,
-			.destination_color_blend_factor = GPU_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-			//.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-			//.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
-			.color_blend_operation = GPU_BLEND_OP_ADD ,
-			.source_alpha_blend_factor = GPU_BLEND_FACTOR_ONE,
-			.destination_alpha_blend_factor = GPU_BLEND_FACTOR_ZERO,
-			.alpha_blend_operation = GPU_BLEND_OP_ADD,
-			.color_write_mask = GPU_COLOR_COMPONENT_RED | GPU_COLOR_COMPONENT_GREEN | GPU_COLOR_COMPONENT_BLUE | GPU_COLOR_COMPONENT_ALPHA,
-	};
-	GPUPipelineVertexInputAttributeDescription vertexInputAttributeDescriptions[] =
-	{
-		{
-			.format = GPU_FORMAT_R32G32B32_SFLOAT,
-			.binding = GPU_VERTEX_BUFFER_BIND_ID,
-			.location = 0,
-			.offset = 0,
-		},
-	};
-	GPUPipelineVertexInputBindingDescription vertexInputBindingDescriptions[] =
-	{
-		{
-			.binding = GPU_VERTEX_BUFFER_BIND_ID,
-			.stride = sizeof(V3),
-			.input_rate = GPU_VERTEX_INPUT_RATE_VERTEX,
-		},
-	};
-	GPUDynamicPipelineState dynamicStates[] =
-	{
-		GPU_DYNAMIC_PIPELINE_STATE_VIEWPORT,
-		GPU_DYNAMIC_PIPELINE_STATE_SCISSOR,
-	};
-	auto shader = GetShader(FLAT_COLOR_SHADER);
-	GPUPipelineDescription pipelineDescription =
-	{
-		.descriptor_set_layout_count = 1,
-		.descriptor_set_layouts = &renderContext.descriptorSets[FLAT_COLOR_SHADER].layout,
-		.push_constant_count = 0,
-		.push_constant_descriptions = NULL,
-		.topology = GPU_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-		.viewport_width = (f32)windowWidth,
-		.viewport_height = (f32)windowHeight,
-		.scissor_width = windowWidth,
-		.scissor_height = windowHeight,
-		.depth_compare_operation = GPU_COMPARE_OP_LESS,
-		.framebuffer_attachment_color_blend_count = 1,
-		.framebuffer_attachment_color_blend_descriptions = &colorBlendDescription,
-		.vertex_input_attribute_count = 1,
-		.vertex_input_attribute_descriptions = vertexInputAttributeDescriptions,
-		.vertex_input_binding_count = 1,
-		.vertex_input_binding_descriptions = vertexInputBindingDescriptions,
-		.dynamic_state_count = ArrayCount(dynamicStates),
-		.dynamic_states = dynamicStates,
-		.shader = shader,
-		.render_pass = renderPass,
-		.enable_depth_bias = false,
-	};
-	pipelines[FLAT_COLOR_SHADER] = GPUCreatePipeline(&pipelineDescription);
-}
-
+#define VERTEX_BUFFER_BIND_ID 0
 #define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE Megabyte(1)
 
-void CreateDescriptorSets(GPUDescriptorPool pool, u32 swapchainImageCount, ShaderDescriptorSets *sets)
+struct ThreadLocalRenderGlobals
 {
-	DescriptorSetBindingInfo bindingInfos[] =
+	//GfxCommandPool graphicsCommandPools[GFX_MAX_FRAMES_IN_FLIGHT];
+	//GfxCommandPool computeCommandPools[GFX_MAX_FRAMES_IN_FLIGHT];
+};
+
+struct Shader
+{
+	String name;
+	Array<GfxShaderModule> modules;
+	Array<GfxShaderStage> stages;
+};
+
+struct DescriptorSetGroup
+{
+	u32 setNumber;
+	GfxDescriptorSetLayout layout;
+	GfxDescriptorSet *sets;
+	GfxBuffer *buffers;
+};
+
+struct
+{
+	f32 aspectRatio;
+	u32 swapchainImageIndex; // @TODO
+	u32 frameIndex;
+	//GfxCommandPool uploadCommandPool;
+	GfxFence inFlightFences[GFX_MAX_FRAMES_IN_FLIGHT];
+	GfxDescriptorPool descriptorPool;
+	HashTable<String, Shader> shaders;
+	u32 swapchainImageCount;
+	GfxSwapchain swapchain;
+	Array<GfxImageView> swapchainImageViews;
+	GfxPipelineLayout pipelineLayout;
+	Array<GfxDescriptorSetLayout> descriptorSetLayouts;
+	Array<Array<GfxDescriptorSet>> descriptorSets;
+	Array<Array<GfxBuffer>> descriptorSetBuffers;
+	GfxFence descriptorSetUpdateFence;
+
+	// @TODO TEMPORARY
+	GfxFramebuffer *framebuffers;
+
+	Array<ThreadLocalRenderGlobals> threadLocal;
+} renderGlobals;
+
+u32 GetFrameIndex()
+{
+	return renderGlobals.frameIndex;
+}
+
+void CreateDescriptorSetGroup(u32 setIndex, u32 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
+{
+	renderGlobals.descriptorSetLayouts[setIndex] = GfxCreateDescriptorSetLayout(bindingInfoCount, bindingInfos);
+	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
 	{
-		{
-			.binding = 0,
-			.descriptorType = GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.descriptorCount = 1,
-			.stage = GPU_VERTEX_SHADER_STAGE,
-		},
-	};
-	sets[FLAT_COLOR_SHADER].layout = GPUCreateDescriptorSetLayout(ArrayCount(bindingInfos), bindingInfos);
-	sets[FLAT_COLOR_SHADER].sets = AllocateArray(GPUDescriptorSet, swapchainImageCount);
-	sets[FLAT_COLOR_SHADER].buffers = AllocateArray(GPUBuffer, swapchainImageCount);
-	GPUCreateDescriptorSets(pool, sets[FLAT_COLOR_SHADER].layout, swapchainImageCount, sets[FLAT_COLOR_SHADER].sets);
-	for (auto i = 0; i < swapchainImageCount; i++)
-	{
-		sets[FLAT_COLOR_SHADER].buffers[i] = Renderer::CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+		GfxCreateDescriptorSets(renderGlobals.descriptorPool, renderGlobals.descriptorSetLayouts[setIndex], 1, &renderGlobals.descriptorSets[i][setIndex]);
+		renderGlobals.descriptorSetBuffers[i][setIndex] = CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	}
 }
 
-void InitializeRenderer(void *job_parameter_pointer) {
-	//GameState *game_state = (GameState *)job_parameter_pointer;
+void LoadShaders()
+{
+	if (development)
+	{
+		String shaderDirectory;
+		String binaryDirectory;
+		String binaryFilenameExtension;
+		if (usingVulkanAPI)
+		{
+			shaderDirectory = "Code/Shader/GLSL";
+			binaryDirectory = "Build/Shader/GLSL/Binary";
+			binaryFilenameExtension = "spirv";
+		}
+		else
+		{
+			InvalidCodePath();
+		}
+
+		Shader shader;
+		RunProcess("ShaderCompiler");
+		{
+			auto [spirv, error] = ReadEntireFile("Build/Shader/Binary/Model.vert.spirv");
+			Assert(!error);
+			Append(&shader.stages, GFX_VERTEX_SHADER_STAGE);
+			Append(&shader.modules, GfxCreateShaderModule(GFX_VERTEX_SHADER_STAGE, spirv));
+		}
+		{
+			auto [spirv, error] = ReadEntireFile("Build/Shader/Binary/Model.frag.spirv");
+			Assert(!error);
+			Append(&shader.stages, GFX_FRAGMENT_SHADER_STAGE);
+			Append(&shader.modules, GfxCreateShaderModule(GFX_FRAGMENT_SHADER_STAGE, spirv));
+		}
+		shader.name = "Model";
+		Insert(&renderGlobals.shaders, String{"Model"}, shader);
+
+// @TODO: Automatic loading.
+#if 0
+		u32 shaderIndex = 0;
+		DirectoryIteration iteration;
+		while (IterateDirectory(shaderDirectory, &iteration))
+		{
+			auto sourceFilepath = JoinFilepaths(shaderDirectory, iteration.filename);
+			RunProcess(FormatString("ShaderCompiler %s", &sourceFilepath[0]));
+			String moduleNames[] =
+			{
+				"vert",
+				"frag",
+				"comp",
+			};
+			Shader shader;
+			shader.name = "abc";
+			for (auto &module : moduleNames)
+			{
+				auto binaryFilepath = JoinFilepaths(binaryDirectory, iteration.filename);
+				SetFilepathExtension(&binaryFilepath, FormatString(".%s.%s", &module[0], &binaryFilenameExtension[0]));
+				if (!FileExists(binaryFilepath))
+				{
+					continue;
+				}
+				auto [spirv, error] = ReadEntireFile(binaryFilepath);
+				if (error)
+				{
+					continue;
+				}
+				GfxShaderStage stage;
+				if (module == "vert")
+				{
+					stage = GFX_VERTEX_SHADER_STAGE;
+				}
+				else if (module == "frag")
+				{
+					stage = GFX_FRAGMENT_SHADER_STAGE;
+				}
+				else if (module == "comp")
+				{
+					stage = GFX_COMPUTE_SHADER_STAGE;
+				}
+				else
+				{
+					InvalidCodePath();
+				}
+				Append(&shader.stages, stage);
+				Append(&shader.modules, GfxCreateShaderModule(stage, spirv));
+			}
+			Assert(0);
+			//CreateShader(infos, &shaders[shaderIndex]); // @TODO: Wrong!
+			shaderIndex++;
+		}
+#endif
+	}
+	else
+	{
+		InvalidCodePath(); // Should just load the binaries from somewhere...
+	}
+}
+
+Shader *GetShader(const String &name)
+{
+	auto shader = Lookup(&renderGlobals.shaders, name);
+	if (!shader)
+	{
+		LogPrint(LogType::ERROR, "Failed to get non-existent shader %s\n", &name[0]);
+		return NULL;
+	}
+	return shader;
+}
+
+GfxPipeline GetShaderGraphicsPipeline(Shader *shader, GfxRenderPass renderPass)
+{
+	if (shader->name == "Model")
+	{
+		GfxFramebufferAttachmentColorBlendDescription colorBlendDescription =
+		{
+			.enable_blend = true,
+			.source_color_blend_factor = GFX_BLEND_FACTOR_SRC_ALPHA,
+			.destination_color_blend_factor = GFX_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			//.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+			//.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.color_blend_operation = GFX_BLEND_OP_ADD ,
+			.source_alpha_blend_factor = GFX_BLEND_FACTOR_ONE,
+			.destination_alpha_blend_factor = GFX_BLEND_FACTOR_ZERO,
+			.alpha_blend_operation = GFX_BLEND_OP_ADD,
+			.color_write_mask = GFX_COLOR_COMPONENT_RED | GFX_COLOR_COMPONENT_GREEN | GFX_COLOR_COMPONENT_BLUE | GFX_COLOR_COMPONENT_ALPHA,
+		};
+		GfxPipelineVertexInputBindingDescription vertexInputBindingDescriptions[] =
+		{
+			{
+				.binding = VERTEX_BUFFER_BIND_ID,
+				.stride = sizeof(Vertex1P1N),
+				.input_rate = GFX_VERTEX_INPUT_RATE_VERTEX,
+			},
+		};
+		GfxPipelineVertexInputAttributeDescription vertexInputAttributeDescriptions[] =
+		{
+			{
+				.format = GFX_FORMAT_R32G32B32_SFLOAT,
+				.binding = VERTEX_BUFFER_BIND_ID,
+				.location = 0,
+				.offset = offsetof(Vertex1P1N, position),
+			},
+			{
+				.format = GFX_FORMAT_R32G32B32_SFLOAT,
+				.binding = VERTEX_BUFFER_BIND_ID,
+				.location = 1,
+				.offset = offsetof(Vertex1P1N, normal),
+			},
+		};
+		GfxDynamicPipelineState dynamicStates[] =
+		{
+			GFX_DYNAMIC_PIPELINE_STATE_VIEWPORT,
+			GFX_DYNAMIC_PIPELINE_STATE_SCISSOR,
+		};
+		GfxPipelineDescription pipelineDescription =
+		{
+			.layout = renderGlobals.pipelineLayout,
+			.topology = GFX_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.viewport_width = (f32)windowWidth,
+			.viewport_height = (f32)windowHeight,
+			.scissor_width = windowWidth,
+			.scissor_height = windowHeight,
+			.depth_compare_operation = GFX_COMPARE_OP_LESS,
+			.framebuffer_attachment_color_blend_count = 1,
+			.framebuffer_attachment_color_blend_descriptions = &colorBlendDescription,
+			.vertex_input_attribute_count = ArrayCount(vertexInputAttributeDescriptions),
+			.vertex_input_attribute_descriptions = vertexInputAttributeDescriptions,
+			.vertex_input_binding_count = ArrayCount(vertexInputBindingDescriptions),
+			.vertex_input_binding_descriptions = vertexInputBindingDescriptions,
+			.dynamic_state_count = ArrayCount(dynamicStates),
+			.dynamic_states = dynamicStates,
+			.shaderStages = shader->stages,
+			.shaderModules = shader->modules,
+			.render_pass = renderPass,
+			.enable_depth_bias = false,
+		};
+		return GfxCreatePipeline(pipelineDescription);
+	}
+	InvalidCodePath();
+	return GfxPipeline{};
+}
+
+struct RenderGraphResource
+{
+	String name;
+	bool isTexture = false;
+	bool isBuffer = false;
+};
+
+struct RenderPass
+{
+	String name;
+	Shader *shader;
+	Array<RenderGraphResource> read;
+	Array<RenderGraphResource> write;
+	Array<RenderGraphResource> create;
+	void (*execute)(GfxCommandBuffer commandBuffer);
+};
+
+struct PhyisicalRenderPass
+{
+	GfxRenderPass gfxPass;
+	GfxPipeline gfxPipeline;
+	void (*execute)(GfxCommandBuffer commandBuffer);
+};
+
+struct RenderGraph
+{
+	bool compiled = false;
+	Array<RenderPass> logicalPasses;
+	Array<PhyisicalRenderPass> physicalPasses;
+};
+
+void AddRenderGraphPass(RenderGraph *graph, const RenderPass &pass)
+{
+	Append(&graph->logicalPasses, pass);
+}
+
+void CompileRenderGraph(RenderGraph *graph)
+{
+	graph->compiled = true;
+	for (const auto &logicalPass : graph->logicalPasses)
+	{
+		PhyisicalRenderPass physicalPass =
+		{
+			.gfxPass = TEMPORARY_Render_API_Create_Render_Pass(),
+			.gfxPipeline = GetShaderGraphicsPipeline(logicalPass.shader, physicalPass.gfxPass),
+			.execute = logicalPass.execute,
+		};
+		Append(&graph->physicalPasses, physicalPass);
+	}
+}
+
+GfxBuffer uniform_buffer;
+GfxImageView depthBufferImageView; // @TODO
+
+void ExecuteRenderGraph(RenderGraph *graph, u32 swapchainImageIndex)
+{
+	for (const auto &pass : graph->physicalPasses)
+	{
+		GfxImageView attachments[] =
+		{
+			renderGlobals.swapchainImageViews[swapchainImageIndex],
+			depthBufferImageView,
+		};
+		renderGlobals.framebuffers[swapchainImageIndex] = GfxCreateFramebuffer(pass.gfxPass, windowWidth, windowHeight, ArrayCount(attachments), attachments);
+
+		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
+
+		GfxRecordBindDescriptorSetsCommand(commandBuffer, GFX_GRAPHICS_PIPELINE_BIND_POINT, renderGlobals.pipelineLayout, 0, Length(renderGlobals.descriptorSets[swapchainImageIndex]), &renderGlobals.descriptorSets[swapchainImageIndex][0]);
+
+		GfxRecordBeginRenderPassCommand(commandBuffer, pass.gfxPass, renderGlobals.framebuffers[swapchainImageIndex]);
+		GfxRecordBindPipelineCommand(commandBuffer, pass.gfxPipeline);
+		pass.execute(commandBuffer);
+
+		GfxWaitForFences(1, &renderGlobals.descriptorSetUpdateFence, true, U32_MAX);
+
+		TEMPORARY_VULKAN_SUBMIT(commandBuffer, renderGlobals.frameIndex, renderGlobals.inFlightFences[renderGlobals.frameIndex]);
+
+		GfxResetFences(1, &renderGlobals.descriptorSetUpdateFence);
+	}
+}
+
+void InitializeRenderer(void *job_parameter_pointer)
+{
 	auto window = (WindowContext *)job_parameter_pointer;
-	//Render_Context *context = &game_state->render_context;
-	auto context = &renderContext;
-	Render_API_Initialize(&context->api_context, window);
 
-	context->swapchain = GPUCreateSwapchain();
-	context->swapchain_image_count = GPUGetSwapchainImageCount(context->swapchain);
-	GPUImageView *swapchain_image_views = (GPUImageView *)malloc(context->swapchain_image_count * sizeof(GPUImageView)); // @TODO
-	GPUGetSwapchainImageViews(context->swapchain, context->swapchain_image_count, swapchain_image_views);
+	GfxInitialize(window);
 
-	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_buffer, Megabyte(8), GPU_DEVICE_MEMORY);
-	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.device_block_image, Megabyte(256), GPU_DEVICE_MEMORY);
-	///Create_GPU_Memory_Block_Allocator(&context->gpu_memory_allocators.staging_block, Megabyte(256), GPU_HOST_MEMORY);
-	// Descriptor sets.
-	// Command Pools.
-	// Create shaders.
-	// Create display objects.
-	// Initialize memory.
-	//     Device block.
-	//     Host ring buffer.
-	//     Create uniform buffers.
-	/*
-	GPU_Image_Creation_Parameters shadow_map_image_creation_parameters = {
-		.width = SHADOW_MAP_WIDTH,
-		.height = SHADOW_MAP_HEIGHT,
-		.format = GPU_FORMAT_D16_UNORM,
-		.initial_layout = GPU_IMAGE_LAYOUT_UNDEFINED,
-		.usage_flags = GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GPU_IMAGE_USAGE_SAMPLED,
-		.sample_count_flags = GPU_SAMPLE_COUNT_1,
-	};
-	*/
-	auto shadow_map_image = Renderer::CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
-	auto shadow_map_image_view = GPUCreateImageView(shadow_map_image, (VkFormat)SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
+	InitializeGPU();
 
-	/*
-	GPU_Image_Creation_Parameters depth_buffer_image_creation_parameters = {
-		.width = window_width,
-		.height = window_height,
-		.format = DEPTH_BUFFER_FORMAT,
-		.initial_layout = DEPTH_BUFFER_INITIAL_LAYOUT,
-		.usage_flags = DEPTH_BUFFER_IMAGE_USAGE_FLAGS,
-		.sample_count_flags = DEPTH_BUFFER_SAMPLE_COUNT_FLAGS,
-	};
-	*/
-	auto depth_buffer_image = Renderer::CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
-	auto depth_buffer_image_view = GPUCreateImageView(depth_buffer_image, (VkFormat)DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
+	renderGlobals.swapchain = GfxCreateSwapchain();
+	renderGlobals.swapchainImageCount = GfxGetSwapchainImageCount(renderGlobals.swapchain);
+	Resize(&renderGlobals.swapchainImageViews, renderGlobals.swapchainImageCount);
+	GfxGetSwapchainImageViews(renderGlobals.swapchain, renderGlobals.swapchainImageCount, &renderGlobals.swapchainImageViews[0]);
 
-	for (s32 i = 0; i < GPU_MAX_FRAMES_IN_FLIGHT; i++) {
-		context->inFlightFences[i] = GPUCreateFence(true);
+	//auto shadowMapImage = CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
+	//auto shadowMapImageView = GfxCreateImageView(shadowMapImage, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
+
+	auto depthBufferImage = CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
+	depthBufferImageView = GfxCreateImageView(depthBufferImage, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
+
+	for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		renderGlobals.inFlightFences[i] = GfxCreateFence(true);
 	}
 
-	//Render_API_Load_Shaders(&context->api_context, context->shaders);
 	LoadShaders();
 
-	context->descriptor_pool = GPUCreateDescriptorPool(context->swapchain_image_count);
+	renderGlobals.descriptorPool = GfxCreateDescriptorPool(renderGlobals.swapchainImageCount);
 
-	context->render_passes.scene = TEMPORARY_Render_API_Create_Render_Pass();
+	Resize(&renderGlobals.threadLocal, GetWorkerThreadCount());
 
-	context->framebuffers = (VkFramebuffer *)malloc(context->swapchain_image_count * sizeof(GPUFramebuffer));
-	for (s32 i = 0; i < context->swapchain_image_count; i++) {
-		GPUImageView attachments[] = {
-			swapchain_image_views[i],
-			depth_buffer_image_view,
-		};
-		context->framebuffers[i] = GPUCreateFramebuffer(context->render_passes.scene, windowWidth, windowHeight, ArrayCount(attachments), attachments);
-	}
+	renderGlobals.framebuffers = AllocateArray(GfxFramebuffer, renderGlobals.swapchainImageCount);
 
-	context->render_thread_count = GetWorkerThreadCount();
-	context->thread_local_contexts = (Thread_Local_Render_Context *)malloc(context->render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
-	for (s32 i = 0; i < context->render_thread_count; i++) {
-		context->thread_local_contexts[i].upload_command_pool = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
-		context->thread_local_contexts[i].command_pools = (VkCommandPool *)malloc(context->swapchain_image_count * sizeof(GPUCommandPool));
-		for (s32 j = 0; j < context->swapchain_image_count; j++) {
-			context->thread_local_contexts[i].command_pools[j] = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
+#if 0
+	renderGlobals.renderThreadCount = GetWorkerThreadCount();
+	renderGlobals.threadLocalContexts = (Thread_Local_Render_Context *)malloc(renderGlobals.render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
+	for (s32 i = 0; i < renderGlobals.render_thread_count; i++) {
+		renderGlobals.thread_local_contexts[i].upload_command_pool = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
+		ConsolePrint("OBJ %u\n", renderGlobals.thread_local_contexts[i].upload_command_pool);
+		renderGlobals.thread_local_contexts[i].command_pools = (VkCommandPool *)malloc(renderGlobals.swapchain_image_count * sizeof(GPUCommandPool));
+		for (auto j = 0; j < renderGlobals.swapchain_image_count; j++) {
+			renderGlobals.thread_local_contexts[i].command_pools[j] = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
 		}
 	}
+#endif
 
-	CreateDescriptorSets(context->descriptor_pool, context->swapchain_image_count, context->descriptorSets);
-	CreateGraphicsPipelines(context->render_passes.scene, context->pipelines);
+	Resize(&renderGlobals.descriptorSets, renderGlobals.swapchainImageCount);
+	Resize(&renderGlobals.descriptorSetBuffers, renderGlobals.swapchainImageCount);
+	Resize(&renderGlobals.descriptorSetLayouts, DESCRIPTOR_SET_COUNT);
+	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
+	{
+		Resize(&renderGlobals.descriptorSets[i], DESCRIPTOR_SET_COUNT);
+		Resize(&renderGlobals.descriptorSetBuffers[i], DESCRIPTOR_SET_COUNT);
+	}
+	renderGlobals.descriptorSetUpdateFence = GfxCreateFence(false);
+	{
+		DescriptorSetBindingInfo globalBindingInfos[] =
+		{
+			{
+				.binding = 0,
+				.descriptorType = GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = GFX_VERTEX_SHADER_STAGE,
+			},
+		};
+		CreateDescriptorSetGroup(GLOBAL_DESCRIPTOR_SET_INDEX, ArrayCount(globalBindingInfos), globalBindingInfos);
 
-	context->aspect_ratio = windowWidth / (f32)windowHeight;
-	//context->focal_length = 0.1f;
-	//context->scene_projection_matrix = perspective_projection(game_state->camera.field_of_view, context->aspect_ratio, context->focal_length, 100.0f); // @TODO
+		DescriptorSetBindingInfo viewBindingInfos[] =
+		{
+			{
+				.binding = 0,
+				.descriptorType = GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = GFX_VERTEX_SHADER_STAGE,
+			},
+		};
+		CreateDescriptorSetGroup(VIEW_DESCRIPTOR_SET_INDEX, ArrayCount(viewBindingInfos), viewBindingInfos);
 
-	// @TODO: Handpick these colors so they're visually distinct.
-	for (u32 i = 0; i < RANDOM_COLOR_TABLE_LENGTH; i++) {
-		random_color_table[i] = random_color();
+		DescriptorSetBindingInfo materialBindingInfos[] =
+		{
+			{
+				.binding = 0,
+				.descriptorType = GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = GFX_VERTEX_SHADER_STAGE | GFX_FRAGMENT_SHADER_STAGE,
+			},
+		};
+		CreateDescriptorSetGroup(MATERIAL_DESCRIPTOR_SET_INDEX, ArrayCount(materialBindingInfos), materialBindingInfos);
+
+		DescriptorSetBindingInfo objectBindingInfos[] =
+		{
+			{
+				.binding = 0,
+				.descriptorType = GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = GFX_VERTEX_SHADER_STAGE,
+			},
+		};
+		CreateDescriptorSetGroup(OBJECT_DESCRIPTOR_SET_INDEX, ArrayCount(objectBindingInfos), objectBindingInfos);
 	}
 
-	//context->rrdescriptor_sets = Create_Descriptor_Sets_For_Shader(context, context->swapchain_image_count, context->descriptor_pool, RUSTED_IRON_SHADER);
+	renderGlobals.pipelineLayout = GfxCreatePipelineLayout(Length(renderGlobals.descriptorSetLayouts), &renderGlobals.descriptorSetLayouts[0]);
+
+	renderGlobals.aspectRatio = windowWidth / (f32)windowHeight;
 
 	#if 0
 	VkWriteDescriptorSet descriptor_writes[10]; // @TODO
 	s32 write_count = 0;
-	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * context->swapchain_image_count + 0x100 * context->swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
-	VkDescriptorBufferInfo buffer_infos[context->swapchain_image_count];
+	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * renderGlobals.swapchain_image_count + 0x100 * renderGlobals.swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
+	VkDescriptorBufferInfo buffer_infos[renderGlobals.swapchain_image_count];
 	s32 buffer_info_count = 0;
-	for (s32 i = 0; i < context->swapchain_image_count; i++) {
+	for (s32 i = 0; i < renderGlobals.swapchain_image_count; i++) {
 		buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
 			.buffer = uniform_buffer,
 			.offset = i * 0x100,
@@ -302,7 +447,7 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		};
 		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
 			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet          = context->descriptor_sets.rusted_iron_vertex_bind_per_object_update_immediate[i],
+			.dstSet          = renderGlobals.descriptor_sets.rusted_iron_vertex_bind_per_object_update_immediate[i],
 			.dstBinding      = 0,
 			.dstArrayElement = 0,
 			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -311,36 +456,31 @@ void InitializeRenderer(void *job_parameter_pointer) {
 		};
 		buffer_info_count++;
 	}
-	vkUpdateDescriptorSets(context->api_context.device, write_count, descriptor_writes, 0, NULL);
+	vkUpdateDescriptorSets(renderGlobals.api_context.device, write_count, descriptor_writes, 0, NULL);
 	#endif
 
-	matrix_fence = GPUCreateFence(false);
-
-	for (s32 i = 0; i < context->swapchain_image_count; i++)
+#if 0
+	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
 	{
 		M4 m = IdentityMatrix();
 		//GPU_Descriptor_Update_Info update_infos[] = {
 			//{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		//};
-		//Update_Descriptors(context, matrix_fence, i, &context->rrdescriptor_sets, ArrayCount(update_infos), update_infos);
+		//Update_Descriptors(context, matrix_fence, i, &renderGlobals.rrdescriptor_sets, ArrayCount(update_infos), update_infos);
 		void *staging_memory;
-		GPUBuffer staging_buffer = Renderer::CreateGPUStagingBuffer(sizeof(M4), &staging_memory);
+		GfxBuffer staging_buffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &staging_memory);
 		CopyMemory(&m, staging_memory, sizeof(M4));
-		ConsolePrint("obj = %u\n", context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
-		ConsolePrint("threadIndex = %u\n", threadIndex);
-		ConsolePrint("currentFrame = %u\n", context->currentFrame);
-		GPUCommandBuffer command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
-		GPURecordCopyBufferCommand(command_buffer, sizeof(M4), staging_buffer, renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[i], 0, 0);
-		GPUEndCommandBuffer(command_buffer);
-		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
-		GPUUpdateDescriptorSets(renderContext.descriptorSets[FLAT_COLOR_SHADER].sets[i], renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[i], GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
+		GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), staging_buffer, renderGlobals.descriptorSetBuffers[i][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
+		GfxEndCommandBuffer(commandBuffer);
+		GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, matrix_fence);
+		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[i][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[i][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 
-		GPUWaitForFences(1, &matrix_fence, true, U32_MAX);
-		GPUResetFences(1, &matrix_fence);
+		GfxWaitForFences(1, &matrix_fence, true, U32_MAX);
+		GfxResetFences(1, &matrix_fence);
 	}
 
 	// @TODO
-#if 0
 	Render_Graph_External_Attachment external_attachments[] = {
 		{
 			.id = SHADOW_MAP_ATTACHMENT_ID,
@@ -393,49 +533,8 @@ void InitializeRenderer(void *job_parameter_pointer) {
 #endif
 }
 
-/*
-// render pass:
-// shadow {
-//     material_properies contain cast_shadow
-
-// material:
-// rock {
-//     cast_shadow,
-//     receive_shadow,
-//     physically_based,
-//     albedo: aksdjf;laskjfd,
-//     ...
-
-typedef struct Render_Pass {
-	GPU_Render_Pass gpu_render_pass;
-	u32 eligible_submesh_count;
-	u32 eligible_submeshes[100]; // @TODO @FRAME: Should really be per-frame.
-	//which meshes are eligible for this render pass, change from frame to frame, calculated when the mesh is added to the scene
-	//which meshes depends solely on the material for the mesh.
-	//have to cross reference visible meshes and eligible meshes to find the list of meshes this render pass should operate on.
-} Render_Pass;
-
-u32 render_pass_count;
-Render_Pass render_passes[100];
-
-typedef struct Gather_Submeshes_For_Render_Pass_Job_Parameter {
-	u32 visible_mesh_count;
-	u32 *visible_meshes;
-	u32 eligible_submesh_count;
-	u32 *eligible_submeshes;
-	//OUTPUT?
-} Gather_Submeshes_For_Render_Pass_Job_Parameter;
-
-void Gather_Submeshes_For_Render_Pass(void *job_parameter_pointer) {
-	Gather_Submeshes_For_Render_Pass_Job_Parameter *job_parameter = job_parameter_pointer;
-}
-*/
-
-void FinalizeAssetUploadsToGPU(Render_API_Context *api_context);
-
 Array<MeshInstance> GetMeshInstances();
 
-// @TODO: Float up render passes, descriptor sets, pipelines, command lists.
 void Render()
 {
 	auto camera = GetCamera("main");
@@ -445,102 +544,99 @@ void Render()
 		return;
 	}
 
-	auto mesh_instances = GetMeshInstances();
-	auto context = &renderContext;
+	GfxWaitForFences(1, &renderGlobals.inFlightFences[renderGlobals.frameIndex], true, U32_MAX);
+	GfxResetFences(1, &renderGlobals.inFlightFences[renderGlobals.frameIndex]);
 
-	FinalizeAssetUploadsToGPU(&context->api_context);
+	auto swapchainImageIndex = GfxAcquireNextSwapchainImage(renderGlobals.swapchain, renderGlobals.frameIndex);
 
-	GPUWaitForFences(1, &context->inFlightFences[context->currentFrame], true, U32_MAX);
-	GPUResetFences(1, &context->inFlightFences[context->currentFrame]);
-	for (s32 i = 0; i < context->render_thread_count; i++) {
-		GPUResetCommandPool(context->thread_local_contexts[i].command_pools[context->currentFrame]);
-	}
+	ClearGPUMemoryForFrameIndex(renderGlobals.frameIndex);
+	ClearGPUCommandPoolsForFrameIndex(renderGlobals.frameIndex);
 
-	u32 swapchain_image_index = GPUAcquireNextSwapchainImage(context->swapchain, context->currentFrame);
-
-	#if 0
-	GPU_Staging_Buffer staging_buffer;
+	// Update descriptor sets.
 	{
-		M4 scene_projection_view_matrix = multiply_m4(camera->projectionMatrix, camera->viewMatrix);
-		void *staging_memory;
-		staging_buffer = Create_GPU_Staging_Buffer(context, sizeof(M4), &staging_memory);
-		Copy_Memory(&scene_projection_view_matrix, staging_memory, sizeof(M4));
-		auto command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[thread_index].command_pools[context->currentFrame]);
-		//Render_API_Record_Copy_Buffer_Command(&context->api_context, command_buffer, sizeof(M4), staging_buffer.buffer, uniform_buffer, staging_buffer.offset, sizeof(M4) * swapchain_image_index);
-		GPURecordCopyBufferCommand(command_buffer, sizeof(M4), staging_buffer.buffer, uniform_buffer, staging_buffer.offset, 0x100 * swapchain_image_index);
-		GPUEndCommandBuffer(command_buffer);
-		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
+		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
+		u32 u = 0;
+		{
+			void *stagingMemory;
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			CopyMemory(&u, stagingMemory, sizeof(u32));
+			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], 0, 0);
+			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+		}
+		{
+			void *stagingMemory;
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			CopyMemory(&u, stagingMemory, sizeof(u32));
+			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], 0, 0);
+			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+		}
+		{
+			void *stagingMemory;
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			CopyMemory(&u, stagingMemory, sizeof(u32));
+			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], 0, 0);
+			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+		}
+		{
+			auto projectionMatrix = CreateInfinitePerspectiveProjectionMatrix(0.01f, camera->fov, renderGlobals.aspectRatio);
+			auto viewMatrix = CreateViewMatrix(camera->transform.position, CalculateForwardVector(camera->transform.rotation));
+			//SetRotationMatrix(&viewMatrix, ToMatrix(camera->transform.rotation));
+			//auto viewMatrix = ViewMatrix(camera->transform.position, -camera->transform.position);
+			//M4 m = projectionMatrix * viewMatrix;
+			M4 m = projectionMatrix * viewMatrix;
+			void *stagingMemory;
+			auto stagingBuffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			CopyMemory(&m, stagingMemory, sizeof(M4));
+			GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
+			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+		}
+		GfxEndCommandBuffer(commandBuffer);
+		GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, renderGlobals.descriptorSetUpdateFence);
 	}
-	#endif
-	auto projectionMatrix = InfinitePerspectiveProjection(camera->fov, windowWidth / (f32)windowHeight);
-	auto viewMatrix = ViewMatrix(camera->transform.position, CalculateTransformForward(&camera->transform));
-	M4 m = projectionMatrix * viewMatrix;
+
+	auto transferSemaphore = SubmitGPUTransferCommandBuffers();
+
+	// Build and execute render graph.
 	{
-		void *staging_memory;
-		auto staging_buffer = Renderer::CreateGPUStagingBuffer(sizeof(M4), &staging_memory);
-		CopyMemory(&m, staging_memory, sizeof(M4));
-		auto command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
-		GPURecordCopyBufferCommand(command_buffer, sizeof(M4), staging_buffer, renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[swapchain_image_index], 0, 0);
-		GPUEndCommandBuffer(command_buffer);
-		GPUSubmitCommandBuffers(1, &command_buffer, GPU_GRAPHICS_COMMAND_QUEUE, matrix_fence);
-		GPUUpdateDescriptorSets(renderContext.descriptorSets[FLAT_COLOR_SHADER].sets[swapchain_image_index], renderContext.descriptorSets[FLAT_COLOR_SHADER].buffers[swapchain_image_index], GPU_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+		RenderGraph renderGraph;
+		RenderPass renderPass =
+		{
+			.name = "test",
+			.shader = GetShader("Model"),
+			.execute = [](GfxCommandBuffer commandBuffer)
+			{
+				GfxRecordSetViewportCommand(commandBuffer, windowWidth, windowHeight);
+				GfxRecordSetScissorCommand(commandBuffer, windowWidth, windowHeight);
+
+				auto meshInstances = GetMeshInstances();
+				for (auto &mesh : meshInstances)
+				{
+					// @TODO
+					if (mesh.asset->loadStatus != ASSET_LOADED)
+					{
+						ConsolePrint("CONTINUE\n");
+						continue;
+					}
+					for (auto &submesh : mesh.asset->submeshes)
+					{
+						GfxRecordBindVertexBufferCommand(commandBuffer, mesh.asset->gpuGeometry.vertexBuffer);
+						GfxRecordBindIndexBufferCommand(commandBuffer, mesh.asset->gpuGeometry.indexBuffer);
+						GfxDrawIndexedVertices(commandBuffer, submesh.indexCount, submesh.firstIndex, submesh.vertexOffset);
+					}
+				}
+				GfxRecordEndRenderPassCommand(commandBuffer);
+				GfxEndCommandBuffer(commandBuffer);
+			},
+		};
+		AddRenderGraphPass(&renderGraph, renderPass);
+		CompileRenderGraph(&renderGraph);
+		ExecuteRenderGraph(&renderGraph, swapchainImageIndex);
 	}
-	//GPU_Descriptor_Update_Info update_infos[] = {
-		//{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
-		//{COLOR_DESCRIPTOR, {.v4 = {}}},
-	//};
-	//CopyMemory(m.M, update_infos[0].data.m4, sizeof(m.M));
-	//V4 v = {1.0f, 0.0f, 0.0f, 1.0f};
-	//CopyMemory(&v, update_infos[1].data.v4, sizeof(v));
-	//Update_Descriptors(context, matrix_fence, swapchain_image_index, &context->rrdescriptor_sets, ArrayCount(update_infos), update_infos);
 
-	//M4 scene_projection_view_matrix = multiply_m4(camera->projection_matrix, camera->view_matrix);
-	//Descriptor_Set_Data descriptor_set_data[] = {
-		//{
-			//RUSTED_IRON_SHADER,
-			//1,
-			//{.rusted_iron = {m4_identity()}},
-		//},
-	//};
-	//Update_Descriptor_Sets(context, ArrayCount(descriptor_set_data), descriptor_set_data, camera);
+	GfxPresentSwapchainImage(renderGlobals.swapchain, swapchainImageIndex, renderGlobals.frameIndex);
 
-	auto command_buffer = GPUCreateCommandBuffer(context->thread_local_contexts[threadIndex].command_pools[context->currentFrame]);
-	GPURecordBeginRenderPassCommand(command_buffer, context->render_passes.scene, context->framebuffers[swapchain_image_index]);
-	GPURecordSetViewportCommand(command_buffer, windowWidth, windowHeight);
-	GPURecordSetScissorCommand(command_buffer, windowWidth, windowHeight);
-	GPURecordBindPipelineCommand(command_buffer, context->pipelines[FLAT_COLOR_SHADER]);
-	for (auto &mesh : mesh_instances) {
-		// @TODO
-		if (mesh.asset->loadStatus != ASSET_LOADED) {
-			continue;
-		}
-		ConsolePrint("NOT_SKIPPING\n");
-		//Render_API_Set_Per_Object_Shader_Parameters(&context->api_context);
-		//Bind_Shader_Per_Object_Descriptor_Sets(context, RUSTED_IRON_SHADER);
-		vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context->pipelines[FLAT_COLOR_SHADER].layout, 0, 1, &context->descriptorSets[FLAT_COLOR_SHADER].sets[swapchain_image_index], 0, NULL);
-		GPURecordBindVertexBufferCommand(command_buffer, mesh.asset->gpuMesh.vertex_buffer);
-		GPURecordBindIndexBufferCommand(command_buffer, mesh.asset->gpuMesh.index_buffer);
-		u32 total_mesh_index_count = 0;
-		for (auto indexCount : mesh.asset->submeshIndexCounts) {
-			//Render_API_Set_Per_Material_Shader_Parameters(&context->api_context, RUSTED_IRON_SHADER); // @TODO: WRONG!
-			GPUDrawIndexedVertices(command_buffer, indexCount, total_mesh_index_count);
-			total_mesh_index_count += indexCount;
-		}
-	}
-	GPURecordEndRenderPassCommand(command_buffer);
-	GPUEndCommandBuffer(command_buffer);
-	GPUWaitForFences(1, &matrix_fence, true, U32_MAX);
-	TEMPORARY_VULKAN_SUBMIT(command_buffer, context->currentFrame, context->inFlightFences[context->currentFrame]);
+	renderGlobals.frameIndex = (renderGlobals.frameIndex + 1) % GFX_MAX_FRAMES_IN_FLIGHT;
 
-	GPUPresentSwapchainImage(context->swapchain, swapchain_image_index, context->currentFrame);
-
-	// @TODO: WRONG Asset system needs its own block allocator so it doesn't get messed up.
-	GPUResetFences(1, &matrix_fence);
-	//Render_API_Destroy_Buffer(&context->api_context, staging_buffer.buffer);
-	// @TODO Renderer::ClearGPUMemoryBlockAllocator(&gpuContext.memoryAllocatory.stagingBlock); // @TODO
-	Renderer::ClearGPUMemoryBlockAllocator(); // @TODO
-
-	context->currentFrame = (context->currentFrame + 1) % GPU_MAX_FRAMES_IN_FLIGHT;
 #if 0
 	// Flush uploads to GPU.
 	{
@@ -567,12 +663,12 @@ void Render()
 	// Wait for command queues to empty and get next frame.
 	{
 		GPU_Fence fences[] = {
-			upload_fences[vulkan_context.currentFrame],
-			render_fences[vulkan_context.currentFrame],
+			upload_fences[vulkan_context.frameIndex],
+			render_fences[vulkan_context.frameIndex],
 		};
 		GPU_Wait_For_Fences(ArrayCount(fences), fences, 1, UINT64_MAX);
 		GPU_Reset_Fences(ArrayCount(fences), fences);
-		VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.currentFrame], NULL, &vulkan_context.currentFrame));
+		VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.frameIndex], NULL, &vulkan_context.frameIndex));
 		GPU_Reset_Command_List_Pool(game_state->render_context.thread_local[thread_index].command_list_pools[game_state->render_context.current_frame_index]);
 	}
 
@@ -671,7 +767,7 @@ void Render()
 */
 #endif
 	//vulkan_submit(&game_state->camera, game_state->entities.meshes.instances, visible_meshes, visible_mesh_count, &render_context, frame_index); // @TODO
-	context->debug_render_object_count = 0;
+	//renderGlobals.debugRenderObjectCount = 0;
 }
 
 /*
@@ -687,5 +783,40 @@ void Create_GPU_Buffer_Allocator(GPU_Buffer_Allocator *allocator, Render_Backend
 	//vkGetBufferMemoryRequirements(vulkan_context.device, new_block->buffer, &allocator->memory_requirements);
 	//Render_Backend_Memory_Requirements memory_requirements;
 	//Render_Backend_Get_Buffer_Memory_Requirements(&memory_requirements);
+}
+*/
+
+/*
+#define MAX_VISIBLE_ENTITY_MESHES MAX_ENTITY_MESHES
+
+void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, u32 mesh_bounding_sphere_count, f32 focal_length, f32 aspect_ratio, u32 *visible_meshes, u32 *visible_mesh_count) {
+	f32 half_near_plane_height = focal_length * Tan(camera->fov / 2.0f);
+	f32 half_near_plane_width = focal_length * Tan(camera->fov / 2.0f) * aspect_ratio;
+	V3 center_of_near_plane = focal_length * CalculateForwardVector(camera->transform.rotation);
+	enum {
+		RIGHT,
+		LEFT,
+		TOP,
+		BOTTOM,
+		FRUSTUM_PLANE_COUNT,
+	};
+	auto right = CalculateTransformRight(&camera->transform);
+	auto up = CalculateTransformUp(&camera->transform);
+	V3 frustum_plane_normals[] = {
+		[RIGHT] = CrossProduct(Normalize(center_of_near_plane + (half_near_plane_width * right)), up),
+		[LEFT] = CrossProduct(up, Normalize(center_of_near_plane - half_near_plane_width * right)),
+		[TOP] = CrossProduct(right, Normalize(center_of_near_plane + half_near_plane_height * up)),
+		[BOTTOM] = CrossProduct(Normalize(center_of_near_plane - (half_near_plane_height * up)), right),
+	};
+	for (u32 i = 0; i < mesh_bounding_sphere_count; i++) {
+		//Draw_Wire_Sphere(mesh_bounding_spheres[i].center, mesh_bounding_spheres[i].radius, v3_to_v4(random_color_table[i % RANDOM_COLOR_TABLE_LENGTH], 1.0f));
+		if ((DotProduct(frustum_plane_normals[RIGHT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[RIGHT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[LEFT], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[LEFT], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[TOP], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[TOP], camera->transform.position) <= mesh_bounding_spheres[i].radius)
+		 && (DotProduct(frustum_plane_normals[BOTTOM], mesh_bounding_spheres[i].center) - DotProduct(frustum_plane_normals[BOTTOM], camera->transform.position) <= mesh_bounding_spheres[i].radius)) {
+		 	Assert(*visible_mesh_count < MAX_VISIBLE_ENTITY_MESHES);
+			visible_meshes[(*visible_mesh_count)++] = i;
+		}
+	}
 }
 */

@@ -1,4 +1,4 @@
-ReadFileResult ReadEntireFile(const String &path)
+String ReadEntireFile(const String &path)
 {
 	auto [file, error] = OpenFile(path, OPEN_FILE_READ_ONLY);
 	if (error)
@@ -8,4 +8,9 @@ ReadFileResult ReadEntireFile(const String &path)
 	Defer(CloseFile(file));
 	auto fileLength = GetFileLength(file);
 	return ReadFile(file, fileLength);
+}
+
+bool WriteStringToFile(FileHandle file, const String &string)
+{
+	return WriteFile(file, Length(string), &string[0]);
 }

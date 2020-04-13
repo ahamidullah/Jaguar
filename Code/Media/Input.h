@@ -18,8 +18,9 @@ struct Mouse
 	s32 deltaY = 0;
 	f32 rawDeltaX = 0;
 	f32 rawDeltaY = 0;
-	f32 sensitivity = 0.2;
-	InputButtons buttons = {
+	f32 sensitivity = 0.005;
+	InputButtons buttons =
+	{
 		AllocateArray(bool, MOUSE_BUTTON_COUNT),
 		AllocateArray(bool, MOUSE_BUTTON_COUNT),
 		AllocateArray(bool, MOUSE_BUTTON_COUNT),

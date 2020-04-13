@@ -4,7 +4,7 @@
 struct
 {
 	Array<Camera> cameras;
-} cameraGlobals;
+} cameraState;
 
 #if 0
 void create_camera_basis(Camera *camera, V3 forward) {
@@ -37,17 +37,20 @@ void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov
 	Camera camera =
 	{
 		.name = name,
+		.pitch = 0.0f,
+		.yaw = 0.0f,
+		.roll = 0.0f,
 		.transform =
 		{
 			.position = position,
-			//.rotation = ,
+			.rotation = CreateQuaternion(lookAt - position),
 		},
 		.fov = fov,
 		.focalLength = 0.01f,
 		.speed = speed,
 	};
 	//create_camera_basis(&camera, lookAt - position);
-	Append(&cameraGlobals.cameras, camera);
+	Append(&cameraState.cameras, camera);
 }
 
 V3 CalculateCameraForward(f32 pitch, f32 yaw)
@@ -65,7 +68,7 @@ V3 CalculateCameraForward(f32 pitch, f32 yaw)
 Camera *GetCamera(const String &name)
 {
 	Camera *result = NULL;
-	for (auto &camera : cameraGlobals.cameras)
+	for (auto &camera : cameraState.cameras)
 	{
 		if (camera.name == name)
 		{

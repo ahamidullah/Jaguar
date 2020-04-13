@@ -29,10 +29,10 @@ void AssertActual(bool test, const char *fileName, const char *functionName, s32
 {
 	if (debug && !test)
 	{
-		LogPrint(LogType::ERROR, "%s: %s: line %d: assertion failed '%s'\n", fileName, functionName, lineNumber, testName);
+		LogPrint(ERROR_LOG, "%s: %s: line %d: assertion failed '%s'\n", fileName, functionName, lineNumber, testName);
 		PrintStacktrace();
 		SignalDebugBreakpoint();
-		ExitProcess(ProcessExitCode::FAILURE);
+		ExitProcess(PROCESS_FAILURE);
 	}
 }
 
@@ -40,14 +40,14 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 {
 	va_list arguments;
 	va_start(arguments, lineNumber);
-	LogPrint(LogType::ERROR, "###########################################################################\n");
-	LogPrint(LogType::ERROR, "[PROGRAM ABORT]\n");
-	LogPrint(LogType::ERROR, format, arguments);
+	LogPrint(ERROR_LOG, "###########################################################################\n");
+	LogPrint(ERROR_LOG, "[PROGRAM ABORT]\n");
+	LogPrintVarArgs(ERROR_LOG, format, arguments);
 	PrintStacktrace();
-	LogPrint(LogType::ERROR, "###########################################################################\n");
+	LogPrint(ERROR_LOG, "###########################################################################\n");
 	va_end(arguments);
 	SignalDebugBreakpoint();
-	ExitProcess(ProcessExitCode::FAILURE);
+	ExitProcess(PROCESS_FAILURE);
 }
 
 void InitializeBasic(u32 maxFiberCount)

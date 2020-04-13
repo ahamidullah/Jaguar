@@ -9,7 +9,7 @@ size_t Length(const char *s);
 struct String
 {
 	Array<char> data;
-	String() = default;
+	String() : String("") {};
 	String(const Array<char> &a) : data{a} {}
 	String(const char *cString) : data{CreateArray(Length(cString) + 1, cString)} {};
 	char &operator[](size_t i);
@@ -21,59 +21,39 @@ bool operator!=(const String &a, const String &b);
 bool CStringsEqual(const char *a, const char *b);
 
 String CreateString(size_t length, size_t capacity);
-String CreateString(size_t length);
-String CreateString(const String &copy);
-String CreateString(const String &copy, size_t startIndex, size_t endIndex);
-size_t Length(const String &s);
-size_t Length(const String *s);
-void Append(String *destination, const String &source);
-void Append(String *destination, const char *source);
-void Append(String *destination, String source, u32 rangeStartIndex, u32 rangeLength);
-void Append(String *s, char c);
-String _FormatString(const char *format, ...);
-s32 FormatString(char *buffer, const char *format, va_list arguments);
-s32 FormatString(char *buffer, const char *format, ...);
-s64 FindFirstIndex(const String &s, char c);
-s64 FindLastIndex(const String &s, char c);
-bool IsSpace(char c);
-void Trim(String *s, size_t leftIndex, size_t rightIndex);
+String CreateStringCopy(const String &copy);
+String CreateStringCopyRange(const String &copy, size_t startIndex, size_t endIndex);
 
-template<typename... StringPack>
-size_t Length(const String& S, const StringPack... rest) {
-	return Length(S) + Length(rest...);
-}
+size_t StringLength(const String &s);
 
-template<typename... StringPack>
-size_t Length(const char *S, const StringPack... rest) {
-	return Length(S) + Length(rest...);
-}
+void ResizeString(String *s, size_t newSize);
 
-template<typename... StringPack>
-void ConcatenateAppend(size_t writeIndex, String *result, const String &source) {
-	CopyMemory(&source.data[0], &result->data[writeIndex], Length(source));
-}
+void StringAppend(String *destination, const String &source);
+void StringAppendCString(String *destination, const char *source);
+void StringAppendRange(String *destination, String source, size_t rangeStartIndex, size_t rangeLength);
 
-template<typename... StringPack>
-void ConcatenateAppend(size_t writeIndex, String *result, const char *source) {
-	CopyMemory(source, &result->data[writeIndex], Length(source));
-}
+String FormatString(const char *format, ...);
+s32 FormatStringBuffer(char *buffer, const char *format, ...);
+s32 FormatStringBufferVarArgs(char *buffer, const char *format, va_list arguments);
 
-template<typename... StringPack>
-void ConcatenateAppend(size_t writeIndex, String *result, const String &first, StringPack... rest) {
-	CopyMemory(&first.data[0], &result->data[writeIndex], Length(first));
-	ConcatenateAppend(writeIndex + Length(first), result, rest...);
-}
+s64 FindFirstCharIndex(const String &s, char c);
+s64 FindLastCharIndex(const String &s, char c);
 
-template<typename... StringPack>
-void ConcatenateAppend(size_t writeIndex, String *result, const char *first, StringPack... rest) {
-	CopyMemory(first, &result->data, Length(first));
-	ConcatenateAppend(writeIndex + Length(first), result, rest...);
-}
+bool IsCharSpace(char c);
+bool IsCharDigit(char c);
 
-template<typename T, typename... StringPack>
-String Concatenate(const T &first, const StringPack... rest) {
-	String result = CreateString(Length(first, rest...));
-	ConcatenateAppend(0, &result, first, rest...);
-	result.data[Length(result)] = '\0';
-	return result;
-}
+void TrimString(String *s, size_t leftIndex, size_t rightIndex);
+
+bool ParseInteger(const String &string, s64 *result);
+
+char UppercaseChar(char c);
+char LowercaseChar(char c);
+void UppercaseString(String *s);
+void LowercaseString(String *s);
+
+char *begin(const String &s);
+char *end(const String &s);
+char *begin(String *s);
+char *end(String *s);
+
+u64 Hash(const String &s);

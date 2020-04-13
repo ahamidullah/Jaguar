@@ -1,58 +1,124 @@
-#include <math.h>
-
-f32 SquareRoot(f32 F) {
-	return sqrt(F);
+void PrintM4Actual(const char *name, M4 m)
+{
+	ConsolePrint("%s:\n", name);
+	for (s32 i = 0; i < 4; i++) {
+		ConsolePrint("%f %f %f %f\n", m[i][0], m[i][1], m[i][2], m[i][3]);
+	}
 }
 
-f32 Tan(f32 F) {
-	return tan(F);
+void PrintV3Actual(const char *name, V3 v)
+{
+	ConsolePrint("%s: %f %f %f\n", name, v.x, v.y, v.z);
 }
 
-f32 Sin(f32 F) {
-	return sin(F);
+void PrintQuaternionActual(const char *name, Quaternion q)
+{
+	ConsolePrint("%s: %f %f %f %f\n", name, q.x, q.y, q.z, q.w);
 }
 
-f32 Cos(f32 F) {
-	return cos(F);
+void PrintF32Actual(const char *name, f32 number)
+{
+	ConsolePrint("%s: %f\n", name, number);
 }
 
-u32 DivideAndRoundUp(u32 A, u32 B) {
-	return (A + (B - 1)) / B;
+f32 SquareRoot(f32 f)
+{
+	return sqrt(f);
 }
 
-bool NotNAN(V3 V) {
-	return (V.x != NAN) && (V.y != NAN) && (V.z != NAN);
+f32 Tan(f32 f)
+{
+	return tan(f);
 }
 
-bool Notzero(V3 V) {
-	return (V.x != 0.0f) || (V.y != 0.0f) || (V.z != 0.0f);
+f32 Atan2(f32 x, f32 y)
+{
+	return atan2(x, y);
 }
 
-V4 V3ToV4(V3 V, f32 w) {
-	return {
-		V.x,
-		V.y,
-		V.z,
+f32 Sin(f32 f)
+{
+	return sin(f);
+}
+
+f32 Asin(f32 f)
+{
+	return asin(f);
+}
+
+f32 Cos(f32 f)
+{
+	return cos(f);
+}
+
+f32 Acos(f32 f)
+{
+	return acos(f);
+}
+
+void SinCos(f32 angle, f32 *sin, f32 *cos)
+{
+	// @TODO
+	*sin = Sin(angle);
+	*cos = Cos(angle);
+}
+
+f32 Abs(f32 f)
+{
+	return fabs(f);
+}
+
+f32 Fmod(f32 f, f32 mod)
+{
+	return fmodf(f, mod);
+}
+
+u32 DivideAndRoundUp(u32 a, u32 b)
+{
+	return (a + (b - 1)) / b;
+}
+
+bool NotNAN(V3 v)
+{
+	return (v.x != NAN) && (v.y != NAN) && (v.z != NAN);
+}
+
+bool NotZero(V3 v)
+{
+	return (v.x != 0.0f) || (v.y != 0.0f) || (v.z != 0.0f);
+}
+
+V4 V3ToV4(V3 v, f32 w)
+{
+	return
+	{
+		v.x,
+		v.y,
+		v.z,
 		w,
 	};
 }
 
-V2 operator-(V2 A, V2 B) {
-	return {
-		A.x - B.x,
-		A.y - B.y,
+V2 operator-(V2 a, V2 b)
+{
+	return
+	{
+		a.x - b.x,
+		a.y - b.y,
 	};
 }
 
-bool operator==(const V3 &A, const V3 &B) {
-	return A.x == B.x && A.y == B.y && A.z == B.z;
+bool operator==(const V3 &a, const V3 &b)
+{
+	return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
-V3 operator-(V3 V) {
+V3 operator-(V3 v)
+{
 	return {
-		-V.x,
-		-V.y,
-		-V.z,
+		-v.x,
+		-v.y,
+		-v.z,
 	};
 }
 
@@ -66,28 +132,34 @@ V3 operator*(f32 s, V3 v)
 	};
 }
 
-V3 operator/(V3 V, f32 S) {
-	S = 1.0f / S;
-	return {
-		S * V.x,
-		S * V.y,
-		S * V.z,
+V3 operator/(V3 v, f32 s)
+{
+	s = 1.0f / s;
+	return
+	{
+		s * v.x,
+		s * v.y,
+		s * v.z,
 	};
 }
 
-V3 operator+(V3 A, V3 B) {
-	return {
-		A.x + B.x,
-		A.y + B.y,
-		A.z + B.z,
+V3 operator+(V3 a, V3 b)
+{
+	return
+	{
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z,
 	};
 }
 
-V3 operator-(V3 A, V3 B) {
-	return {
-		A.x - B.x,
-		A.y - B.y,
-		A.z - B.z,
+V3 operator-(V3 a, V3 b)
+{
+	return
+	{
+		a.x - b.x,
+		a.y - b.y,
+		a.z - b.z,
 	};
 }
 
@@ -203,37 +275,32 @@ f32 &V4::operator[](int i)
 	return w;
 }
 
-V3 &M3::operator[](int I)
+V3 &M3::operator[](int i)
 {
-	return *(V3 *)m[I];
+	return *(V3 *)m[i];
 }
 
-V4 &M4::operator[](int I)
+V3 &M3::operator[](int i) const
 {
-	return *(V4 *)m[I];
+	return *(V3 *)m[i];
 }
 
-M4 IdentityMatrix()
+V4 &M4::operator[](int i)
 {
-	return
-	{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f,
-	};
+	return *(V4 *)m[i];
 }
 
-M4 operator*(M4 a, M4 b) {
+M4 operator*(M4 a, M4 b)
+{
 	M4 result;
 	for (auto i = 0; i < 4; i++)
 	{
 		for (auto j = 0; j < 4; j++)
 		{
-			result.m[i][j] = a.m[i][0] * b.m[0][j]
-			               + a.m[i][1] * b.m[1][j]
-			               + a.m[i][2] * b.m[2][j]
-			               + a.m[i][3] * b.m[3][j];
+			result[i][j] = a[i][0] * b[0][j]
+			             + a[i][1] * b[1][j]
+			             + a[i][2] * b[2][j]
+			             + a[i][3] * b[3][j];
 		}
 	}
 	return result;
@@ -261,12 +328,14 @@ V4 operator*(M4 m, V4 v)
 	};
 }
 
-f32 LengthSquared(V3 V) {
-	return V.x*V.x + V.y*V.y + V.z*V.z;
+f32 LengthSquared(V3 v)
+{
+	return v.x*v.x + v.y*v.y + v.z*v.z;
 }
 
-f32 Length(V3 V) {
-	return SquareRoot(V.x * V.x + V.y * V.y + V.z * V.z);
+f32 Length(V3 v)
+{
+	return SquareRoot(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
 V3 Normalize(V3 V)
@@ -276,21 +345,31 @@ V3 Normalize(V3 V)
 	return Result;
 }
 
-f32 DotProduct(V3 A, V3 B)
+f32 DotProduct(V3 a, V3 b)
 {
-	return A.x*B.x + A.y*B.y + A.z*B.z;
+	return a.x*b.x + a.y*b.y + a.z*b.z;
 }
 
-V3 CrossProduct(V3 A, V3 B)
+V3 CrossProduct(V3 a, V3 b)
 {
-	V3 Result =
+	V3 result =
 	{
-		A.y*B.z - B.y*A.z,
-		A.z*B.x - B.z*A.x,
-		A.x*B.y - B.x*A.y,
+		a.y * b.z - b.y * a.z,
+		a.z * b.x - b.z * a.x,
+		a.x * b.y - b.x * a.y,
 	};
-	Assert(Notzero(Result));
-	return Result;
+	Assert(NotZero(result));
+	return result;
+}
+
+V3 Abs(V3 v)
+{
+	return
+	{
+		Abs(v.x),
+		Abs(v.y),
+		Abs(v.z),
+	};
 }
 
 /*
@@ -331,54 +410,87 @@ M4 inverse(M4 m) {
 }
 */
 
+M3 CreateMatrix(V3 column1, V3 column2, V3 column3)
+{
+	return
+	{
+		column1.x, column2.x, column3.x,
+		column1.y, column2.y, column3.y,
+		column1.z, column2.z, column3.z,
+	};
+}
+
+V3 operator*(M3 m, V3 v)
+{
+	return
+	{
+		v.x*m[0][0] + v.y*m[0][1] + v.z*m[0][2],
+		v.x*m[1][0] + v.y*m[1][1] + v.z*m[1][2],
+		v.x*m[2][0] + v.y*m[2][1] + v.z*m[2][2],
+	};
+}
+
+void CreateUprightOrthonormalBasis(V3 forward, V3 *right, V3 *up)
+{
+	if (Abs(forward) == WorldUpVector)
+	{
+		*right = WorldRightVector;
+	}
+	else
+	{
+		*right = Normalize(CrossProduct(forward, WorldUpVector));
+	}
+	*up = Normalize(CrossProduct(*right, forward));
+}
+
 void SetRotation(M4 *m, M3 r)
 {
-	m->m[0][0] = r.m[0][0];
-	m->m[0][1] = r.m[0][1];
-	m->m[0][2] = r.m[0][2];
-	m->m[1][0] = r.m[1][0];
-	m->m[1][1] = r.m[1][1];
-	m->m[1][2] = r.m[1][2];
-	m->m[2][0] = r.m[2][0];
-	m->m[2][1] = r.m[2][1];
-	m->m[2][2] = r.m[2][2];
+	(*m)[0][0] = r[0][0];
+	(*m)[0][1] = r[0][1];
+	(*m)[0][2] = r[0][2];
+	(*m)[1][0] = r[1][0];
+	(*m)[1][1] = r[1][1];
+	(*m)[1][2] = r[1][2];
+	(*m)[2][0] = r[2][0];
+	(*m)[2][1] = r[2][1];
+	(*m)[2][2] = r[2][2];
 }
 
 void SetTranslation(M4 *m, V3 t)
 {
-	m->m[0][3] = t.x;
-	m->m[1][3] = t.y;
-	m->m[2][3] = t.z;
+	(*m)[0][3] = t.x;
+	(*m)[1][3] = t.y;
+	(*m)[2][3] = t.z;
 }
 
 void SetScale(M4 *m, V3 s)
 {
 	for (s32 i = 0; i < 4; i++)
 	{
-		m->m[i][0] *= s.x;
-		m->m[i][1] *= s.y;
-		m->m[i][2] *= s.z;
+		(*m)[i][0] *= s.x;
+		(*m)[i][1] *= s.y;
+		(*m)[i][2] *= s.z;
 	}
-}
-
-V3 GetTranslation(M4 m)
-{
-	return
-	{
-		m.m[0][3],
-		m.m[1][3],
-		m.m[2][3],
-	};
 }
 
 M4 Transpose(M4 m)
 {
 	return
 	{
-		m.m[0][0], m.m[1][0], m.m[2][0], m.m[3][0],
-		m.m[0][1], m.m[1][1], m.m[2][1], m.m[3][1],
-		m.m[0][2], m.m[1][2], m.m[2][2], m.m[3][2],
-		m.m[0][3], m.m[1][3], m.m[2][3], m.m[3][3],
+		m[0][0], m[1][0], m[2][0], m[3][0],
+		m[0][1], m[1][1], m[2][1], m[3][1],
+		m[0][2], m[1][2], m[2][2], m[3][2],
+		m[0][3], m[1][3], m[2][3], m[3][3],
+	};
+}
+
+M3 Transpose(M3 m)
+{
+	return
+	{
+		m[0][0], m[1][0], m[2][0],
+		m[0][1], m[1][1], m[2][1],
+		m[0][2], m[1][2], m[2][2],
 	};
 }
 
@@ -394,22 +506,28 @@ M4 PerspectiveProjection(f32 verticalFOV, f32 aspectRatio, f32 near, f32 far)
 	};
 }
 
-// Assumes near is 0.01f and far is infinity.
-M4 InfinitePerspectiveProjection(f32 verticalFOV, f32 aspectRatio)
+M4 CreateInfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspectRatio)
 {
-	constexpr f32 near = 0.01f;
-	f32 focalLength = 1 / Tan(verticalFOV / 2);
-	return
+	// Assumes camera space is looking down positive z.
+	if (usingVulkanAPI)
 	{
-		focalLength,   0.0f,                         0.0f,     0.0f,
-		0.0f,          -focalLength * aspectRatio,   0.0f,     0.0f,
-		0.0f,          0.0f,                         -1.0f,    -2.0f * near,
-		0.0f,          0.0f,                         -1.0f,    0.0f,
-	};
+		// Vulkan NDC:
+		//   right-handed
+		//   x points right, and y points down, z points forward
+		//   x from -1 to 1, y from -1 to 1, and z from 0 to 1 (half of opengl)
+		// @TODO: Divide z by 1/2?
+		f32 focalLength = 1.0f / Tan(verticalFOV / 2.0f);
+		return
+		{
+			focalLength,   0.0f,                         0.0f,     0.0f,
+			0.0f,          -focalLength * aspectRatio,   0.0f,     0.0f,
+			0.0f,          0.0f,                         1.0f,    -2.0f * near,
+			0.0f,          0.0f,                         1.0f,    0.0f,
+		};
+	}
 }
 
-// Assumes near is -1.0f and far is 1.0f.
-M4 OrthographicProjection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far)
+M4 CreateOrthographicProjectionMatrix(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far)
 {
 	return
 	{
@@ -420,38 +538,123 @@ M4 OrthographicProjection(f32 left, f32 right, f32 bottom, f32 top, f32 near, f3
 	};
 }
 
-M4 ViewMatrix(V3 position, V3 forward)
+M4 CreateViewMatrix(V3 position, V3 forward)
 {
-	const V3 worldUp = {0.0f, 0.0f, 1.0f};
 	forward = Normalize(forward);
-	auto right = Normalize(CrossProduct(forward, worldUp));
-	auto up = Normalize(CrossProduct(right, forward));
+	V3 right, up;
+	CreateUprightOrthonormalBasis(forward, &right, &up);
 	return
 	{
 		right.x,      right.y,      right.z,      -DotProduct(right, position),
 		up.x,         up.y,         up.z,         -DotProduct(up, position),
-		-forward.x,   -forward.y,   -forward.z,   DotProduct(forward, position),
+		forward.x,    forward.y,    forward.z,    -DotProduct(forward, position),
 		0,            0,            0,            1.0f,
 	};
 }
 
-M4 LookAt(V3 position, V3 target)
+Quaternion ToQuaternion(M3 m)
 {
-	return ViewMatrix(position, target - position);
+	Quaternion result;
+	auto trace = m[0][0] + m[1][1] + m[2][2];
+	if (trace > 0)
+	{
+		auto s = 0.5f / SquareRoot(trace + 1.0f);
+		result.w = 0.25f / s;
+		result.x = (m[2][1] - m[1][2]) * s;
+		result.y = (m[0][2] - m[2][0]) * s;
+		result.z = (m[1][0] - m[0][1]) * s;
+	}
+	else
+	{
+		if (m[0][0] > m[1][1] && m[0][0] > m[2][2])
+		{
+			auto s = 2.0f * SquareRoot(1.0f + m[0][0] - m[1][1] - m[2][2]);
+			result.w = (m[2][1] - m[1][2] ) / s;
+			result.x = 0.25f * s;
+			result.y = (m[0][1] + m[1][0] ) / s;
+			result.z = (m[0][2] + m[2][0] ) / s;
+		}
+		else if (m[1][1] > m[2][2])
+		{
+			auto s = 2.0f * SquareRoot(1.0f + m[1][1] - m[0][0] - m[2][2]);
+			result.w = (m[0][2] - m[2][0] ) / s;
+			result.x = (m[0][1] + m[1][0] ) / s;
+			result.y = 0.25f * s;
+			result.z = (m[1][2] + m[2][1] ) / s;
+		}
+		else
+		{
+			auto s = 2.0f * SquareRoot(1.0f + m[2][2] - m[0][0] - m[1][1]);
+			result.w = (m[1][0] - m[0][1] ) / s;
+			result.x = (m[0][2] + m[2][0] ) / s;
+			result.y = (m[1][2] + m[2][1] ) / s;
+			result.z = 0.25f * s;
+		}
+	}
+	return result;
 }
 
-/*
-Quaternion operator*(Quaternion q1, Quaternion q2) {
-	return {
-		q1.w * q2.x + q2.w * q1.x + q1.y * q2.z - q2.y * q1.z,
-		q1.w * q2.y + q2.w * q1.y + q2.x * q1.z - q1.x * q2.z,
-		q1.w * q2.z + q2.w * q1.z + q1.x * q2.y - q2.x * q1.y,
-		q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z,
+EulerAngles ToAngles(M3 m)
+{
+	EulerAngles result;
+	auto s = SquareRoot(m[0][0] * m[0][0] + m[0][1] * m[0][1]);
+	if (s > FLOAT_EPSILON)
+	{
+		result.roll = -Atan2(m[0][2], s);
+		result.yaw = Atan2(m[0][1], m[0][0]);
+		result.pitch = Atan2(m[1][2], m[2][2]);
+	}
+	else
+	{
+		if (m[0][2] < 0.0f)
+		{
+			result.roll = 90.0f;
+		}
+		else
+		{
+			result.roll = -90.0f;
+		}
+		result.yaw = -Atan2(m[1][0], m[1][1]);
+		result.pitch = 0.0f;
+	}
+	return result;
+}
+
+Quaternion CreateQuaternion(V3 axis, f32 angle)
+{
+	auto imaginary = Sin(angle / 2.0f) * axis;
+	return
+	{
+		imaginary.x,
+		imaginary.y,
+		imaginary.z,
+		Cos(angle / 2.0f),
 	};
 }
 
-Quaternion operator*(f32 s, Quaternion q) {
-	return {
+Quaternion CreateQuaternion(V3 forward)
+{
+	forward = Normalize(forward);
+	V3 right, up;
+	CreateUprightOrthonormalBasis(forward, &right, &up);
+	return Normalize(ToQuaternion(CreateMatrix(right, forward, up)));
+}
+
+Quaternion operator*(Quaternion a, Quaternion b)
+{
+	return
+	{
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+	};
+}
+
+Quaternion operator*(f32 s, Quaternion q)
+{
+	return
+	{
 		s * q.x,
 		s * q.y,
 		s * q.z,
@@ -459,16 +662,67 @@ Quaternion operator*(f32 s, Quaternion q) {
 	};
 }
 
-Quaternion conjugate(Quaternion q) {
-	return {-q.x, -q.y, -q.z, q.w};
+Quaternion Conjugate(Quaternion q)
+{
+	return
+	{
+		-q.x,
+		-q.y,
+		-q.z,
+		q.w
+	};
 }
 
-V3 rotate_vector(V3 v, Quaternion q) {
-	Quaternion result = q * Quaternion{v.x, v.y, v.z, 0.0} * conjugate(q);
-	return {result.x, result.y, result.z};
+V3 Rotate(V3 v, Quaternion q)
+{
+	Quaternion result = q * Quaternion{v.x, v.y, v.z, 0.0} * Conjugate(q);
+	return
+	{
+		result.x,
+		result.y,
+		result.z,
+	};
 }
 
-M3 to_matrix(Quaternion q) {
+// @TODO: Clean this up.
+M3 ToMatrix(Quaternion q)
+{
+	M3	mat;
+	float	wx, wy, wz;
+	float	xx, yy, yz;
+	float	xy, xz, zz;
+	float	x2, y2, z2;
+
+	x2 = q.x + q.x;
+	y2 = q.y + q.y;
+	z2 = q.z + q.z;
+
+	xx = q.x * x2;
+	xy = q.x * y2;
+	xz = q.x * z2;
+
+	yy = q.y * y2;
+	yz = q.y * z2;
+	zz = q.z * z2;
+
+	wx = q.w * x2;
+	wy = q.w * y2;
+	wz = q.w * z2;
+
+	mat[ 0 ][ 0 ] = 1.0f - ( yy + zz );
+	mat[ 0 ][ 1 ] = xy - wz;
+	mat[ 0 ][ 2 ] = xz + wy;
+
+	mat[ 1 ][ 0 ] = xy + wz;
+	mat[ 1 ][ 1 ] = 1.0f - ( xx + zz );
+	mat[ 1 ][ 2 ] = yz - wx;
+
+	mat[ 2 ][ 0 ] = xz - wy;
+	mat[ 2 ][ 1 ] = yz + wx;
+	mat[ 2 ][ 2 ] = 1.0f - ( xx + yy );
+
+	return mat;
+#if 0
 	f32 x2 = q.x * q.x;
 	f32 y2 = q.y * q.y;
 	f32 z2 = q.z * q.z;
@@ -478,48 +732,135 @@ M3 to_matrix(Quaternion q) {
 	f32 wx = q.w * q.x;
 	f32 wy = q.w * q.y;
 	f32 wz = q.w * q.z;
-
-	return M3{
+	return
+	{
 		1.0f - 2.0f * (y2 + z2),  2.0f * (xy - wz),         2.0f * (xz + wy),
 		2.0f * (xy + wz),         1.0f - 2.0f * (x2 + z2),  2.0f * (yz - wx),
 		2.0f * (xz - wy),         2.0f * (yz + wx),         1.0f - 2.0f * (x2 + y2),
 	};
+#endif
 }
 
-V3 lerp(V3 start, V3 end, f32 t) {
+EulerAngles ToAngles(Quaternion q)
+{
+	EulerAngles result;
+	auto singularityTest = q.z * q.x - q.w * q.y;
+	auto yawY = 2.0f * (q.w * q.z + q.x * q.y);
+	auto yawX = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+	auto singularityThreshold = 0.4999995f;
+	if (singularityTest < -singularityThreshold)
+	{
+		result.roll = -PI / 2;
+		result.yaw = Atan2(yawY, yawX);
+		result.pitch = -result.yaw - (2.0f * Atan2(q.x, q.w));
+	}
+	else if (singularityTest > singularityThreshold)
+	{
+		result.roll = PI / 2;
+		result.yaw = Atan2(yawY, yawX);
+		result.pitch = result.yaw - (2.0f * Atan2(q.x, q.w));
+	}
+	else
+	{
+		result.roll = Asin(2.0f * singularityTest);
+		result.yaw = Atan2(yawY, yawX);
+		result.pitch = Atan2(-2.0f * (q.w * q.x + q.y * q.z), 1.0f - 2.0f * (q.x * q.x + q.y * q.y));
+	}
+	return result;
+}
+
+V3 Lerp(V3 start, V3 end, f32 t)
+{
 	return start + t * (end - start);
 }
 
-f32 norm_squared(Quaternion q) {
-	return q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w; 
+f32 NormalSquared(Quaternion q)
+{
+	return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w; 
 }
 
-Quaternion normalize(Quaternion q) {
-	f32 inverse_norm_squared = 1.0f / (f32)sqrt(norm_squared(q));
-	return {q.x*inverse_norm_squared, q.y*inverse_norm_squared, q.z*inverse_norm_squared, q.w*inverse_norm_squared};
-}
-
-Quaternion lerp(Quaternion a, Quaternion b, f32 t) {
-	f32 dot_product = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
-	f32 one_minus_t = 1.0f - t;
-
-	Quaternion result;
-
-	if (dot_product < 0.0f)
+Quaternion Normalize(Quaternion q)
+{
+	auto inverseNormalSquared = 1.0f / SquareRoot(NormalSquared(q));
+	return
 	{
-		result.x = one_minus_t * a.x + t * -b.x;
-		result.y = one_minus_t * a.y + t * -b.y;
-		result.z = one_minus_t * a.z + t * -b.z;
-		result.w = one_minus_t * a.w + t * -b.w;
-	} else {
-		result.x = one_minus_t * a.x + t * b.x;
-		result.y = one_minus_t * a.y + t * b.y;
-		result.z = one_minus_t * a.z + t * b.z;
-		result.w = one_minus_t * a.w + t * b.w;
+		q.x * inverseNormalSquared,
+		q.y * inverseNormalSquared,
+		q.z * inverseNormalSquared,
+		q.w * inverseNormalSquared
+	};
+}
+
+Quaternion Lerp(Quaternion a, Quaternion b, f32 t)
+{
+	f32 dotProduct = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+	f32 oneMinusT = 1.0f - t;
+	Quaternion result;
+	if (dotProduct < 0.0f)
+	{
+		result.x = oneMinusT * a.x + t * -b.x;
+		result.y = oneMinusT * a.y + t * -b.y;
+		result.z = oneMinusT * a.z + t * -b.z;
+		result.w = oneMinusT * a.w + t * -b.w;
 	}
-
-	normalize(result);
-
+	else
+	{
+		result.x = oneMinusT * a.x + t * b.x;
+		result.y = oneMinusT * a.y + t * b.y;
+		result.z = oneMinusT * a.z + t * b.z;
+		result.w = oneMinusT * a.w + t * b.w;
+	}
+	Normalize(result);
 	return result;
 }
-*/
+
+V3 CalculateRightVector(const Quaternion &q)
+{
+	return
+	{
+		1 - 2 * (q.y * q.y + q.z * q.z),
+		2 * (q.x * q.y + q.w * q.z),
+		2 * (q.x * q.z - q.w * q.y),
+	};
+}
+
+V3 CalculateForwardVector(const Quaternion &q)
+{
+	return
+	{
+		2 * (q.x * q.y - q.w * q.z),
+		1 - 2 * (q.x * q.x + q.z * q.z),
+		2 * (q.y * q.z + q.w * q.x),
+	};
+}
+
+V3 CalculateUpVector(const Quaternion &q)
+{
+	return
+	{
+		2 * (q.x * q.z + q.w * q.y),
+		2 * (q.y * q.z - q.w * q.x),
+		1 - 2 * (q.x * q.x + q.y * q.y),
+	};
+}
+
+Quaternion ToQuaternion(EulerAngles angles)
+{
+	auto pitchNoWinding = Fmod(angles.pitch, 2 * PI);
+	auto yawNoWinding = Fmod(angles.yaw, 2 * PI);
+	auto rollNoWinding = Fmod(angles.roll, 2 * PI);
+
+	f32 sp, sy, sr;
+	f32 cp, cy, cr;
+	SinCos(pitchNoWinding * 0.5f, &sp, &cp);
+	SinCos(yawNoWinding * 0.5f, &sy, &cy);
+	SinCos(rollNoWinding * 0.5f, &sr, &cr);
+
+	return
+	{
+		cp * sr * sy - sp * cr * cy,
+		-cp * sr * cy - sp * cr * sy,
+		cp * cr * sy - sp * sr * cy,
+		cp * cr * cy + sp * sr * sy,
+	};
+}

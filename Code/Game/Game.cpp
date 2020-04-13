@@ -2,12 +2,12 @@
 
 void InitializeGame()
 {
-	CreateCamera("main", {2, 2, 2}, {0, 0, 0}, 0.4f, DegreesToRadians(90.0f));
+	CreateCamera("main", {50000, 50000, 50000}, {0, 0, 0}, 1000.4f, DegreesToRadians(90.0f));
 
 	auto e = CreateEntity();
 	auto t = Transform{};
 	SetEntityTransform(e, t);
-	SetEntityModel(e, ANVIL_ASSET, t);
+	SetEntityModel(e, SPONZA_ASSET, t);
 }
 
 void GameLoop(f32 deltaTime)
@@ -20,45 +20,36 @@ void GameLoop(f32 deltaTime)
 
 	if (GetMouseDeltaX() != 0 || GetMouseDeltaY() != 0)
 	{
-		auto newYaw = camera->transform.rotation.z + -GetMouseDeltaX() * GetMouseSensitivity();
-		auto newPitch = camera->transform.rotation.x + GetMouseDeltaY() * GetMouseSensitivity();
-		if (newPitch > 89.0f)
-		{
-			newPitch = 89.0f;
-		}
-		if (newPitch < -89.0f)
-		{
-			newPitch = -89.0f;
-		}
-		SetTransformRotation(&camera->transform, newPitch, 0.0f, newYaw);
+		auto deltaPitch = -GetMouseDeltaY() * GetMouseSensitivity();
+		auto deltaYaw = -GetMouseDeltaX() * GetMouseSensitivity();
+		auto angles = ToAngles(camera->transform.rotation);
+		auto pitchRotation = ToQuaternion(EulerAngles{.pitch = angles.pitch + deltaPitch});
+		auto yawRotation = ToQuaternion(EulerAngles{.yaw = angles.yaw + deltaYaw});
+		camera->transform.rotation = Normalize(yawRotation * pitchRotation);
 	}
 
-	V3 newPosition = camera->transform.position;
 	if (IsKeyDown(A_KEY))
 	{
-		//newPosition -= camera->speed * CalculateTransformRight(&camera->transform);
+		camera->transform.position -= camera->speed * CalculateRightVector(camera->transform.rotation);
 	}
 	else if (IsKeyDown(D_KEY))
 	{
-		//newPosition += camera->speed * CalculateTransformRight(&camera->transform);
+		camera->transform.position += camera->speed * CalculateRightVector(camera->transform.rotation);
 	}
 	if (IsKeyDown(Q_KEY))
 	{
-		newPosition.z -= camera->speed;
+		camera->transform.position.z -= camera->speed;
 	}
 	else if (IsKeyDown(E_KEY))
 	{
-		newPosition.z += camera->speed;
+		camera->transform.position.z += camera->speed;
 	}
 	if (IsKeyDown(W_KEY))
 	{
-		newPosition += camera->speed * CalculateTransformForward(&camera->transform);
+		camera->transform.position += camera->speed * CalculateForwardVector(camera->transform.rotation);
 	}
 	else if (IsKeyDown(S_KEY))
 	{
-		newPosition -= camera->speed * CalculateTransformForward(&camera->transform);
+		camera->transform.position -= camera->speed * CalculateForwardVector(camera->transform.rotation);
 	}
-	auto f = CalculateTransformForward(&camera->transform);
-	ConsolePrint("speed %f, forward %f %f %f, p %f %f %f\n", camera->speed, f[0], f[1], f[2], newPosition[0], newPosition[1], newPosition[2]);
-	camera->transform.position = newPosition;
 }

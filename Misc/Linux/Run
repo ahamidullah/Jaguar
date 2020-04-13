@@ -4,8 +4,8 @@ set -e
 
 cd $PROJECT_DIRECTORY
 
-if [ "$1" = "ShaderPreprocessor" ]; then
-	Build/ShaderPreprocessor
+if [ "$1" = "ShaderCompiler" ]; then
+	Build/ShaderCompiler
 else
 	Build/Game
 fi

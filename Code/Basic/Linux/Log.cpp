@@ -1,32 +1,37 @@
 #include <errno.h>
 #include <string.h>
 
+void WriteToConsole(const String &writeString)
+{
+	WriteToFile(1, StringLength(writeString), &writeString[0]);
+}
+
 void PrintStacktrace()
 {
-	LogPrint(LogType::INFO, "Stack trace:\n");
+	LogPrint(INFO_LOG, "Stack trace:\n");
 
-	const u32 addressBufferSize = 100;
+	auto addressBufferSize = 100;
 	void *addresses[addressBufferSize];
-	s32 addressCount = backtrace(addresses, addressBufferSize);
+	auto addressCount = backtrace(addresses, addressBufferSize);
 	if (addressCount == addressBufferSize)
 	{
-		LogPrint(LogType::ERROR, "stack trace is probably truncated.\n");
+		LogPrint(ERROR_LOG, "Stack trace is probably truncated.\n");
 	}
 
-	char **strings = backtrace_symbols(addresses, addressCount);
+	auto **strings = backtrace_symbols(addresses, addressCount);
 	if (!strings)
 	{
-		LogPrint(LogType::ERROR, "failed to get function names\n");
+		LogPrint(ERROR_LOG, "Failed to get function names.\n");
 		return;
 	}
-	for (s32 i = 0; i < addressCount; i++)
+	for (auto i = 0; i < addressCount; i++)
 	{
-		LogPrint(LogType::INFO, "\t%s\n", strings[i]);
+		LogPrint(INFO_LOG, "\t%s\n", strings[i]);
 	}
 	free(strings);
 }
 
-const char *GetPlatformError()
+String GetPlatformError()
 {
 	return strerror(errno);
 }

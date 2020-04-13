@@ -4,7 +4,8 @@
 
 #include "AtomicRingBuffer.h"
 #include "AtomicLinkedList.h"
-#include "Jobs.h"
+#include "AtomicDoubleBuffer.h"
+#include "Job.h"
 #include "Math.h"
 #include "Transform.h"
 #include "Timer.h"
@@ -12,9 +13,8 @@
 #include "Vulkan.h"
 #endif
 #include "GPU.h"
-#include "Renderer/Shader.h"
 #include "Mesh.h"
 #include "Camera.h"
 #include "Render.h"
-#include "Assets.h"
+#include "Asset.h"
 #include "Entity.h"

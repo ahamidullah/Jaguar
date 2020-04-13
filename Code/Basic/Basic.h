@@ -16,6 +16,7 @@ typedef float f32;
 typedef double f64;
 
 #define U32_MAX UINT32_MAX
+#define U64_MAX UINT64_MAX
 
 #define Kilobyte(b) ((size_t)b*1024)
 #define Megabyte(b) (Kilobyte(b)*1024)
@@ -79,6 +80,7 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 
 #include "Memory.h"
 #include "Array.h"
+#include "HashTable.h"
 #include "String.h"
 #include "File.h"
 #include "Log.h"

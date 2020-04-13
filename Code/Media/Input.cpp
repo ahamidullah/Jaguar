@@ -8,7 +8,7 @@ static struct
 		AllocateArray(bool, SCANCODE_COUNT),
 	};
 	WindowEvents windowEvents;
-} inputGlobals;
+} inputState;
 
 void PressButton(u32 buttonIndex, InputButtons *buttons)
 {
@@ -44,7 +44,7 @@ bool IsKeyDown(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return IsButtonDown(keyCode, &inputGlobals.keyboard);
+	return IsButtonDown(keyCode, &inputState.keyboard);
 }
 
 bool WasKeyPressed(KeySymbol keySymbol)
@@ -54,7 +54,7 @@ bool WasKeyPressed(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return WasButtonPressed(keyCode, &inputGlobals.keyboard);
+	return WasButtonPressed(keyCode, &inputState.keyboard);
 }
 
 bool WasKeyReleased(KeySymbol keySymbol)
@@ -64,7 +64,7 @@ bool WasKeyReleased(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return WasButtonReleased(keyCode, &inputGlobals.keyboard);
+	return WasButtonReleased(keyCode, &inputState.keyboard);
 }
 
 bool IsMouseButtonDown(MouseButton mouseButton)
@@ -73,7 +73,7 @@ bool IsMouseButtonDown(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return IsButtonDown(mouseButton, &inputGlobals.mouse.buttons);
+	return IsButtonDown(mouseButton, &inputState.mouse.buttons);
 }
 
 bool WasMouseButtonPressed(MouseButton mouseButton)
@@ -82,7 +82,7 @@ bool WasMouseButtonPressed(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return WasButtonPressed(mouseButton, &inputGlobals.mouse.buttons);
+	return WasButtonPressed(mouseButton, &inputState.mouse.buttons);
 }
 
 bool WasMouseButtonReleased(MouseButton mouseButton)
@@ -91,55 +91,55 @@ bool WasMouseButtonReleased(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return WasButtonReleased(mouseButton, &inputGlobals.mouse.buttons);
+	return WasButtonReleased(mouseButton, &inputState.mouse.buttons);
 }
 
 f32 GetMouseX()
 {
-	return inputGlobals.mouse.x;
+	return inputState.mouse.x;
 }
 
 f32 GetMouseY()
 {
-	return inputGlobals.mouse.y;
+	return inputState.mouse.y;
 }
 
 f32 GetMouseDeltaX()
 {
-	return inputGlobals.mouse.rawDeltaX;
+	return inputState.mouse.rawDeltaX;
 }
 
 f32 GetMouseDeltaY()
 {
-	return inputGlobals.mouse.rawDeltaY;
+	return inputState.mouse.rawDeltaY;
 }
 
 f32 GetMouseSensitivity()
 {
-	return inputGlobals.mouse.sensitivity;
+	return inputState.mouse.sensitivity;
 }
 
 bool QuitWindowEvent()
 {
-	return inputGlobals.windowEvents.quit;
+	return inputState.windowEvents.quit;
 }
 
 void GetPlatformInput(WindowContext *window)
 {
 	// Clear per-frame input.
-	SetMemory(inputGlobals.mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
-	SetMemory(inputGlobals.mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
-	SetMemory(inputGlobals.keyboard.pressed, false, sizeof(bool) * SCANCODE_COUNT);
-	SetMemory(inputGlobals.keyboard.released, false, sizeof(bool) * SCANCODE_COUNT);
-	inputGlobals.mouse.rawDeltaX = 0;
-	inputGlobals.mouse.rawDeltaY = 0;
+	SetMemory(inputState.mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
+	SetMemory(inputState.mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
+	SetMemory(inputState.keyboard.pressed, false, sizeof(bool) * SCANCODE_COUNT);
+	SetMemory(inputState.keyboard.released, false, sizeof(bool) * SCANCODE_COUNT);
+	inputState.mouse.rawDeltaX = 0;
+	inputState.mouse.rawDeltaY = 0;
 
-	ProcessWindowEvents(window, &inputGlobals.keyboard, &inputGlobals.mouse, &inputGlobals.windowEvents);
+	ProcessWindowEvents(window, &inputState.keyboard, &inputState.mouse, &inputState.windowEvents);
 
 	// Update mouse position.
-	s32 oldX = inputGlobals.mouse.x;
-	s32 oldY = inputGlobals.mouse.y;
-	QueryMousePosition(window, &inputGlobals.mouse.x, &inputGlobals.mouse.y);
-	inputGlobals.mouse.deltaX = inputGlobals.mouse.x - oldX;
-	inputGlobals.mouse.deltaY = inputGlobals.mouse.y - oldY;
+	s32 oldX = inputState.mouse.x;
+	s32 oldY = inputState.mouse.y;
+	QueryMousePosition(window, &inputState.mouse.x, &inputState.mouse.y);
+	inputState.mouse.deltaX = inputState.mouse.x - oldX;
+	inputState.mouse.deltaY = inputState.mouse.y - oldY;
 }

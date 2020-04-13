@@ -63,7 +63,8 @@ u8 key_released(PlatformKeySymbol key_symbol, Game_Input *input)
 }
 
 void UpdateInput(Game_Input *input, GameExecutionStatus *execution_status) {
-	{ // Clear per-frame input.
+	 // Clear per-frame input.
+	{
 		memset(input->mouse.buttons.pressed, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
 		memset(input->mouse.buttons.released, 0, sizeof(u8) * MOUSE_BUTTON_COUNT);
 		memset(input->keyboard.pressed, 0, sizeof(u8) * SCANCODE_COUNT);
@@ -72,7 +73,8 @@ void UpdateInput(Game_Input *input, GameExecutionStatus *execution_status) {
 		input->mouse.raw_delta_y = 0;
 	}
 	PlatformHandleWindowEvents(input, execution_status);
-	{ // Update mouse position.
+	 // Update mouse position.
+	{
 		s32 old_x = input->mouse.x;
 		s32 old_y = input->mouse.y;
 		PlatformGetMousePosition(&input->mouse.x, &input->mouse.y);

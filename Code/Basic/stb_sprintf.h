@@ -513,6 +513,9 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          char const *sn;
 
       case 's':
+      auto str = va_arg(va, String);
+      s = &str[0];
+#if 0
          // get the string
          s = va_arg(va, char *);
          if (s == 0)
@@ -548,6 +551,7 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          // clamp to precision
          if (l > (stbsp__uint32)pr)
             l = pr;
+#endif
          lead[0] = 0;
          tail[0] = 0;
          pr = 0;

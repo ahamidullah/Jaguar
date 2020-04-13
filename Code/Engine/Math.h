@@ -1,5 +1,8 @@
 #pragma once
 
+#include <math.h>
+#include <float.h>
+
 struct V2
 {
 	f32 x, y;
@@ -33,6 +36,7 @@ struct V4
 struct M3
 {
 	f32 m[3][3];
+	V3 &operator[](int i) const;
 	V3 &operator[](int i);
 };
 
@@ -42,15 +46,28 @@ struct M4
 	V4 &operator[](int i);
 };
 
-struct Quaternion {
-	/*
-	Quaternion() {}
-	Quaternion(f32 x, f32 y, f32 z, f32 w) : x{x}, y{y}, z{z}, w{w} {}
-	Quaternion(V3 v) : x{v.x}, y{v.y}, z{v.z}, w{0.0f} {}
-	Quaternion(V3 axis, f32 angle) : im{sin(angle/2.0f)*axis}, w{cos(angle/2.0f)} {}
-	*/
+struct Quaternion
+{
 	f32 x, y, z, w;
 };
+
+struct EulerAngles
+{
+	f32 pitch, yaw, roll;
+};
+
+constexpr Quaternion IdentityQuaternion = {0.0f, 0.0f, 0.0f, 1.0f};
+constexpr M4 IdentityMatrix =
+{
+	1.0f, 0.0f, 0.0f, 0.0f,
+	0.0f, 1.0f, 0.0f, 0.0f,
+	0.0f, 0.0f, 1.0f, 0.0f,
+	0.0f, 0.0f, 0.0f, 1.0f,
+};
+
+constexpr V3 WorldRightVector = {1.0f, 0.0f, 0.0f};
+constexpr V3 WorldForwardVector = {0.0f, 1.0f, 0.0f};
+constexpr V3 WorldUpVector = {0.0f, 0.0f, 1.0f};
 
 #define PI 3.14159265358979323846264338327950288
 constexpr f32 DEGREES_TO_RADIANS_MULTIPLIER = PI / 180.0;
@@ -65,6 +82,8 @@ constexpr f32 RadiansToDegrees(f32 radians)
 {
 	return radians * RADIANS_TO_DEGREES_MULTIPLIER;
 }
+
+#define FLOAT_EPSILON FLT_EPSILON
 
 template <typename T>
 T Minimum(T a, T b)
@@ -86,18 +105,65 @@ T Maximum(T a, T b)
 	return b;
 }
 
+#define PrintF32(f) PrintF32Actual(#f, (f))
+void PrintF32Actual(const char *name, f32 number);
+#define PrintV3(v) PrintV3Actual(#v, (v))
+void PrintV3Actual(const char *name, V3 v);
+#define PrintQuaternion(q) PrintQuaternionActual(#q, (q))
+void PrintQuaternionActual(const char *name, Quaternion q);
+#define PrintM4(m) PrintM4Actual(#m, (m))
+void PrintM4Actual(const char *name, M4 m);
+
+f32 SquareRoot();
+u32 DivideAndRoundUp(u32 a, u32 b);
+f32 Tan(f32 f);
+f32 Sin(f32 f);
+f32 Cos(f32 f);
+f32 Acos(f32 f);
+f32 Abs(f32 f);
+
+V3 operator-(V3 v);
 V3 operator*(f32 s, V3 v);
+V3 operator/(V3 v, f32 s);
+V3 operator+(V3 a, V3 b);
+V3 operator-(V3 a, V3 b);
+bool operator==(const V3 &a, const V3 &b);
 V3 &operator+=(V3 &a, V3 b);
 V3 &operator-=(V3 &a, V3 b);
-
-u32 DivideAndRoundUp(u32 a, u32 b);
 bool NotNAN(V3 v);
 bool NotZero(V3 v);
 V4 V3ToV4(V3 v, f32 w);
-M4 IdentityMatrix();
 f32 Length(V3 v);
 f32 LengthSquared(V3 v);
 V3 Normalize(V3 v);
 f32 DotProduct(V3 a, V3 b);
 V3 CrossProduct(V3 a, V3 b);
-f32 SquareRoot();
+V3 Lerp(V3 start, V3 end, f32 t);
+
+M3 CreateMatrix(V3 column1, V3 column2, V3 column3);
+void SetRotationMatrix(M4 *m, M3 r);
+Quaternion ToQuaternion(M3 m);
+M4 CreateViewMatrix(V3 position, V3 forward);
+M4 CreateInfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspectRatio);
+M4 CreateOrthographicProjectionMatrix(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far);
+
+Quaternion CreateQuaternion(f32 x, f32 y, f32 z, f32 w);
+Quaternion CreateQuaternion(V3 axis, f32 angle);
+Quaternion CreateQuaternion(f32 yaw, f32 pitch, f32 roll);
+Quaternion CreateUprightQuaternion(V3 forward);
+Quaternion operator*(Quaternion a, Quaternion b);
+Quaternion operator*(f32 s, Quaternion q);
+Quaternion Concatenate(Quaternion a, Quaternion b);
+Quaternion Conjugate(Quaternion q);
+V3 Rotate(V3 v, Quaternion q);
+Quaternion Rotate(Quaternion q, f32 pitch, f32 yaw, f32 roll);
+M3 ToMatrix(Quaternion q);
+f32 NormSquared(Quaternion q);
+Quaternion Normalize(Quaternion q);
+Quaternion Lerp(Quaternion a, Quaternion b, f32 t);
+V3 CalculateRightVector(const Quaternion &q);
+V3 CalculateForwardVector(const Quaternion &q);
+V3 CalculateUpVector(const Quaternion &q);
+EulerAngles ToAngles(Quaternion q);
+
+Quaternion ToQuaternion(EulerAngles euler);

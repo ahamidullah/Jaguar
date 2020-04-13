@@ -3,8 +3,7 @@
 struct Camera
 {
 	String name;
-	//M4 viewMatrix;
-	//M4 projectionMatrix;
+	f32 pitch, yaw, roll;
 	Transform transform;
 	f32 fov;
 	f32 focalLength;

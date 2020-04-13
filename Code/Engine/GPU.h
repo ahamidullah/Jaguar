@@ -1,26 +1,30 @@
 #pragma once
 
-namespace Renderer
-{
-
 #define GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK 512
+#define GPU_MAX_MEMORY_ALLOCATIONS_PER_RING_FRAME 512
+
+enum GPUResourceLifetime
+{
+	GPU_RESOURCE_LIFETIME_FRAME,
+	GPU_RESOURCE_LIFETIME_PERSISTENT,
+};
 
 struct GPUMemoryAllocation
 {
-	GPUMemory memory;
+	GfxMemory memory;
 	u32 offset;
 	void *mappedPointer;
 };
 
 struct GPUSubbuffer
 {
-	GPUBuffer buffer;
+	GfxBuffer buffer;
 	u32 *offset;
 };
 
 struct GPUImageAllocation
 {
-	GPUMemory memory;
+	GfxMemory memory;
 	u32 *offset;
 };
 
@@ -30,11 +34,11 @@ struct GPUImageAllocation
 
 struct GPUMemoryBlock
 {
-	GPUMemory memory;
+	GfxMemory memory;
 	void *mappedPointer;
 	u32 frontier;
 	u32 allocationCount;
-	GPUMemoryAllocation allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK];
+	GPUMemoryAllocation allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK]; // @TODO: Use a dynamic array?
 	GPUMemoryBlock *next;
 };
 
@@ -44,22 +48,24 @@ struct GPUMemoryBlockAllocator
 	u32 blockSize;
 	GPUMemoryBlock *baseBlock;
 	GPUMemoryBlock *activeBlock;
-	GPUMemoryType memoryType;
+	GfxMemoryType memoryType;
 };
 
 struct GPUMemoryRingAllocator
 {
-	GPUMemory memory;
-	void *mappedPointer;
+	GfxMemory memory;
+	GfxMemoryType memoryType;
+	u32 capacity;
 	u32 size;
-	u32 readIndex;
-	u32 writeIndex;
+	u32 frameSizes[GFX_MAX_FRAMES_IN_FLIGHT];
+	u32 bottom, top;
+	u32 allocationCounts[GFX_MAX_FRAMES_IN_FLIGHT];
+	GPUMemoryAllocation allocations[GFX_MAX_FRAMES_IN_FLIGHT][GPU_MAX_MEMORY_ALLOCATIONS_PER_RING_FRAME];
+	void *mappedPointer;
 };
 
 struct GPUIndexedGeometry
 {
-	GPUBuffer vertex_buffer;
-	GPUBuffer index_buffer;
+	GfxBuffer vertexBuffer;
+	GfxBuffer indexBuffer;
 };
-
-}

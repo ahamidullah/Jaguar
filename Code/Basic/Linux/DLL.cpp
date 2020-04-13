@@ -1,29 +1,46 @@
 #include <dlfcn.h>
 
-DLLHandle OpenDLL(const char *filename)
+DLLHandle OpenDLL(const String &filename, bool *error)
 {
-	void* library = dlopen(filename, RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
+	void* library = dlopen(&filename[0], RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
 	if (!library)
 	{
-		Abort("failed to load shared library: %s", dlerror());
+		LogPrint(ERROR_LOG, "Failed to open DLL %s: %s.\n", &filename[0], dlerror());
+		*error = true;
+		return {};
 	}
+	*error = false;
 	return library;
 }
 
-void CloseDLL(DLLHandle library)
+bool CloseDLL(DLLHandle library)
 {
-	if (s32 errorCode = dlclose(library); errorCode < 0)
+	if (dlclose(library) < 0)
 	{
-		LogPrint(LogType::ERROR, "failed to close shared library: %s\n", dlerror());
+		LogPrint(ERROR_LOG, "Failed to close DLL: %s.\n", dlerror());
+		return false;
 	}
+	return true;
 }
 
-DLLFunction GetDLLFunction(DLLHandle library, const char *functionName)
+DLLFunction GetDLLFunction(DLLHandle library, const String &functionName, bool *error)
 {
+	// According to https://linux.die.net/man/3/dlsym:
+	// If the symbol is not found, in the specified library or any of the libraries that were
+	// automatically loaded by dlopen() when that library was loaded, dlsym() returns NULL.  Since
+	// the value of the symbol could actually be NULL (so that a NULL return from dlsym() need not
+	// indicate an error), the correct way to test for an error is to call dlerror() to clear any
+	// old error conditions, then call dlsym(), and then call dlerror() again, saving its return
+	// value into a variable, and check whether this saved value is not NULL.
+	dlerror();
 	void *function = dlsym(library, &functionName[0]);
-	if (!function)
+	auto errorString = dlerror();
+	if (errorString)
 	{
-		Abort("failed to load shared library function %s", functionName);
+		LogPrint(ERROR_LOG, "Failed to load DLL function %s: %s.\n", functionName, errorString);
+		*error = true;
+		return {};
 	}
+	*error = false;
 	return function;
 }

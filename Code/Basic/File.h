@@ -1,15 +1,4 @@
 #pragma once
 
-struct OpenFileResult
-{
-	FileHandle file;
-	bool error;
-};
-
-struct ReadFileResult
-{
-	String string;
-	bool error;
-};
-
-ReadFileResult ReadEntireFile(const String &path);
+String ReadEntireFile(const String &path, u8 *error);
+bool WriteStringToFile(FileHandle file, const String &string);

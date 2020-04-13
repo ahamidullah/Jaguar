@@ -26,6 +26,7 @@ bool GatherProjectFiles(const String &sourceFilepath, Array<String> *dependencie
 
 struct BuildCommand
 {
+	String name;
 	String sourceFilepath;
 	String compilerFlags;
 	String linkerFlags;
@@ -36,14 +37,23 @@ struct BuildCommand
 
 bool Build(const BuildCommand &command)
 {
-	LogPrint(LogType::INFO, "sourceFilepath: %s\n\nisLibrary: %d\n\ncompilerFlags: %s\n\nlinkerFlags: %s\n\nbinaryFilepath: %s\n\n", &command.sourceFilepath[0], command.isLibrary, &command.compilerFlags[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
+	LogPrint
+	(
+		INFO_LOG,
+		"sourceFilepath: %s\n\n"
+		"isLibrary: %d\n\n"
+		"compilerFlags: %s\n\n"
+		"linkerFlags: %s\n\n"
+		"binaryFilepath: %s\n\n",
+		&command.sourceFilepath[0], command.isLibrary, &command.compilerFlags[0], &command.linkerFlags[0], &command.binaryFilepath[0]
+	);
 
-	auto objFilepath = CreateString(command.binaryFilepath);
+	auto objFilepath = CreateStringCopy(command.binaryFilepath);
 	SetFilepathExtension(&objFilepath, ".o");
 
 	if (command.isLibrary)
 	{
-		auto compileCommand = _FormatString("g++ -shared %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
+		auto compileCommand = FormatString("g++ -shared %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
 		LogPrint(LogType::INFO, "compileCommand: %s\n\n", &compileCommand[0]);
 		if (auto result = RunProcess(compileCommand); result != 0)
 		{
@@ -52,7 +62,7 @@ bool Build(const BuildCommand &command)
 	}
 	else
 	{
-		auto compileCommand = _FormatString("g++ %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
+		auto compileCommand = FormatString("g++ %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
 		LogPrint(LogType::INFO, "compileCommand: %s\n\n", &compileCommand[0]);
 		if (auto result = RunProcess(compileCommand); result != 0)
 		{
@@ -60,7 +70,7 @@ bool Build(const BuildCommand &command)
 		}
 	}
 
-	LogPrint(LogType::INFO, "build success\n");
+	LogPrint(LogType::INFO, "build successful\n");
 
 	return true;
 }
@@ -159,15 +169,13 @@ bool BuildIfOutOfDate(const BuildCommand &command)
 
 s32 ApplicationEntry(s32 argc, char *argv[])
 {
-	CreateDirectoryIfItDoesNotExist("Build/ShaderPreprocessor");
 	CreateDirectoryIfItDoesNotExist("Build/Shader");
-	CreateDirectoryIfItDoesNotExist("Build/Shader/GLSL");
-	CreateDirectoryIfItDoesNotExist("Build/Shader/GLSL/Code");
-	CreateDirectoryIfItDoesNotExist("Build/Shader/GLSL/Binary");
+	CreateDirectoryIfItDoesNotExist("Build/Shader/Code");
+	CreateDirectoryIfItDoesNotExist("Build/Shader/Binary");
 
 	Append(&includeSearchDirectories, String{"Code"});
 
-	auto commonCompilerFlags = _FormatString("-std=c++17 -DUSE_VULKAN_RENDER_API -ICode -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers");
+	auto commonCompilerFlags = FormatString("-std=c++17 -DUSE_VULKAN_RENDER_API -ICode -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers");
 	if (debugBuild)
 	{
 		Append(&commonCompilerFlags, " -DDEBUG -g -O0");
@@ -183,6 +191,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 	auto gameCompilerFlags = Concatenate(commonCompilerFlags, " -IDependencies/Vulkan/1.1.106.0/include");
 	auto gameLinkerFlags = "Build/libBasic.so Build/libEngine.so Build/libMedia.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread";
 
+	String buildTarget;
 	bool forceBuildFlag = false;
 	for (auto i = 1; i < argc; i++)
 	{
@@ -193,56 +202,94 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 				forceBuildFlag = true;
 			}
 		}
+		else if (CStringsEqual(argv[i], "ShaderCompiler"))
+		{
+			buildTarget = "ShaderCompiler";
+		}
+		else
+		{
+			// @TODO
+			Assert(0);
+		}
 	}
 
-	Array<BuildCommand> buildCommands;
-	Append(&buildCommands,
-	BuildCommand{
-		.sourceFilepath = "Code/Basic/Basic.cpp",
-		.compilerFlags = commonCompilerFlags,
-		.linkerFlags = "-fPIC",
-		.binaryFilepath = "Build/libBasic.so",
-		.isLibrary = true,
-	});
-	Append(&buildCommands,
-	BuildCommand{
-		.sourceFilepath = "Code/Media/Media.cpp",
-		.compilerFlags = commonCompilerFlags,
-		.linkerFlags = "-fPIC",
-		.binaryFilepath = "Build/libMedia.so",
-		.libraryDependencies = CreateInitializedArray(String{"Basic"}),
-		.isLibrary = true,
-	});
-	Append(&buildCommands,
-	BuildCommand{
-		.sourceFilepath = "Code/Engine/Engine.cpp",
-		.compilerFlags = commonCompilerFlags,
-		.linkerFlags = "-fPIC",
-		.binaryFilepath = "Build/libEngine.so",
-		.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}),
-		.isLibrary = true,
-	});
-	Append(&buildCommands,
-	BuildCommand{
-		.sourceFilepath = "Code/ShaderCompiler/ShaderCompiler.cpp",
-		.compilerFlags = commonCompilerFlags,
-		.linkerFlags = "Build/libBasic.so -ldl -lpthread",
-		.binaryFilepath = "Build/ShaderCompiler",
-		.libraryDependencies = CreateInitializedArray(String{"Basic"}),
-		.isLibrary = false,
-	});
-	Append(&buildCommands,
-	BuildCommand{
-		.sourceFilepath = "Code/Game/Game.cpp",
-		.compilerFlags = gameCompilerFlags,
-		.linkerFlags = gameLinkerFlags,
-		.binaryFilepath = "Build/Game",
-		.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}),
-		.isLibrary = false,
-	});
+	auto allBuildCommands =
+	CreateInitializedArray(
+		BuildCommand{
+			.name = "Basic",
+			.sourceFilepath = "Code/Basic/Basic.cpp",
+			.compilerFlags = commonCompilerFlags,
+			.linkerFlags = "-fPIC",
+			.binaryFilepath = "Build/libBasic.so",
+			.isLibrary = true,
+		},
+		BuildCommand{
+			.name = "Media",
+			.sourceFilepath = "Code/Media/Media.cpp",
+			.compilerFlags = commonCompilerFlags,
+			.linkerFlags = "-fPIC",
+			.binaryFilepath = "Build/libMedia.so",
+			.libraryDependencies = CreateInitializedArray(String{"Basic"}),
+			.isLibrary = true,
+		},
+		BuildCommand{
+			.name = "Engine",
+			.sourceFilepath = "Code/Engine/Engine.cpp",
+			.compilerFlags = commonCompilerFlags,
+			.linkerFlags = "-fPIC",
+			.binaryFilepath = "Build/libEngine.so",
+			.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}),
+			.isLibrary = true,
+		},
+		BuildCommand{
+			.name = "ShaderCompiler",
+			.sourceFilepath = "Code/ShaderCompiler/ShaderCompiler.cpp",
+			.compilerFlags = commonCompilerFlags,
+			.linkerFlags = "Build/libBasic.so -ldl -lpthread",
+			.binaryFilepath = "Build/ShaderCompiler",
+			.libraryDependencies = CreateInitializedArray(String{"Basic"}),
+			.isLibrary = false,
+		},
+		BuildCommand{
+			.name = "Game",
+			.sourceFilepath = "Code/Game/Game.cpp",
+			.compilerFlags = gameCompilerFlags,
+			.linkerFlags = gameLinkerFlags,
+			.binaryFilepath = "Build/Game",
+			.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}, String{"Engine"}),
+			.isLibrary = false,
+		}
+	);
+
+	Array<BuildCommand> requestedBuildCommands;
+	if (buildTarget == "")
+	{
+		requestedBuildCommands = allBuildCommands;
+	}
+	else
+	{
+		auto GetBuildCommand = [&allBuildCommands](const String &name)
+		{
+			for (auto command : allBuildCommands)
+			{
+				if (name == command.name)
+				{
+					return command;
+				}
+			}
+			Abort("unknown build name %s\n", &name[0]);
+			return BuildCommand{};
+		};
+		auto command = GetBuildCommand(buildTarget);
+		for (auto dep : command.libraryDependencies)
+		{
+			Append(&requestedBuildCommands, GetBuildCommand(dep));
+		}
+		Append(&requestedBuildCommands, command);
+	}
 
 	LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
-	for (auto &command : buildCommands)
+	for (auto &command : requestedBuildCommands)
 	{
 		auto success = false;
 		if (forceBuildFlag)

@@ -43,23 +43,15 @@ bool CStringsEqual(const char *a, const char *b)
 
 String CreateString(size_t length, size_t capacity)
 {
-	String result = {
+	String result =
+	{
 		.data = CreateArray<char>(length + 1, capacity + 1),
 	};
 	result.data[length] = '\0';
 	return result;
 }
 
-String CreateString(size_t length)
-{
-	String result = {
-		.data = CreateArray<char>(length + 1),
-	};
-	result.data[length] = '\0';
-	return result;
-}
-
-String CreateString(const String &copy)
+String CreateStringCopy(const String &copy)
 {
 	auto length = Length(copy);
 	String result = {
@@ -70,31 +62,57 @@ String CreateString(const String &copy)
 	return result;
 }
 
-String CreateString(const String &copy, size_t startIndex, size_t endIndex)
+String CreateStringCopyRange(const String &copy, size_t startIndex, size_t endIndex)
 {
 	Assert(endIndex >= startIndex);
 	auto length = endIndex - startIndex + 1;
-	auto result = CreateString(length);
+	auto result = CreateString(length, length);
 	CopyMemory(&copy[startIndex], &result[0], length);
 	return result;
 }
 
-void Resize(String *string, size_t newSize)
+void ResizeString(String *string, size_t newSize)
 {
-	Resize(&string->data, newSize + 1);
+	ResizeArray(&string->data, newSize + 1);
 	string->data[newSize] = '\0';
 }
 
-void Append(String *Destination, const String &Source)
+void StringAppend(String *destination, const String &source)
 {
-	size_t WriteIndex = Length(Destination);
-	Resize(&Destination->data, Length(Destination) + Length(Source) + 1);
-	CopyMemory(&Source.data[0], &Destination->data[WriteIndex], Length(Source) + 1);
+	auto writeIndex = StringLength(destination);
+	ResizeString(&destination->data, StringLength(destination) + StringLength(source) + 1);
+	CopyMemory(&source.data[0], &destination->data[writeIndex], StringLength(source) + 1);
 }
 
-size_t Length(const char *string)
+void StringAppendCString(String *destination, const char *source)
 {
-	size_t length = 0;
+	auto sourceLength = CStringLength(source);
+	auto writeIndex = StringLength(*destination);
+	ResizeString(&destination->data, StringLength(destination) + sourceLength + 1);
+	CopyMemory(source, &destination->data[writeIndex], sourceLength + 1);
+}
+
+void StringAppendRange(String *destination, const String &source, size_t rangeStartIndex, size_t rangeLength)
+{
+	Assert(source.data.count > rangeStartIndex);
+	Assert(source.data.count >= rangeStartIndex + rangeLength);
+	auto writeIndex = StringLength(*destination);
+	ResizeString(&destination->data, Length(destination) + rangeLength + 1);
+	CopyMemory(&source.data[rangeStartIndex], &destination->data[writeIndex], rangeLength + 1);
+}
+
+size_t StringLength(const String &s)
+{
+	if (ArrayCount(s.data) == 0)
+	{
+		return 0;
+	}
+	return ArrayCount(s.data) - 1; // To account for the NULL terminator we insert at the end.
+}
+
+size_t CStringLength(const char *string)
+{
+	auto length = 0;
 	while (string[length])
 	{
 		length++;
@@ -102,99 +120,31 @@ size_t Length(const char *string)
 	return length;
 }
 
-void Append(String *Destination, const char *Source)
+String FormatStringVarArgs(const char *format, va_list arguments)
 {
-	size_t SourceLength = Length(Source);
-	size_t WriteIndex = Length(Destination);
-	Resize(&Destination->data, Length(Destination) + SourceLength + 1);
-	CopyMemory(Source, &Destination->data[WriteIndex], SourceLength + 1);
-}
-
-void Append(String *Destination, String Source, u32 RangeStartIndex, u32 RangeLength)
-{
-	Assert(Source.data.count > RangeStartIndex);
-	Assert(Source.data.count >= RangeStartIndex + RangeLength);
-	size_t WriteIndex = Length(Destination);
-	Resize(&Destination->data, Length(Destination) + RangeLength + 1);
-	CopyMemory(&Source.data[RangeStartIndex], &Destination->data[WriteIndex], RangeLength + 1);
-
-	///SetSize(&Destination->data, Length(Destination->data) - 1);
-	///Append(&Destination->data, &Source.data[RangeStartIndex], RangeLength);
-	///Append(&Destinaton->data, '\0');
-}
-
-void Append(String *s, char c)
-{
-	Resize(&s->data, Length(s) + 2);
-	s->data[Length(s->data) - 2] = c;
-	s->data[Length(s->data) - 1] = '\0';
-}
-
-size_t Length(const String *S)
-{
-	if (Length(S->data) == 0)
+	auto result = CreateString(0);
+	auto sprintfCallback = [&result](const char *buffer, void *userData, s32 length)
 	{
-		return 0;
-	}
-	return Length(S->data) - 1;
+		auto writeIndex = StringLength(result);
+		ResizeString(&result, StringLength(result) + length);
+		CopyMemory(buffer, &result[writeIndex], length);
+	};
+	char buffer[STB_SPRINTF_MIN];
+	stbsp_vsprintf(sprintfCallback, NULL, buffer, format, arguments);
 }
 
-size_t Length(const String &S)
-{
-	if (Length(S.data) == 0)
-	{
-		return 0;
-	}
-	return Length(S.data) - 1; // To account for the NULL terminator we insert at the end.
-}
-
-char *begin(String &S)
-{
-	return &S.data[0];
-}
-
-char *end(String &S)
-{
-	return &S.data[S.data.count];
-}
-
-char *begin(String *S)
-{
-	return &S->data[0];
-}
-
-char *end(String *S)
-{
-	return &S->data[S->data.count];
-}
-
-s32 FormatString(char *buffer, const char *format, ...)
+String FormatString(const String &format, ...)
 {
 	va_list arguments;
 	va_start(arguments, format);
-	auto numberOfBytesWritten = stbsp_vsprintf(buffer, format, arguments);
+	auto result = FormatStringVarArgs(format, arguments);
 	va_end(arguments);
-	return numberOfBytesWritten;
+	return result;
 }
 
-s32 FormatString(char *buffer, const char *format, va_list arguments)
+s64 FindFirstCharIndex(const String &s, char c)
 {
-	return stbsp_vsprintf(buffer, format, arguments);
-}
-
-String _FormatString(const char *format, ...)
-{
-	char buffer[2056]; // @TODO
-	va_list arguments;
-	va_start(arguments, format);
-	FormatString(buffer, format, arguments);
-	va_end(arguments);
-	return CreateString(buffer);
-}
-
-s64 FindFirstIndex(const String &s, char c)
-{
-	for (size_t i = 0; i < Length(s); i++)
+	for (auto i = 0; i < StringLength(s); i++)
 	{
 		if (s.data[i] == c)
 		{
@@ -204,10 +154,10 @@ s64 FindFirstIndex(const String &s, char c)
 	return -1;
 }
 
-s64 FindLastIndex(const String &s, char c)
+s64 FindLastCharIndex(const String &s, char c)
 {
 	s64 occurrence = -1;
-	for (size_t i = 0; i < Length(s); i++)
+	for (auto i = 0; i < StringLength(s); i++)
 	{
 		if (s.data[i] == c)
 		{
@@ -217,7 +167,7 @@ s64 FindLastIndex(const String &s, char c)
 	return occurrence;
 }
 
-bool IsSpace(char c)
+bool IsCharSpace(char c)
 {
 	if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
 	{
@@ -226,20 +176,29 @@ bool IsSpace(char c)
 	return false;
 }
 
-void Trim(String *s, size_t leftIndex, size_t rightIndex)
+bool IsCharDigit(char c)
+{
+	if ('0' <= c && c <= '9')
+	{
+		return true;
+	}
+	return false;
+}
+
+void TrimString(String *s, size_t leftIndex, size_t rightIndex)
 {
 	Assert(rightIndex > leftIndex);
 	auto length = rightIndex - (leftIndex + 1);
 	MoveMemory(&s->data[leftIndex + 1], &s->data[0], length);
-	Resize(s, length);
+	ResizeString(s, length);
 }
 
-Array<String> Split(const String &s, char seperator)
+Array<String> SplitString(const String &s, char seperator)
 {
 	Array<String> result;
 	auto splitStartIndex = 0;
 	auto splitLength = 0;
-	for (auto i = 0; i < Length(s); i++)
+	for (auto i = 0; i < StringLength(s); i++)
 	{
 		if (s[i] == seperator)
 		{
@@ -263,4 +222,82 @@ Array<String> Split(const String &s, char seperator)
 		Append(&result, CreateString(s, splitStartIndex, Length(s) - 1));
 	}
 	return result;
+}
+
+bool ParseInteger(const String &s, s64 *result)
+{
+    *result = 0;
+    for (auto c : s)
+    {
+    	if (!IsDigit(c))
+    	{
+    		return false;
+    	}
+    	*result = (*result * 10) + c - '0';
+    }
+    return true;
+}
+
+char *begin(const String &s)
+{
+	return &s[0];
+}
+
+char *end(const String &s)
+{
+	return &s[StringLength(*s)];
+}
+
+char *begin(String *s)
+{
+	return &(*s)[0];
+}
+
+char *end(String *s)
+{
+	return &(*s)[StringLength(*s)];
+}
+
+char UppercaseChar(char c)
+{
+	if ('a' <= c && c <= 'z')
+	{
+		return 'A' + (c - 'a');
+	}
+	return c;
+}
+
+char LowercaseChar(char c)
+{
+	if ('A' <= c && c <= 'Z')
+	{
+		return 'a' + (c - 'A');
+	}
+	return c;
+}
+
+void UppercaseString(String *s)
+{
+	for (auto i = 0; i < StringLength(*s); i++)
+	{
+		(*s)[i] = UppercaseChar((*s)[i]);
+	}
+}
+
+void LowercaseString(String *s)
+{
+	for (auto i = 0; i < StringLength(*s); i++)
+	{
+		(*s)[i] = LowercaseChar((*s)[i]);
+	}
+}
+
+u64 Hash(const String &s)
+{
+    u64 hash = 5381;
+    for (auto c : s)
+    {
+        hash = ((hash << 5) + hash) + c;
+	}
+    return hash;
 }

@@ -1,9 +1,8 @@
 #include "Engine.h"
 
-THREAD_LOCAL u32 threadIndex; // @TODO
 u32 windowWidth, windowHeight;
 
-#include "Jobs.cpp"
+#include "Job.cpp"
 #include "Math.cpp"
 #include "Timer.cpp"
 #define STB_IMAGE_IMPLEMENTATION
@@ -11,10 +10,9 @@ u32 windowWidth, windowHeight;
 #include "Vulkan.cpp"
 #include "GPU.cpp"
 #include "Render.cpp"
-#include "Assets.cpp"
+#include "Asset.cpp"
 #include "Camera.cpp"
 #include "Entity.cpp"
-#include "Renderer/Shader.cpp"
 #include "Transform.cpp"
 
 void InitializeGame();

@@ -1,14 +1,15 @@
 #include <sys/stat.h>
 
-OpenFileResult OpenFile(const String &path, OpenFileFlags flags)
+FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error)
 {
-	auto file = open(&path[0], (s32)flags, 0666);
+	auto file = open(&path[0], flags, 0666);
 	if (file < 0)
 	{
-		LogPrint(LogType::ERROR, "could not open file: %s\n", &path[0]);
-		return {.error = true};
+		LogPrint(ERROR_LOG, "Could not open file: %s.\n", &path[0]);
+		*error = true;
+		return {};
 	}
-	return {.file = file};
+	return file;
 }
 
 bool CloseFile(FileHandle file)
@@ -16,13 +17,13 @@ bool CloseFile(FileHandle file)
 	auto result = close(file);
 	if (result == -1)
 	{
-		LogPrint(LogType::ERROR, "could not close file: %s\n", GetPlatformError());
+		LogPrint(ERROR_LOG, "Could not close file: %s.\n", GetPlatformError());
 		return false;
 	}
 	return true;
 }
 
-ReadFileResult ReadFile(FileHandle file, size_t numberOfBytesToRead)
+String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error)
 {
 	size_t totalBytesRead = 0;
 	ssize_t currentBytesRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
@@ -36,66 +37,73 @@ ReadFileResult ReadFile(FileHandle file, size_t numberOfBytesToRead)
 	} while (totalBytesRead < numberOfBytesToRead && currentBytesRead != 0 && currentBytesRead != -1);
 	if (currentBytesRead == -1)
 	{
-		LogPrint(LogType::ERROR, "ReadFile failed: could not read from file: %s\n", GetPlatformError());
-		return ReadFileResult{.error = true};
+		LogPrint(ERROR_LOG, "ReadFile failed: could not read from file: %s.\n", GetPlatformError());
+		*error = true;
+		return {};
 	}
 	else if (totalBytesRead != numberOfBytesToRead)
 	{
 		// @TODO: Add file name to file handle.
-		LogPrint(LogType::ERROR, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested\n", totalBytesRead, numberOfBytesToRead);
-		return ReadFileResult{.error = true};
+		LogPrint(ERROR_LOG, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested.\n", totalBytesRead, numberOfBytesToRead);
+		*error = true;
+		return {};
 	}
-	return ReadFileResult{.string = fileString};
+	return fileString;
 }
 
-bool WriteFile(FileHandle file, size_t count, const void *buffer)
+bool WriteToFile(FileHandle file, size_t length, void *buffer)
 {
 	size_t totalBytesWritten = 0;
 	ssize_t currentBytesWritten = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
 	auto position = (char *)buffer;
 	do
 	{
-		currentBytesWritten = write(file, position, (count - totalBytesWritten));
+		currentBytesWritten = write(file, position, (length - totalBytesWritten));
 		totalBytesWritten += currentBytesWritten;
 		position += currentBytesWritten;
-	} while (totalBytesWritten < count && currentBytesWritten != 0);
-	if (totalBytesWritten != count)
+	} while (totalBytesWritten < length && currentBytesWritten != 0);
+	if (totalBytesWritten != length)
 	{
 		// @TODO: Add file name to file handle.
-		LogPrint(LogType::ERROR, "Could not write to file: %s\n", GetPlatformError());
+		LogPrint(ERROR_LOG, "Could not write to file: %s.\n", GetPlatformError());
 		return false;
 	}
 	return true;
 }
 
-FileOffset GetFileLength(FileHandle file)
+FileOffset GetFileLength(FileHandle file, bool *error)
 {
 	struct stat stat; 
-	if (fstat(file, &stat) == 0)
+	if (fstat(file, &stat) == -1)
 	{
-		return (FileOffset)stat.st_size;
+		// @TODO: Add file name to file handle.
+		LogPrint(ERROR_LOG, "Could not fstat file: %s.\n", GetPlatformError());
+		*error = true;
+		return {};
 	}
-	return FILE_OFFSET_ERROR; 
+	return FileOffset{stat.st_size};
 }
 
-FileOffset SeekFile(FileHandle file, FileOffset offset, FileSeekRelative relative)
+FileOffset SeekInFile(FileHandle file, FileOffset offset, FileSeekRelative relative, bool *error)
 {
 	auto result = lseek(file, offset, (s32)relative);
 	if (result == (off_t)-1)
 	{
-		LogPrint(LogType::ERROR, "File seek failed: %s\n", GetPlatformError());
+		LogPrint(LogType::ERROR, "File seek failed: %s.\n", GetPlatformError());
+		*error = true;
+		return {};
 	}
 	return result;
 }
 
-PlatformTime GetFileLastModifiedTime(FileHandle file)
+PlatformTime GetFileLastModifiedTime(FileHandle file, bool *error)
 {
 	struct stat stat;
-	auto errorCode = fstat(file, &stat);
-	if (errorCode == -1)
+	if (fstat(file, &stat) == -1)
 	{
-		LogPrint(LogType::ERROR, "failed fstat: %s\n", GetPlatformError());
-		return PLATFORM_TIME_ERROR;
+		LogPrint(ERROR_LOG, "Could not fstat file: %s.\n", GetPlatformError());
+		*error = true;
+		return {};
 	}
 	return PlatformTime{stat.st_mtim};
 }
@@ -107,7 +115,7 @@ bool IterateDirectory(const String &path, DirectoryIteration *context)
 		context->dir = opendir(&path[0]);
 		if (!context->dir)
 		{
-			LogPrint(LogType::ERROR, "failed to open directory %s: %s\n", &path[0], GetPlatformError());
+			LogPrint(ERROR_LOG, "Failed to open directory %s: %s.\n", &path[0], GetPlatformError());
 			return false;
 		}
 	}
@@ -141,7 +149,7 @@ bool CreateDirectoryIfItDoesNotExist(const String &path)
 	}
 	if (mkdir(&path[0], 0700) == -1)
 	{
-		LogPrint(LogType::ERROR, "failed to create directory %s: %s\n", &path[0], GetPlatformError());
+		LogPrint(ERROR_LOG, "Failed to create directory %s: %s.\n", &path[0], GetPlatformError());
 		return false;
 	}
 	return true;

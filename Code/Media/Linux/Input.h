@@ -1,9 +1,5 @@
 #pragma once
 
-#include <X11/X.h>
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
-
 enum KeySymbol
 {
 	W_KEY = XK_w,
@@ -39,4 +35,4 @@ enum MouseButton
 };
 
 s32 KeySymbolToScancode(KeySymbol keySymbol);
-void QueryMousePosition(WindowContext *window, s32 *x, s32 *y);
+void QueryMousePosition(PlatformWindow *window, s32 *x, s32 *y);

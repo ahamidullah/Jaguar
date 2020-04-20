@@ -86,20 +86,20 @@ void *WorkerThreadProcedure(void *parameter)
 			// Get the next job to run. Prefer higher priority jobs and resumable jobs.
 			for (s32 i = 0; i < JOB_PRIORITY_COUNT; i++)
 			{
-				if (Read(&resumableJobQueues[i], &activeJobFiber))
+				if (ReadFromAtomicRingBuffer(&resumableJobQueues[i], &activeJobFiber))
 				{
 					break;
 				}
 				// Avoid copying the Job twice by getting the idle job fiber before we know if we have a job.
 				// If there are no more jobs left, just write the job fiber back to the idle job fiber list.
-				activeJobFiber = PopFromFront(&idleJobFiberList);
-				if (Read(&jobQueues[i], &activeJobFiber->parameter.scheduledJob))
+				activeJobFiber = PopFromFrontOfAtomicLinkedList(&idleJobFiberList);
+				if (ReadFromAtomicRingBuffer(&jobQueues[i], &activeJobFiber->parameter.scheduledJob))
 				{
 					break;
 				}
 				else
 				{
-					PushToFront(&idleJobFiberList, activeJobFiber);
+					PushToFrontOfAtomicLinkedList(&idleJobFiberList, activeJobFiber);
 					activeJobFiber = NULL;
 				}
 			}
@@ -111,32 +111,32 @@ void *WorkerThreadProcedure(void *parameter)
 			Job *scheduledJob = &activeJobFiber->parameter.scheduledJob;
 			if (scheduledJob->finished)
 			{
-				PushToFront(&idleJobFiberList, activeJobFiber);
+				PushToFrontOfAtomicLinkedList(&idleJobFiberList, activeJobFiber);
 				if (!scheduledJob->counterWaitingForThisJob)
 				{
 					continue;
 				}
 				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
-				s32 unfinishedJobCount = AtomicAdd(&scheduledJob->counterWaitingForThisJob->unfinishedJobCount, -1);
+				s32 unfinishedJobCount = AtomicAdd32(&scheduledJob->counterWaitingForThisJob->unfinishedJobCount, -1);
 				if (unfinishedJobCount > 0)
 				{
 					continue;
 				}
 				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waitingJobFiber will be NULL.
-				JobFiber *waitingJobFiber = (JobFiber *)AtomicFetchAndSet((void *volatile *)&scheduledJob->counterWaitingForThisJob->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
+				JobFiber *waitingJobFiber = (JobFiber *)AtomicFetchAndSetPointer((void *volatile *)&scheduledJob->counterWaitingForThisJob->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waitingJobFiber)
 				{
 					continue;
 				}
 				// OK, the job finished, the counter reached zero, and the parent job started waiting on the counter. Now we can mark the parent job as resumable.
-				Write(&resumableJobQueues[waitingJobFiber->parameter.scheduledJob.priority], waitingJobFiber);
+				WriteToAtomicRingBuffer(&resumableJobQueues[waitingJobFiber->parameter.scheduledJob.priority], waitingJobFiber);
 			}
 			else
 			{
-				if (AtomicCompareAndSwap((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
+				if (AtomicCompareAndSwapPointer((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
 				{
 					// The waitingJobFiber was not NULL, hence all dependency jobs already finished. This job can resume immediately.
-					Write(&resumableJobQueues[scheduledJob->priority], activeJobFiber);
+					WriteToAtomicRingBuffer(&resumableJobQueues[scheduledJob->priority], activeJobFiber);
 				}
 			}
 		} while (activeJobFiber);
@@ -174,7 +174,7 @@ void RunJobs(u32 jobCount, JobDeclaration *jobDeclarations, JobPriority priority
 	}
 	for (u32 i = 0; i < jobCount; i++)
 	{
-		Write(&jobQueues[priority], (Job){
+		WriteToAtomicRingBuffer(&jobQueues[priority], (Job){
 			.procedure = jobDeclarations[i].procedure,
 			.parameter = jobDeclarations[i].parameter,
 			.priority = priority,
@@ -205,7 +205,7 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 {
 	for (auto i = 0; i < JOB_FIBER_COUNT; i++)
 	{
-		JobFiber *newFiber = AllocateStruct(JobFiber);
+		JobFiber *newFiber = AllocateStructMemory(JobFiber);
 		CreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
 		newFiber->next = idleJobFiberList.head;
 		idleJobFiberList.head = newFiber;
@@ -232,7 +232,7 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 	WorkerThreadProcedure(&workerThreads[workerThreadCount - 1].parameter);
 }
 
-u32 GetWorkerThreadCount()
+size_t GetWorkerThreadCount()
 {
-	return Length(workerThreads);
+	return ArrayLength(workerThreads);
 }

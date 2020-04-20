@@ -1,16 +1,43 @@
-String ReadEntireFile(const String &path)
+String ReadEntireFile(const String &path, bool *error)
 {
-	auto [file, error] = OpenFile(path, OPEN_FILE_READ_ONLY);
-	if (error)
+	auto file = OpenFile(path, OPEN_FILE_READ_ONLY, error);
+	if (*error)
 	{
-		return ReadFileResult{.error = true};
+		return "";
 	}
 	Defer(CloseFile(file));
-	auto fileLength = GetFileLength(file);
-	return ReadFile(file, fileLength);
+	auto fileLength = GetFileLength(file, error);
+	if (*error)
+	{
+		return "";
+	}
+	auto result = ReadFromFile(file, fileLength, error);
+	if (*error)
+	{
+		return "";
+	}
+	*error = false;
+	return result;
 }
 
 bool WriteStringToFile(FileHandle file, const String &string)
 {
-	return WriteFile(file, Length(string), &string[0]);
+	return WriteToFile(file, StringLength(string), &string[0]);
+}
+
+PlatformTime GetFilepathLastModifiedTime(const String &filepath, bool *error)
+{
+	auto sourceFile = OpenFile(filepath, OPEN_FILE_READ_ONLY, error);
+	if (*error)
+	{
+		return PlatformTime{};
+	}
+	Defer(CloseFile(sourceFile));
+	auto result = GetFileLastModifiedTime(sourceFile, error);
+	if (*error)
+	{
+		return PlatformTime{};
+	}
+	*error = false;
+	return result;
 }

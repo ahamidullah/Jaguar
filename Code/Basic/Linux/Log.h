@@ -1,4 +1,6 @@
 #pragma once
 
+struct String;
+
 void PrintStacktrace();
-const char *GetPlatformError();
+String GetPlatformError();

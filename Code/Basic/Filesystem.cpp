@@ -20,7 +20,7 @@ String GetFilepathFilename(const String &path)
 	{
 		return "";
 	}
-	auto filenameLength = Length(path) - (slashIndex + 1);
+	auto filenameLength = StringLength(path) - (slashIndex + 1);
 	auto filename = CreateString(filenameLength);
 	CopyMemory(&path[0] + slashIndex + 1, &filename[0], filenameLength);
 	return filename;
@@ -49,18 +49,18 @@ void SetFilepathExtension(String *path, const String &extension)
 		StringAppend(path, extension);
 		return;
 	}
-	auto extensionLength = StringLength(extension))
-	ResizeString(path, dotIndex + extensionLength;
+	auto extensionLength = StringLength(extension);
+	ResizeString(path, dotIndex + extensionLength);
 	CopyMemory(&extension[0], &(*path)[dotIndex], extensionLength);
 }
 
 // Concatenates two strings and inserts a '/' between them.
 String JoinFilepaths(const String &a, const String &b)
 {
-	auto result = CreateString(Length(a) + Length(b) + 1);
-	CopyMemory(&a[0], &result[0], Length(a));
-	result[Length(a)] = '/';
-	CopyMemory(&b[0], &result[0] + Length(a) + 1, Length(b));
+	auto result = CreateString(StringLength(a) + StringLength(b) + 1);
+	CopyMemory(&a[0], &result[0], StringLength(a));
+	result[StringLength(a)] = '/';
+	CopyMemory(&b[0], &result[0] + StringLength(a) + 1, StringLength(b));
 	return result;
 }
 
@@ -68,7 +68,7 @@ String JoinFilepaths(const String &a, const String &b)
 String CleanFilepath(const String &filepath)
 {
 	auto components = SplitString(filepath, '/');
-	for (auto i = 0; i < StringLength(components); i++)
+	for (auto i = 0; i < ArrayLength(components); i++)
 	{
 		if (components[i] == ".")
 		{
@@ -83,15 +83,15 @@ String CleanFilepath(const String &filepath)
 			}
 		}
 	}
-	auto result = CreateString(0, Length(filepath));
+	auto result = CreateString(0, StringLength(filepath));
 	if (StringLength(filepath) > 0 && filepath[0] == '/')
 	{
 		StringAppend(&result, "/");
 	}
-	for (auto i = 0; i < StringLength(components); i++)
+	for (auto i = 0; i < ArrayLength(components); i++)
 	{
 		StringAppend(&result, components[i]);
-		if (i != ArrayCount(components) - 1)
+		if (i != ArrayLength(components) - 1)
 		{
 			StringAppend(&result, "/");
 		}

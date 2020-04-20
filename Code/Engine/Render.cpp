@@ -70,6 +70,8 @@ void CreateDescriptorSetGroup(u32 setIndex, u32 bindingInfoCount, DescriptorSetB
 
 void LoadShaders()
 {
+	bool error;
+
 	if (development)
 	{
 		String shaderDirectory;
@@ -89,19 +91,19 @@ void LoadShaders()
 		Shader shader;
 		RunProcess("ShaderCompiler");
 		{
-			auto [spirv, error] = ReadEntireFile("Build/Shader/Binary/Model.vert.spirv");
+			auto spirv = ReadEntireFile("Build/Shader/Binary/Model.vert.spirv", &error);
 			Assert(!error);
-			Append(&shader.stages, GFX_VERTEX_SHADER_STAGE);
-			Append(&shader.modules, GfxCreateShaderModule(GFX_VERTEX_SHADER_STAGE, spirv));
+			ArrayAppend(&shader.stages, GFX_VERTEX_SHADER_STAGE);
+			ArrayAppend(&shader.modules, GfxCreateShaderModule(GFX_VERTEX_SHADER_STAGE, spirv));
 		}
 		{
-			auto [spirv, error] = ReadEntireFile("Build/Shader/Binary/Model.frag.spirv");
+			auto spirv = ReadEntireFile("Build/Shader/Binary/Model.frag.spirv", &error);
 			Assert(!error);
-			Append(&shader.stages, GFX_FRAGMENT_SHADER_STAGE);
-			Append(&shader.modules, GfxCreateShaderModule(GFX_FRAGMENT_SHADER_STAGE, spirv));
+			ArrayAppend(&shader.stages, GFX_FRAGMENT_SHADER_STAGE);
+			ArrayAppend(&shader.modules, GfxCreateShaderModule(GFX_FRAGMENT_SHADER_STAGE, spirv));
 		}
 		shader.name = "Model";
-		Insert(&renderGlobals.shaders, String{"Model"}, shader);
+		HashTableInsert(&renderGlobals.shaders, String{"Model"}, shader);
 
 // @TODO: Automatic loading.
 #if 0
@@ -166,10 +168,10 @@ void LoadShaders()
 
 Shader *GetShader(const String &name)
 {
-	auto shader = Lookup(&renderGlobals.shaders, name);
+	auto shader = HashTableLookup(&renderGlobals.shaders, name);
 	if (!shader)
 	{
-		LogPrint(LogType::ERROR, "Failed to get non-existent shader %s\n", &name[0]);
+		LogPrint(ERROR_LOG, "Failed to get non-existent shader %s\n", &name[0]);
 		return NULL;
 	}
 	return shader;
@@ -231,11 +233,11 @@ GfxPipeline GetShaderGraphicsPipeline(Shader *shader, GfxRenderPass renderPass)
 			.depth_compare_operation = GFX_COMPARE_OP_LESS,
 			.framebuffer_attachment_color_blend_count = 1,
 			.framebuffer_attachment_color_blend_descriptions = &colorBlendDescription,
-			.vertex_input_attribute_count = ArrayCount(vertexInputAttributeDescriptions),
+			.vertex_input_attribute_count = CArrayCount(vertexInputAttributeDescriptions),
 			.vertex_input_attribute_descriptions = vertexInputAttributeDescriptions,
-			.vertex_input_binding_count = ArrayCount(vertexInputBindingDescriptions),
+			.vertex_input_binding_count = CArrayCount(vertexInputBindingDescriptions),
 			.vertex_input_binding_descriptions = vertexInputBindingDescriptions,
-			.dynamic_state_count = ArrayCount(dynamicStates),
+			.dynamic_state_count = CArrayCount(dynamicStates),
 			.dynamic_states = dynamicStates,
 			.shaderStages = shader->stages,
 			.shaderModules = shader->modules,
@@ -281,7 +283,7 @@ struct RenderGraph
 
 void AddRenderGraphPass(RenderGraph *graph, const RenderPass &pass)
 {
-	Append(&graph->logicalPasses, pass);
+	ArrayAppend(&graph->logicalPasses, pass);
 }
 
 void CompileRenderGraph(RenderGraph *graph)
@@ -295,7 +297,7 @@ void CompileRenderGraph(RenderGraph *graph)
 			.gfxPipeline = GetShaderGraphicsPipeline(logicalPass.shader, physicalPass.gfxPass),
 			.execute = logicalPass.execute,
 		};
-		Append(&graph->physicalPasses, physicalPass);
+		ArrayAppend(&graph->physicalPasses, physicalPass);
 	}
 }
 
@@ -311,11 +313,11 @@ void ExecuteRenderGraph(RenderGraph *graph, u32 swapchainImageIndex)
 			renderGlobals.swapchainImageViews[swapchainImageIndex],
 			depthBufferImageView,
 		};
-		renderGlobals.framebuffers[swapchainImageIndex] = GfxCreateFramebuffer(pass.gfxPass, windowWidth, windowHeight, ArrayCount(attachments), attachments);
+		renderGlobals.framebuffers[swapchainImageIndex] = GfxCreateFramebuffer(pass.gfxPass, windowWidth, windowHeight, CArrayCount(attachments), attachments);
 
 		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
 
-		GfxRecordBindDescriptorSetsCommand(commandBuffer, GFX_GRAPHICS_PIPELINE_BIND_POINT, renderGlobals.pipelineLayout, 0, Length(renderGlobals.descriptorSets[swapchainImageIndex]), &renderGlobals.descriptorSets[swapchainImageIndex][0]);
+		GfxRecordBindDescriptorSetsCommand(commandBuffer, GFX_GRAPHICS_PIPELINE_BIND_POINT, renderGlobals.pipelineLayout, 0, ArrayLength(renderGlobals.descriptorSets[swapchainImageIndex]), &renderGlobals.descriptorSets[swapchainImageIndex][0]);
 
 		GfxRecordBeginRenderPassCommand(commandBuffer, pass.gfxPass, renderGlobals.framebuffers[swapchainImageIndex]);
 		GfxRecordBindPipelineCommand(commandBuffer, pass.gfxPipeline);
@@ -331,7 +333,7 @@ void ExecuteRenderGraph(RenderGraph *graph, u32 swapchainImageIndex)
 
 void InitializeRenderer(void *job_parameter_pointer)
 {
-	auto window = (WindowContext *)job_parameter_pointer;
+	auto window = (PlatformWindow *)job_parameter_pointer;
 
 	GfxInitialize(window);
 
@@ -339,7 +341,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 
 	renderGlobals.swapchain = GfxCreateSwapchain();
 	renderGlobals.swapchainImageCount = GfxGetSwapchainImageCount(renderGlobals.swapchain);
-	Resize(&renderGlobals.swapchainImageViews, renderGlobals.swapchainImageCount);
+	ResizeArray(&renderGlobals.swapchainImageViews, renderGlobals.swapchainImageCount);
 	GfxGetSwapchainImageViews(renderGlobals.swapchain, renderGlobals.swapchainImageCount, &renderGlobals.swapchainImageViews[0]);
 
 	//auto shadowMapImage = CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
@@ -357,9 +359,9 @@ void InitializeRenderer(void *job_parameter_pointer)
 
 	renderGlobals.descriptorPool = GfxCreateDescriptorPool(renderGlobals.swapchainImageCount);
 
-	Resize(&renderGlobals.threadLocal, GetWorkerThreadCount());
+	ResizeArray(&renderGlobals.threadLocal, GetWorkerThreadCount());
 
-	renderGlobals.framebuffers = AllocateArray(GfxFramebuffer, renderGlobals.swapchainImageCount);
+	renderGlobals.framebuffers = AllocateArrayMemory(GfxFramebuffer, renderGlobals.swapchainImageCount);
 
 #if 0
 	renderGlobals.renderThreadCount = GetWorkerThreadCount();
@@ -374,13 +376,13 @@ void InitializeRenderer(void *job_parameter_pointer)
 	}
 #endif
 
-	Resize(&renderGlobals.descriptorSets, renderGlobals.swapchainImageCount);
-	Resize(&renderGlobals.descriptorSetBuffers, renderGlobals.swapchainImageCount);
-	Resize(&renderGlobals.descriptorSetLayouts, DESCRIPTOR_SET_COUNT);
+	ResizeArray(&renderGlobals.descriptorSets, renderGlobals.swapchainImageCount);
+	ResizeArray(&renderGlobals.descriptorSetBuffers, renderGlobals.swapchainImageCount);
+	ResizeArray(&renderGlobals.descriptorSetLayouts, DESCRIPTOR_SET_COUNT);
 	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
 	{
-		Resize(&renderGlobals.descriptorSets[i], DESCRIPTOR_SET_COUNT);
-		Resize(&renderGlobals.descriptorSetBuffers[i], DESCRIPTOR_SET_COUNT);
+		ResizeArray(&renderGlobals.descriptorSets[i], DESCRIPTOR_SET_COUNT);
+		ResizeArray(&renderGlobals.descriptorSetBuffers[i], DESCRIPTOR_SET_COUNT);
 	}
 	renderGlobals.descriptorSetUpdateFence = GfxCreateFence(false);
 	{
@@ -393,7 +395,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 				.stageFlags = GFX_VERTEX_SHADER_STAGE,
 			},
 		};
-		CreateDescriptorSetGroup(GLOBAL_DESCRIPTOR_SET_INDEX, ArrayCount(globalBindingInfos), globalBindingInfos);
+		CreateDescriptorSetGroup(GLOBAL_DESCRIPTOR_SET_INDEX, CArrayCount(globalBindingInfos), globalBindingInfos);
 
 		DescriptorSetBindingInfo viewBindingInfos[] =
 		{
@@ -404,7 +406,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 				.stageFlags = GFX_VERTEX_SHADER_STAGE,
 			},
 		};
-		CreateDescriptorSetGroup(VIEW_DESCRIPTOR_SET_INDEX, ArrayCount(viewBindingInfos), viewBindingInfos);
+		CreateDescriptorSetGroup(VIEW_DESCRIPTOR_SET_INDEX, CArrayCount(viewBindingInfos), viewBindingInfos);
 
 		DescriptorSetBindingInfo materialBindingInfos[] =
 		{
@@ -415,7 +417,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 				.stageFlags = GFX_VERTEX_SHADER_STAGE | GFX_FRAGMENT_SHADER_STAGE,
 			},
 		};
-		CreateDescriptorSetGroup(MATERIAL_DESCRIPTOR_SET_INDEX, ArrayCount(materialBindingInfos), materialBindingInfos);
+		CreateDescriptorSetGroup(MATERIAL_DESCRIPTOR_SET_INDEX, CArrayCount(materialBindingInfos), materialBindingInfos);
 
 		DescriptorSetBindingInfo objectBindingInfos[] =
 		{
@@ -426,10 +428,10 @@ void InitializeRenderer(void *job_parameter_pointer)
 				.stageFlags = GFX_VERTEX_SHADER_STAGE,
 			},
 		};
-		CreateDescriptorSetGroup(OBJECT_DESCRIPTOR_SET_INDEX, ArrayCount(objectBindingInfos), objectBindingInfos);
+		CreateDescriptorSetGroup(OBJECT_DESCRIPTOR_SET_INDEX, CArrayCount(objectBindingInfos), objectBindingInfos);
 	}
 
-	renderGlobals.pipelineLayout = GfxCreatePipelineLayout(Length(renderGlobals.descriptorSetLayouts), &renderGlobals.descriptorSetLayouts[0]);
+	renderGlobals.pipelineLayout = GfxCreatePipelineLayout(ArrayLength(renderGlobals.descriptorSetLayouts), &renderGlobals.descriptorSetLayouts[0]);
 
 	renderGlobals.aspectRatio = windowWidth / (f32)windowHeight;
 
@@ -466,7 +468,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 		//GPU_Descriptor_Update_Info update_infos[] = {
 			//{MODEL_TO_WORLD_SPACE_DESCRIPTOR, {.m4 = {}}},
 		//};
-		//Update_Descriptors(context, matrix_fence, i, &renderGlobals.rrdescriptor_sets, ArrayCount(update_infos), update_infos);
+		//Update_Descriptors(context, matrix_fence, i, &renderGlobals.rrdescriptor_sets, CArrayCount(update_infos), update_infos);
 		void *staging_memory;
 		GfxBuffer staging_buffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &staging_memory);
 		CopyMemory(&m, staging_memory, sizeof(M4));
@@ -518,15 +520,15 @@ void InitializeRenderer(void *job_parameter_pointer)
 			.depth_attachment = &shadow_pass_depth_attachments,
 		},
 		{
-			.color_attachment_count = ArrayCount(scene_pass_color_attachments),
+			.color_attachment_count = CArrayCount(scene_pass_color_attachments),
 			.color_attachments = scene_pass_color_attachments,
 			.depth_attachment = &scene_pass_depth_attachment,
 		},
 	};
 	Render_Graph_Description render_graph_description = {
-		.external_attachment_count = ArrayCount(external_attachments),
+		.external_attachment_count = CArrayCount(external_attachments),
 		.external_attachments = external_attachments,
-		.render_pass_count = ArrayCount(render_pass_descriptions),
+		.render_pass_count = CArrayCount(render_pass_descriptions),
 		.render_pass_descriptions = render_pass_descriptions,
 	};
 	GPU_Render_Graph render_graph = GPU_Compile_Render_Graph(&game_state->render_context.gpu_context, &render_graph_description);
@@ -540,7 +542,7 @@ void Render()
 	auto camera = GetCamera("main");
 	if (!camera)
 	{
-		LogPrint(LogType::ERROR, "Render: could not get main camera");
+		LogPrint(ERROR_LOG, "Render: could not get main camera");
 		return;
 	}
 
@@ -591,10 +593,10 @@ void Render()
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 		}
 		GfxEndCommandBuffer(commandBuffer);
-		GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, renderGlobals.descriptorSetUpdateFence);
+		//GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, renderGlobals.descriptorSetUpdateFence);
 	}
 
-	auto transferSemaphore = SubmitGPUTransferCommandBuffers();
+	//auto transferSemaphore = SubmitGPUTransferCommandBuffers();
 
 	// Build and execute render graph.
 	{
@@ -666,8 +668,8 @@ void Render()
 			upload_fences[vulkan_context.frameIndex],
 			render_fences[vulkan_context.frameIndex],
 		};
-		GPU_Wait_For_Fences(ArrayCount(fences), fences, 1, UINT64_MAX);
-		GPU_Reset_Fences(ArrayCount(fences), fences);
+		GPU_Wait_For_Fences(CArrayCount(fences), fences, 1, UINT64_MAX);
+		GPU_Reset_Fences(CArrayCount(fences), fences);
 		VK_CHECK(vkAcquireNextImageKHR(vulkan_context.device, vulkan_context.swapchain, UINT64_MAX, vulkan_context.image_available_semaphores[vulkan_context.frameIndex], NULL, &vulkan_context.frameIndex));
 		GPU_Reset_Command_List_Pool(game_state->render_context.thread_local[thread_index].command_list_pools[game_state->render_context.current_frame_index]);
 	}

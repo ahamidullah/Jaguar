@@ -18,7 +18,7 @@ void FreePlatformMemory(void *memory, size_t size)
 {
 	if (munmap(memory, size) == -1)
 	{
-		LogPrint(LogType::ERROR, "failed to free platform memory: %s\n", GetPlatformError());
+		LogPrint(ERROR_LOG, "Failed to free platform memory: %s.\n", GetPlatformError());
 	}
 }
 

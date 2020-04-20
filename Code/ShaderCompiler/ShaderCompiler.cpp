@@ -2,9 +2,11 @@
 
 bool CompileShader(const String &shaderFilepath)
 {
+	bool error;
+
 	if (!FileExists(shaderFilepath))
 	{
-		LogPrint(LogType::ERROR, "Shader file %s does not exist\n", &shaderFilepath[0]);
+		LogPrint(ERROR_LOG, "Shader file %s does not exist\n", &shaderFilepath[0]);
 		return false;
 	}
 
@@ -14,17 +16,17 @@ bool CompileShader(const String &shaderFilepath)
 
 	// Write out a new version of the shader, inserting the includes.
 	auto outputFilepath = FormatString("Build/Shader/Code/%s.%s", &shaderName[0], &fileExtension[1]);
-	auto [outputFile, fileOpenError] = OpenFile(outputFilepath, OPEN_FILE_WRITE_ONLY | OPEN_FILE_CREATE);
-	if (fileOpenError)
+	auto outputFile = OpenFile(outputFilepath, OPEN_FILE_WRITE_ONLY | OPEN_FILE_CREATE, &error);
+	if (error)
 	{
-		LogPrint(LogType::ERROR, "Failed to open shader output file %s\n", &outputFilepath[0]);
+		LogPrint(ERROR_LOG, "Failed to open shader output file %s\n", &outputFilepath[0]);
 		return false;
 	}
 
-	ParserStream parser;
-	if (!CreateParserStreamFromFile(&parser, shaderFilepath))
+	ParserStream parser = CreateParserStream(shaderFilepath, &error);
+	if (error)
 	{
-		LogPrint(LogType::ERROR, "Failed to create parser\n");
+		LogPrint(ERROR_LOG, "Failed to create parser\n");
 		return false;
 	}
 	String line;
@@ -41,13 +43,13 @@ bool CompileShader(const String &shaderFilepath)
 			String includeFilepath;
 			for (token = GetToken(&lineParser); token != "\""; token = GetToken(&lineParser))
 			{
-				Append(&includeFilepath, token);
+				StringAppend(&includeFilepath, token);
 			}
 			includeFilepath = JoinFilepaths("Code/Shader", includeFilepath);
 			auto [includeString, error] = ReadEntireFile(includeFilepath);
 			if (error)
 			{
-				LogPrint(LogType::ERROR, "Failed to read file %s included from %s\n", &includeFilepath[0], &shaderFilepath[0]);
+				LogPrint(ERROR_LOG, "Failed to read file %s included from %s\n", &includeFilepath[0], &shaderFilepath[0]);
 				return false;
 			}
 			WriteStringToFile(outputFile, includeString);
@@ -61,7 +63,7 @@ bool CompileShader(const String &shaderFilepath)
 	auto command = FormatString("$VULKAN_SDK_PATH/bin/glslangValidator -V %s -S %s -o Build/Shader/Binary/%s.%s.spirv", &outputFilepath[0], &fileExtension[1], &shaderName[0], &fileExtension[1]);
 	if (RunProcess(command) != 0)
 	{
-		LogPrint(LogType::ERROR, "Shader compilation command failed: %s", command);
+		LogPrint(ERROR_LOG, "Shader compilation command failed: %s", command);
 		return false;
 	}
 
@@ -88,18 +90,18 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 			{
 				continue;
 			}
-			LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
-			LogPrint(LogType::INFO, "Compiling shader %s\n", &shaderFilepath[0]);
+			LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
+			LogPrint(INFO_LOG, "Compiling shader %s\n", &shaderFilepath[0]);
 			if (CompileShader(shaderFilepath))
 			{
-				LogPrint(LogType::INFO, "Compiliation successful\n");
+				LogPrint(INFO_LOG, "Compiliation successful.\n");
 			}
 			else
 			{
-				LogPrint(LogType::INFO, "Compiliation failed\n");
+				LogPrint(INFO_LOG, "Compiliation failed.\n");
 			}
 		}
-		LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
+		LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
 	}
 
 	return 1;

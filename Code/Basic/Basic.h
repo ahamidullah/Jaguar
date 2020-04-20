@@ -24,7 +24,7 @@ typedef double f64;
 
 #define Milliseconds(t) (t * 1000)
 
-#define ArrayCount(x) (sizeof(x)/sizeof(x[0]))
+#define CArrayCount(x) (sizeof(x)/sizeof(x[0]))
 
 #define InvalidCodePath() Abort("%s: %s: line %d: invalid code path\n", __FILE__, __func__, __LINE__);
 
@@ -56,11 +56,13 @@ ScopeExit<F> MakeScopeExit(F f) {
 #define STRING_JOIN(arg1, arg2) DO_STRING_JOIN(arg1, arg2)
 #define Defer(code) auto STRING_JOIN(scope_exit_, __LINE__) = MakeScopeExit([=](){code;})
 
+struct String;
+
 #define Assert(x) AssertActual(x, __FILE__, __func__, __LINE__, #x)
-void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName);
+void AssertActual(bool test, const String &fileName, const String &functionName, s32 lineNumber, const String &testName);
 
 #define Abort(format, ...) AbortActual(format, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
-void AbortActual(const char *format, const char *fileName, const char *functionName, s32 lineNumber, ...);
+void AbortActual(const String &format, const String &fileName, const String &functionName, s32 lineNumber, ...);
 
 #if defined(__linux__)
 	#include "Linux/Log.h"
@@ -86,6 +88,5 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 #include "Log.h"
 #include "Filesystem.h"
 #include "Parser.h"
-//#include "RNG.h"
 
 void InitializeBasic(u32 fiberCount = 0);

@@ -484,33 +484,33 @@ u32 AlignmentOffset(u32 number, u32 alignment)
 u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *callbackData, void *userData)
 {
 	LogType logType;
-	const char *severityString;
+	String severityString;
 	switch (severity)
 	{
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
 	{
-		logType = LogType::INFO;
+		logType = INFO_LOG;
 		severityString = "Info";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
 	{
-		logType = LogType::ERROR;
+		logType = ERROR_LOG;
 		severityString = "Warning";
 	} break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 	{
-		logType = LogType::ERROR;
+		logType = ERROR_LOG;
 		severityString = "Error";
 	} break;
 	default:
 	{
-		logType = LogType::ERROR;
+		logType = ERROR_LOG;
 		severityString = "Unknown";
 	};
 	}
 
-	const char *typeString;
+	String typeString;
 	switch (type)
 	{
 	case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:
@@ -531,13 +531,13 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 	};
 	}
 
-	if (CStringsEqual(severityString, "Error"))
+	if (severityString == "Error")
 	{
-		Abort("Vulkan debug message: %s: %s: %s\n", severityString, typeString, callbackData->pMessage);
+		Abort("Vulkan debug message: %k: %k: %s\n", severityString, typeString, callbackData->pMessage);
 	}
 
-	LogPrint(logType, "Vulkan debug message: %s: %s: %s\n", severityString, typeString, callbackData->pMessage);
-	if (logType == LogType::ERROR)
+	LogPrint(logType, "Vulkan debug message: %k: %k: %s\n", severityString, typeString, callbackData->pMessage);
+	if (logType == ERROR_LOG)
 	{
 		PrintStacktrace();
 	}
@@ -565,23 +565,23 @@ GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool)
 	return commandBuffer;
 }
 
-void GfxSubmitCommands(GfxCommandQueueType queueType, const GfxQueueSubmitInfo &submitInfo, GfxFence fence)
+void GfxSubmitCommandBuffers(GfxCommandQueueType queueType, GfxSubmitInfo &submitInfo, GfxFence fence)
 {
-	VkSubmitInfo submitInfo =
+	VkSubmitInfo vulkanSubmitInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.commandBufferCount = Length(submitInfo.commandBuffers),
-		.pCommandBuffers = &submitInfo.commandBuffers[0],
-		.waitSemaphoreCount = Length(submitInfo.waitSemaphores),
+		.waitSemaphoreCount = (u32)ArrayLength(submitInfo.waitSemaphores),
 		.pWaitSemaphores = &submitInfo.waitSemaphores[0],
-		.signalSemaphoreCount = Length(submitInfo.signalSemaphores),
+		.commandBufferCount = (u32)ArrayLength(submitInfo.commandBuffers),
+		.pCommandBuffers = &submitInfo.commandBuffers[0],
+		.signalSemaphoreCount = (u32)ArrayLength(submitInfo.signalSemaphores),
 		.pSignalSemaphores = &submitInfo.signalSemaphores[0],
 	};
 	switch (queueType)
 	{
 	case GFX_GRAPHICS_COMMAND_QUEUE:
 	{
-		VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &submitInfo, fence));
+		VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &vulkanSubmitInfo, fence));
 	} break;
 	default:
 	{
@@ -603,12 +603,12 @@ void TEMPORARY_VULKAN_SUBMIT(GfxCommandBuffer command_buffer, s32 current_frame_
 	VkSubmitInfo submit_info =
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = ArrayCount(wait_semaphores),
+		.waitSemaphoreCount = CArrayCount(wait_semaphores),
 		.pWaitSemaphores = wait_semaphores,
 		.pWaitDstStageMask = wait_stages,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &command_buffer,
-		.signalSemaphoreCount = ArrayCount(signal_semaphores),
+		.signalSemaphoreCount = CArrayCount(signal_semaphores),
 		.pSignalSemaphores = signal_semaphores,
 	};
 	VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &submit_info, fence));
@@ -744,7 +744,7 @@ GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, const String &spirv)
 	VkShaderModuleCreateInfo shaderModuleCreateInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = Length(spirv),
+		.codeSize = StringLength(spirv),
 		.pCode = (u32 *)&spirv[0],
 	};
 	VK_CHECK(vkCreateShaderModule(vulkanGlobals.device, &shaderModuleCreateInfo, NULL, &module));
@@ -849,7 +849,7 @@ GfxSwapchain GfxCreateSwapchain()
 	if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
 	{
 		swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		swapchainCreateInfo.queueFamilyIndexCount = ArrayCount(queueFamilyIndices);
+		swapchainCreateInfo.queueFamilyIndexCount = CArrayCount(queueFamilyIndices);
 		swapchainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
 	}
 	else
@@ -979,7 +979,7 @@ GFX_Render_Graph GFX_Compile_Render_Graph(Render_API_Context *context, Render_Gr
 					.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 				},
 			},
-			.dependencyCount = ArrayCount(subpass_dependencies),
+			.dependencyCount = CArrayCount(subpass_dependencies),
 			.pDependencies   = subpass_dependencies,
 		};
 		VK_CHECK(vkCreateRenderPass(context->device, &render_pass_create_info, NULL, &render_graph.render_passes[0]));
@@ -1009,7 +1009,7 @@ GFX_Render_Graph GFX_Compile_Render_Graph(Render_API_Context *context, Render_Gr
 		};
 		VkRenderPassCreateInfo render_pass_create_info = {
 			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = ArrayCount(attachments),
+			.attachmentCount = CArrayCount(attachments),
 			.pAttachments    = attachments,
 			.subpassCount    = 1,
 			.pSubpasses      = &(VkSubpassDescription){
@@ -1489,9 +1489,9 @@ GfxPipeline GfxCreatePipeline(GfxPipelineDescription pipeline_description)
 		.dynamicStateCount = pipeline_description.dynamic_state_count,
 		.pDynamicStates = (VkDynamicState *)pipeline_description.dynamic_states,
 	};
-	Assert(Length(pipeline_description.shaderStages) == Length(pipeline_description.shaderModules));
-	VkPipelineShaderStageCreateInfo shader_stage_create_infos[Length(pipeline_description.shaderStages)];
-	for (auto i = 0; i < Length(pipeline_description.shaderStages); i++)
+	Assert(ArrayLength(pipeline_description.shaderStages) == ArrayLength(pipeline_description.shaderModules));
+	VkPipelineShaderStageCreateInfo shader_stage_create_infos[ArrayLength(pipeline_description.shaderStages)];
+	for (auto i = 0; i < ArrayLength(pipeline_description.shaderStages); i++)
 	{
 		shader_stage_create_infos[i] =
 		(VkPipelineShaderStageCreateInfo){
@@ -1504,7 +1504,7 @@ GfxPipeline GfxCreatePipeline(GfxPipelineDescription pipeline_description)
 	VkGraphicsPipelineCreateInfo graphics_pipeline_create_info =
 	{
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		.stageCount = (u32)Length(pipeline_description.shaderStages),
+		.stageCount = (u32)ArrayLength(pipeline_description.shaderStages),
 		.pStages = shader_stage_create_infos,
 		.pVertexInputState = &vertex_input_state_create_info,
 		.pInputAssemblyState = &input_assembly_create_info,
@@ -1704,9 +1704,9 @@ void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, u
 	VkPresentInfoKHR presentInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = ArrayCount(signalSemaphores),
+		.waitSemaphoreCount = CArrayCount(signalSemaphores),
 		.pWaitSemaphores = signalSemaphores,
-		.swapchainCount = ArrayCount(swapchains),
+		.swapchainCount = CArrayCount(swapchains),
 		.pSwapchains = swapchains,
 		.pImageIndices = &swapchainImageIndex,
 	};
@@ -1854,7 +1854,7 @@ GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass()
 	{
 		{
 			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-			.colorAttachmentCount = ArrayCount(colorAttachments),
+			.colorAttachmentCount = CArrayCount(colorAttachments),
 			.pColorAttachments = colorAttachments,
 			.pDepthStencilAttachment = &stencilAttachment,
 		},
@@ -1873,11 +1873,11 @@ GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass()
 	VkRenderPassCreateInfo renderPassCreateInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = ArrayCount(attachments),
+		.attachmentCount = CArrayCount(attachments),
 		.pAttachments = attachments,
-		.subpassCount = ArrayCount(subpassDescriptions),
+		.subpassCount = CArrayCount(subpassDescriptions),
 		.pSubpasses = subpassDescriptions,
-		.dependencyCount = ArrayCount(subpassDependencies),
+		.dependencyCount = CArrayCount(subpassDependencies),
 		.pDependencies = subpassDependencies,
 	};
 	VkRenderPass renderPass;
@@ -1957,7 +1957,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		if (vulkan_context.graphics_queue_family != vulkan_context.present_queue_family) {
 			u32 queue_family_indices[] = { vulkan_context.graphics_queue_family, vulkan_context.present_queue_family };
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
-			swapchain_create_info.queueFamilyIndexCount = ArrayCount(queue_family_indices);
+			swapchain_create_info.queueFamilyIndexCount = CArrayCount(queue_family_indices);
 			swapchain_create_info.pQueueFamilyIndices   = queue_family_indices;
 		} else {
 			swapchain_create_info.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE;
@@ -2034,7 +2034,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 					.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 				},
 			},
-			.dependencyCount = ArrayCount(subpass_dependencies),
+			.dependencyCount = CArrayCount(subpass_dependencies),
 			.pDependencies   = subpass_dependencies,
 		};
 		VK_CHECK(vkCreateRenderPass(vulkan_context.device, &render_pass_create_info, NULL, &vulkan_context.render_passes.shadow_map));
@@ -2065,7 +2065,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		};
 		VkRenderPassCreateInfo render_pass_create_info = {
 			.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = ArrayCount(attachments),
+			.attachmentCount = CArrayCount(attachments),
 			.pAttachments    = attachments,
 			.subpassCount    = 1,
 			.pSubpasses      = &(VkSubpassDescription){
@@ -2101,7 +2101,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ArrayCount(vulkan_context.descriptor_set_layouts.scene),
+				.setLayoutCount         = CArrayCount(vulkan_context.descriptor_set_layouts.scene),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.scene,
 				.pushConstantRangeCount = 1,
 				.pPushConstantRanges    = &(VkPushConstantRange){
@@ -2115,7 +2115,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ArrayCount(vulkan_context.descriptor_set_layouts.shadow_map),
+				.setLayoutCount         = CArrayCount(vulkan_context.descriptor_set_layouts.shadow_map),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.shadow_map,
 			};
 			VK_CHECK(vkCreatePipelineLayout(vulkan_context.device, &pipeline_layout_create_info, NULL, &vulkan_context.pipeline_layouts.shadow_map));
@@ -2123,7 +2123,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 		{
 			VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
 				.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-				.setLayoutCount         = ArrayCount(vulkan_context.descriptor_set_layouts.flat_color),
+				.setLayoutCount         = CArrayCount(vulkan_context.descriptor_set_layouts.flat_color),
 				.pSetLayouts            = vulkan_context.descriptor_set_layouts.flat_color,
 				.pushConstantRangeCount = 1,
 				.pPushConstantRanges    = &(VkPushConstantRange){
@@ -2269,9 +2269,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ArrayCount(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = CArrayCount(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ArrayCount(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = CArrayCount(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2280,7 +2280,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ArrayCount(dynamic_states),
+				.dynamicStateCount = CArrayCount(dynamic_states),
 				.pDynamicStates    = dynamic_states,
 			};
 			//VkPipelineShaderStageCreateInfo *shader_stage_create_infos = allocate_array(arena, VkPipelineShaderStageCreateInfo, requests[i].shaders->module_count);
@@ -2332,9 +2332,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ArrayCount(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = CArrayCount(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ArrayCount(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = CArrayCount(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2344,7 +2344,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ArrayCount(dynamic_states),
+				.dynamicStateCount = CArrayCount(dynamic_states),
 				.pDynamicStates = dynamic_states,
 			};
 			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
@@ -2405,9 +2405,9 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			// @TODO: Fix shadow map vertex input attributes (only needs position).
 			VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
 				.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-				.vertexBindingDescriptionCount   = ArrayCount(vertex_input_binding_descriptions),
+				.vertexBindingDescriptionCount   = CArrayCount(vertex_input_binding_descriptions),
 				.pVertexBindingDescriptions      = vertex_input_binding_descriptions,
-				.vertexAttributeDescriptionCount = ArrayCount(vertex_input_attribute_descriptions),
+				.vertexAttributeDescriptionCount = CArrayCount(vertex_input_attribute_descriptions),
 				.pVertexAttributeDescriptions    = vertex_input_attribute_descriptions,
 			};
 			VkDynamicState dynamic_states[] = {
@@ -2416,7 +2416,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			};
 			VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.dynamicStateCount = ArrayCount(dynamic_states),
+				.dynamicStateCount = CArrayCount(dynamic_states),
 				.pDynamicStates = dynamic_states,
 			};
 			VkPipelineShaderStageCreateInfo shader_stage_create_infos[MAX_SHADER_MODULES] = {};
@@ -2510,7 +2510,7 @@ void create_vulkan_display_objects(Memory_Arena *arena) {
 			VkFramebufferCreateInfo framebuffer_create_info = {
 				.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 				.renderPass      = vulkan_context.render_pass,
-				.attachmentCount = ArrayCount(attachments),
+				.attachmentCount = CArrayCount(attachments),
 				.pAttachments    = attachments,
 				.width           = vulkan_context.swapchain_image_extent.width,
 				.height          = vulkan_context.swapchain_image_extent.height,
@@ -2880,7 +2880,7 @@ void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPa
 			.offset = {0, 0},
 			.extent = {windowWidth, windowHeight},
 		},
-		.clearValueCount = ArrayCount(clearValues),
+		.clearValueCount = CArrayCount(clearValues),
 		.pClearValues = clearValues,
 	};
 	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -2938,12 +2938,18 @@ void GfxDrawIndexedVertices(GfxCommandBuffer commandBuffer, u32 indexCount, u32 
 	vkCmdDrawIndexed(commandBuffer, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
-void GfxInitialize(WindowContext *window)
+void GfxInitialize(PlatformWindow *window)
 {
-	DLLHandle vulkan_library = OpenDLL("libvulkan.so");
+	bool error;
+	DLLHandle vulkan_library = OpenDLL("libvulkan.so", &error);
+	if (error)
+	{
+		Abort("Could not open Vulkan DLL libvulkan.so.");
+	}
+
 #define VK_EXPORTED_FUNCTION(name) \
-	name = (PFN_##name)GetDLLFunction(vulkan_library, #name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	name = (PFN_##name)GetDLLFunction(vulkan_library, #name, &error); \
+	if (error) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required.", #name);
 #define VK_GLOBAL_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
 	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
@@ -2978,7 +2984,7 @@ void GfxInitialize(WindowContext *window)
 	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1)) {
 		Abort("Vulkan version 1.1 or greater required: version %d.%d.%d is installed");
 	}
-	LogPrint(LogType::INFO, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+	LogPrint(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {
 #if defined(DEBUG)
@@ -2995,17 +3001,17 @@ void GfxInitialize(WindowContext *window)
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, NULL);
 		VkLayerProperties available_instance_layers[available_instance_layer_count];
 		vkEnumerateInstanceLayerProperties(&available_instance_layer_count, available_instance_layers);
-		LogPrint(LogType::INFO, "Available Vulkan layers:\n");
+		LogPrint(INFO_LOG, "Available Vulkan layers:\n");
 		for (s32 i = 0; i < available_instance_layer_count; i++) {
-			LogPrint(LogType::INFO, "\t%s\n", available_instance_layers[i].layerName);
+			LogPrint(INFO_LOG, "\t%s\n", available_instance_layers[i].layerName);
 		}
 		u32 available_instance_extension_count = 0;
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, NULL));
 		VkExtensionProperties available_instance_extensions[available_instance_extension_count];
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &available_instance_extension_count, available_instance_extensions));
-		LogPrint(LogType::INFO, "Available Vulkan instance extensions:\n");
+		LogPrint(INFO_LOG, "Available Vulkan instance extensions:\n");
 		for (s32 i = 0; i < available_instance_extension_count; i++) {
-			LogPrint(LogType::INFO, "\t%s\n", available_instance_extensions[i].extensionName);
+			LogPrint(INFO_LOG, "\t%s\n", available_instance_extensions[i].extensionName);
 		}
 		auto ApplicationInfo = VkApplicationInfo{
 			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -3022,9 +3028,9 @@ void GfxInitialize(WindowContext *window)
 			.pNext = &debug_create_info,
 #endif
 			.pApplicationInfo = &ApplicationInfo,
-			.enabledLayerCount = ArrayCount(required_instance_layers),
+			.enabledLayerCount = CArrayCount(required_instance_layers),
 			.ppEnabledLayerNames = required_instance_layers,
-			.enabledExtensionCount = ArrayCount(required_instance_extensions),
+			.enabledExtensionCount = CArrayCount(required_instance_extensions),
 			.ppEnabledExtensionNames = required_instance_extensions,
 		};
 		VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &vulkanGlobals.instance));
@@ -3076,7 +3082,7 @@ void GfxInitialize(WindowContext *window)
 			VkExtensionProperties available_device_extensions[available_device_extension_count];
 			VK_CHECK(vkEnumerateDeviceExtensionProperties(availablePhysicalDevices[i], NULL, &available_device_extension_count, available_device_extensions));
 			bool missing_required_device_extension = false;
-			for (s32 j = 0; j < ArrayCount(required_device_extensions); j++) {
+			for (s32 j = 0; j < CArrayCount(required_device_extensions); j++) {
 				bool found = false;
 				for (s32 k = 0; k < available_device_extension_count; k++) {
 					if (strcmp(available_device_extensions[k].extensionName, required_device_extensions[j]) == 0) { // @TODO
@@ -3183,10 +3189,10 @@ void GfxInitialize(WindowContext *window)
 				vulkanGlobals.presentMode = present_mode;
 				found_suitable_physical_device = true;
 
-				LogPrint(LogType::INFO, "Available Vulkan device extensions:\n");
+				LogPrint(INFO_LOG, "Available Vulkan device extensions:\n");
 				for (auto k = 0; k < available_device_extension_count; k++)
 				{
-					LogPrint(LogType::INFO, "\t%s\n", available_device_extensions[k].extensionName);
+					LogPrint(INFO_LOG, "\t%s\n", available_device_extensions[k].extensionName);
 				}
 
 				break;
@@ -3202,38 +3208,36 @@ void GfxInitialize(WindowContext *window)
 	{
 		auto queuePriority = 1.0f;
 		Array<VkDeviceQueueCreateInfo> deviceQueueCreateInfos;
-		Append(
-			&deviceQueueCreateInfos,
-			VkDeviceQueueCreateInfo{
-				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				.queueFamilyIndex = vulkanGlobals.graphicsQueueFamily,
-				.queueCount = 1,
-				.pQueuePriorities = &queuePriority,
-			}
-		);
+		ArrayAppend(&deviceQueueCreateInfos,
+		            VkDeviceQueueCreateInfo
+		            {
+		            	.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				    	.queueFamilyIndex = vulkanGlobals.graphicsQueueFamily,
+				    	.queueCount = 1,
+				    	.pQueuePriorities = &queuePriority,
+		            });
 		if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
 		{
-			Append(
-				&deviceQueueCreateInfos,
-				VkDeviceQueueCreateInfo{
-					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-					.queueFamilyIndex = vulkanGlobals.presentQueueFamily,
-					.queueCount = 1,
-					.pQueuePriorities = &queuePriority,
-				}
+			ArrayAppend(&deviceQueueCreateInfos,
+			            VkDeviceQueueCreateInfo
+			            {
+			            	.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+					    	.queueFamilyIndex = vulkanGlobals.presentQueueFamily,
+					    	.queueCount = 1,
+					    	.pQueuePriorities = &queuePriority,
+			            }
 			);
 		}
 		if (vulkanGlobals.transferQueueFamily != vulkanGlobals.graphicsQueueFamily)
 		{
-			Append(
-				&deviceQueueCreateInfos,
-				VkDeviceQueueCreateInfo{
-					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-					.queueFamilyIndex = vulkanGlobals.transferQueueFamily,
-					.queueCount = 1,
-					.pQueuePriorities = &queuePriority,
-				}
-			);
+			ArrayAppend(&deviceQueueCreateInfos,
+			            VkDeviceQueueCreateInfo
+			            {
+			            	.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+					    	.queueFamilyIndex = vulkanGlobals.transferQueueFamily,
+					    	.queueCount = 1,
+					    	.pQueuePriorities = &queuePriority,
+			            });
 		}
 		VkPhysicalDeviceFeatures physicalDeviceFeatures =
 		{
@@ -3248,11 +3252,11 @@ void GfxInitialize(WindowContext *window)
 		{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 			.pNext = &descriptorIndexingFeatures,
-			.queueCreateInfoCount = (u32)Length(deviceQueueCreateInfos),
+			.queueCreateInfoCount = (u32)ArrayLength(deviceQueueCreateInfos),
 			.pQueueCreateInfos = &deviceQueueCreateInfos[0],
-			.enabledLayerCount = ArrayCount(required_instance_layers),
+			.enabledLayerCount = CArrayCount(required_instance_layers),
 			.ppEnabledLayerNames = required_instance_layers,
-			.enabledExtensionCount = ArrayCount(required_device_extensions),
+			.enabledExtensionCount = CArrayCount(required_device_extensions),
 			.ppEnabledExtensionNames = required_device_extensions,
 			.pEnabledFeatures = &physicalDeviceFeatures,
 		};
@@ -3347,7 +3351,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 				.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
 			};
@@ -3359,7 +3363,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_MATERIAL_DESCRIPTOR_SET]));
@@ -3370,7 +3374,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_DYNAMIC_UNIFORM_DESCRIPTOR_SET]));
@@ -3382,7 +3386,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_SAMPLER_DESCRIPTOR_SET]));
@@ -3393,7 +3397,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.scene[SCENE_TEXTURE_DESCRIPTOR_SET]));
@@ -3404,7 +3408,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.shadow_map[SHADOW_MAP_UNIFORM_DESCRIPTOR_SET]));
@@ -3415,7 +3419,7 @@ void GfxInitialize(WindowContext *window)
 			};
 			VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
 				.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				.bindingCount = ArrayCount(bindings),
+				.bindingCount = CArrayCount(bindings),
 				.pBindings    = bindings,
 			};
 			VK_CHECK(vkCreateDescriptorSetLayout(vulkan_context.device, &descriptor_set_layout_create_info, NULL, &vulkan_context.descriptor_set_layouts.flat_color[FLAT_COLOR_UBO_DESCRIPTOR_SET_NUMBER]));
@@ -3438,11 +3442,11 @@ void GfxInitialize(WindowContext *window)
 		const char *flat_color_shaders[] = {"build/flat_color_vertex.spirv", "build/flat_color_fragment.spirv"};
 		// @TODO: Generate shader table.
 		Create_Shader_Request requests[] = {
-			{&vulkan_context.shaders[TEXTURED_STATIC_SHADER], textured_static_shaders, ArrayCount(textured_static_shaders)},
-			{&vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER], shadow_map_static_shaders, ArrayCount(shadow_map_static_shaders)},
-			{&vulkan_context.shaders[FLAT_COLOR_SHADER], flat_color_shaders, ArrayCount(flat_color_shaders)},
+			{&vulkan_context.shaders[TEXTURED_STATIC_SHADER], textured_static_shaders, CArrayCount(textured_static_shaders)},
+			{&vulkan_context.shaders[SHADOW_MAP_STATIC_SHADER], shadow_map_static_shaders, CArrayCount(shadow_map_static_shaders)},
+			{&vulkan_context.shaders[FLAT_COLOR_SHADER], flat_color_shaders, CArrayCount(flat_color_shaders)},
 		};
-		for (s32 i = 0; i < ArrayCount(requests); i++) {
+		for (s32 i = 0; i < CArrayCount(requests); i++) {
 			assert(requests[i].shader_module_count < MAX_SHADER_MODULES);
 			requests[i].shaders->module_count = requests[i].shader_module_count;
 			requests[i].shaders->modules = (Shader_Module *)malloc(sizeof(Shader_Module) * requests[i].shader_module_count); // @TODO: allocate_array(&game_state->permanant_arena, Shader_Module, requests[i].shader_module_count);
@@ -3571,7 +3575,7 @@ void GfxInitialize(WindowContext *window)
 		};
 		VkDescriptorPoolCreateInfo pool_info = {
 			.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.poolSizeCount = ArrayCount(pool_sizes),
+			.poolSizeCount = CArrayCount(pool_sizes),
 			.pPoolSizes    = pool_sizes,
 			.maxSets       = vulkan_context.num_swapchain_images + 60,
 			.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
@@ -3957,7 +3961,7 @@ void build_vulkan_command_buffer(Mesh_Instance *meshes, u32 *visible_meshes, u32
 			.framebuffer = vulkan_context.framebuffers[swapchain_image_index],
 			.renderArea.offset = {0, 0},
 			.renderArea.extent = vulkan_context.swapchain_image_extent,
-			.clearValueCount = ArrayCount(clear_values),
+			.clearValueCount = CArrayCount(clear_values),
 			.pClearValues = clear_values,
 		};
 		vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
@@ -4101,12 +4105,12 @@ void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u
 
 	VkSubmitInfo submit_info = {
 		.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount   = ArrayCount(wait_semaphores),
+		.waitSemaphoreCount   = CArrayCount(wait_semaphores),
 		.pWaitSemaphores      = wait_semaphores,
 		.pWaitDstStageMask    = wait_stages,
 		.commandBufferCount   = 0,
 		.pCommandBuffers      = &vulkan_context.command_buffers[swapchain_image_index],
-		.signalSemaphoreCount = ArrayCount(signal_semaphores),
+		.signalSemaphoreCount = CArrayCount(signal_semaphores),
 		.pSignalSemaphores    = signal_semaphores,
 	};
 	VK_CHECK(vkQueueSubmit(vulkan_context.graphics_queue, 1, &submit_info, vulkan_context.inFlightFences[vulkan_context.currentFrame]));
@@ -4145,9 +4149,9 @@ void vulkan_submit(Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u
 	VkSwapchainKHR swapchains[] = {vulkan_context.swapchain};
 	VkPresentInfoKHR present_info = {
 		.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = ArrayCount(signal_semaphores),
+		.waitSemaphoreCount = CArrayCount(signal_semaphores),
 		.pWaitSemaphores    = signal_semaphores,
-		.swapchainCount     = ArrayCount(swapchains),
+		.swapchainCount     = CArrayCount(swapchains),
 		.pSwapchains        = swapchains,
 		.pImageIndices      = &swapchain_image_index,
 	};

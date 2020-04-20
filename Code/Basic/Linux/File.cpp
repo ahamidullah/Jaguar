@@ -9,6 +9,7 @@ FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error)
 		*error = true;
 		return {};
 	}
+	*error = false;
 	return file;
 }
 
@@ -39,15 +40,16 @@ String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error)
 	{
 		LogPrint(ERROR_LOG, "ReadFile failed: could not read from file: %s.\n", GetPlatformError());
 		*error = true;
-		return {};
+		return "";
 	}
 	else if (totalBytesRead != numberOfBytesToRead)
 	{
 		// @TODO: Add file name to file handle.
 		LogPrint(ERROR_LOG, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested.\n", totalBytesRead, numberOfBytesToRead);
 		*error = true;
-		return {};
+		return "";
 	}
+	*error = false;
 	return fileString;
 }
 
@@ -81,6 +83,7 @@ FileOffset GetFileLength(FileHandle file, bool *error)
 		*error = true;
 		return {};
 	}
+	*error = false;
 	return FileOffset{stat.st_size};
 }
 
@@ -89,10 +92,11 @@ FileOffset SeekInFile(FileHandle file, FileOffset offset, FileSeekRelative relat
 	auto result = lseek(file, offset, (s32)relative);
 	if (result == (off_t)-1)
 	{
-		LogPrint(LogType::ERROR, "File seek failed: %s.\n", GetPlatformError());
+		LogPrint(ERROR_LOG, "File seek failed: %s.\n", GetPlatformError());
 		*error = true;
 		return {};
 	}
+	*error = false;
 	return result;
 }
 
@@ -105,6 +109,7 @@ PlatformTime GetFileLastModifiedTime(FileHandle file, bool *error)
 		*error = true;
 		return {};
 	}
+	*error = false;
 	return PlatformTime{stat.st_mtim};
 }
 

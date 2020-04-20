@@ -1,14 +1,25 @@
 static struct
 {
 	Mouse mouse;
-	InputButtons keyboard =
-	{
-		AllocateArray(bool, SCANCODE_COUNT),
-		AllocateArray(bool, SCANCODE_COUNT),
-		AllocateArray(bool, SCANCODE_COUNT),
-	};
+	InputButtons keyboard;
 	WindowEvents windowEvents;
-} inputState;
+} inputContext;
+
+InputButtons CreateInputButtons(size_t size)
+{
+	return
+	{
+		.down = AllocateArrayMemory(bool, size),
+		.pressed = AllocateArrayMemory(bool, size),
+		.released = AllocateArrayMemory(bool, size),
+	};
+}
+
+void InitializeInput()
+{
+	inputContext.mouse.buttons = CreateInputButtons(MOUSE_BUTTON_COUNT);
+	inputContext.keyboard = CreateInputButtons(SCANCODE_COUNT);
+}
 
 void PressButton(u32 buttonIndex, InputButtons *buttons)
 {
@@ -44,7 +55,7 @@ bool IsKeyDown(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return IsButtonDown(keyCode, &inputState.keyboard);
+	return IsButtonDown(keyCode, &inputContext.keyboard);
 }
 
 bool WasKeyPressed(KeySymbol keySymbol)
@@ -54,7 +65,7 @@ bool WasKeyPressed(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return WasButtonPressed(keyCode, &inputState.keyboard);
+	return WasButtonPressed(keyCode, &inputContext.keyboard);
 }
 
 bool WasKeyReleased(KeySymbol keySymbol)
@@ -64,7 +75,7 @@ bool WasKeyReleased(KeySymbol keySymbol)
 	{
 		return false;
 	}
-	return WasButtonReleased(keyCode, &inputState.keyboard);
+	return WasButtonReleased(keyCode, &inputContext.keyboard);
 }
 
 bool IsMouseButtonDown(MouseButton mouseButton)
@@ -73,7 +84,7 @@ bool IsMouseButtonDown(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return IsButtonDown(mouseButton, &inputState.mouse.buttons);
+	return IsButtonDown(mouseButton, &inputContext.mouse.buttons);
 }
 
 bool WasMouseButtonPressed(MouseButton mouseButton)
@@ -82,7 +93,7 @@ bool WasMouseButtonPressed(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return WasButtonPressed(mouseButton, &inputState.mouse.buttons);
+	return WasButtonPressed(mouseButton, &inputContext.mouse.buttons);
 }
 
 bool WasMouseButtonReleased(MouseButton mouseButton)
@@ -91,55 +102,55 @@ bool WasMouseButtonReleased(MouseButton mouseButton)
 	{
 		return false;
 	}
-	return WasButtonReleased(mouseButton, &inputState.mouse.buttons);
+	return WasButtonReleased(mouseButton, &inputContext.mouse.buttons);
 }
 
 f32 GetMouseX()
 {
-	return inputState.mouse.x;
+	return inputContext.mouse.x;
 }
 
 f32 GetMouseY()
 {
-	return inputState.mouse.y;
+	return inputContext.mouse.y;
 }
 
 f32 GetMouseDeltaX()
 {
-	return inputState.mouse.rawDeltaX;
+	return inputContext.mouse.rawDeltaX;
 }
 
 f32 GetMouseDeltaY()
 {
-	return inputState.mouse.rawDeltaY;
+	return inputContext.mouse.rawDeltaY;
 }
 
 f32 GetMouseSensitivity()
 {
-	return inputState.mouse.sensitivity;
+	return inputContext.mouse.sensitivity;
 }
 
 bool QuitWindowEvent()
 {
-	return inputState.windowEvents.quit;
+	return inputContext.windowEvents.quit;
 }
 
-void GetPlatformInput(WindowContext *window)
+void GetPlatformInput(PlatformWindow *window)
 {
 	// Clear per-frame input.
-	SetMemory(inputState.mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
-	SetMemory(inputState.mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
-	SetMemory(inputState.keyboard.pressed, false, sizeof(bool) * SCANCODE_COUNT);
-	SetMemory(inputState.keyboard.released, false, sizeof(bool) * SCANCODE_COUNT);
-	inputState.mouse.rawDeltaX = 0;
-	inputState.mouse.rawDeltaY = 0;
+	SetMemory(inputContext.mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
+	SetMemory(inputContext.mouse.buttons.released, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
+	SetMemory(inputContext.keyboard.pressed, false, sizeof(bool) * SCANCODE_COUNT);
+	SetMemory(inputContext.keyboard.released, false, sizeof(bool) * SCANCODE_COUNT);
+	inputContext.mouse.rawDeltaX = 0;
+	inputContext.mouse.rawDeltaY = 0;
 
-	ProcessWindowEvents(window, &inputState.keyboard, &inputState.mouse, &inputState.windowEvents);
+	ProcessWindowEvents(window, &inputContext.keyboard, &inputContext.mouse, &inputContext.windowEvents);
 
 	// Update mouse position.
-	s32 oldX = inputState.mouse.x;
-	s32 oldY = inputState.mouse.y;
-	QueryMousePosition(window, &inputState.mouse.x, &inputState.mouse.y);
-	inputState.mouse.deltaX = inputState.mouse.x - oldX;
-	inputState.mouse.deltaY = inputState.mouse.y - oldY;
+	s32 oldX = inputContext.mouse.x;
+	s32 oldY = inputContext.mouse.y;
+	QueryMousePosition(window, &inputContext.mouse.x, &inputContext.mouse.y);
+	inputContext.mouse.deltaX = inputContext.mouse.x - oldX;
+	inputContext.mouse.deltaY = inputContext.mouse.y - oldY;
 }

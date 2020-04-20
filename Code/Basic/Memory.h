@@ -7,14 +7,14 @@
 #define AllocateArrayMemory(type, count) AllocateArrayMemoryActual<type>(count)
 
 template <typename T>
-T *AllocateStructMemory()
+T *AllocateStructMemoryActual()
 {
 	auto p = malloc(sizeof(T)); // @TODO
 	return new(p) T;
 }
 
 template <typename T>
-T *AllocateArrayMemory(size_t count)
+T *AllocateArrayMemoryActual(size_t count)
 {
 	auto p = malloc(count * sizeof(T)); // @TODO
 	return new(p) T[count];

@@ -4,11 +4,11 @@
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 
-struct WindowContext
+struct PlatformWindow
 {
-	Window x11;
-	Atom deleteWindowAtom;
-	Cursor blankCursor;
+	Window x11Window;
+	Atom x11DeleteWindowAtom;
+	Cursor x11BlankCursor;
 	u32 height;
 };
 
@@ -16,12 +16,12 @@ struct InputButtons;
 struct Mouse;
 struct WindowEvents;
 
-WindowContext CreateWindow(s32 width, s32 height, bool startFullscreen = false);
-void ProcessWindowEvents(WindowContext *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents);
-void ToggleFullscreen(WindowContext *window);
-void CaptureCursor(WindowContext *window);
-void UncaptureCursor(WindowContext *window);
-void DestroyWindow(WindowContext *window);
+PlatformWindow CreateWindow(s32 width, s32 height, bool startFullscreen = false);
+void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents);
+void ToggleFullscreen(PlatformWindow *window);
+void CaptureCursor(PlatformWindow *window);
+void UncaptureCursor(PlatformWindow *window);
+void DestroyWindow(PlatformWindow *window);
 void InitializeWindow();
 
 #if defined(USE_VULKAN_RENDER_API)
@@ -31,6 +31,6 @@ void InitializeWindow();
 #include <vulkan/vulkan_xlib.h> 
 
 const char *GetRequiredVulkanSurfaceInstanceExtension();
-VkResult CreateVulkanSurface(WindowContext *window, VkInstance instance, VkSurfaceKHR *surface);
+VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface);
 
 #endif

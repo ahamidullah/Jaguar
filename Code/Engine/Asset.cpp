@@ -30,7 +30,7 @@ GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 ind
 	GfxRecordCopyBufferCommand(theBuffer, verticesByteSize, vertexStagingBuffer, vertexBuffer, 0, 0);
 	GfxRecordCopyBufferCommand(theBuffer, indicesByteSize, vertexStagingBuffer, indexBuffer, verticesByteSize, 0);
 	GfxEndCommandBuffer(theBuffer);
-	QueueGPUTransferCommandBuffer(theBuffer);
+	QueueGPUTransfer(theBuffer);
 	ready = true;
 	//auto fence = GfxCreateFence(false);
 	//GfxSubmitCommandBuffers(1, &theBuffer, GFX_GRAPHICS_COMMAND_QUEUE, fence);
@@ -54,7 +54,7 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s32 texturePixelWidth, s32 texturePixelH
 	GfxRecordCopyBufferToImageCommand(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
 	GfxTransitionImageLayout(commandBuffer, image, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GFX_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	GfxEndCommandBuffer(commandBuffer);
-	QueueGPUTransferCommandBuffer(commandBuffer);
+	QueueGPUTransfer(commandBuffer);
 	return 0;
 }
 
@@ -72,7 +72,7 @@ void LoadTexture(void *jobParameterPointer)
 	u8 *pixels = stbi_load(&jobParameter->path[0], &texturePixelWidth, &texturePixelHeight, &textureChannels, STBI_rgb_alpha);
 	if (!pixels)
 	{
-		LogPrint(LogType::ERROR, "failed to load texture %s\n", &jobParameter->path[0]);
+		LogPrint(ERROR_LOG, "failed to load texture %s\n", &jobParameter->path[0]);
 		return;
 	}
 	Defer(free(pixels));
@@ -101,7 +101,7 @@ void LoadModel(void *jobParameterPointer) {
 
 	String modelDirectory;
 	bool foundModel = false;
-	for (auto i = 0; i < ArrayCount(asset_id_to_filepath_map); i++)
+	for (auto i = 0; i < CArrayCount(asset_id_to_filepath_map); i++)
 	{
 		if (asset_id_to_filepath_map[i].asset_id == jobParameter->assetID)
 		{
@@ -124,8 +124,8 @@ void LoadModel(void *jobParameterPointer) {
 	//u32 submeshCount = assimpScene->mNumMeshes;
 	auto submeshCount = 1;
 
-	Resize(&mesh->submeshes, submeshCount);
-	Resize(&mesh->materials, submeshCount);
+	ResizeArray(&mesh->submeshes, submeshCount);
+	ResizeArray(&mesh->materials, submeshCount);
 	for (auto i = 0; i < submeshCount; i++)
 	{
 		LoadTextureJobParameter *loadTextureJobParameters = (LoadTextureJobParameter *)malloc(5 * sizeof(LoadTextureJobParameter)); // @TODO
@@ -155,11 +155,11 @@ void LoadModel(void *jobParameterPointer) {
 			.outputTextureID = &mesh->materials[i].ambient_occlusion_map,
 		};
 		JobDeclaration loadTextureJobDeclarations[5]; // @TODO
-		for (auto j = 0; j < ArrayCount(loadTextureJobDeclarations); j++)
+		for (auto j = 0; j < CArrayCount(loadTextureJobDeclarations); j++)
 		{
 			loadTextureJobDeclarations[j] = CreateJob(LoadTexture, &loadTextureJobParameters[j]);
 		}
-		RunJobs(ArrayCount(loadTextureJobDeclarations), loadTextureJobDeclarations, NORMAL_PRIORITY_JOB, NULL);
+		RunJobs(CArrayCount(loadTextureJobDeclarations), loadTextureJobDeclarations, NORMAL_PRIORITY_JOB, NULL);
 	}
 
 	auto totalVertexCount = 0;
@@ -715,8 +715,8 @@ void FinalizeAssetUploadsToGPU()
 
 void InitializeAssets(void *job_parameter)
 {
-	for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++)
-	{
-		assetsContext.uploadFences[i] = GfxCreateFence(false);
-	}
+	//for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++)
+	//{
+		//assetsContext.uploadFences[i] = GfxCreateFence(false);
+	//}
 }

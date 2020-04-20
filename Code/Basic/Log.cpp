@@ -1,6 +1,6 @@
 void ConsolePrintVarArgs(const String &format, va_list arguments)
 {
-	WriteToConsole(FormatStringVarArgs(format, arguments))
+	WriteToConsole(FormatStringVarArgs(format, arguments));
 }
 
 void ConsolePrint(const String &format, ...)
@@ -11,13 +11,13 @@ void ConsolePrint(const String &format, ...)
 	va_end(arguments);
 }
 
-void LogPrintVarArgs(LogType logType, const char *format, va_list arguments)
+void LogPrintVarArgs(LogType logType, const String &format, va_list arguments)
 {
-	// @TODO: Print message to a log file as well.
-	if (debug)
+	if (development)
 	{
 		ConsolePrintVarArgs(format, arguments);
 	}
+	// @TODO: Print message to a log file.
 }
 
 // @TODO: Handle logType.

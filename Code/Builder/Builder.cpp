@@ -3,139 +3,168 @@
 bool debugBuild = true;
 bool developmentBuild = true;
 
-Array<String> includeSearchDirectories;
-Array<String> librariesWithChangedHeaders;
-
-bool GatherProjectFiles(const String &sourceFilepath, Array<String> *dependencies)
-{
-	DirectoryIteration iteration;
-	while (IterateDirectory(sourceFilepath, &iteration))
-	{
-		if (iteration.isDirectory)
-		{
-			GatherProjectFiles(JoinFilepaths(sourceFilepath, iteration.filename), dependencies);
-		}
-		auto ext = GetFilepathExtension(iteration.filename);
-		if (ext == ".cpp" || ext == ".h")
-		{
-			Append(dependencies, JoinFilepaths(sourceFilepath, iteration.filename));
-		}
-	}
-	return true;
-}
-
 struct BuildCommand
 {
-	String name;
-	String sourceFilepath;
-	String compilerFlags;
-	String linkerFlags;
-	String binaryFilepath;
-	Array<String> libraryDependencies;
-	bool isLibrary;
+	String        name;
+	String        sourceFilepath;
+	String        compilerFlags;
+	String        linkerFlags;
+	String        binaryFilepath;
+	Array<String> dependencies;
+	bool          isLibrary;
 };
 
 bool Build(const BuildCommand &command)
 {
-	LogPrint
-	(
-		INFO_LOG,
-		"sourceFilepath: %s\n\n"
-		"isLibrary: %d\n\n"
-		"compilerFlags: %s\n\n"
-		"linkerFlags: %s\n\n"
-		"binaryFilepath: %s\n\n",
-		&command.sourceFilepath[0], command.isLibrary, &command.compilerFlags[0], &command.linkerFlags[0], &command.binaryFilepath[0]
-	);
+	LogPrint(INFO_LOG,
+	         "Running build command %k...\n\n"
+	         "sourceFilepath: %k\n\n"
+	         "isLibrary: %d\n\n"
+	         "compilerFlags: %k\n\n"
+	         "linkerFlags: %k\n\n"
+	         "binaryFilepath: %k\n\n",
+	         command.name,
+	         command.sourceFilepath,
+	         command.isLibrary,
+	         command.compilerFlags,
+	         command.linkerFlags,
+	         command.binaryFilepath);
 
-	auto objFilepath = CreateStringCopy(command.binaryFilepath);
+	auto objFilepath = CreateString(command.binaryFilepath);
 	SetFilepathExtension(&objFilepath, ".o");
 
 	if (command.isLibrary)
 	{
-		auto compileCommand = FormatString("g++ -shared %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
-		LogPrint(LogType::INFO, "compileCommand: %s\n\n", &compileCommand[0]);
-		if (auto result = RunProcess(compileCommand); result != 0)
+		auto compileCommand = FormatString("g++ -shared %k %k %k -o %k", command.compilerFlags, command.sourceFilepath, command.linkerFlags, command.binaryFilepath);
+		LogPrint(INFO_LOG, "compileCommand: %k\n\n", compileCommand);
+		if (RunProcess(compileCommand) != 0)
 		{
+			LogPrint(INFO_LOG, "\nBuild failed.\n");
 			return false;
 		}
 	}
 	else
 	{
-		auto compileCommand = FormatString("g++ %s %s %s -o %s", &command.compilerFlags[0], &command.sourceFilepath[0], &command.linkerFlags[0], &command.binaryFilepath[0]);
-		LogPrint(LogType::INFO, "compileCommand: %s\n\n", &compileCommand[0]);
+		auto compileCommand = FormatString("g++ %k %k %k -o %k", command.compilerFlags, command.sourceFilepath, command.linkerFlags, command.binaryFilepath);
+		LogPrint(INFO_LOG, "compileCommand: %k\n\n", compileCommand);
 		if (auto result = RunProcess(compileCommand); result != 0)
 		{
+			LogPrint(INFO_LOG, "\nBuild failed.\n");
 			return false;
 		}
 	}
 
-	LogPrint(LogType::INFO, "build successful\n");
-
+	LogPrint(INFO_LOG, "Build successful.\n");
 	return true;
+}
+
+Array<String> GatherModuleFilepaths(const String &sourceDirectory)
+{
+	Array<String> directories;
+	ArrayAppend(&directories, sourceDirectory);
+
+	Array<String> result;
+	for (auto i = 0; i < ArrayLength(directories); i++)
+	{
+		DirectoryIteration iteration;
+		while (IterateDirectory(directories[i], &iteration))
+		{
+			auto filepath = JoinFilepaths(directories[i], iteration.filename);
+			if (iteration.isDirectory)
+			{
+				ArrayAppend(&directories, filepath);
+				continue;
+			}
+			auto ext = GetFilepathExtension(iteration.filename);
+			if (ext == ".cpp" || ext == ".h")
+			{
+				ArrayAppend(&result, filepath);
+			}
+		}
+	}
+	return result;
 }
 
 bool BuildIfOutOfDate(const BuildCommand &command)
 {
-	auto directory = GetFilepathDirectory(command.sourceFilepath);
-	Assert(Length(directory) > 0);
-
-	bool binaryExists = FileExists(command.binaryFilepath);
-
-	bool libHeaderChanged = false;
-	if (!binaryExists)
+	struct LibraryBuildInfo
 	{
-		libHeaderChanged = true;
-	}
-	else
+		String buildCommandName;
+		bool   dependentsNeedRebuild;
+	};
+	static Array<LibraryBuildInfo> libraryBuildInfos;
+
+	if (!FileExists(command.binaryFilepath))
 	{
-		for (const auto &dep : command.libraryDependencies)
+		LogPrint(INFO_LOG, "%k does not exist, building...\n\n", command.binaryFilepath);
+		if (command.isLibrary)
 		{
-			for (const auto &lib : librariesWithChangedHeaders)
+			ArrayAppend(&libraryBuildInfos,
+		            	{
+		                	.buildCommandName = command.name, // @TODO: Take a copy?
+		           	    	.dependentsNeedRebuild = true,
+		            	});
+		}
+		return Build(command);
+	}
+
+	auto dependencyFileWasModified = false;
+	for (const auto &d : command.dependencies)
+	{
+		auto foundDependencyLibraryBuildInfo = false;
+		for (const auto &i : libraryBuildInfos)
+		{
+			if (i.buildCommandName == d)
 			{
-				if (dep == lib)
+				foundDependencyLibraryBuildInfo = true;
+				if (i.dependentsNeedRebuild)
 				{
-					libHeaderChanged = true;
+					dependencyFileWasModified = true;
 					break;
 				}
 			}
-			if (libHeaderChanged)
-			{
-				break;
-			}
+		}
+		if (!foundDependencyLibraryBuildInfo)
+		{
+			LogPrint(ERROR_LOG, "ERROR: In build command %k: could not find library build info for dependency %k.\n", command.name, d);
+			return false;
 		}
 	}
 
-	bool projectFileChanged = false;
-	if (binaryExists && (command.isLibrary || !libHeaderChanged))
+	auto moduleFileWasModified = false;
+	auto libraryHeaderChanged = false;
+	if (command.isLibrary || !dependencyFileWasModified)
 	{
-		Array<String> projectFiles;
-		if (!GatherProjectFiles(GetFilepathDirectory(command.sourceFilepath), &projectFiles))
+		bool error = false;
+
+		auto sourceDirectory = GetFilepathDirectory(command.sourceFilepath);
+		Assert(StringLength(sourceDirectory) > 0);
+
+		auto moduleFilepaths = GatherModuleFilepaths(sourceDirectory);
+
+		auto binaryModifiedTime = GetFilepathLastModifiedTime(command.binaryFilepath, &error);
+		if (error)
 		{
+			LogPrint(ERROR_LOG, "ERROR: In build command %k: could not find last modified time for binary file %k.\n", command.name, command.binaryFilepath);
 			return false;
 		}
 
-		auto [binaryFile, binaryOpenError] = OpenFile(command.binaryFilepath, OPEN_FILE_READ_ONLY);
-		Assert(!binaryOpenError);
-		auto binaryLastModifiedTime = GetFileLastModifiedTime(binaryFile);
-
-		for (auto &sourceFilename : projectFiles)
+		for (auto &filepath : moduleFilepaths)
 		{
-			auto [sourceFile, sourceOpenError] = OpenFile(sourceFilename, OPEN_FILE_READ_ONLY);
-			Assert(!sourceOpenError);
-			Defer(CloseFile(sourceFile));
-			auto lastModifiedTime = GetFileLastModifiedTime(sourceFile);
-			if (lastModifiedTime > binaryLastModifiedTime)
+			auto sourceModifiedTime = GetFilepathLastModifiedTime(filepath, &error);
+			if (error)
 			{
-				projectFileChanged = true;
+				Abort("Could not find last modified time for source file %k, retrieved for build command %k", filepath, command.name);
+			}
+			if (sourceModifiedTime > binaryModifiedTime)
+			{
+				moduleFileWasModified = true;
 				if (command.isLibrary)
 				{
-					auto ext = GetFilepathExtension(sourceFilename);
+					auto ext = GetFilepathExtension(filepath);
 					if (ext == ".h")
 					{
-						auto path = GetFilepathFilename(command.sourceFilepath);
-						SetFilepathExtension(&path, "");
-						Append(&librariesWithChangedHeaders, path);
+						libraryHeaderChanged = true;
 						break;
 					}
 				}
@@ -147,22 +176,33 @@ bool BuildIfOutOfDate(const BuildCommand &command)
 		}
 	}
 
-	if (libHeaderChanged || projectFileChanged || !binaryExists)
+	if (command.isLibrary)
 	{
-		if (!binaryExists)
+		if (libraryHeaderChanged || dependencyFileWasModified)
 		{
-			LogPrint(LogType::INFO, "%s does not exist, building...\n\n", &command.binaryFilepath[0]);
+			ArrayAppend(&libraryBuildInfos,
+						{
+							.buildCommandName = command.name, // @TODO: Take a copy?
+							.dependentsNeedRebuild = true,
+						});
 		}
-		else if (libHeaderChanged || projectFileChanged)
+		else
 		{
-			LogPrint(LogType::INFO, "%s is out of date, rebuilding...\n\n", &command.binaryFilepath[0]);
+			ArrayAppend(&libraryBuildInfos,
+						{
+							.buildCommandName = command.name, // @TODO: Take a copy?
+							.dependentsNeedRebuild = false,
+						});
 		}
+	}
+
+	if (moduleFileWasModified || dependencyFileWasModified)
+	{
+		LogPrint(INFO_LOG, "%k is out of date, rebuilding...\n\n", command.binaryFilepath);
 		return Build(command);
 	}
-	else
-	{
-		LogPrint(LogType::INFO, "%s is up to date, skipping build\n", &command.binaryFilepath[0]);
-	}
+
+	LogPrint(INFO_LOG, "%k is up to date, skipping build.\n", command.binaryFilepath);
 
 	return true;
 }
@@ -173,25 +213,33 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 	CreateDirectoryIfItDoesNotExist("Build/Shader/Code");
 	CreateDirectoryIfItDoesNotExist("Build/Shader/Binary");
 
-	Append(&includeSearchDirectories, String{"Code"});
+	bool error = false;
 
-	auto commonCompilerFlags = FormatString("-std=c++17 -DUSE_VULKAN_RENDER_API -ICode -ffast-math -fno-exceptions -Wall -Wextra -Werror -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers");
+	// @TODO: Some way to set render api compiler flag (-DUSE_VULKAN_RENDER_API).
+	auto commonCompilerFlags = ReadEntireFile("Code/Builder/CommonCompilerFlags.txt", &error);
+	if (error)
+	{
+		Abort("Could not read file Code/Builder/CommonCompilerFlags.txt.");
+	}
+	if (StringLength(commonCompilerFlags) > 0 && commonCompilerFlags[StringLength(commonCompilerFlags) - 1] == '\n')
+	{
+		ResizeString(&commonCompilerFlags, StringLength(commonCompilerFlags) - 1);
+	}
 	if (debugBuild)
 	{
-		Append(&commonCompilerFlags, " -DDEBUG -g -O0");
+		StringAppend(&commonCompilerFlags, " -DDEBUG -g -O0");
 	}
 	else
 	{
-		Append(&commonCompilerFlags, " -O3");
+		StringAppend(&commonCompilerFlags, " -O3");
 	}
 	if (developmentBuild)
 	{
-		Append(&commonCompilerFlags, " -DDEVELOPMENT");
+		StringAppend(&commonCompilerFlags, " -DDEVELOPMENT");
 	}
-	auto gameCompilerFlags = Concatenate(commonCompilerFlags, " -IDependencies/Vulkan/1.1.106.0/include");
+	auto gameCompilerFlags = JoinStrings(commonCompilerFlags, " -IDependencies/Vulkan/1.1.106.0/include");
 	auto gameLinkerFlags = "Build/libBasic.so Build/libEngine.so Build/libMedia.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread";
 
-	String buildTarget;
 	bool forceBuildFlag = false;
 	for (auto i = 1; i < argc; i++)
 	{
@@ -201,95 +249,84 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 			{
 				forceBuildFlag = true;
 			}
-		}
-		else if (CStringsEqual(argv[i], "ShaderCompiler"))
-		{
-			buildTarget = "ShaderCompiler";
-		}
-		else
-		{
-			// @TODO
-			Assert(0);
+			else
+			{
+				LogPrint(ERROR_LOG, "Unknown flag: %s.\n", argv[i]);
+				return PROCESS_FAILURE;
+			}
 		}
 	}
 
-	auto allBuildCommands =
-	CreateInitializedArray(
-		BuildCommand{
+	auto allBuildCommands = CreateArray<BuildCommand>(0);
+	{
+		BuildCommand buildCommand =
+		{
 			.name = "Basic",
 			.sourceFilepath = "Code/Basic/Basic.cpp",
 			.compilerFlags = commonCompilerFlags,
 			.linkerFlags = "-fPIC",
 			.binaryFilepath = "Build/libBasic.so",
 			.isLibrary = true,
-		},
-		BuildCommand{
+		};
+		ArrayAppend(&allBuildCommands, buildCommand);
+	}
+	{
+		BuildCommand buildCommand =
+		{
 			.name = "Media",
 			.sourceFilepath = "Code/Media/Media.cpp",
 			.compilerFlags = commonCompilerFlags,
 			.linkerFlags = "-fPIC",
 			.binaryFilepath = "Build/libMedia.so",
-			.libraryDependencies = CreateInitializedArray(String{"Basic"}),
 			.isLibrary = true,
-		},
-		BuildCommand{
+		};
+		ArrayAppend(&buildCommand.dependencies, String{"Basic"});
+		ArrayAppend(&allBuildCommands, buildCommand);
+	}
+	{
+		BuildCommand buildCommand =
+		{
 			.name = "Engine",
 			.sourceFilepath = "Code/Engine/Engine.cpp",
 			.compilerFlags = commonCompilerFlags,
 			.linkerFlags = "-fPIC",
 			.binaryFilepath = "Build/libEngine.so",
-			.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}),
 			.isLibrary = true,
-		},
-		BuildCommand{
-			.name = "ShaderCompiler",
-			.sourceFilepath = "Code/ShaderCompiler/ShaderCompiler.cpp",
-			.compilerFlags = commonCompilerFlags,
-			.linkerFlags = "Build/libBasic.so -ldl -lpthread",
-			.binaryFilepath = "Build/ShaderCompiler",
-			.libraryDependencies = CreateInitializedArray(String{"Basic"}),
-			.isLibrary = false,
-		},
-		BuildCommand{
+		};
+		ArrayAppend(&buildCommand.dependencies, String{"Media"});
+		ArrayAppend(&allBuildCommands, buildCommand);
+	}
+	{
+		BuildCommand buildCommand =
+		{
 			.name = "Game",
 			.sourceFilepath = "Code/Game/Game.cpp",
 			.compilerFlags = gameCompilerFlags,
 			.linkerFlags = gameLinkerFlags,
 			.binaryFilepath = "Build/Game",
-			.libraryDependencies = CreateInitializedArray(String{"Basic"}, String{"Media"}, String{"Engine"}),
 			.isLibrary = false,
-		}
-	);
-
-	Array<BuildCommand> requestedBuildCommands;
-	if (buildTarget == "")
-	{
-		requestedBuildCommands = allBuildCommands;
-	}
-	else
-	{
-		auto GetBuildCommand = [&allBuildCommands](const String &name)
-		{
-			for (auto command : allBuildCommands)
-			{
-				if (name == command.name)
-				{
-					return command;
-				}
-			}
-			Abort("unknown build name %s\n", &name[0]);
-			return BuildCommand{};
 		};
-		auto command = GetBuildCommand(buildTarget);
-		for (auto dep : command.libraryDependencies)
-		{
-			Append(&requestedBuildCommands, GetBuildCommand(dep));
-		}
-		Append(&requestedBuildCommands, command);
+		ArrayAppend(&buildCommand.dependencies, String{"Engine"});
+		ArrayAppend(&allBuildCommands, buildCommand);
 	}
+	/*
+	{
+		BuildCommand buildCommand =
+		{
+			.name = "ShaderCompiler",
+			.sourceFilepath = "Code/ShaderCompiler/ShaderCompiler.cpp",
+			.compilerFlags = commonCompilerFlags,
+			.linkerFlags = "Build/libBasic.so -ldl -lpthread",
+			.binaryFilepath = "Build/ShaderCompiler",
+			.isLibrary = false,
+		};
+		ArrayAppend(&buildCommand.dependencies, String{"Basic"});
+		ArrayAppend(&allBuildCommands, buildCommand);
+	}
+	*/
 
-	LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
-	for (auto &command : requestedBuildCommands)
+	LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
+	for (auto &command : allBuildCommands)
 	{
 		auto success = false;
 		if (forceBuildFlag)
@@ -300,14 +337,12 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 		{
 			success = BuildIfOutOfDate(command);
 		}
+		LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
 		if (!success)
 		{
-			LogPrint(LogType::ERROR, "\nbuild failed\n");
-			LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
-			return 1;
+			return PROCESS_FAILURE;
 		}
-		LogPrint(LogType::INFO, "-------------------------------------------------------------------------------------------------\n");
 	}
 
-	return 0;
+	return PROCESS_SUCCESS;
 }

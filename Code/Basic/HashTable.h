@@ -20,27 +20,16 @@ struct KeyValuePair
 template <typename K, typename V>
 struct HashTable
 {
-	Array<HashTableKeyValuePair> buckets;
-
-	HashTable(std::initializer_list<KeyValuePair<K, V>> list);
+	Array<KeyHashValuePair<V>> buckets;
 };
 
 template <typename K, typename V>
-HashTable(std::initializer_list<KeyValuePair<K, V>> list)
+HashTable<K, V> CreateHashTable()
 {
-	*this = CreateHashTable();
-	for (const auto &element : list)
+	HashTable<K, V> result =
 	{
-		HashTableInsert(this, element.key, element.value);
-	}
-}
-
-void CreateHashTable()
-{
-	HashTable result =
-	{
-		.buckets = CreateArray(INITIAL_HASH_MAP_SIZE),
-	}
+		.buckets = CreateArray<KeyValuePair<K, V>>(INITIAL_HASH_MAP_SIZE),
+	};
 	for (auto &bucket : result.buckets)
 	{
 		bucket.keyHash = VACANT_HASH_KEY_SENTINEL;
@@ -53,8 +42,8 @@ template <typename K, typename V>
 void HashTableInsert(HashTable<K, V> *table, const K &key, const V &value)
 {
 	auto hash = Hash(key);
-	auto index = hash % Length(table->buckets);
-	for (auto i = (index + 1) % ArrayCount(table->buckets); i != index; i = (i + 1) % ArrayCount(table->buckets))
+	auto index = hash % ArrayLength(table->buckets);
+	for (auto i = (index + 1) % ArrayLength(table->buckets); i != index; i = (i + 1) % ArrayLength(table->buckets))
 	{
 		if (table->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL || table->buckets[index].keyHash == hash)
 		{
@@ -71,8 +60,8 @@ template <typename K, typename V>
 bool HashTableInsertIfNonExistent(HashTable<K, V> *table, const K &key, const V &value)
 {
 	auto hash = Hash(key);
-	auto index = hash % Length(table->buckets);
-	for (auto i = index + 1 % Length(table->buckets); i != index; i = index + 1 % Length(table->buckets))
+	auto index = hash % ArrayLength(table->buckets);
+	for (auto i = index + 1 % ArrayLength(table->buckets); i != index; i = index + 1 % ArrayLength(table->buckets))
 	{
 		if (table->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL)
 		{

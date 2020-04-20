@@ -23,26 +23,26 @@
 #include "String.cpp"
 #include "Filesystem.cpp"
 #include "Parser.cpp"
-//#include "RNG.cpp"
 
-void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName)
+void AssertActual(bool test, const String &fileName, const String &functionName, s32 lineNumber, const String &testName)
 {
 	if (debug && !test)
 	{
-		LogPrint(ERROR_LOG, "%s: %s: line %d: assertion failed '%s'\n", fileName, functionName, lineNumber, testName);
+		LogPrint(ERROR_LOG, "%k: %k: line %d: assertion failed '%k'.\n", fileName, functionName, lineNumber, testName);
 		PrintStacktrace();
 		SignalDebugBreakpoint();
 		ExitProcess(PROCESS_FAILURE);
 	}
 }
 
-void AbortActual(const char *format, const char *fileName, const char *functionName, s32 lineNumber, ...)
+void AbortActual(const String &format, const String &fileName, const String &functionName, s32 lineNumber, ...)
 {
 	va_list arguments;
 	va_start(arguments, lineNumber);
 	LogPrint(ERROR_LOG, "###########################################################################\n");
 	LogPrint(ERROR_LOG, "[PROGRAM ABORT]\n");
 	LogPrintVarArgs(ERROR_LOG, format, arguments);
+	LogPrint(ERROR_LOG, "\n");
 	PrintStacktrace();
 	LogPrint(ERROR_LOG, "###########################################################################\n");
 	va_end(arguments);
@@ -52,5 +52,5 @@ void AbortActual(const char *format, const char *fileName, const char *functionN
 
 void InitializeBasic(u32 maxFiberCount)
 {
-	InitializeFiber(maxFiberCount);
+	InitializeFibers(maxFiberCount);
 }

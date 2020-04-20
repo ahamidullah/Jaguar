@@ -6,21 +6,21 @@ struct AtomicLinkedList {
 };
 
 template <typename T>
-T *PopFromFront(AtomicLinkedList<T> *l) {
+T *PopFromFrontOfAtomicLinkedList(AtomicLinkedList<T> *l) {
 	T *currentHead;
 	do {
 		currentHead = l->head;
 		Assert(currentHead);
-	} while (AtomicCompareAndSwap((void *volatile *)&l->head, currentHead, l->head->next) != currentHead);
+	} while (AtomicCompareAndSwapPointer((void *volatile *)&l->head, currentHead, l->head->next) != currentHead);
 	return currentHead;
 }
 
 template <typename T>
-void PushToFront(AtomicLinkedList<T> *l, T *newHead) {
+void PushToFrontOfAtomicLinkedList(AtomicLinkedList<T> *l, T *newHead) {
 	T *currentHead;
 	do {
 		currentHead = l->head;
 		newHead->next = currentHead;
-	} while (AtomicCompareAndSwap((void *volatile *)&l->head, currentHead, newHead) != currentHead);
+	} while (AtomicCompareAndSwapPointer((void *volatile *)&l->head, currentHead, newHead) != currentHead);
 }
 

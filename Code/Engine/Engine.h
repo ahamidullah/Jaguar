@@ -12,6 +12,7 @@
 #if defined(USE_VULKAN_RENDER_API)
 #include "Vulkan.h"
 #endif
+#include "Gfx.h"
 #include "GPU.h"
 #include "Mesh.h"
 #include "Camera.h"

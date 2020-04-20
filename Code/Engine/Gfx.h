@@ -1,6 +1,6 @@
 #pragma once
 
-struct GfxQueueSubmitInfo
+struct GfxSubmitInfo
 {
 	Array<GfxCommandBuffer> commandBuffers;
     Array<GfxSemaphore> waitSemaphores;

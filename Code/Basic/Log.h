@@ -7,6 +7,6 @@ enum LogType
 	ABORT_LOG,
 };
 
-void ConsolePrintVarargs(const char *format, va_list argumentList);
-void ConsolePrint(const char *format, ...);
-void LogPrint(LogType logType, const char *format, ...);
+void ConsolePrintVarargs(const String &format, va_list argumentList);
+void ConsolePrint(const String &format, ...);
+void LogPrint(LogType logType, const String &format, ...);

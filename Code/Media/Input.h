@@ -19,12 +19,7 @@ struct Mouse
 	f32 rawDeltaX = 0;
 	f32 rawDeltaY = 0;
 	f32 sensitivity = 0.005;
-	InputButtons buttons =
-	{
-		AllocateArray(bool, MOUSE_BUTTON_COUNT),
-		AllocateArray(bool, MOUSE_BUTTON_COUNT),
-		AllocateArray(bool, MOUSE_BUTTON_COUNT),
-	};
+	InputButtons buttons;
 };
 
 struct WindowEvents
@@ -32,7 +27,7 @@ struct WindowEvents
 	bool quit = false;
 };
 
-void GetPlatformInput(WindowContext *window);
+void GetPlatformInput(PlatformWindow *window);
 
 void PressButton(u32 buttonIndex, InputButtons *buttons);
 void ReleaseButton(u32 buttonIndex, InputButtons *buttons);

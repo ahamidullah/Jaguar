@@ -12,5 +12,6 @@
 void InitializeMedia(bool multithreaded, u32 maxFiberCount)
 {
 	InitializeBasic(maxFiberCount);
+	InitializeInput();
 	InitializeWindow(multithreaded);
 }

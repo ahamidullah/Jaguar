@@ -80,7 +80,7 @@ void InitializeGPU()
 	gpuContext.commandPools.transfer = GfxCreateCommandPool(GFX_TRANSFER_COMMAND_QUEUE);
 	gpuContext.commandPools.compute = GfxCreateCommandPool(GFX_COMPUTE_COMMAND_QUEUE);
 
-	Resize(&gpuContext.threadLocal, GetWorkerThreadCount());
+	ResizeArray(&gpuContext.threadLocal, GetWorkerThreadCount());
 	for (auto i = 0; i < GetWorkerThreadCount(); i++)
 	{
 		for (auto j = 0; j < GFX_MAX_FRAMES_IN_FLIGHT; j++)
@@ -165,11 +165,11 @@ GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator
 		allocationStart = (oldTop + alignmentOffset) % allocator->capacity;
 		newTop = (allocationStart + memoryRequirements.size) % allocator->capacity;
 		//ConsolePrint("allocator->top: %d, oldTop: %d, newTop: %d\n", allocator->top, oldTop, newTop);
-	} while (AtomicCompareAndSwap((s32 *)&allocator->top, oldTop, newTop) != oldTop);
-	AtomicFetchAndAdd((s32 *)&allocator->size, allocationSize);
-	AtomicFetchAndAdd((s32 *)&allocator->frameSizes[frameIndex], allocationSize);
+	} while (AtomicCompareAndSwap32((s32 *)&allocator->top, oldTop, newTop) != oldTop);
+	AtomicFetchAndAdd32((s32 *)&allocator->size, allocationSize);
+	AtomicFetchAndAdd32((s32 *)&allocator->frameSizes[frameIndex], allocationSize);
 
-	auto allocationIndex = AtomicFetchAndAdd((s32 *)&allocator->allocationCounts[frameIndex], 1);
+	auto allocationIndex = AtomicFetchAndAdd32((s32 *)&allocator->allocationCounts[frameIndex], 1);
 	auto allocation = &allocator->allocations[frameIndex][allocationIndex];
 	allocation->memory = allocator->memory;
 	allocation->offset = allocationStart;
@@ -295,23 +295,23 @@ void ClearGPUCommandPoolsForFrameIndex(u32 frameIndex)
 
 void QueueGPUTransfer(GfxCommandBuffer commandBuffer)
 {
-	Write(&gpuContext.transferDoubleBuffer, commandBuffer);
+	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
 }
 
 void QueueGPUAsyncTransfer(GfxCommandBuffer commandBuffer, AssetLoadStatus *loadStatus = NULL)
 {
-	Write(&gpuContext.transferDoubleBuffer, commandBuffer);
+	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
 }
 
 GfxSemaphore SubmitGPUTransferCommands()
 {
-	SwitchBuffers(&gpuContext.transferDoubleBuffer);
+	SwitchAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer);
 
 	auto semaphore = GfxCreateSemaphore();
 	GfxSubmitInfo submitInfo =
 	{
-		.commandBuffers = CreateArray(gpuContext.transferDoubleBuffer.readBufferElementCount, gpuContext.transferDoubleBuffer.readBuffer);
-		.signalSemaphores = CreateArray(1, &semaphore);
+		.commandBuffers = CreateArray(gpuContext.transferDoubleBuffer.readBufferElementCount, gpuContext.transferDoubleBuffer.readBuffer->data),
+		.signalSemaphores = CreateArray(1, &semaphore),
 	};
 	GfxSubmitCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, submitInfo, NULL);
 	return semaphore;

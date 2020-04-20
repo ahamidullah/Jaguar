@@ -55,12 +55,13 @@ f64 PlatformTimeDifference(PlatformTime start, PlatformTime end)
 
 void Sleep(u32 milliseconds)
 {
-	struct timespec timespec = {
+	struct timespec timespec =
+	{
 		.tv_sec = milliseconds / 1000,
 		.tv_nsec = (milliseconds % 1000) * 1000000,
 	};
 	if (nanosleep(&timespec, NULL))
 	{
-		LogPrint(LogType::ERROR, "nanosleep() ended early: %s.", GetPlatformError());
+		LogPrint(ERROR_LOG, "nanosleep() ended early: %s.\n", GetPlatformError());
 	}
 }

@@ -1,20 +1,24 @@
-bool CreateParserStreamFromFile(ParserStream *parser, const String &filepath)
+ParserStream CreateParserStream(const String &filepath, const String &delimiters, bool *error)
 {
-	auto [string, error] = ReadEntireFile(filepath);
-	if (error)
+	auto fileString = ReadEntireFile(filepath, error);
+	if (*error)
 	{
-		return false;
+		return ParserStream{};
 	}
-	parser->string = string;
-	return true;
+	*error = false;
+	return
+	{
+		.string = fileString,
+		.delimiters = delimiters,
+		.index = 0,
+	};
 }
 
-bool IsParserDelimiter(char c)
+bool IsParserDelimiter(ParserStream *parser, char c)
 {
-	const char *tokenDelimiters = " \t:;\",(){}=-+*/\n";
-	for (auto i = 0; i < Length(tokenDelimiters); i++)
+	for (auto d : parser->delimiters)
 	{
-		if (c == tokenDelimiters[i])
+		if (c == d)
 		{
 			return true;
 		}
@@ -22,66 +26,84 @@ bool IsParserDelimiter(char c)
 	return false;
 }
 
-String GetToken(ParserStream *stream)
+void AdvanceParser(ParserStream *parser)
 {
-	while (stream->string[stream->index] && (stream->string[stream->index] == ' ' || stream->string[stream->index] == '\t'))
+	if (parser->string[parser->index] == '\n')
 	{
-		stream->index++;
+		parser->lineCount++;
+		parser->lineCharCount = 0;
 	}
-	if (!stream->string[stream->index])
+	parser->index++;
+	parser->lineCharCount++;
+}
+
+String GetToken(ParserStream *parser)
+{
+	while (parser->string[parser->index] && (parser->string[parser->index] == ' ' || parser->string[parser->index] == '\t'))
 	{
-		return CreateString(0);
+		AdvanceParser(parser);
 	}
-	auto tokenStartIndex = stream->index;
-	if (IsParserDelimiter(stream->string[stream->index]))
+	if (!parser->string[parser->index])
 	{
-		stream->index++;
+		return "";
+	}
+	auto tokenStartIndex = parser->index;
+	if (IsParserDelimiter(parser, parser->string[parser->index]))
+	{
+		AdvanceParser(parser);
 	}
 	else
 	{
-		while (stream->string[stream->index] && !IsParserDelimiter(stream->string[stream->index]))
+		while (parser->string[parser->index] && !IsParserDelimiter(parser, parser->string[parser->index]))
 		{
-			stream->index++;
+			AdvanceParser(parser);
 		}
 	}
-	Assert(stream->index > tokenStartIndex);
-	return CreateString(stream->string, tokenStartIndex, stream->index - 1);
+	Assert(parser->index > tokenStartIndex);
+	return CreateString(parser->string, tokenStartIndex, parser->index - 1);
 }
 
-bool GetExpectedToken(ParserStream *parser, const String &expected)
+bool ConsumeUntilChar(ParserStream *parser, char c)
 {
-	return expected == GetToken(parser);
+	while (parser->string[parser->index] && parser->string[parser->index] != c)
+	{
+		AdvanceParser(parser);
+	}
+	if (parser->string[parser->index] != c)
+	{
+		return false;
+	}
+	return true;
 }
 
-bool GetLine(ParserStream *parser, String *line)
+bool GetIfToken(ParserStream *parser, const String &expected)
 {
-	Resize(line, 0);
+	auto initialParser = *parser;
+	auto token = GetToken(parser);
+	if (token == expected)
+	{
+		return true;
+	}
+	*parser = initialParser;
+	return false;
+}
+
+bool GetUntilEndOfLine(ParserStream *parser, String *line)
+{
+	ResizeString(line, 0);
 	if (!parser->string[parser->index])
 	{
 		return false;
 	}
 	while (parser->string[parser->index] && parser->string[parser->index] != '\n')
 	{
-		Append(line, parser->string[parser->index]);
-		parser->index++;
+		StringAppend(line, parser->string[parser->index]);
+		AdvanceParser(parser);
 	}
 	if (parser->string[parser->index] == '\n')
 	{
-		Append(line, parser->string[parser->index]);
-		parser->index++;
+		StringAppend(line, parser->string[parser->index]);
+		AdvanceParser(parser);
 	}
 	return true;
-}
-
-char PeekAtNextCharacter(ParserStream *parser)
-{
-	return parser->string[parser->index];
-}
-
-void AdvanceParser(ParserStream *parser, u32 count)
-{
-	for (auto i = 0; i < count && parser->string[parser->index]; i++)
-	{
-		parser->index++;
-	}
 }

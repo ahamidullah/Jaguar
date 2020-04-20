@@ -1,16 +1,16 @@
 s32 KeySymbolToScancode(KeySymbol keySymbol)
 {
-	s32 scancode = XKeysymToKeycode(x11Display, keySymbol);
+	s32 scancode = XKeysymToKeycode(GetX11Display(), keySymbol);
 	Assert(scancode > 0);
 	return scancode;
 }
 
-void QueryMousePosition(WindowContext *window, s32 *x, s32 *y)
+void QueryMousePosition(PlatformWindow *window, s32 *x, s32 *y)
 {
 	s32 screenX, screenY;
 	Window root, child;
 	u32 mouseButtons;
-	XQueryPointer(x11Display, window->x11, &root, &child, &screenX, &screenY, x, y, &mouseButtons);
+	XQueryPointer(GetX11Display(), window->x11Window, &root, &child, &screenX, &screenY, x, y, &mouseButtons);
 	*y = (window->height - *y); // Bottom left is zero for us, top left is zero for x11.
 }
 

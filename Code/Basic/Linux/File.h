@@ -6,7 +6,7 @@
 #include "Basic/String.h"
 
 typedef s32 FileHandle;
-typedef u64 FileOffset;
+typedef off_t FileOffset;
 
 struct DirectoryIteration
 {
@@ -31,13 +31,13 @@ enum OpenFileFlagBits
 	OPEN_FILE_CREATE = O_CREAT | O_TRUNC,
 };
 
-FileHandle OpenFile(const String &path, OpenFileFlags flags);
+FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error);
 bool CloseFile(FileHandle file);
 String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error);
 bool WriteToFile(FileHandle file, size_t count, void *buffer);
-FileOffset GetFileLength(FileHandle file);
+FileOffset GetFileLength(FileHandle file, bool *error);
 FileOffset SeekFile(FileHandle file, FileOffset offset, FileSeekRelative relative);
 bool IterateDirectory(const String &path, DirectoryIteration *context);
-PlatformTime GetFileLastModifiedTime(FileHandle file);
+PlatformTime GetFileLastModifiedTime(FileHandle file, bool *error);
 bool FileExists(const String &path);
 bool CreateDirectoryIfItDoesNotExist(const String &path);

@@ -42,7 +42,7 @@ void RunGame(void *)
 			//CreateJob(InitializeRenderer, NULL),
 		};
 		JobCounter counter;
-		RunJobs(ArrayCount(jobs), jobs, NORMAL_PRIORITY_JOB, &counter);
+		RunJobs(CArrayCount(jobs), jobs, NORMAL_PRIORITY_JOB, &counter);
 		WaitForJobCounter(&counter);
 	}
 	InitializeEntities(); // @TODO
@@ -57,7 +57,7 @@ void RunGame(void *)
 		Render();
 	}
 
-	ExitProcess(ProcessExitCode::SUCCESS);
+	ExitProcess(PROCESS_SUCCESS);
 }
 
 s32 ApplicationEntry(s32 argc, char *argv[])
@@ -66,5 +66,5 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 	InitializeJobs(RunGame, NULL);
 
 	InvalidCodePath();
-	return 0;
+	return PROCESS_FAILURE;
 }

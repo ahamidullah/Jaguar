@@ -1,9 +1,9 @@
 #pragma once
 
-enum struct ProcessExitCode
+enum ProcessExitCode
 {
-	SUCCESS = 0,
-	FAILURE = 1,
+	PROCESS_SUCCESS = 0,
+	PROCESS_FAILURE = 1,
 };
 
 struct String;
@@ -11,3 +11,4 @@ struct String;
 s32 RunProcess(const String &command);
 void ExitProcess(ProcessExitCode exitCode);
 void SignalDebugBreakpoint();
+String GetEnvironmentVariable(const String &name, bool *exists);

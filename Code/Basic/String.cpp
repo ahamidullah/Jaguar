@@ -41,6 +41,16 @@ bool CStringsEqual(const char *a, const char *b)
 	return true;
 }
 
+String CreateString(size_t length)
+{
+	String result =
+	{
+		.data = CreateArray<char>(length + 1),
+	};
+	result.data[length] = '\0';
+	return result;
+}
+
 String CreateString(size_t length, size_t capacity)
 {
 	String result =
@@ -51,10 +61,11 @@ String CreateString(size_t length, size_t capacity)
 	return result;
 }
 
-String CreateStringCopy(const String &copy)
+String CreateString(const String &copy)
 {
-	auto length = Length(copy);
-	String result = {
+	auto length = StringLength(copy);
+	String result =
+	{
 		.data = CreateArray<char>(length + 1),
 	};
 	CopyMemory(&copy[0], &result[0], length);
@@ -62,11 +73,11 @@ String CreateStringCopy(const String &copy)
 	return result;
 }
 
-String CreateStringCopyRange(const String &copy, size_t startIndex, size_t endIndex)
+String CreateString(const String &copy, size_t startIndex, size_t endIndex)
 {
 	Assert(endIndex >= startIndex);
 	auto length = endIndex - startIndex + 1;
-	auto result = CreateString(length, length);
+	auto result = CreateString(length);
 	CopyMemory(&copy[startIndex], &result[0], length);
 	return result;
 }
@@ -79,35 +90,49 @@ void ResizeString(String *string, size_t newSize)
 
 void StringAppend(String *destination, const String &source)
 {
-	auto writeIndex = StringLength(destination);
-	ResizeString(&destination->data, StringLength(destination) + StringLength(source) + 1);
+	auto writeIndex = StringLength(*destination);
+	ResizeArray(&destination->data, StringLength(*destination) + StringLength(source) + 1);
 	CopyMemory(&source.data[0], &destination->data[writeIndex], StringLength(source) + 1);
 }
 
-void StringAppendCString(String *destination, const char *source)
+void StringAppend(String *destination, const char *source)
 {
 	auto sourceLength = CStringLength(source);
 	auto writeIndex = StringLength(*destination);
-	ResizeString(&destination->data, StringLength(destination) + sourceLength + 1);
+	ResizeArray(&destination->data, StringLength(*destination) + sourceLength + 1);
 	CopyMemory(source, &destination->data[writeIndex], sourceLength + 1);
 }
 
-void StringAppendRange(String *destination, const String &source, size_t rangeStartIndex, size_t rangeLength)
+void StringAppend(String *destination, const String &source, size_t rangeStartIndex, size_t rangeLength)
 {
 	Assert(source.data.count > rangeStartIndex);
 	Assert(source.data.count >= rangeStartIndex + rangeLength);
 	auto writeIndex = StringLength(*destination);
-	ResizeString(&destination->data, Length(destination) + rangeLength + 1);
+	ResizeArray(&destination->data, StringLength(*destination) + rangeLength + 1);
 	CopyMemory(&source.data[rangeStartIndex], &destination->data[writeIndex], rangeLength + 1);
+}
+
+void StringAppend(String *destination, char source)
+{
+	ResizeArray(&destination->data, StringLength(*destination) + 2);
+	(*destination)[StringLength(*destination) - 1] = source;
+}
+
+String JoinStrings(const String &a, const String &b)
+{
+	auto result = CreateString(StringLength(a) + StringLength(b));
+	CopyMemory(&a[0], &result[0], StringLength(a));
+	CopyMemory(&b[0], &result[StringLength(a)], StringLength(b));
+	return result;
 }
 
 size_t StringLength(const String &s)
 {
-	if (ArrayCount(s.data) == 0)
+	if (ArrayLength(s.data) == 0)
 	{
 		return 0;
 	}
-	return ArrayCount(s.data) - 1; // To account for the NULL terminator we insert at the end.
+	return ArrayLength(s.data) - 1; // To account for the NULL terminator we insert at the end.
 }
 
 size_t CStringLength(const char *string)
@@ -120,17 +145,34 @@ size_t CStringLength(const char *string)
 	return length;
 }
 
-String FormatStringVarArgs(const char *format, va_list arguments)
+void SetMinimumStringCapacity(String *string, size_t minimumCapacity)
 {
-	auto result = CreateString(0);
-	auto sprintfCallback = [&result](const char *buffer, void *userData, s32 length)
+	SetMinimumArrayCapacity(&string->data, minimumCapacity + 1);
+}
+
+String FormatStringVarArgs(const String &format, va_list arguments)
+{
+	auto stringBuffer = CreateArray<char>(STB_SPRINTF_MIN);
+	struct SprintfCallbackData
 	{
-		auto writeIndex = StringLength(result);
-		ResizeString(&result, StringLength(result) + length);
-		CopyMemory(buffer, &result[writeIndex], length);
+		Array<char> *stringBuffer;
+		u32 stringLength;
+	} sprintfCallbackData =
+	{
+		.stringBuffer = &stringBuffer,
+		.stringLength = 0,
 	};
-	char buffer[STB_SPRINTF_MIN];
-	stbsp_vsprintf(sprintfCallback, NULL, buffer, format, arguments);
+	auto SprintfCallback = [](char *buffer, void *userData, s32 length)
+	{
+		auto data = (SprintfCallbackData *)userData;
+		data->stringLength += length;
+		ResizeArray(data->stringBuffer, data->stringLength + STB_SPRINTF_MIN);
+		return &(*data->stringBuffer)[data->stringLength];
+	};
+	stbsp_vsprintfcb(SprintfCallback, &sprintfCallbackData, &stringBuffer[0], &format[0], arguments);
+	stringBuffer[sprintfCallbackData.stringLength] = '\0';
+	ResizeArray(&stringBuffer, sprintfCallbackData.stringLength + 1);
+	return String{stringBuffer};
 }
 
 String FormatString(const String &format, ...)
@@ -167,22 +209,14 @@ s64 FindLastCharIndex(const String &s, char c)
 	return occurrence;
 }
 
-bool IsCharSpace(char c)
+bool IsCharWhitespace(char c)
 {
-	if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-	{
-		return true;
-	}
-	return false;
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
 bool IsCharDigit(char c)
 {
-	if ('0' <= c && c <= '9')
-	{
-		return true;
-	}
-	return false;
+	return '0' <= c && c <= '9';
 }
 
 void TrimString(String *s, size_t leftIndex, size_t rightIndex)
@@ -204,7 +238,7 @@ Array<String> SplitString(const String &s, char seperator)
 		{
 			if (splitLength > 0)
 			{
-				Append(&result, CreateString(s, splitStartIndex, i - 1));
+				ArrayAppend(&result, CreateString(s, splitStartIndex, i - 1));
 				splitLength = 0;
 			}
 		}
@@ -219,7 +253,7 @@ Array<String> SplitString(const String &s, char seperator)
 	}
 	if (splitLength > 0)
 	{
-		Append(&result, CreateString(s, splitStartIndex, Length(s) - 1));
+		ArrayAppend(&result, CreateString(s, splitStartIndex, StringLength(s) - 1));
 	}
 	return result;
 }
@@ -229,7 +263,7 @@ bool ParseInteger(const String &s, s64 *result)
     *result = 0;
     for (auto c : s)
     {
-    	if (!IsDigit(c))
+    	if (!IsCharDigit(c))
     	{
     		return false;
     	}
@@ -245,7 +279,7 @@ char *begin(const String &s)
 
 char *end(const String &s)
 {
-	return &s[StringLength(*s)];
+	return &s[StringLength(s)];
 }
 
 char *begin(String *s)

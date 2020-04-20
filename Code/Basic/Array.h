@@ -1,35 +1,17 @@
 #pragma once
 
-#include <initializer_list>
 #include <stdlib.h> // realloc @TODO
 
 template <typename T>
 struct Array
 {
-	size_t count;
-	size_t capacity;
-	T *elements;
+	size_t count = 0;
+	size_t capacity = 0;
+	T *elements = NULL;
 
-	Array(std::initializer_list<T> list);
 	T &operator[](size_t i);
 	T &operator[](size_t i) const;
 };
-
-template <typename T>
-Array(std::initializer_list<T> list)
-{
-	Array<T> a =
-	{
-		.count = list.size(),
-		.capacity = list.size(),
-		.elements = AllocateArrayMemory(T, a.capacity),
-	};
-	for (auto i = 0; i < list.size(), i++)
-	{
-		a[i] = list[i];
-	}
-	return a;
-}
 
 template <typename T>
 T &Array<T>::operator[](size_t i)
@@ -80,7 +62,7 @@ Array<T> CreateArray(size_t count)
 }
 
 template <typename T>
-Array<T> CreateArrayWithCapacity(size_t count, size_t capacity)
+Array<T> CreateArray(size_t count, size_t capacity)
 {
 	return
 	{
@@ -91,16 +73,16 @@ Array<T> CreateArrayWithCapacity(size_t count, size_t capacity)
 }
 
 template <typename T>
-Array<T> CreateArrayFromMemory(size_t count, const T *pointer)
+Array<T> CreateArray(size_t count, const T *source)
 {
-	Array<T> a =
+	Array<T> result =
 	{
 		.count = count,
 		.capacity = count,
 		.elements = AllocateArrayMemory(T, count),
 	};
-	CopyMemory(pointer, a.elements, count * sizeof(T));
-	return a;
+	CopyMemory(source, result.elements, count * sizeof(T));
+	return result;
 }
 
 template <typename T>
@@ -146,28 +128,22 @@ void ArrayAppend(Array<T> *a, const T &newElement)
 }
 
 template <typename T>
-void SetArraySize(Array<T> *a, size_t newCount)
-{
-	a->count = newCount;
-}
-
-template <typename T>
-void ArrayAppendMemory(Array<T> *destination, const T *source, size_t sourceCount)
+void ArrayAppend(Array<T> *destination, const T *source, size_t sourceCount)
 {
 	size_t oldDestinationCount = destination->count;
 	size_t newDestinationCount = destination->count + sourceCount;
 	Resize(destination, newDestinationCount);
-	CopyMemory(source, destination->elements + oldDestinationCount, sourceCount * sizeof(T)); // @TODO
+	CopyMemory(source, destination->elements + oldDestinationCount, sourceCount * sizeof(T));
 }
 
 template <typename T>
-void ArrayAppendArray(Array<T> *destination, const Array<T> &source)
+void ArrayAppend(Array<T> *destination, const Array<T> &source)
 {
 	Append(destination, source.elements, source.count);
 }
 
 template <typename T>
-void ArrayAppendArrayRange(Array<T> *destination, const Array<T> &source, size_t sourceCount)
+void ArrayAppend(Array<T> *destination, const Array<T> &source, size_t sourceCount)
 {
 	Append(destination, source.elements, sourceCount);
 }
@@ -185,7 +161,7 @@ void RemoveArrayElement(Array<T> *a, size_t index)
 }
 
 template <typename T>
-size_t ArrayCount(const Array<T> &a)
+size_t ArrayLength(const Array<T> &a)
 {
 	return a.count;
 }

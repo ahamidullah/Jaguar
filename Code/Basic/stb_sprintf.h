@@ -512,12 +512,18 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          stbsp__int32 dp;
          char const *sn;
 
+      case 'k':
+         // get the string
+         {
+            auto str = va_arg(va, String);
+            s = &str[0];
+      	 }
+         goto ss;
+
       case 's':
-      auto str = va_arg(va, String);
-      s = &str[0];
-#if 0
          // get the string
          s = va_arg(va, char *);
+         ss:
          if (s == 0)
             s = (char *)"null";
          // get the length
@@ -551,7 +557,7 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          // clamp to precision
          if (l > (stbsp__uint32)pr)
             l = pr;
-#endif
+
          lead[0] = 0;
          tail[0] = 0;
          pr = 0;

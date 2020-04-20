@@ -28,4 +28,4 @@ JobDeclaration CreateJob(JobProcedure procedure, void *parameter);
 void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority, JobCounter *counter);
 void WaitForJobCounter(JobCounter *counter);
 void ClearJobCounter(JobCounter *counter);
-u32 GetWorkerThreadCount();
+size_t GetWorkerThreadCount();

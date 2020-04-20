@@ -185,6 +185,7 @@ struct VulkanSamplerFilter
 };
 
 typedef VkBuffer GfxBuffer;
+typedef VkSemaphore GfxSemaphore;
 typedef VkDescriptorSetLayout GfxDescriptorSetLayout;
 typedef VkDescriptorSet GfxDescriptorSet;
 typedef VkFence GfxFence;
@@ -204,8 +205,10 @@ typedef VulkanSamplerFilter GfxSamplerFilter;
 typedef VkPipeline GfxPipeline;
 typedef VkPipelineLayout GfxPipelineLayout;
 
+struct GfxSubmitInfo;
+
 GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool);
-void GfxSubmitCommandBuffers(u32 count, GfxCommandBuffer *commandBuffers, GfxCommandQueueType queueType, GfxFence fence);
+void GfxSubmitCommandBuffers(GfxCommandQueueType queueType, GfxSubmitInfo &submitInfo, GfxFence fence);
 void GfxFreeCommandBuffers(GfxCommandPool pool, s32 count, GfxCommandBuffer *buffers);
 void GfxEndCommandBuffer(GfxCommandBuffer buffer);
 

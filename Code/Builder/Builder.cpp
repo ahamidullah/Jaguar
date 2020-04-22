@@ -5,30 +5,31 @@ bool developmentBuild = true;
 
 struct BuildCommand
 {
-	String        name;
-	String        sourceFilepath;
-	String        compilerFlags;
-	String        linkerFlags;
-	String        binaryFilepath;
+	String name;
+	String sourceFilepath;
+	String compilerFlags;
+	String linkerFlags;
+	String binaryFilepath;
 	Array<String> dependencies;
-	bool          isLibrary;
+	bool isLibrary;
 };
 
 bool Build(const BuildCommand &command)
 {
-	LogPrint(INFO_LOG,
-	         "Running build command %k...\n\n"
-	         "sourceFilepath: %k\n\n"
-	         "isLibrary: %d\n\n"
-	         "compilerFlags: %k\n\n"
-	         "linkerFlags: %k\n\n"
-	         "binaryFilepath: %k\n\n",
-	         command.name,
-	         command.sourceFilepath,
-	         command.isLibrary,
-	         command.compilerFlags,
-	         command.linkerFlags,
-	         command.binaryFilepath);
+	LogPrint(
+		INFO_LOG,
+		"Running build command %k...\n\n"
+		"sourceFilepath: %k\n\n"
+		"isLibrary: %d\n\n"
+		"compilerFlags: %k\n\n"
+		"linkerFlags: %k\n\n"
+		"binaryFilepath: %k\n\n",
+		command.name,
+		command.sourceFilepath,
+		command.isLibrary,
+		command.compilerFlags,
+		command.linkerFlags,
+		command.binaryFilepath);
 
 	auto objFilepath = CreateString(command.binaryFilepath);
 	SetFilepathExtension(&objFilepath, ".o");
@@ -60,13 +61,13 @@ bool Build(const BuildCommand &command)
 
 Array<String> GatherModuleFilepaths(const String &sourceDirectory)
 {
-	Array<String> directories;
+	Array<String> directories = {};
 	ArrayAppend(&directories, sourceDirectory);
 
-	Array<String> result;
+	Array<String> result = {};
 	for (auto i = 0; i < ArrayLength(directories); i++)
 	{
-		DirectoryIteration iteration;
+		DirectoryIteration iteration = {};
 		while (IterateDirectory(directories[i], &iteration))
 		{
 			auto filepath = JoinFilepaths(directories[i], iteration.filename);
@@ -90,20 +91,21 @@ bool BuildIfOutOfDate(const BuildCommand &command)
 	struct LibraryBuildInfo
 	{
 		String buildCommandName;
-		bool   dependentsNeedRebuild;
+		bool dependentsNeedRebuild;
 	};
-	static Array<LibraryBuildInfo> libraryBuildInfos;
+	static Array<LibraryBuildInfo> libraryBuildInfos = {};
 
 	if (!FileExists(command.binaryFilepath))
 	{
 		LogPrint(INFO_LOG, "%k does not exist, building...\n\n", command.binaryFilepath);
 		if (command.isLibrary)
 		{
-			ArrayAppend(&libraryBuildInfos,
-		            	{
-		                	.buildCommandName = command.name, // @TODO: Take a copy?
-		           	    	.dependentsNeedRebuild = true,
-		            	});
+			ArrayAppend(
+				&libraryBuildInfos,
+				{
+					.buildCommandName = command.name, // @TODO: Take a copy?
+					.dependentsNeedRebuild = true,
+				});
 		}
 		return Build(command);
 	}
@@ -180,19 +182,21 @@ bool BuildIfOutOfDate(const BuildCommand &command)
 	{
 		if (libraryHeaderChanged || dependencyFileWasModified)
 		{
-			ArrayAppend(&libraryBuildInfos,
-						{
-							.buildCommandName = command.name, // @TODO: Take a copy?
-							.dependentsNeedRebuild = true,
-						});
+			ArrayAppend(
+				&libraryBuildInfos,
+				{
+					.buildCommandName = command.name, // @TODO: Take a copy?
+					.dependentsNeedRebuild = true,
+				});
 		}
 		else
 		{
-			ArrayAppend(&libraryBuildInfos,
-						{
-							.buildCommandName = command.name, // @TODO: Take a copy?
-							.dependentsNeedRebuild = false,
-						});
+			ArrayAppend(
+				&libraryBuildInfos,
+				{
+					.buildCommandName = command.name, // @TODO: Take a copy?
+					.dependentsNeedRebuild = false,
+				});
 		}
 	}
 
@@ -252,7 +256,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 			else
 			{
 				LogPrint(ERROR_LOG, "Unknown flag: %s.\n", argv[i]);
-				return PROCESS_FAILURE;
+				return PROCESS_EXIT_FAILURE;
 			}
 		}
 	}
@@ -309,7 +313,6 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 		ArrayAppend(&buildCommand.dependencies, String{"Engine"});
 		ArrayAppend(&allBuildCommands, buildCommand);
 	}
-	/*
 	{
 		BuildCommand buildCommand =
 		{
@@ -323,7 +326,6 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 		ArrayAppend(&buildCommand.dependencies, String{"Basic"});
 		ArrayAppend(&allBuildCommands, buildCommand);
 	}
-	*/
 
 	LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
 	for (auto &command : allBuildCommands)
@@ -340,9 +342,9 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 		LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
 		if (!success)
 		{
-			return PROCESS_FAILURE;
+			return PROCESS_EXIT_FAILURE;
 		}
 	}
 
-	return PROCESS_SUCCESS;
+	return PROCESS_EXIT_SUCCESS;
 }

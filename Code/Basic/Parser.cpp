@@ -1,20 +1,19 @@
-ParserStream CreateParserStream(const String &filepath, const String &delimiters, bool *error)
+Parser CreateParser(const String &filepath, const String &delimiters, bool *error)
 {
 	auto fileString = ReadEntireFile(filepath, error);
 	if (*error)
 	{
-		return ParserStream{};
+		return Parser{};
 	}
 	*error = false;
 	return
 	{
 		.string = fileString,
 		.delimiters = delimiters,
-		.index = 0,
 	};
 }
 
-bool IsParserDelimiter(ParserStream *parser, char c)
+bool IsParserDelimiter(Parser *parser, char c)
 {
 	for (auto d : parser->delimiters)
 	{
@@ -26,24 +25,28 @@ bool IsParserDelimiter(ParserStream *parser, char c)
 	return false;
 }
 
-void AdvanceParser(ParserStream *parser)
+void AdvanceParser(Parser *parser)
 {
+	if (parser->index >= StringLength(parser->string))
+	{
+		return;
+	}
 	if (parser->string[parser->index] == '\n')
 	{
-		parser->lineCount++;
-		parser->lineCharCount = 0;
+		parser->line++;
+		parser->column = 0;
 	}
 	parser->index++;
-	parser->lineCharCount++;
+	parser->column++;
 }
 
-String GetToken(ParserStream *parser)
+String GetParserToken(Parser *parser)
 {
-	while (parser->string[parser->index] && (parser->string[parser->index] == ' ' || parser->string[parser->index] == '\t'))
+	while (parser->index < StringLength(parser->string) && (parser->string[parser->index] == ' ' || parser->string[parser->index] == '\t'))
 	{
 		AdvanceParser(parser);
 	}
-	if (!parser->string[parser->index])
+	if (parser->index >= StringLength(parser->string))
 	{
 		return "";
 	}
@@ -54,7 +57,7 @@ String GetToken(ParserStream *parser)
 	}
 	else
 	{
-		while (parser->string[parser->index] && !IsParserDelimiter(parser, parser->string[parser->index]))
+		while (parser->index < StringLength(parser->string) && !IsParserDelimiter(parser, parser->string[parser->index]))
 		{
 			AdvanceParser(parser);
 		}
@@ -63,23 +66,44 @@ String GetToken(ParserStream *parser)
 	return CreateString(parser->string, tokenStartIndex, parser->index - 1);
 }
 
-bool ConsumeUntilChar(ParserStream *parser, char c)
+String GetParserLine(Parser *parser)
 {
+	if (parser->index >= StringLength(parser->string))
+	{
+		return "";
+	}
+	auto lineStartIndex = parser->index;
+	while (parser->index < StringLength(parser->string) && parser->string[parser->index] != '\n')
+	{
+		AdvanceParser(parser);
+	}
+	if (parser->string[parser->index] == '\n')
+	{
+		AdvanceParser(parser);
+	}
+	Assert(parser->index > lineStartIndex);
+	return CreateString(parser->string, lineStartIndex, parser->index - 1);
+}
+
+/*
+String ParserGetUntilChar(Parser *parser, char c)
+{
+	auto startIndex = parser->index;
 	while (parser->string[parser->index] && parser->string[parser->index] != c)
 	{
 		AdvanceParser(parser);
 	}
-	if (parser->string[parser->index] != c)
+	if (!parser->string[parser->index] || startIndex == parser->index)
 	{
-		return false;
+		return "";
 	}
-	return true;
+	return CreateString(parser->string, startIndex, parser->index - 1);
 }
 
-bool GetIfToken(ParserStream *parser, const String &expected)
+bool GetIfParserToken(Parser *parser, const String &expected)
 {
 	auto initialParser = *parser;
-	auto token = GetToken(parser);
+	auto token = GetParserToken(parser);
 	if (token == expected)
 	{
 		return true;
@@ -88,7 +112,31 @@ bool GetIfToken(ParserStream *parser, const String &expected)
 	return false;
 }
 
-bool GetUntilEndOfLine(ParserStream *parser, String *line)
+String GetParserLine(Parser *parser)
+{
+	auto lineStartIndex = parser->index
+	while (parser->string[parser->index] && parser->string[parser->index] != '\n')
+	{
+		AdvanceParser(parser);
+	}
+	if (parser->string[parser->index] != '\n')
+	{
+		AdvanceParser(parser);
+	}
+	return CreateString(parser->string, lineStartIndex, parser->index - 1);
+}
+
+String ParserGetUntilCharOrEnd(Parser *parser, char c)
+{
+	auto startIndex = parser->index;
+	while (parser->string[parser->index] && parser->string[parser->index] != c)
+	{
+		AdvanceParser(parser);
+	}
+	return CreateString(parser->string, startIndex, parser->index - 1);
+}
+
+bool GetUntilEndOfLine(Parser *parser, String *line)
 {
 	ResizeString(line, 0);
 	if (!parser->string[parser->index])
@@ -107,3 +155,4 @@ bool GetUntilEndOfLine(ParserStream *parser, String *line)
 	}
 	return true;
 }
+*/

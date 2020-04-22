@@ -12,7 +12,7 @@ enum JobPriority {
 struct JobFiber;
 
 struct JobCounter {
-	volatile s32 unfinishedJobCount;
+	volatile s64 unfinishedJobCount;
 	JobFiber *waitingJobFiber;
 };
 
@@ -28,4 +28,4 @@ JobDeclaration CreateJob(JobProcedure procedure, void *parameter);
 void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority, JobCounter *counter);
 void WaitForJobCounter(JobCounter *counter);
 void ClearJobCounter(JobCounter *counter);
-size_t GetWorkerThreadCount();
+s64 GetWorkerThreadCount();

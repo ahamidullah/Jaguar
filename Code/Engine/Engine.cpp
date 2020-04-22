@@ -32,7 +32,7 @@ void RunGame(void *)
 {
 	windowWidth = 1200;
 	windowHeight = 1000;
-	auto window = CreateWindow(windowWidth, windowHeight);
+	auto window = CreateWindow(windowWidth, windowHeight, false);
 
 	InitializeRenderer(&window);
 	{
@@ -57,7 +57,7 @@ void RunGame(void *)
 		Render();
 	}
 
-	ExitProcess(PROCESS_SUCCESS);
+	ExitProcess(PROCESS_EXIT_SUCCESS);
 }
 
 s32 ApplicationEntry(s32 argc, char *argv[])
@@ -66,5 +66,5 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 	InitializeJobs(RunGame, NULL);
 
 	InvalidCodePath();
-	return PROCESS_FAILURE;
+	return PROCESS_EXIT_FAILURE;
 }

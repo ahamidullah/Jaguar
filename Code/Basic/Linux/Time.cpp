@@ -1,4 +1,4 @@
-bool operator>(const PlatformTime &a, const PlatformTime &b)
+bool operator>(PlatformTime &a, PlatformTime &b)
 {
 	if (a.ts.tv_sec > b.ts.tv_sec)
 	{
@@ -19,7 +19,7 @@ bool operator>(const PlatformTime &a, const PlatformTime &b)
 	return false;
 }
 
-bool operator<(const PlatformTime &a, const PlatformTime &b)
+bool operator<(PlatformTime &a, PlatformTime &b)
 {
 	if (a.ts.tv_sec < b.ts.tv_sec)
 	{
@@ -53,7 +53,7 @@ f64 PlatformTimeDifference(PlatformTime start, PlatformTime end)
 	return ((end.ts.tv_sec - start.ts.tv_sec) * 1000.0) + ((end.ts.tv_nsec - start.ts.tv_nsec) / 1000000.0);
 }
 
-void Sleep(u32 milliseconds)
+void Sleep(s64 milliseconds)
 {
 	struct timespec timespec =
 	{

@@ -20,12 +20,12 @@ struct EntityMeshes
 struct
 {
 	Transform transforms[100]; // @TODO
-	u32 transform_count;
+	s64 transform_count;
 
 	EntityMeshes meshes;
 
-	u32 ids[100]; // @TODO
-	u32 id_count;
+	s64 ids[100]; // @TODO
+	s64 id_count;
 } entitiesContext;
 
 u32 guy_id;

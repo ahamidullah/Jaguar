@@ -204,25 +204,25 @@ typedef VkImageView GfxImageView;
 typedef VulkanSamplerFilter GfxSamplerFilter;
 typedef VkPipeline GfxPipeline;
 typedef VkPipelineLayout GfxPipelineLayout;
+typedef VkDeviceSize GfxSize;
 
 struct GfxSubmitInfo;
-
 GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool);
 void GfxSubmitCommandBuffers(GfxCommandQueueType queueType, GfxSubmitInfo &submitInfo, GfxFence fence);
-void GfxFreeCommandBuffers(GfxCommandPool pool, s32 count, GfxCommandBuffer *buffers);
+void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GfxCommandBuffer *buffers);
 void GfxEndCommandBuffer(GfxCommandBuffer buffer);
 
 GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType);
 void GfxResetCommandPool(GfxCommandPool pool);
 
-GfxBuffer GfxCreateBuffer(u32 size, GfxBufferUsageFlags usage);
+GfxBuffer GfxCreateBuffer(GfxSize size, GfxBufferUsageFlags usage);
 void GfxDestroyBuffer(GfxBuffer buffer);
-void GfxRecordCopyBufferCommand(GfxCommandBuffer buffer, u32 size, GfxBuffer source, GfxBuffer destination, u32 sourceOffset, u32 destinationOffset);
+void GfxRecordCopyBufferCommand(GfxCommandBuffer buffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset);
 GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer);
-void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, u32 memoryOffset);
+void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, GfxSize memoryOffset);
 
-bool GfxAllocateMemory(u32 size, GfxMemoryType memoryType, GfxMemory *memory);
-void *GfxMapMemory(GfxMemory memory, u32 size, u32 offset);
+bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory);
+void *GfxMapMemory(GfxMemory memory, GfxSize size, GfxSize offset);
 
 GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, const String &spirv);
 
@@ -237,13 +237,13 @@ u32 GfxGetSwapchainImageCount(GfxSwapchain swapchain);
 void GfxGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *imageViews);
 void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame);
 
-GfxDescriptorPool GfxCreateDescriptorPool(u32 swapchainImageCount);
+GfxDescriptorPool GfxCreateDescriptorPool();
 
 GfxFramebuffer GfxCreateFramebuffer(GfxRenderPass renderPass, u32 width, u32 height, u32 attachmentCount, GfxImageView *attachments);
 
 GfxMemoryRequirements GfxGetImageMemoryRequirements(GfxImage image);
 GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsage usage, VkSampleCountFlagBits sampleCount);
-void GfxBindImageMemory(GfxImage image, GfxMemory memory, u32 offset);
+void GfxBindImageMemory(GfxImage image, GfxMemory memory, GfxSize offset);
 GfxImageView GfxCreateImageView(GfxImage image, GfxFormat format, GfxImageUsage usage);
 void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout);
 void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight);
@@ -252,7 +252,8 @@ void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer
 
 #define GFX_DESCRIPTOR_SET_COUNT 1
 
-typedef struct Render_API_Context {
+typedef struct Render_API_Context
+{
 	VkPhysicalDevice physical_device;
 	VkDevice device;
 	VkInstance instance;

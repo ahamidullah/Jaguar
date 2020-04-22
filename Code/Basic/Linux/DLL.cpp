@@ -2,10 +2,10 @@
 
 DLLHandle OpenDLL(const String &filename, bool *error)
 {
-	void* library = dlopen(&filename[0], RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
+	auto library = dlopen(&filename[0], RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
 	if (!library)
 	{
-		LogPrint(ERROR_LOG, "Failed to open DLL %s: %s.\n", &filename[0], dlerror());
+		LogPrint(ERROR_LOG, "Failed to open DLL %k: %s.\n", filename, dlerror());
 		*error = true;
 		return {};
 	}
@@ -33,11 +33,11 @@ DLLFunction GetDLLFunction(DLLHandle library, const String &functionName, bool *
 	// old error conditions, then call dlsym(), and then call dlerror() again, saving its return
 	// value into a variable, and check whether this saved value is not NULL.
 	dlerror();
-	void *function = dlsym(library, &functionName[0]);
+	auto function = dlsym(library, &functionName[0]);
 	auto errorString = dlerror();
 	if (errorString)
 	{
-		LogPrint(ERROR_LOG, "Failed to load DLL function %s: %s.\n", functionName, errorString);
+		LogPrint(ERROR_LOG, "Failed to load DLL function %k: %s.\n", functionName, errorString);
 		*error = true;
 		return {};
 	}

@@ -1,46 +1,32 @@
-constexpr size_t INITIAL_HASH_MAP_SIZE = 256;
-constexpr u64 VACANT_HASH_KEY_SENTINEL = U64_MAX;
+constexpr auto INITIAL_HASH_MAP_SIZE = 256;
+constexpr auto VACANT_HASH_KEY_SENTINEL = -1;
 
 // @TODO: GROW THE HASH TABLE.
 
 template <typename V>
 struct KeyHashValuePair
 {
-	u64 keyHash;
-	V value;
+	u64 keyHash = VACANT_HASH_KEY_SENTINEL;
+	V value = {};
 };
 
 template <typename K, typename V>
 struct KeyValuePair
 {
-	K key;
-	V value;
+	K key = {};
+	V value = {};
 };
 
 template <typename K, typename V>
 struct HashTable
 {
-	Array<KeyHashValuePair<V>> buckets;
+	Array<KeyHashValuePair<V>> buckets = CreateArray<KeyHashValuePair<V>>(INITIAL_HASH_MAP_SIZE);
 };
-
-template <typename K, typename V>
-HashTable<K, V> CreateHashTable()
-{
-	HashTable<K, V> result =
-	{
-		.buckets = CreateArray<KeyValuePair<K, V>>(INITIAL_HASH_MAP_SIZE),
-	};
-	for (auto &bucket : result.buckets)
-	{
-		bucket.keyHash = VACANT_HASH_KEY_SENTINEL;
-		bucket.value = {};
-	}
-	return result;
-}
 
 template <typename K, typename V>
 void HashTableInsert(HashTable<K, V> *table, const K &key, const V &value)
 {
+	Assert(ArrayLength(table->buckets));
 	auto hash = Hash(key);
 	auto index = hash % ArrayLength(table->buckets);
 	for (auto i = (index + 1) % ArrayLength(table->buckets); i != index; i = (i + 1) % ArrayLength(table->buckets))

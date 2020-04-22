@@ -2,8 +2,8 @@
 
 enum ProcessExitCode
 {
-	PROCESS_SUCCESS = 0,
-	PROCESS_FAILURE = 1,
+	PROCESS_EXIT_SUCCESS = 0,
+	PROCESS_EXIT_FAILURE = 1,
 };
 
 struct String;

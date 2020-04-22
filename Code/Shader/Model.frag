@@ -3,7 +3,7 @@
 #include "../Engine/ShaderGlobal.h"
 #include "Global.inc"
 
-layout(location = 0) in vec3 fragmentNormal;
+layout (location = 0) in vec3 fragmentNormal;
 
 layout (location = 0) out vec4 outputColor;
 

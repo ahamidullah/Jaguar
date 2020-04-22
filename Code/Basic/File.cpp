@@ -20,11 +20,6 @@ String ReadEntireFile(const String &path, bool *error)
 	return result;
 }
 
-bool WriteStringToFile(FileHandle file, const String &string)
-{
-	return WriteToFile(file, StringLength(string), &string[0]);
-}
-
 PlatformTime GetFilepathLastModifiedTime(const String &filepath, bool *error)
 {
 	auto sourceFile = OpenFile(filepath, OPEN_FILE_READ_ONLY, error);

@@ -29,8 +29,8 @@ struct WindowEvents
 
 void GetPlatformInput(PlatformWindow *window);
 
-void PressButton(u32 buttonIndex, InputButtons *buttons);
-void ReleaseButton(u32 buttonIndex, InputButtons *buttons);
+void PressButton(s64 buttonIndex, InputButtons *buttons);
+void ReleaseButton(s64 buttonIndex, InputButtons *buttons);
 
 bool IsKeyDown(KeySymbol keySymbol);
 bool WasKeyPressed(KeySymbol keySymbol);

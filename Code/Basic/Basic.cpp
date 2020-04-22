@@ -31,7 +31,7 @@ void AssertActual(bool test, const String &fileName, const String &functionName,
 		LogPrint(ERROR_LOG, "%k: %k: line %d: assertion failed '%k'.\n", fileName, functionName, lineNumber, testName);
 		PrintStacktrace();
 		SignalDebugBreakpoint();
-		ExitProcess(PROCESS_FAILURE);
+		ExitProcess(PROCESS_EXIT_FAILURE);
 	}
 }
 
@@ -47,10 +47,10 @@ void AbortActual(const String &format, const String &fileName, const String &fun
 	LogPrint(ERROR_LOG, "###########################################################################\n");
 	va_end(arguments);
 	SignalDebugBreakpoint();
-	ExitProcess(PROCESS_FAILURE);
+	ExitProcess(PROCESS_EXIT_FAILURE);
 }
 
-void InitializeBasic(u32 maxFiberCount)
+void InitializeBasic(s64 maxFiberCount)
 {
 	InitializeFibers(maxFiberCount);
 }

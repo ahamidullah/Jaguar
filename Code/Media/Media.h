@@ -11,4 +11,4 @@
 
 #include "Input.h"
 
-void InitializeMedia(bool multithreaded = false, u32 maxFiberCount = 0);
+void InitializeMedia(bool multithreaded = false, s64 maxFiberCount = 0);

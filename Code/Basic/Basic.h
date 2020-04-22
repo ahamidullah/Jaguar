@@ -17,6 +17,8 @@ typedef double f64;
 
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX
+#define S32_MAX INT32_MAX
+#define S64_MAX INT64_MAX
 
 #define Kilobyte(b) ((size_t)b*1024)
 #define Megabyte(b) (Kilobyte(b)*1024)
@@ -41,14 +43,16 @@ typedef double f64;
 #endif
 
 template <typename F>
-struct ScopeExit {
+struct ScopeExit
+{
 	ScopeExit(F _f) : f(_f) {}
 	~ScopeExit() { f(); }
 	F f;
 };
 
 template <typename F>
-ScopeExit<F> MakeScopeExit(F f) {
+ScopeExit<F> MakeScopeExit(F f)
+{
 	return ScopeExit<F>(f);
 }
 
@@ -77,7 +81,7 @@ void AbortActual(const String &format, const String &fileName, const String &fun
 	#include "Linux/Fiber.h"
 	#include "Linux/DLL.h"
 #else
-	#error unsupported platform
+	#error Unsupported platform.
 #endif
 
 #include "Memory.h"
@@ -89,4 +93,4 @@ void AbortActual(const String &format, const String &fileName, const String &fun
 #include "Filesystem.h"
 #include "Parser.h"
 
-void InitializeBasic(u32 fiberCount = 0);
+void InitializeBasic(s64 fiberCount = 0);

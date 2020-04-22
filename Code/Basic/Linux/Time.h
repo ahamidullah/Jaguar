@@ -7,10 +7,9 @@ struct PlatformTime
 	timespec ts;
 };
 
-#define PLATFORM_TIME_ERROR (PlatformTime{.ts{0, -1}})
+bool operator>(PlatformTime &a, PlatformTime &b);
+bool operator<(PlatformTime &a, PlatformTime &b);
 
 PlatformTime GetPlatformTime();
 f64 PlatformTimeDifference(PlatformTime start, PlatformTime end);
-void Sleep(u32 milliseconds);
-bool operator>(const PlatformTime &a, const PlatformTime &b);
-bool operator<(const PlatformTime &a, const PlatformTime &b);
+void Sleep(s64 milliseconds);

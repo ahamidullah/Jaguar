@@ -7,8 +7,8 @@
 typedef pthread_t ThreadHandle;
 typedef void *(*ThreadProcedure)(void *);
 
-s32 GetProcessorCount();
+s64 GetProcessorCount();
 ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter);
-u32 GetThreadID();
+s64 GetThreadID();
 ThreadHandle GetCurrentThread();
-void SetThreadProcessorAffinity(ThreadHandle thread, u32 cpuIndex);
+void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex);

@@ -12,8 +12,8 @@ struct DirectoryIteration
 {
 	DIR *dir = NULL;
 	struct dirent *dirent = NULL;
-	String filename;
-	bool isDirectory = 0;
+	String filename = "";
+	bool isDirectory = false;
 };
 
 enum FileSeekRelative
@@ -23,7 +23,7 @@ enum FileSeekRelative
 	FILE_SEEK_RELATIVE_TO_END = SEEK_END,
 };
 
-typedef u32 OpenFileFlags;
+typedef s64 OpenFileFlags;
 enum OpenFileFlagBits
 {
 	OPEN_FILE_READ_ONLY = O_RDONLY,
@@ -33,8 +33,8 @@ enum OpenFileFlagBits
 
 FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error);
 bool CloseFile(FileHandle file);
-String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error);
-bool WriteToFile(FileHandle file, size_t count, void *buffer);
+String ReadFromFile(FileHandle file, s64 byteCount, bool *error);
+bool WriteToFile(FileHandle file, s64 byteCount, void *buffer);
 FileOffset GetFileLength(FileHandle file, bool *error);
 FileOffset SeekFile(FileHandle file, FileOffset offset, FileSeekRelative relative);
 bool IterateDirectory(const String &path, DirectoryIteration *context);

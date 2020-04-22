@@ -1,4 +1,4 @@
-GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GfxMemoryType memoryType)
+GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(s64 blockSize, GfxMemoryType memoryType)
 {
 	GPUMemoryBlockAllocator allocator =
 	{
@@ -7,11 +7,11 @@ GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(u32 blockSize, GfxMemoryTy
 		.activeBlock = NULL,
 		.memoryType = memoryType,
 	};
-	CreateMutex(&allocator.mutex);
+	allocator.mutex = CreateMutex();
 	return allocator;
 }
 
-GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(u32 capacity, GfxMemoryType memoryType)
+GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(s64 capacity, GfxMemoryType memoryType)
 {
 	GPUMemoryRingAllocator allocator =
 	{
@@ -130,8 +130,9 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 	}
 	// Allocate out of the active block's frontier.
 	GPUMemoryAllocation *newAllocation = &allocator->activeBlock->allocations[allocator->activeBlock->allocationCount++];
-	u32 allocationStartOffset = AlignU32(allocator->activeBlock->frontier, memoryRequirements.alignment);
-	*newAllocation = {
+	auto allocationStartOffset = AlignS64(allocator->activeBlock->frontier, memoryRequirements.alignment);
+	*newAllocation =
+	{
 		.memory = allocator->activeBlock->memory,
 		.offset = allocationStartOffset,
 	};
@@ -149,13 +150,13 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 	return newAllocation;
 }
 
-GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator, GfxMemoryRequirements memoryRequirements, u32 frameIndex)
+GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator, GfxMemoryRequirements memoryRequirements, s64 frameIndex)
 {
 	auto newTop = 0, oldTop = 0, allocationStart = 0, allocationSize = 0;
 	do
 	{
 		oldTop = allocator->top;
-		auto alignmentOffset = AlignmentOffset(oldTop, memoryRequirements.alignment);
+		auto alignmentOffset = AlignmentOffsetS64(oldTop, memoryRequirements.alignment);
 		allocationSize = alignmentOffset + memoryRequirements.size;
 		if (allocator->size + allocationSize > allocator->capacity)
 		{
@@ -180,7 +181,7 @@ GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator
 	return allocation;
 }
 
-void ClearGPUMemoryForFrameIndex(u32 frameIndex)
+void ClearGPUMemoryForFrameIndex(s64 frameIndex)
 {
 	auto clear = [frameIndex](GPUMemoryRingAllocator *allocator)
 	{
@@ -193,7 +194,7 @@ void ClearGPUMemoryForFrameIndex(u32 frameIndex)
 	clear(&gpuContext.memoryAllocators.deviceRingBuffer);
 }
 
-GfxBuffer CreateGPUBuffer(u32 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedPointer = NULL)
+GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedPointer = NULL)
 {
 	auto buffer = GfxCreateBuffer(size, usage);
 	auto memoryRequirements = GfxGetBufferMemoryRequirements(buffer);
@@ -230,7 +231,7 @@ GfxBuffer CreateGPUBuffer(u32 size, GfxBufferUsageFlags usage, GfxMemoryType mem
 	return buffer;
 }
 
-GfxImage CreateGPUImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount)
+GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount)
 {
 	auto image = GfxCreateImage(width, height, format, initialLayout, usage, sampleCount);
 	auto memoryRequirements = GfxGetImageMemoryRequirements(image);
@@ -283,7 +284,7 @@ GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queue, GPUResourceLi
 	return GfxCommandBuffer{};
 }
 
-void ClearGPUCommandPoolsForFrameIndex(u32 frameIndex)
+void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex)
 {
 	for (auto i = 0; i < GetWorkerThreadCount(); i++)
 	{
@@ -298,7 +299,7 @@ void QueueGPUTransfer(GfxCommandBuffer commandBuffer)
 	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
 }
 
-void QueueGPUAsyncTransfer(GfxCommandBuffer commandBuffer, AssetLoadStatus *loadStatus = NULL)
+void QueueGPUAsyncTransfer(GfxCommandBuffer commandBuffer)
 {
 	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
 }

@@ -16,7 +16,7 @@ struct InputButtons;
 struct Mouse;
 struct WindowEvents;
 
-PlatformWindow CreateWindow(s32 width, s32 height, bool startFullscreen = false);
+PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen);
 void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents);
 void ToggleFullscreen(PlatformWindow *window);
 void CaptureCursor(PlatformWindow *window);

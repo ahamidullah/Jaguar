@@ -9,7 +9,7 @@
 
 #include "Input.cpp"
 
-void InitializeMedia(bool multithreaded, u32 maxFiberCount)
+void InitializeMedia(bool multithreaded, s64 maxFiberCount)
 {
 	InitializeBasic(maxFiberCount);
 	InitializeInput();

@@ -23,7 +23,7 @@ struct Shader
 
 struct DescriptorSetGroup
 {
-	u32 setNumber;
+	s64 setNumber;
 	GfxDescriptorSetLayout layout;
 	GfxDescriptorSet *sets;
 	GfxBuffer *buffers;
@@ -32,16 +32,19 @@ struct DescriptorSetGroup
 struct
 {
 	f32 aspectRatio;
-	u32 swapchainImageIndex; // @TODO
-	u32 frameIndex;
-	//GfxCommandPool uploadCommandPool;
-	GfxFence inFlightFences[GFX_MAX_FRAMES_IN_FLIGHT];
-	GfxDescriptorPool descriptorPool;
-	HashTable<String, Shader> shaders;
-	u32 swapchainImageCount;
+
+	s64 frameIndex;
+	GfxFence frameFences[GFX_MAX_FRAMES_IN_FLIGHT];
+	GfxSemaphore imageAvailableSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+	GfxSemaphore renderFinishedSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+
+	s64 swapchainImageIndex; // @TODO
+	s64 swapchainImageCount;
 	GfxSwapchain swapchain;
 	Array<GfxImageView> swapchainImageViews;
+
 	GfxPipelineLayout pipelineLayout;
+	GfxDescriptorPool descriptorPool;
 	Array<GfxDescriptorSetLayout> descriptorSetLayouts;
 	Array<Array<GfxDescriptorSet>> descriptorSets;
 	Array<Array<GfxBuffer>> descriptorSetBuffers;
@@ -50,15 +53,17 @@ struct
 	// @TODO TEMPORARY
 	GfxFramebuffer *framebuffers;
 
+	HashTable<String, Shader> shaders;
+
 	Array<ThreadLocalRenderGlobals> threadLocal;
 } renderGlobals;
 
-u32 GetFrameIndex()
+s64 GetFrameIndex()
 {
 	return renderGlobals.frameIndex;
 }
 
-void CreateDescriptorSetGroup(u32 setIndex, u32 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
+void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
 {
 	renderGlobals.descriptorSetLayouts[setIndex] = GfxCreateDescriptorSetLayout(bindingInfoCount, bindingInfos);
 	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
@@ -74,9 +79,9 @@ void LoadShaders()
 
 	if (development)
 	{
-		String shaderDirectory;
-		String binaryDirectory;
-		String binaryFilenameExtension;
+		String shaderDirectory = {};
+		String binaryDirectory = {};
+		String binaryFilenameExtension = {};
 		if (usingVulkanAPI)
 		{
 			shaderDirectory = "Code/Shader/GLSL";
@@ -107,7 +112,7 @@ void LoadShaders()
 
 // @TODO: Automatic loading.
 #if 0
-		u32 shaderIndex = 0;
+		s64 shaderIndex = 0;
 		DirectoryIteration iteration;
 		while (IterateDirectory(shaderDirectory, &iteration))
 		{
@@ -304,7 +309,7 @@ void CompileRenderGraph(RenderGraph *graph)
 GfxBuffer uniform_buffer;
 GfxImageView depthBufferImageView; // @TODO
 
-void ExecuteRenderGraph(RenderGraph *graph, u32 swapchainImageIndex)
+void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 {
 	for (const auto &pass : graph->physicalPasses)
 	{
@@ -325,7 +330,7 @@ void ExecuteRenderGraph(RenderGraph *graph, u32 swapchainImageIndex)
 
 		GfxWaitForFences(1, &renderGlobals.descriptorSetUpdateFence, true, U32_MAX);
 
-		TEMPORARY_VULKAN_SUBMIT(commandBuffer, renderGlobals.frameIndex, renderGlobals.inFlightFences[renderGlobals.frameIndex]);
+		TEMPORARY_VULKAN_SUBMIT(commandBuffer, renderGlobals.frameIndex, renderGlobals.frameFences[renderGlobals.frameIndex]);
 
 		GfxResetFences(1, &renderGlobals.descriptorSetUpdateFence);
 	}
@@ -352,12 +357,12 @@ void InitializeRenderer(void *job_parameter_pointer)
 
 	for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		renderGlobals.inFlightFences[i] = GfxCreateFence(true);
+		renderGlobals.frameFences[i] = GfxCreateFence(true);
 	}
 
 	LoadShaders();
 
-	renderGlobals.descriptorPool = GfxCreateDescriptorPool(renderGlobals.swapchainImageCount);
+	renderGlobals.descriptorPool = GfxCreateDescriptorPool();
 
 	ResizeArray(&renderGlobals.threadLocal, GetWorkerThreadCount());
 
@@ -546,8 +551,8 @@ void Render()
 		return;
 	}
 
-	GfxWaitForFences(1, &renderGlobals.inFlightFences[renderGlobals.frameIndex], true, U32_MAX);
-	GfxResetFences(1, &renderGlobals.inFlightFences[renderGlobals.frameIndex]);
+	GfxWaitForFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex], true, U32_MAX);
+	GfxResetFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex]);
 
 	auto swapchainImageIndex = GfxAcquireNextSwapchainImage(renderGlobals.swapchain, renderGlobals.frameIndex);
 
@@ -593,10 +598,13 @@ void Render()
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 		}
 		GfxEndCommandBuffer(commandBuffer);
-		//GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, renderGlobals.descriptorSetUpdateFence);
+
+		GfxSubmitInfo submitInfo;
+		ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
+		GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.descriptorSetUpdateFence);
 	}
 
-	//auto transferSemaphore = SubmitGPUTransferCommandBuffers();
+	auto transferSemaphore = SubmitGPUTransferCommands();
 
 	// Build and execute render graph.
 	{

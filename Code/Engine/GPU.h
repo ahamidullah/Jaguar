@@ -12,20 +12,20 @@ enum GPUResourceLifetime
 struct GPUMemoryAllocation
 {
 	GfxMemory memory;
-	u32 offset;
+	s64 offset;
 	void *mappedPointer;
 };
 
 struct GPUSubbuffer
 {
 	GfxBuffer buffer;
-	u32 *offset;
+	s64 *offset;
 };
 
 struct GPUImageAllocation
 {
 	GfxMemory memory;
-	u32 *offset;
+	s64 *offset;
 };
 
 // A block allocator stores its memory in a linked list of fixed size blocks.
@@ -36,8 +36,8 @@ struct GPUMemoryBlock
 {
 	GfxMemory memory;
 	void *mappedPointer;
-	u32 frontier;
-	u32 allocationCount;
+	s64 frontier;
+	s64 allocationCount;
 	GPUMemoryAllocation allocations[GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK]; // @TODO: Use a dynamic array?
 	GPUMemoryBlock *next;
 };
@@ -45,7 +45,7 @@ struct GPUMemoryBlock
 struct GPUMemoryBlockAllocator
 {
 	Mutex mutex;
-	u32 blockSize;
+	s64 blockSize;
 	GPUMemoryBlock *baseBlock;
 	GPUMemoryBlock *activeBlock;
 	GfxMemoryType memoryType;
@@ -55,11 +55,11 @@ struct GPUMemoryRingAllocator
 {
 	GfxMemory memory;
 	GfxMemoryType memoryType;
-	u32 capacity;
-	u32 size;
-	u32 frameSizes[GFX_MAX_FRAMES_IN_FLIGHT];
-	u32 bottom, top;
-	u32 allocationCounts[GFX_MAX_FRAMES_IN_FLIGHT];
+	s64 capacity;
+	s64 size;
+	s64 frameSizes[GFX_MAX_FRAMES_IN_FLIGHT];
+	s64 bottom, top;
+	s64 allocationCounts[GFX_MAX_FRAMES_IN_FLIGHT];
 	GPUMemoryAllocation allocations[GFX_MAX_FRAMES_IN_FLIGHT][GPU_MAX_MEMORY_ALLOCATIONS_PER_RING_FRAME];
 	void *mappedPointer;
 };

@@ -1,15 +1,15 @@
 #define STB_SPRINTF_IMPLEMENTATION
 #include "stb_sprintf.h"
 
-char &String::operator[](size_t i)
+char &String::operator[](s64 i)
 {
-	Assert(i < data.count);
+	Assert(i >= 0 && i < data.count);
 	return data[i];
 }
 
-char &String::operator[](size_t i) const
+char &String::operator[](s64 i) const
 {
-	Assert(i < data.count);
+	Assert(i >= 0 && i < data.count);
 	return data[i];
 }
 
@@ -41,7 +41,7 @@ bool CStringsEqual(const char *a, const char *b)
 	return true;
 }
 
-String CreateString(size_t length)
+String CreateString(s64 length)
 {
 	String result =
 	{
@@ -51,7 +51,7 @@ String CreateString(size_t length)
 	return result;
 }
 
-String CreateString(size_t length, size_t capacity)
+String CreateString(s64 length, s64 capacity)
 {
 	String result =
 	{
@@ -73,7 +73,7 @@ String CreateString(const String &copy)
 	return result;
 }
 
-String CreateString(const String &copy, size_t startIndex, size_t endIndex)
+String CreateString(const String &copy, s64 startIndex, s64 endIndex)
 {
 	Assert(endIndex >= startIndex);
 	auto length = endIndex - startIndex + 1;
@@ -82,7 +82,7 @@ String CreateString(const String &copy, size_t startIndex, size_t endIndex)
 	return result;
 }
 
-void ResizeString(String *string, size_t newSize)
+void ResizeString(String *string, s64 newSize)
 {
 	ResizeArray(&string->data, newSize + 1);
 	string->data[newSize] = '\0';
@@ -103,7 +103,7 @@ void StringAppend(String *destination, const char *source)
 	CopyMemory(source, &destination->data[writeIndex], sourceLength + 1);
 }
 
-void StringAppend(String *destination, const String &source, size_t rangeStartIndex, size_t rangeLength)
+void StringAppend(String *destination, const String &source, s64 rangeStartIndex, s64 rangeLength)
 {
 	Assert(source.data.count > rangeStartIndex);
 	Assert(source.data.count >= rangeStartIndex + rangeLength);
@@ -126,7 +126,7 @@ String JoinStrings(const String &a, const String &b)
 	return result;
 }
 
-size_t StringLength(const String &s)
+s64 StringLength(const String &s)
 {
 	if (ArrayLength(s.data) == 0)
 	{
@@ -135,7 +135,7 @@ size_t StringLength(const String &s)
 	return ArrayLength(s.data) - 1; // To account for the NULL terminator we insert at the end.
 }
 
-size_t CStringLength(const char *string)
+s64 CStringLength(const char *string)
 {
 	auto length = 0;
 	while (string[length])
@@ -145,7 +145,7 @@ size_t CStringLength(const char *string)
 	return length;
 }
 
-void SetMinimumStringCapacity(String *string, size_t minimumCapacity)
+void SetMinimumStringCapacity(String *string, s64 minimumCapacity)
 {
 	SetMinimumArrayCapacity(&string->data, minimumCapacity + 1);
 }
@@ -156,7 +156,7 @@ String FormatStringVarArgs(const String &format, va_list arguments)
 	struct SprintfCallbackData
 	{
 		Array<char> *stringBuffer;
-		u32 stringLength;
+		s64 stringLength;
 	} sprintfCallbackData =
 	{
 		.stringBuffer = &stringBuffer,
@@ -219,7 +219,7 @@ bool IsCharDigit(char c)
 	return '0' <= c && c <= '9';
 }
 
-void TrimString(String *s, size_t leftIndex, size_t rightIndex)
+void TrimString(String *s, s64 leftIndex, s64 rightIndex)
 {
 	Assert(rightIndex > leftIndex);
 	auto length = rightIndex - (leftIndex + 1);

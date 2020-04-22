@@ -2,11 +2,11 @@
 
 bool CompileShader(const String &shaderFilepath)
 {
-	bool error;
+	auto error = false;
 
 	if (!FileExists(shaderFilepath))
 	{
-		LogPrint(ERROR_LOG, "Shader file %s does not exist\n", &shaderFilepath[0]);
+		LogPrint(ERROR_LOG, "Shader file %k does not exist.\n", shaderFilepath);
 		return false;
 	}
 
@@ -15,55 +15,112 @@ bool CompileShader(const String &shaderFilepath)
 	SetFilepathExtension(&shaderName, "");
 
 	// Write out a new version of the shader, inserting the includes.
-	auto outputFilepath = FormatString("Build/Shader/Code/%s.%s", &shaderName[0], &fileExtension[1]);
+	auto outputFilepath = FormatString("Build/Shader/Code/%k.%s", shaderName, &fileExtension[1]);
 	auto outputFile = OpenFile(outputFilepath, OPEN_FILE_WRITE_ONLY | OPEN_FILE_CREATE, &error);
 	if (error)
 	{
-		LogPrint(ERROR_LOG, "Failed to open shader output file %s\n", &outputFilepath[0]);
+		LogPrint(ERROR_LOG, "Failed to open shader output file %k.\n", outputFilepath);
 		return false;
 	}
 
-	ParserStream parser = CreateParserStream(shaderFilepath, &error);
+	auto parser = CreateParser(shaderFilepath, STANDARD_PARSER_DELIMITERS, &error);
 	if (error)
 	{
-		LogPrint(ERROR_LOG, "Failed to create parser\n");
+		LogPrint(ERROR_LOG, "Failed to create parser for shader %k.\n", shaderFilepath);
 		return false;
 	}
-	String line;
-	while (GetLine(&parser, &line))
+	for (auto line = GetParserLine(&parser); line != ""; line = GetParserLine(&parser))
 	{
-		ParserStream lineParser =
+		Parser lineParser =
 		{
 			.string = line,
+			.delimiters = " \"\n",
 		};
-		auto token = GetToken(&lineParser);
-		if (token == "#include")
+		auto token = GetParserToken(&lineParser);
+		if (token != "#include")
 		{
-			GetExpectedToken(&lineParser, "\"");
-			String includeFilepath;
-			for (token = GetToken(&lineParser); token != "\""; token = GetToken(&lineParser))
+			WriteToFile(outputFile, StringLength(line), &line[0]);
+			continue;
+		}
+		if (GetParserToken(&lineParser) != "\"")
+		{
+			LogPrint(ERROR_LOG, "In file included from %k:%ld:%ld: Expected '\"'.\n", shaderFilepath, parser.line, lineParser.column);
+			return false;
+		}
+		auto includeFilepath = JoinFilepaths("Code/Shader", GetParserToken(&lineParser));
+		if (GetParserToken(&lineParser) != "\"")
+		{
+			LogPrint(ERROR_LOG, "In file included from %k:%ld:%ld: Expected '\"'.\n", shaderFilepath, parser.line, lineParser.column);
+			return false;
+		}
+		auto includeFileContents = ReadEntireFile(includeFilepath, &error);
+		if (error)
+		{
+			LogPrint(ERROR_LOG, "In file included from %k:%ld%ld: failed to read include file %k.\n", shaderFilepath, parser.line, lineParser.column, includeFilepath);
+			return false;
+		}
+		WriteToFile(outputFile, StringLength(includeFileContents), &includeFileContents[0]);
+	}
+
+#if 0
+		auto shaderFileContents = ParserGetUntilChar(&parser, '#');
+		WriteToFile(outputFile, StringLength(shaderFileContents), &shaderFileContents[0]);
+
+		auto token = GetParserToken(&parser);
+		if (token != "#include")
+		{
+			WriteToFile(outputFile, StringLength(token), &token[0]);
+			continue;
+		}
+		if (!GetIfParserToken(&parser, "\""))
+		{
+			LogPrint(ERROR_LOG, "%k:%ld%ld: Expected '\"'", shaderFilepath, parser.line, parser.column);
+			return false;
+		}
+		auto includeFilepath = JoinFilepaths("Code/Shader", GetParserToken(&parser));
+		if (!GetIfParserToken(&parser, "\""))
+		{
+			LogPrint(ERROR_LOG, "%k:%ld%ld: Expected '\"'", shaderFilepath, parser.line, parser.column);
+			return false;
+		}
+		auto includeFileString = ReadEntireFile(includeFilepath, &error);
+		if (error)
+		{
+			LogPrint(ERROR_LOG, "%k:%ld:%ld: failed to read include file %k.\n", shaderFilepath, parser.line, parser.column, includeFilepath);
+			return false;
+		}
+		WriteToFile(outputFile, StringLength(includeFileString), &includeFileString[0]);
+	}
+#endif
+
+#if 0
+		if (token[0] == '#' && GetIfParserToken(&parser, " \"", "include"))
+		{
+			if (!GetIfParserToken(&parser, "\"", "\""))
 			{
-				StringAppend(&includeFilepath, token);
+				continue;
 			}
-			includeFilepath = JoinFilepaths("Code/Shader", includeFilepath);
-			auto [includeString, error] = ReadEntireFile(includeFilepath);
+			auto includeFilepath = JoinFilepaths("Code/Shader", GetParserToken(&parser, "\""));
+			auto includeFileString = ReadEntireFile(includeFilepath, &error);
 			if (error)
 			{
-				LogPrint(ERROR_LOG, "Failed to read file %s included from %s\n", &includeFilepath[0], &shaderFilepath[0]);
+				LogPrint(ERROR_LOG, "%k:%ld:%ld: failed to read include file %k.\n", shaderFilepath, parser.lineCount, parser.lineCharCount, includeFilepath);
 				return false;
 			}
-			WriteStringToFile(outputFile, includeString);
+			WriteToFile(outputFile, StringLength(includeFileString), &includeFileString[0]);
+			GetToken();
 		}
 		else
 		{
-			WriteStringToFile(outputFile, line);
+			WriteToFile(outputFile, StringLength(token), &token[0]);
 		}
 	}
+#endif
 
 	auto command = FormatString("$VULKAN_SDK_PATH/bin/glslangValidator -V %s -S %s -o Build/Shader/Binary/%s.%s.spirv", &outputFilepath[0], &fileExtension[1], &shaderName[0], &fileExtension[1]);
 	if (RunProcess(command) != 0)
 	{
-		LogPrint(ERROR_LOG, "Shader compilation command failed: %s", command);
+		LogPrint(ERROR_LOG, "\nShader compilation command failed: %k.\n", command);
 		return false;
 	}
 
@@ -91,7 +148,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 				continue;
 			}
 			LogPrint(INFO_LOG, "-------------------------------------------------------------------------------------------------\n");
-			LogPrint(INFO_LOG, "Compiling shader %s\n", &shaderFilepath[0]);
+			LogPrint(INFO_LOG, "Compiling shader %k...\n", shaderFilepath);
 			if (CompileShader(shaderFilepath))
 			{
 				LogPrint(INFO_LOG, "Compiliation successful.\n");

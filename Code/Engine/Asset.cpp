@@ -21,7 +21,7 @@ struct AssetsContext
 GfxCommandBuffer theBuffer;
 bool ready = false;
 
-GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 indicesByteSize, GfxBuffer vertexStagingBuffer, AssetLoadStatus *loadStatus)
+GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer, AssetLoadStatus *loadStatus)
 {
 	auto vertexBuffer = CreateGPUBuffer(verticesByteSize, GFX_VERTEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	auto indexBuffer = CreateGPUBuffer(indicesByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
@@ -41,11 +41,11 @@ GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(u32 verticesByteSize, u32 ind
 	};
 }
 
-u32 QueueTextureUploadToGPU(u8 *pixels, s32 texturePixelWidth, s32 texturePixelHeight, AssetLoadStatus *loadStatus)
+u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelHeight, AssetLoadStatus *loadStatus)
 {
 	// @TODO: Load texture directly into staging memory.
 	void *stagingMemory;
-	u32 textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
+	auto textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
 	auto stagingBuffer = CreateGPUBuffer(textureByteSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
 	CopyMemory(pixels, stagingMemory, textureByteSize);
 	auto image = CreateGPUImage(texturePixelWidth, texturePixelHeight, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_USAGE_TRANSFER_DST | GFX_IMAGE_USAGE_SAMPLED, GFX_SAMPLE_COUNT_1);

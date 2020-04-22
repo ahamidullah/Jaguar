@@ -8,7 +8,7 @@ struct DescriptorSetBindingInfo
 	GfxShaderStageFlags stageFlags;
 };
 
-u32 GetFrameIndex();
+s64 GetFrameIndex();
 
 #if 0
 enum RenderPrimitive

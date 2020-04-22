@@ -88,6 +88,26 @@ bool NotZero(V3 v)
 	return (v.x != 0.0f) || (v.y != 0.0f) || (v.z != 0.0f);
 }
 
+s64 AlignS64(s64 number, s64 alignment)
+{
+	auto remainder = number % alignment;
+	if (remainder == 0)
+	{
+		return number;
+	}
+	return number + alignment - remainder;
+}
+
+s64 AlignmentOffsetS64(s64 number, s64 alignment)
+{
+	auto remainder = number % alignment;
+	if (remainder == 0)
+	{
+		return 0;
+	}
+	return alignment - remainder;
+}
+
 V4 V3ToV4(V3 v, f32 w)
 {
 	return

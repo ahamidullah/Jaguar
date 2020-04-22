@@ -3,7 +3,7 @@
 #include "Memory.h"
 #include "Array.h"
 
-size_t CStringLength(const char *s);
+s64 CStringLength(const char *s);
 
 // @TODO: Make this utf-8 by default?
 struct String
@@ -13,26 +13,26 @@ struct String
 	String() : String("") {};
 	String(const Array<char> &a) : data{a} {}
 	String(const char *cString) : data{CreateArray(CStringLength(cString) + 1, cString)} {};
-	char &operator[](size_t i);
-	char &operator[](size_t i) const;
+	char &operator[](s64 i);
+	char &operator[](s64 i) const;
 };
 
 bool operator==(const String &a, const String &b);
 bool operator!=(const String &a, const String &b);
 bool CStringsEqual(const char *a, const char *b);
 
-String CreateString(size_t length);
-String CreateString(size_t length, size_t capacity);
+String CreateString(s64 length);
+String CreateString(s64 length, s64 capacity);
 String CreateString(const String &copy);
-String CreateString(const String &copy, size_t startIndex, size_t endIndex);
+String CreateString(const String &copy, s64 startIndex, s64 endIndex);
 
-size_t StringLength(const String &s);
+s64 StringLength(const String &s);
 
-void ResizeString(String *s, size_t newSize);
+void ResizeString(String *s, s64 newSize);
 
 void StringAppend(String *destination, const String &source);
 void StringAppend(String *destination, const char *source);
-void StringAppend(String *destination, String source, size_t rangeStartIndex, size_t rangeLength);
+void StringAppend(String *destination, String source, s64 rangeStartIndex, s64 rangeLength);
 void StringAppend(String *destination, char source);
 
 String JoinStrings(const String &a, const String &b);
@@ -46,7 +46,7 @@ s64 FindLastCharIndex(const String &s, char c);
 bool IsCharWhitespace(char c);
 bool IsCharDigit(char c);
 
-void TrimString(String *s, size_t leftIndex, size_t rightIndex);
+void TrimString(String *s, s64 leftIndex, s64 rightIndex);
 
 bool ParseInteger(const String &string, s64 *result);
 

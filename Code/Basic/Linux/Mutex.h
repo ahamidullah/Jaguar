@@ -4,6 +4,6 @@
 
 typedef pthread_mutex_t Mutex;
 
-void CreateMutex(Mutex *mutex);
+Mutex CreateMutex();
 void LockMutex(Mutex *mutex);
 void UnlockMutex(Mutex *mutex);

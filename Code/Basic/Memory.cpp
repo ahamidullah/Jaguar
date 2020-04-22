@@ -2,47 +2,40 @@
 #include <string.h> // memcpy @TODO
 
 // @TODO: Use non-caching intrinsics?
-void SetMemory(void *destination, s8 setTo, size_t count)
+void SetMemory(void *destination, s8 setTo, s64 byteCount)
 {
 	auto d = (char *)destination;
-	for (auto i = 0; i < count; ++i)
+	for (auto i = 0; i < byteCount; ++i)
 	{
 		d[i] = setTo;
 	}
 }
 
-void *AllocateMemory(size_t size)
+void *AllocateMemory(s64 size)
 {
 	return malloc(size); // @TODO
 }
 
-void CopyMemory(const void *source, void *destination, size_t size)
+void CopyMemory(const void *source, void *destination, s64 byteCount)
 {
-	memcpy(destination, source, size);
-/*
-	const char *s = (const char *)source;
-	char *d = (char *)destination;
-	for (size_t i = 0; i < count; ++i) {
-		d[i] = s[i];
-	}
-*/
+	memcpy(destination, source, byteCount); // @TODO
 }
 
 // Only legal if source and destination are in the same array.
-void MoveMemory(void *source, void *destination, size_t length)
+void MoveMemory(void *source, void *destination, s64 byteCount)
 {
 	auto s = (char *)source;
 	auto d = (char *)destination;
 	if (s < d)
 	{
-		for (s += length, d += length; length; --length)
+		for (s += byteCount, d += byteCount; byteCount; --byteCount)
 		{
 			*--d = *--s;
 		}
 	}
 	else
 	{
-		while (length--)
+		while (byteCount--)
 		{
 			*d++ = *s++;
 		}

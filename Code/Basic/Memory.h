@@ -14,13 +14,13 @@ T *AllocateStructMemoryActual()
 }
 
 template <typename T>
-T *AllocateArrayMemoryActual(size_t count)
+T *AllocateArrayMemoryActual(s64 count)
 {
 	auto p = malloc(count * sizeof(T)); // @TODO
 	return new(p) T[count];
 }
 
-void *AllocateMemory(size_t size);
-void SetMemory(void *destination, s8 setTo, size_t count);
-void CopyMemory(const void *source, void *destination, size_t size);
-void MoveMemory(void *source, void *destination, size_t length);
+void *AllocateMemory(s64 size);
+void SetMemory(void *destination, s8 setTo, s64 byteCount);
+void CopyMemory(const void *source, void *destination, s64 byteCount);
+void MoveMemory(void *source, void *destination, s64 byteCount);

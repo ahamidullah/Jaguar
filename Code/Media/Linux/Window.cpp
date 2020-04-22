@@ -13,7 +13,7 @@ Display *GetX11Display()
 	return windowsContext.x11Display;
 }
 
-PlatformWindow CreateWindow(s32 width, s32 height, bool startFullscreen)
+PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 {
 	windowsContext.x11Display = XOpenDisplay(NULL);
 	if (!windowsContext.x11Display)
@@ -76,23 +76,25 @@ PlatformWindow CreateWindow(s32 width, s32 height, bool startFullscreen)
 		.event_mask = StructureNotifyMask,
 		.colormap = XCreateColormap(windowsContext.x11Display, rootWindow, visualInfo->visual, AllocNone),
 	};
-	s32 windowAttributesMask = CWBackPixel
-	                           | CWColormap
-	                           | CWBorderPixel
-	                           | CWEventMask;
+	s32 windowAttributesMask =
+		CWBackPixel
+		| CWColormap
+		| CWBorderPixel
+		| CWEventMask;
 	PlatformWindow result;
-	result.x11Window = XCreateWindow(windowsContext.x11Display,
-	                                 rootWindow,
-	                                 0,
-	                                 0,
-	                                 width,
-	                                 height,
-	                                 0,
-		                             visualInfo->depth,
-		                             InputOutput,
-		                             visualInfo->visual,
-		                             windowAttributesMask,
-		                             &windowAttributes);
+	result.x11Window = XCreateWindow(
+		windowsContext.x11Display,
+		rootWindow,
+		0,
+		0,
+		width,
+		height,
+		0,
+		visualInfo->depth,
+		InputOutput,
+		visualInfo->visual,
+		windowAttributesMask,
+		&windowAttributes);
 	if (!result.x11Window)
 	{
 		Abort("Failed to create a window.");
@@ -179,7 +181,7 @@ void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *
 		} break;
 		case XI_RawButtonPress:
 		{
-			u32 buttonIndex = (event.xbutton.button - 1);
+			auto buttonIndex = (event.xbutton.button - 1);
 			if (buttonIndex > MOUSE_BUTTON_COUNT)
 			{
 				break;
@@ -188,7 +190,7 @@ void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *
 		} break;
 		case XI_RawButtonRelease:
 		{
-			u32 buttonIndex = (event.xbutton.button - 1);
+			auto buttonIndex = (event.xbutton.button - 1);
 			if (buttonIndex > MOUSE_BUTTON_COUNT)
 			{
 				break;

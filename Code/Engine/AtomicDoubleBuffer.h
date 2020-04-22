@@ -2,21 +2,21 @@
 
 // @TODO: Have a mutex locked fallback if we run out of space.
 
-template <typename T, size_t Size>
+template <typename T, s64 Size>
 struct AtomicDoubleBuffer
 {
 	struct Buffer
 	{
-		s32 readyCount = 0;
+		s64 readyCount = 0;
 		T data[Size];
 	} buffers[2];
 	T *writeHead = &buffers[0].data[0];
 	Buffer *writeBuffer = &buffers[0];
 	Buffer *readBuffer = &buffers[1];
-	s32 readBufferElementCount = 0;
+	s64 readBufferElementCount = 0;
 };
 
-template <typename T, size_t Size>
+template <typename T, s64 Size>
 void WriteToAtomicDoubleBuffer(AtomicDoubleBuffer<T, Size> *b, const T &newElement)
 {
 	T *writePointer;
@@ -32,7 +32,7 @@ void WriteToAtomicDoubleBuffer(AtomicDoubleBuffer<T, Size> *b, const T &newEleme
 	b->buffers[bufferIndex].readyCount += 1;
 }
 
-template <typename T, size_t Size>
+template <typename T, s64 Size>
 void SwitchAtomicDoubleBuffer(AtomicDoubleBuffer<T, Size> *b)
 {
 	if (b->writeBuffer == &b->buffers[0])

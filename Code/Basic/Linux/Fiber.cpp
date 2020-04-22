@@ -19,8 +19,8 @@ THREAD_LOCAL struct ThreadLocalFibersContext
 struct FibersContext
 {
 	char *fiberStackMemory;
-	volatile u32 fiberCount;
-	size_t pageSize;
+	volatile s64 fiberCount;
+	s64 pageSize;
 } fibersContext;
 
 struct FiberCreationInfo
@@ -33,9 +33,9 @@ struct FiberCreationInfo
 
 void RunFiber(void *fiberCreationInfoPointer)
 {
-	auto *fiberCreationInfo = (FiberCreationInfo *)fiberCreationInfoPointer;
+	auto fiberCreationInfo = (FiberCreationInfo *)fiberCreationInfoPointer;
 	auto procedure = fiberCreationInfo->procedure;
-	auto *parameter = fiberCreationInfo->parameter;
+	auto parameter = fiberCreationInfo->parameter;
 	if (!_setjmp(*fiberCreationInfo->jumpBuffer))
 	{
 		ucontext_t context = {};
@@ -50,7 +50,7 @@ void RunFiber(void *fiberCreationInfoPointer)
 void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 {
 	getcontext(&fiber->context);
-	auto fiberIndex = AtomicFetchAndAdd32((s32 *)&fibersContext.fiberCount, 1);
+	auto fiberIndex = AtomicFetchAndAdd64(&fibersContext.fiberCount, 1);
 	fiber->context.uc_stack.ss_sp = fibersContext.fiberStackMemory + ((fiberIndex * FIBER_STACK_SIZE) + ((fiberIndex + 1) * fibersContext.pageSize));
 	fiber->context.uc_stack.ss_size = FIBER_STACK_SIZE;
 	fiber->context.uc_link = 0;
@@ -86,11 +86,13 @@ Fiber *GetCurrentFiber()
 	return threadLocalFibersContext.activeFiber;
 }
 
-void InitializeFibers(u32 maxFiberCount)
+void InitializeFibers(s64 maxFiberCount)
 {
 	fibersContext.pageSize = GetPageSize();
 	fibersContext.fiberCount = 0;
 	fibersContext.fiberStackMemory = (char *)AllocateMemory((maxFiberCount * FIBER_STACK_SIZE) + ((maxFiberCount + 1) * fibersContext.pageSize));
+	// Protect the memory surrounding each fiber's stack to detect writing off out of bounds.
+	// @TODO: Disable this in release mode to save memory?
 	for (auto i = 0; i <= maxFiberCount; i++)
 	{
 		mprotect(fibersContext.fiberStackMemory + ((i * FIBER_STACK_SIZE) + (i * fibersContext.pageSize)), fibersContext.pageSize, PROT_NONE);

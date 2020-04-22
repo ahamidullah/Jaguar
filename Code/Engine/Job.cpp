@@ -26,10 +26,10 @@ constexpr auto MAX_JOBS_PER_QUEUE = 100;
 struct Job
 {
 	JobProcedure procedure;
-	void *parameter;
-	JobPriority priority;
-	JobCounter *counterWaitingForThisJob;
-	bool finished;
+	void        *parameter;
+	JobPriority  priority;
+	JobCounter  *waitingCounter;
+	bool         finished;
 };
 
 struct JobFiberParameter
@@ -39,9 +39,9 @@ struct JobFiberParameter
 
 struct JobFiber
 {
-	Fiber platformFiber;
+	Fiber             platformFiber;
 	JobFiberParameter parameter;
-	struct JobFiber *next;
+	struct JobFiber  *next;
 };
 
 struct WorkerThreadParameter
@@ -51,7 +51,7 @@ struct WorkerThreadParameter
 
 struct WorkerThread
 {
-	ThreadHandle platformThread;
+	ThreadHandle          platformThread;
 	WorkerThreadParameter parameter;
 };
 
@@ -84,7 +84,7 @@ void *WorkerThreadProcedure(void *parameter)
 		{
 			activeJobFiber = NULL;
 			// Get the next job to run. Prefer higher priority jobs and resumable jobs.
-			for (s32 i = 0; i < JOB_PRIORITY_COUNT; i++)
+			for (auto i = 0; i < JOB_PRIORITY_COUNT; i++)
 			{
 				if (ReadFromAtomicRingBuffer(&resumableJobQueues[i], &activeJobFiber))
 				{
@@ -107,23 +107,25 @@ void *WorkerThreadProcedure(void *parameter)
 			{
 				break;
 			}
+
 			SwitchToFiber(&activeJobFiber->platformFiber);
-			Job *scheduledJob = &activeJobFiber->parameter.scheduledJob;
+
+			auto scheduledJob = &activeJobFiber->parameter.scheduledJob;
 			if (scheduledJob->finished)
 			{
 				PushToFrontOfAtomicLinkedList(&idleJobFiberList, activeJobFiber);
-				if (!scheduledJob->counterWaitingForThisJob)
+				if (!scheduledJob->waitingCounter)
 				{
 					continue;
 				}
 				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
-				s32 unfinishedJobCount = AtomicAdd32(&scheduledJob->counterWaitingForThisJob->unfinishedJobCount, -1);
+				auto unfinishedJobCount = AtomicAdd64(&scheduledJob->waitingCounter->unfinishedJobCount, -1);
 				if (unfinishedJobCount > 0)
 				{
 					continue;
 				}
 				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waitingJobFiber will be NULL.
-				JobFiber *waitingJobFiber = (JobFiber *)AtomicFetchAndSetPointer((void *volatile *)&scheduledJob->counterWaitingForThisJob->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
+				auto waitingJobFiber = (JobFiber *)AtomicFetchAndSetPointer((void *volatile *)&scheduledJob->waitingCounter->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waitingJobFiber)
 				{
 					continue;
@@ -146,7 +148,7 @@ void *WorkerThreadProcedure(void *parameter)
 
 void JobFiberProcedure(void *parameterPointer)
 {
-	JobFiberParameter *parameter = (JobFiberParameter *)parameterPointer;
+	auto parameter = (JobFiberParameter *)parameterPointer;
 	Job *activeJob;
 	while (1)
 	{
@@ -159,28 +161,31 @@ void JobFiberProcedure(void *parameterPointer)
 
 JobDeclaration CreateJob(JobProcedure procedure, void *parameter)
 {
-	return {
+	return
+	{
 		.procedure = procedure,
 		.parameter = parameter,
 	};
 }
 
+// @TODO: Switch to a real array.
 void RunJobs(u32 jobCount, JobDeclaration *jobDeclarations, JobPriority priority, JobCounter *counter)
 {
 	if (counter)
 	{
-		counter->unfinishedJobCount = jobCount;
+		counter->unfinishedJobCount = jobCount,
 		counter->waitingJobFiber = NULL;
 	}
-	for (u32 i = 0; i < jobCount; i++)
+	for (auto i = 0; i < jobCount; i++)
 	{
-		WriteToAtomicRingBuffer(&jobQueues[priority], (Job){
-			.procedure = jobDeclarations[i].procedure,
-			.parameter = jobDeclarations[i].parameter,
-			.priority = priority,
-			.counterWaitingForThisJob = counter,
-			.finished = 0,
-		});
+		WriteToAtomicRingBuffer(&jobQueues[priority],
+		                        {
+		                        	.procedure      = jobDeclarations[i].procedure,
+		                        	.parameter      = jobDeclarations[i].parameter,
+		                        	.priority       = priority,
+		                        	.waitingCounter = counter,
+		                        	.finished       = 0,
+		                        });
 		SignalSemaphore(&jobsAvailableSemaphore);
 	}
 }
@@ -232,7 +237,7 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 	WorkerThreadProcedure(&workerThreads[workerThreadCount - 1].parameter);
 }
 
-size_t GetWorkerThreadCount()
+s64 GetWorkerThreadCount()
 {
 	return ArrayLength(workerThreads);
 }

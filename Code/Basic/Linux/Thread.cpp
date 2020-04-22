@@ -1,9 +1,6 @@
 #include <sys/syscall.h>
 
-volatile u32 threadCounter;
-THREAD_LOCAL u32 threadIndex;
-
-s32 GetProcessorCount()
+s64 GetProcessorCount()
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
@@ -23,7 +20,7 @@ ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter)
 	return thread;
 }
 
-u32 GetThreadID()
+s64 GetThreadID()
 {
 	return syscall(__NR_gettid);
 }
@@ -33,7 +30,7 @@ ThreadHandle GetCurrentThread()
 	return pthread_self();
 }
 
-void SetThreadProcessorAffinity(ThreadHandle thread, u32 cpuIndex)
+void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex)
 {
 	cpu_set_t cpuSet;
 	CPU_ZERO(&cpuSet);

@@ -5,25 +5,25 @@
 template <typename T>
 struct Array
 {
-	size_t count = 0;
-	size_t capacity = 0;
+	s64 count = 0;
+	s64 capacity = 0;
 	T *elements = NULL;
 
-	T &operator[](size_t i);
-	T &operator[](size_t i) const;
+	T &operator[](s64 i);
+	T &operator[](s64 i) const;
 };
 
 template <typename T>
-T &Array<T>::operator[](size_t i)
+T &Array<T>::operator[](s64 i)
 {
-	Assert(i < count);
+	Assert(i >= 0 && i < count);
 	return elements[i];
 }
 
 template <typename T>
-T &Array<T>::operator[](size_t i) const
+T &Array<T>::operator[](s64 i) const
 {
-	Assert(i < count);
+	Assert(i >= 0 && i < count);
 	return elements[i];
 }
 
@@ -34,7 +34,7 @@ bool operator==(const Array<T> &a, const Array<T> &b)
 	{
 		return false;
 	}
-	for (size_t i = 0; i < a.count; i++)
+	for (auto i = 0; i < a.count; i++)
 	{
 		if (a.elements[i] != b.elements[i])
 		{
@@ -51,7 +51,7 @@ bool operator!=(const Array<T> &a, const Array<T> &b)
 }
 
 template <typename T>
-Array<T> CreateArray(size_t count)
+Array<T> CreateArray(s64 count)
 {
 	return
 	{
@@ -62,7 +62,7 @@ Array<T> CreateArray(size_t count)
 }
 
 template <typename T>
-Array<T> CreateArray(size_t count, size_t capacity)
+Array<T> CreateArray(s64 count, s64 capacity)
 {
 	return
 	{
@@ -73,7 +73,7 @@ Array<T> CreateArray(size_t count, size_t capacity)
 }
 
 template <typename T>
-Array<T> CreateArray(size_t count, const T *source)
+Array<T> CreateArray(s64 count, const T *source)
 {
 	Array<T> result =
 	{
@@ -86,7 +86,7 @@ Array<T> CreateArray(size_t count, const T *source)
 }
 
 template <typename T>
-void SetMinimumArrayCapacity(Array<T> *a, size_t minimumCapacity)
+void SetMinimumArrayCapacity(Array<T> *a, s64 minimumCapacity)
 {
 	if (a->capacity >= minimumCapacity)
 	{
@@ -110,7 +110,7 @@ void SetMinimumArrayCapacity(Array<T> *a, size_t minimumCapacity)
 }
 
 template <typename T>
-void ResizeArray(Array<T> *a, size_t newCount)
+void ResizeArray(Array<T> *a, s64 newCount)
 {
 	SetMinimumArrayCapacity(a, newCount);
 	a->count = newCount;
@@ -119,7 +119,7 @@ void ResizeArray(Array<T> *a, size_t newCount)
 template <typename T>
 void ArrayAppend(Array<T> *a, const T &newElement)
 {
-	size_t newElementIndex = a->count;
+	auto newElementIndex = a->count;
 	SetMinimumArrayCapacity(a, a->count + 1);
 	Assert(a->count <= a->capacity);
 	Assert(newElementIndex < a->capacity);
@@ -128,10 +128,10 @@ void ArrayAppend(Array<T> *a, const T &newElement)
 }
 
 template <typename T>
-void ArrayAppend(Array<T> *destination, const T *source, size_t sourceCount)
+void ArrayAppend(Array<T> *destination, const T *source, s64 sourceCount)
 {
-	size_t oldDestinationCount = destination->count;
-	size_t newDestinationCount = destination->count + sourceCount;
+	auto oldDestinationCount = destination->count;
+	auto newDestinationCount = destination->count + sourceCount;
 	Resize(destination, newDestinationCount);
 	CopyMemory(source, destination->elements + oldDestinationCount, sourceCount * sizeof(T));
 }
@@ -143,13 +143,13 @@ void ArrayAppend(Array<T> *destination, const Array<T> &source)
 }
 
 template <typename T>
-void ArrayAppend(Array<T> *destination, const Array<T> &source, size_t sourceCount)
+void ArrayAppend(Array<T> *destination, const Array<T> &source, s64 sourceCount)
 {
 	Append(destination, source.elements, sourceCount);
 }
 
 template <typename T>
-void RemoveArrayElement(Array<T> *a, size_t index)
+void RemoveArrayElement(Array<T> *a, s64 index)
 {
 	if (index == a->count - 1)
 	{
@@ -161,7 +161,7 @@ void RemoveArrayElement(Array<T> *a, size_t index)
 }
 
 template <typename T>
-size_t ArrayLength(const Array<T> &a)
+s64 ArrayLength(const Array<T> &a)
 {
 	return a.count;
 }

@@ -24,28 +24,28 @@ bool CloseFile(FileHandle file)
 	return true;
 }
 
-String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error)
+String ReadFromFile(FileHandle file, s64 byteCount, bool *error)
 {
-	size_t totalBytesRead = 0;
-	ssize_t currentBytesRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
-	auto fileString = CreateString(numberOfBytesToRead);
-	auto *cursor = &fileString[0];
+	auto totalBytesRead = 0;
+	auto currentBytesRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
+	auto fileString = CreateString(byteCount);
+	auto cursor = &fileString[0];
 	do
 	{
-		currentBytesRead = read(file, cursor, numberOfBytesToRead - totalBytesRead);
+		currentBytesRead = read(file, cursor, byteCount - totalBytesRead);
 		totalBytesRead += currentBytesRead;
 		cursor += currentBytesRead;
-	} while (totalBytesRead < numberOfBytesToRead && currentBytesRead != 0 && currentBytesRead != -1);
+	} while (totalBytesRead < byteCount && currentBytesRead != 0 && currentBytesRead != -1);
 	if (currentBytesRead == -1)
 	{
 		LogPrint(ERROR_LOG, "ReadFile failed: could not read from file: %s.\n", GetPlatformError());
 		*error = true;
 		return "";
 	}
-	else if (totalBytesRead != numberOfBytesToRead)
+	else if (totalBytesRead != byteCount)
 	{
 		// @TODO: Add file name to file handle.
-		LogPrint(ERROR_LOG, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested.\n", totalBytesRead, numberOfBytesToRead);
+		LogPrint(ERROR_LOG, "ReadFromFile failed: could only read %lu bytes, but %lu bytes were requested.\n", totalBytesRead, byteCount);
 		*error = true;
 		return "";
 	}
@@ -53,18 +53,18 @@ String ReadFromFile(FileHandle file, size_t numberOfBytesToRead, bool *error)
 	return fileString;
 }
 
-bool WriteToFile(FileHandle file, size_t length, void *buffer)
+bool WriteToFile(FileHandle file, s64 byteCount, void *buffer)
 {
 	size_t totalBytesWritten = 0;
 	ssize_t currentBytesWritten = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
 	auto position = (char *)buffer;
 	do
 	{
-		currentBytesWritten = write(file, position, (length - totalBytesWritten));
+		currentBytesWritten = write(file, position, (byteCount - totalBytesWritten));
 		totalBytesWritten += currentBytesWritten;
 		position += currentBytesWritten;
-	} while (totalBytesWritten < length && currentBytesWritten != 0);
-	if (totalBytesWritten != length)
+	} while (totalBytesWritten < byteCount && currentBytesWritten != 0);
+	if (totalBytesWritten != byteCount)
 	{
 		// @TODO: Add file name to file handle.
 		LogPrint(ERROR_LOG, "Could not write to file: %s.\n", GetPlatformError());

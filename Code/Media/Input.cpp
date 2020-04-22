@@ -1,11 +1,11 @@
-static struct
+struct InputContext
 {
 	Mouse mouse;
 	InputButtons keyboard;
 	WindowEvents windowEvents;
 } inputContext;
 
-InputButtons CreateInputButtons(size_t size)
+InputButtons CreateInputButtons(s64 size)
 {
 	return
 	{
@@ -21,29 +21,31 @@ void InitializeInput()
 	inputContext.keyboard = CreateInputButtons(SCANCODE_COUNT);
 }
 
-void PressButton(u32 buttonIndex, InputButtons *buttons)
+// @TODO: Swap the order of parameters on all of these functions.
+
+void PressButton(s64 buttonIndex, InputButtons *buttons)
 {
 	buttons->pressed[buttonIndex] = !buttons->down[buttonIndex];
 	buttons->down[buttonIndex] = true;
 }
 
-void ReleaseButton(u32 buttonIndex, InputButtons *buttons)
+void ReleaseButton(s64 buttonIndex, InputButtons *buttons)
 {
 	buttons->released[buttonIndex] = buttons->down[buttonIndex];
 	buttons->down[buttonIndex] = false;
 }
 
-bool IsButtonDown(u32 buttonIndex, InputButtons *buttons)
+bool IsButtonDown(s64 buttonIndex, InputButtons *buttons)
 {
 	return buttons->down[buttonIndex];
 }
 
-bool WasButtonPressed(u32 buttonIndex, InputButtons *buttons)
+bool WasButtonPressed(s64 buttonIndex, InputButtons *buttons)
 {
 	return buttons->pressed[buttonIndex];
 }
 
-bool WasButtonReleased(u32 buttonIndex, InputButtons *buttons)
+bool WasButtonReleased(s64 buttonIndex, InputButtons *buttons)
 {
 	return buttons->released[buttonIndex];
 }

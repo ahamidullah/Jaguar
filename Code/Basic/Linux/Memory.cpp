@@ -4,9 +4,9 @@
 
 #define MAP_ANONYMOUS 0x20
 
-void *AllocatePlatformMemory(size_t size)
+void *AllocatePlatformMemory(s64 size)
 {
-	void *memory = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	auto memory = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (memory == (void *)-1)
 	{
 		Assert(0); // @TODO
@@ -14,7 +14,7 @@ void *AllocatePlatformMemory(size_t size)
 	return memory;
 }
 
-void FreePlatformMemory(void *memory, size_t size)
+void FreePlatformMemory(void *memory, s64 size)
 {
 	if (munmap(memory, size) == -1)
 	{

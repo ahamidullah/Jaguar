@@ -48,35 +48,32 @@
 // @TODO: Debug clear freed memory?
 // @TODO: Debug memory protection?
 // @TODO: Read image pixels and mesh verices/indices directly into Gfx accessable staging memory.
-// @TODO: Move vulkan_context into game_state somehow.
 // @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
-// @TODO: Move logging out of band?
 
 struct VulkanContext
 {
 	VkDebugUtilsMessengerEXT debugMessenger;
 
-	VkInstance       instance;
+	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
-	VkDevice         device;
+	VkDevice device;
 
 	u32 graphicsQueueFamily;
 	u32 presentQueueFamily;
 	u32 transferQueueFamily;
 	u32 computeQueueFamily;
 
-	VkQueue graphicsQueue;
 	VkQueue presentQueue;
-	VkQueue transferQueue;
-	VkQueue computeQueue;
+
+	Array<VkCommandBuffer> changeImageOwnershipFromGraphicsToPresentQueueCommands;
 
 	VkPresentModeKHR presentMode;
+	VkCommandPool presentCommandPool;
 
-	VkSurfaceKHR       surface;
+	VkSurfaceKHR surface;
 	VkSurfaceFormatKHR surfaceFormat;
 
-	VkSemaphore imageAvailableSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
-	VkSemaphore renderFinishedSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore imageOwnershipSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } vulkanGlobals; // @TODO: Rename me.
 
 #define VK_CHECK(x)\
@@ -85,8 +82,10 @@ struct VulkanContext
 		if (_result != VK_SUCCESS) Abort("VK_CHECK failed on '%s': %k\n", #x, VkResultToString(_result));\
 	} while (0)
 
-String VkResultToString(VkResult result) {
-	switch(result) {
+String VkResultToString(VkResult result)
+{
+	switch(result)
+	{
 		case (VK_SUCCESS):
 			return "VK_SUCCESS";
 		case (VK_NOT_READY):
@@ -161,7 +160,7 @@ String VkResultToString(VkResult result) {
 #define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
 #define VK_INSTANCE_FUNCTION(name) PFN_##name name = NULL;
 #define VK_DEVICE_FUNCTION(name) PFN_##name name = NULL;
-#include "VulkanFunction.h"
+	#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
@@ -231,6 +230,31 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
     return 0;
 }
 
+GfxCommandQueue GfxGetCommandQueue(GfxCommandQueueType queueType)
+{
+	auto queue = GfxCommandQueue{};
+	switch (queueType)
+	{
+		case GFX_GRAPHICS_COMMAND_QUEUE:
+		{
+			vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.graphicsQueueFamily, 0, &queue); // No return.
+		} break;
+		case GFX_TRANSFER_COMMAND_QUEUE:
+		{
+			vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.transferQueueFamily, 0, &queue); // No return.
+		} break;
+		case GFX_COMPUTE_COMMAND_QUEUE:
+		{
+			vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.computeQueueFamily, 0, &queue); // No return.
+		} break;
+		default:
+		{
+			Abort("Unknown queue type: %d.\n", queueType);
+		} break;
+	}
+	return queue;
+}
+
 GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool)
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo =
@@ -251,33 +275,20 @@ GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool)
 	return commandBuffer;
 }
 
-void GfxSubmitCommandBuffers(GfxCommandQueueType queueType, GfxSubmitInfo &submitInfo, GfxFence fence)
+void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, GfxFence fence)
 {
 	VkSubmitInfo vulkanSubmitInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = (u32)ArrayLength(submitInfo.waitSemaphores),
 		.pWaitSemaphores = submitInfo.waitSemaphores.elements,
+		.pWaitDstStageMask = submitInfo.waitStages.elements,
 		.commandBufferCount = (u32)ArrayLength(submitInfo.commandBuffers),
 		.pCommandBuffers = submitInfo.commandBuffers.elements,
 		.signalSemaphoreCount = (u32)ArrayLength(submitInfo.signalSemaphores),
 		.pSignalSemaphores = submitInfo.signalSemaphores.elements,
 	};
-	switch (queueType)
-	{
-	case GFX_GRAPHICS_COMMAND_QUEUE:
-	{
-		VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &vulkanSubmitInfo, fence));
-	} break;
-	case GFX_TRANSFER_COMMAND_QUEUE:
-	{
-		VK_CHECK(vkQueueSubmit(vulkanGlobals.transferQueue, 1, &vulkanSubmitInfo, fence));
-	} break;
-	default:
-	{
-		InvalidCodePath();
-	} break;
-	}
+	VK_CHECK(vkQueueSubmit(queue, 1, &vulkanSubmitInfo, fence));
 }
 
 void GfxFreeCommandBuffers(GfxCommandPool pool, s64 count, GfxCommandBuffer *buffers)
@@ -370,12 +381,33 @@ void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, s64 memoryOffset)
 
 bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory)
 {
-	VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+	auto memoryFlags = VkMemoryPropertyFlags{};
+	switch (memoryType)
+	{
+		case GFX_GPU_ONLY_MEMORY:
+		{
+			memoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		} break;
+		case GFX_CPU_TO_GPU_MEMORY:
+		{
+			memoryFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		} break;
+		case GFX_GPU_TO_CPU_MEMORY:
+		{
+			memoryFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+		} break;
+		default:
+		{
+			Abort("Unknown memory type: %d.\n", memoryType);
+		} break;
+	}
+
+	auto physicalDeviceMemoryProperties = VkPhysicalDeviceMemoryProperties{};
 	vkGetPhysicalDeviceMemoryProperties(vulkanGlobals.physicalDevice, &physicalDeviceMemoryProperties);
-	s64 selectedMemoryTypeIndex = -1;
+	auto selectedMemoryTypeIndex = -1;
 	for (auto i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
 	{
-		if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & memoryType) == memoryType)
+		if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & memoryFlags) == memoryFlags)
 		{
 			selectedMemoryTypeIndex = i;
 			break;
@@ -383,16 +415,16 @@ bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory
 	}
 	if (selectedMemoryTypeIndex < 0)
 	{
-		Abort("Failed to find suitable Gfx memory type");
+		Abort("Failed to find suitable Gfx memory type.");
 	}
 
-	VkMemoryAllocateInfo memoryAllocateInfo =
+	auto memoryAllocateInfo = VkMemoryAllocateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = (GfxSize)size,
+		.allocationSize = size,
 		.memoryTypeIndex = (u32)selectedMemoryTypeIndex,
 	};
-	VkResult result = vkAllocateMemory(vulkanGlobals.device, &memoryAllocateInfo, NULL, memory);
+	auto result = vkAllocateMemory(vulkanGlobals.device, &memoryAllocateInfo, NULL, memory);
 	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
 	{
 		return false;
@@ -404,27 +436,28 @@ bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory
 
 void *GfxMapMemory(GfxMemory memory, GfxSize size, GfxSize offset)
 {
-	void *pointer;
+	auto pointer = (void *){};
 	VK_CHECK(vkMapMemory(vulkanGlobals.device, memory, offset, size, 0, &pointer));
 	return pointer;
 }
 
 GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, String &spirv)
 {
-	VkShaderModule module;
-	VkShaderModuleCreateInfo shaderModuleCreateInfo =
+	auto shaderModuleCreateInfo = VkShaderModuleCreateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 		.codeSize = (u32)StringLength(spirv),
 		.pCode = (u32 *)&spirv[0],
 	};
+	auto module = VkShaderModule{};
 	VK_CHECK(vkCreateShaderModule(vulkanGlobals.device, &shaderModuleCreateInfo, NULL, &module));
 	return module;
 }
 
 GfxFence GfxCreateFence(bool startSignalled)
 {
-	VkFenceCreateInfo fenceCreateInfo = {
+	auto fenceCreateInfo = VkFenceCreateInfo
+	{
 		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 		.flags = 0,
 	};
@@ -432,14 +465,14 @@ GfxFence GfxCreateFence(bool startSignalled)
 	{
 		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	}
-	VkFence fence;
+	auto fence = VkFence{};
 	VK_CHECK(vkCreateFence(vulkanGlobals.device, &fenceCreateInfo, NULL, &fence));
 	return fence;
 }
 
 bool GfxWasFenceSignalled(GfxFence fence)
 {
-	VkResult result = vkGetFenceStatus(vulkanGlobals.device, fence);
+	auto result = vkGetFenceStatus(vulkanGlobals.device, fence);
 	if (result == VK_SUCCESS)
 	{
 		return true;
@@ -534,21 +567,30 @@ GfxSwapchain GfxCreateSwapchain()
 	return swapchain;
 }
 
-u32 GfxAcquireNextSwapchainImage(GfxSwapchain swapchain, u32 currentFrameIndex)
-{
-	u32 swapchainImageIndex = 0;
-	VK_CHECK(vkAcquireNextImageKHR(vulkanGlobals.device, swapchain, UINT64_MAX, vulkanGlobals.imageAvailableSemaphores[currentFrameIndex], NULL, &swapchainImageIndex));
-	return swapchainImageIndex;
-}
-
-u32 GfxGetSwapchainImageCount(GfxSwapchain swapchain)
+Array<GfxImage> GfxGetSwapchainImages(GfxSwapchain swapchain)
 {
 	u32 swapchainImageCount;
 	VK_CHECK(vkGetSwapchainImagesKHR(vulkanGlobals.device, swapchain, &swapchainImageCount, NULL));
-	return swapchainImageCount;
+
+	auto result = CreateArray<GfxImage>(swapchainImageCount);
+	VK_CHECK(vkGetSwapchainImagesKHR(vulkanGlobals.device, swapchain, &swapchainImageCount, result.elements));
+	return result;
 }
 
-void GfxGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *imageViews)
+u32 GfxAcquireNextSwapchainImage(GfxSwapchain swapchain, GfxSemaphore semaphore)
+{
+	auto swapchainImageIndex = u32{};
+	VK_CHECK(vkAcquireNextImageKHR(vulkanGlobals.device, swapchain, UINT64_MAX, semaphore, NULL, &swapchainImageIndex));
+	return swapchainImageIndex;
+}
+
+VkFormat GfxGetSurfaceFormat()
+{
+	return vulkanGlobals.surfaceFormat.format;
+}
+
+#if 0
+void VulkanGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *imageViews)
 {
 	VkImage images[count]; // @TODO: Use a real array.
 	VK_CHECK(vkGetSwapchainImagesKHR(vulkanGlobals.device, swapchain, &count, images));
@@ -578,6 +620,7 @@ void GfxGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *
 		VK_CHECK(vkCreateImageView(vulkanGlobals.device, &imageViewCreateInfo, NULL, &imageViews[i]));
 	}
 }
+#endif
 
 // @TODO: Better abstraction for render passes.
 
@@ -1222,29 +1265,24 @@ void GfxBindImageMemory(GfxImage image, GfxMemory memory, s64 offset)
 	VK_CHECK(vkBindImageMemory(vulkanGlobals.device, image, memory, offset));
 }
 
-GfxImageView GfxCreateImageView(GfxImage image, GfxFormat format, GfxImageUsage usage)
+GfxImageView GfxCreateImageView(GfxImage image, GfxImageViewType viewType, GfxFormat format, GfxSwizzleMapping swizzleMapping, GfxImageSubresourceRange subresourceRange)
 {
 	VkImageViewCreateInfo imageViewCreateInfo =
 	{
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.image = image,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = (VkFormat)format,
-		.components =
+		.viewType = viewType, //VK_IMAGE_VIEW_TYPE_2D,
+		.format = format,
+		.components = 
 		{
-			.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.r = swizzleMapping.r,
+			.g = swizzleMapping.g,
+			.b = swizzleMapping.b,
+			.a = swizzleMapping.a,
 		},
-		.subresourceRange =
-		{
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		},
+		.subresourceRange = subresourceRange,
 	};
+	/*
 	if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
 	{
 		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1253,6 +1291,7 @@ GfxImageView GfxCreateImageView(GfxImage image, GfxFormat format, GfxImageUsage 
 	{
 		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
+	*/
 	VkImageView imageView;
 	VK_CHECK(vkCreateImageView(vulkanGlobals.device, &imageViewCreateInfo, NULL, &imageView));
 	return imageView;
@@ -1341,21 +1380,42 @@ void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer
 	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame /* @TODO */)
+void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, Array<GfxSemaphore> waitSemaphores)
 {
-	VkSemaphore waitSemaphores[] = {vulkanGlobals.imageAvailableSemaphores[currentFrame]};
-	VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	VkSemaphore signalSemaphores[] = {vulkanGlobals.renderFinishedSemaphores[currentFrame]};
-	VkSwapchainKHR swapchains[] = {swapchain};
-	VkPresentInfoKHR presentInfo =
+	if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
+	{
+		// If we are using separate queues, change image ownership to the present queue before
+		// presenting, waiting for the draw complete semaphore and signalling the ownership released
+		// semaphore when finished.
+		auto submitInfo = VkSubmitInfo
+		{
+			.waitSemaphoreCount = (u32)waitSemaphores.count,
+			.pWaitSemaphores = waitSemaphores.elements,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &vulkanGlobals.changeImageOwnershipFromGraphicsToPresentQueueCommands[swapchainImageIndex],
+			.signalSemaphoreCount = 1,
+			.pSignalSemaphores = &vulkanGlobals.imageOwnershipSemaphores[GetFrameIndex()],
+		};
+		VK_CHECK(vkQueueSubmit(vulkanGlobals.presentQueue, 1, &submitInfo, VK_NULL_HANDLE));
+	}
+
+	auto presentInfo = VkPresentInfoKHR
 	{
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = CArrayCount(signalSemaphores),
-		.pWaitSemaphores = signalSemaphores,
-		.swapchainCount = CArrayCount(swapchains),
-		.pSwapchains = swapchains,
+		.swapchainCount = 1,
+		.pSwapchains = &swapchain,
 		.pImageIndices = &swapchainImageIndex,
 	};
+	if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
+	{
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &vulkanGlobals.imageOwnershipSemaphores[GetFrameIndex()];
+	}
+	else
+	{
+		presentInfo.waitSemaphoreCount = (u32)waitSemaphores.count;
+		presentInfo.pWaitSemaphores = waitSemaphores.elements;
+	}
 	VK_CHECK(vkQueuePresentKHR(vulkanGlobals.presentQueue, &presentInfo));
 }
 
@@ -1923,32 +1983,46 @@ void GfxInitialize(PlatformWindow *window)
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
 	name = (PFN_##name)vkGetDeviceProcAddr(vulkanGlobals.device, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 is required.", #name);
 #include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.graphicsQueueFamily, 0, &vulkanGlobals.graphicsQueue); // No return.
 	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.presentQueueFamily, 0, &vulkanGlobals.presentQueue); // No return.
-	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.transferQueueFamily, 0, &vulkanGlobals.transferQueue); // No return.
-	vkGetDeviceQueue(vulkanGlobals.device, vulkanGlobals.computeQueueFamily, 0, &vulkanGlobals.computeQueue); // No return.
 
-	// Create presentation semaphores.
+	// Create the presentation semaphores.
 	{
-		VkSemaphoreCreateInfo semaphoreCreateInfo =
+		auto semaphoreCreateInfo = VkSemaphoreCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 		};
 		for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &vulkanGlobals.imageAvailableSemaphores[i]));
-			VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &vulkanGlobals.renderFinishedSemaphores[i]));
+			if (vulkanGlobals.graphicsQueueFamily != vulkanGlobals.presentQueueFamily)
+			{
+				VK_CHECK(vkCreateSemaphore(vulkanGlobals.device, &semaphoreCreateInfo, NULL, &vulkanGlobals.imageOwnershipSemaphores[i]));
+			}
 		}
 	}
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#if 0
 void TEMPORARY_VULKAN_SUBMIT(GfxCommandBuffer command_buffer, s32 current_frame_index, GfxFence fence)
 {
 	VkSemaphore wait_semaphores[] = {vulkanGlobals.imageAvailableSemaphores[current_frame_index]};
@@ -1968,7 +2042,6 @@ void TEMPORARY_VULKAN_SUBMIT(GfxCommandBuffer command_buffer, s32 current_frame_
 	VK_CHECK(vkQueueSubmit(vulkanGlobals.graphicsQueue, 1, &submit_info, fence));
 }
 
-#if 0
 
 void update_vulkan_uniforms(M4 scene_projection, Camera *camera, Mesh_Instance *meshes, u32 *visible_meshes, u32 visible_mesh_count, u32 swapchain_image_index) {
 	// @TODO: Does all of this need to happen every frame? Probably not!

@@ -42,6 +42,12 @@ void HashTableInsert(HashTable<K, V> *table, const K &key, const V &value)
 	Abort("Ran out of room in the hash table...");
 }
 
+template <typename V>
+void HashTableInsert(HashTable<String, V> *table, const String &key, const V &value)
+{
+	HashTableInsert<String, V>(table, key, value);
+}
+
 template <typename K, typename V>
 bool HashTableInsertIfNonExistent(HashTable<K, V> *table, const K &key, const V &value)
 {

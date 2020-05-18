@@ -14,7 +14,7 @@ bool CompileShader(const String &shaderFilepath)
 	auto shaderName = GetFilepathFilename(shaderFilepath);
 	SetFilepathExtension(&shaderName, "");
 
-	// Write out a new version of the shader, inserting the includes.
+	// Write out a new version of the shader, inserting the text for the include files into the output.
 	auto outputFilepath = FormatString("Build/Shader/Code/%k.%s", shaderName, &fileExtension[1]);
 	auto outputFile = OpenFile(outputFilepath, OPEN_FILE_WRITE_ONLY | OPEN_FILE_CREATE, &error);
 	if (error)

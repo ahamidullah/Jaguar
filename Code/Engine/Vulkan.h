@@ -61,6 +61,10 @@ typedef VkSampleCountFlagBits GfxSampleCount;
 #define GFX_SAMPLE_COUNT_32 VK_SAMPLE_COUNT_32_BIT
 #define GFX_SAMPLE_COUNT_64 VK_SAMPLE_COUNT_64_BIT
 
+typedef VkFlags GfxPipelineStageFlags;
+typedef VkPipelineStageFlagBits GfxPipelineStage;
+#define GFX_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+
 typedef VkBlendFactor GfxBlendFactor;
 #define GFX_BLEND_FACTOR_SRC_ALPHA VK_BLEND_FACTOR_SRC_ALPHA
 #define GFX_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
@@ -145,6 +149,10 @@ typedef VkPipelineBindPoint GfxPipelineBindPoint;
 #define GFX_GRAPHICS_PIPELINE_BIND_POINT VK_PIPELINE_BIND_POINT_GRAPHICS
 #define GFX_COMPUTE_PIPELINE_BIND_POINT VK_PIPELINE_BIND_POINT_COMPUTE
 
+typedef VkPipelineStageFlags GfxPipelineStageFlags;
+#define GFX_PIPELINE_STAGE_TOP_OF_PIPE VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+#define GFX_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+
 enum GfxSamplerAddressMode
 {
 	GFX_SAMPLER_ADDRESS_MODE_REPEAT = VK_SAMPLER_ADDRESS_MODE_REPEAT,
@@ -164,18 +172,34 @@ enum GfxBorderColor
 	GFX_BORDER_COLOR_INT_OPAQUE_WHITE = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
 };
 
-enum GfxCommandQueueType
+typedef VkComponentSwizzle GfxSwizzle;
+#define GFX_SWIZZLE_MAPPING_IDENTITY VK_COMPONENT_SWIZZLE_IDENTITY
+
+typedef VkImageAspectFlags GfxImageAspectFlags;
+#define GFX_IMAGE_ASPECT_COLOR VK_IMAGE_ASPECT_COLOR_BIT
+#define GFX_IMAGE_ASPECT_DEPTH VK_IMAGE_ASPECT_DEPTH_BIT
+
+typedef VkImageViewType GfxImageViewType;
+#define GFX_IMAGE_VIEW_TYPE_2D VK_IMAGE_VIEW_TYPE_2D
+
+struct GfxSwizzleMapping
 {
-	GFX_GRAPHICS_COMMAND_QUEUE,
-	GFX_COMPUTE_COMMAND_QUEUE,
-	GFX_TRANSFER_COMMAND_QUEUE,
+	GfxSwizzle r;
+	GfxSwizzle g;
+	GfxSwizzle b;
+	GfxSwizzle a;
 };
 
-enum GfxMemoryType
+#if 0
+struct GfxImageSubresourceRange
 {
-	GFX_DEVICE_MEMORY = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-	GFX_HOST_MEMORY = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+	GfxImageAspectFlags aspectMask;
+	u32 baseMipLevel;
+	u32 levelCount;
+	u32 baseArrayLayer;
+	u32 layerCount;
 };
+#endif
 
 struct VulkanSamplerFilter
 {
@@ -205,14 +229,15 @@ typedef VulkanSamplerFilter GfxSamplerFilter;
 typedef VkPipeline GfxPipeline;
 typedef VkPipelineLayout GfxPipelineLayout;
 typedef VkDeviceSize GfxSize;
+typedef VkImageSubresourceRange GfxImageSubresourceRange;
+typedef VkQueue GfxCommandQueue;
 
 struct GfxSubmitInfo;
 GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool);
-void GfxSubmitCommandBuffers(GfxCommandQueueType queueType, GfxSubmitInfo &submitInfo, GfxFence fence);
+void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, GfxFence fence);
 void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GfxCommandBuffer *buffers);
 void GfxEndCommandBuffer(GfxCommandBuffer buffer);
 
-GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType);
 void GfxResetCommandPool(GfxCommandPool pool);
 
 GfxBuffer GfxCreateBuffer(GfxSize size, GfxBufferUsageFlags usage);
@@ -221,7 +246,6 @@ void GfxRecordCopyBufferCommand(GfxCommandBuffer buffer, GfxSize size, GfxBuffer
 GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer);
 void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, GfxSize memoryOffset);
 
-bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory);
 void *GfxMapMemory(GfxMemory memory, GfxSize size, GfxSize offset);
 
 GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, const String &spirv);
@@ -244,7 +268,6 @@ GfxFramebuffer GfxCreateFramebuffer(GfxRenderPass renderPass, u32 width, u32 hei
 GfxMemoryRequirements GfxGetImageMemoryRequirements(GfxImage image);
 GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsage usage, VkSampleCountFlagBits sampleCount);
 void GfxBindImageMemory(GfxImage image, GfxMemory memory, GfxSize offset);
-GfxImageView GfxCreateImageView(GfxImage image, GfxFormat format, GfxImageUsage usage);
 void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout);
 void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight);
 
@@ -277,6 +300,11 @@ typedef struct Render_API_Context
 	VkSemaphore image_available_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 	VkSemaphore render_finished_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } Render_API_Context;
+
+void ArrayAppend(Array<u32> *a, const VkFlags &newElement)
+{
+	ArrayAppend<u32>(a, newElement);
+}
 
 #else
 

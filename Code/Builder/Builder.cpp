@@ -284,7 +284,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 			.binaryFilepath = "Build/libMedia.so",
 			.isLibrary = true,
 		};
-		ArrayAppend(&buildCommand.dependencies, String{"Basic"});
+		ArrayAppend(&buildCommand.dependencies, "Basic");
 		ArrayAppend(&allBuildCommands, buildCommand);
 	}
 	{

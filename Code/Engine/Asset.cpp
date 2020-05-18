@@ -23,14 +23,14 @@ bool ready = false;
 
 GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer, AssetLoadStatus *loadStatus)
 {
-	auto vertexBuffer = CreateGPUBuffer(verticesByteSize, GFX_VERTEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
-	auto indexBuffer = CreateGPUBuffer(indicesByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+	auto vertexBuffer = CreateGPUBuffer(verticesByteSize, GFX_VERTEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+	auto indexBuffer = CreateGPUBuffer(indicesByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	//auto commandBuffer = CreateUploadCommandBuffer();
 	theBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	GfxRecordCopyBufferCommand(theBuffer, verticesByteSize, vertexStagingBuffer, vertexBuffer, 0, 0);
 	GfxRecordCopyBufferCommand(theBuffer, indicesByteSize, vertexStagingBuffer, indexBuffer, verticesByteSize, 0);
 	GfxEndCommandBuffer(theBuffer);
-	QueueGPUTransfer(theBuffer);
+	QueueGPUCommandBuffer(theBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT, NULL);
 	ready = true;
 	//auto fence = GfxCreateFence(false);
 	//GfxSubmitCommandBuffers(1, &theBuffer, GFX_GRAPHICS_COMMAND_QUEUE, fence);
@@ -46,15 +46,15 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelH
 	// @TODO: Load texture directly into staging memory.
 	void *stagingMemory;
 	auto textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
-	auto stagingBuffer = CreateGPUBuffer(textureByteSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
+	auto stagingBuffer = CreateGPUBuffer(textureByteSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
 	CopyMemory(pixels, stagingMemory, textureByteSize);
-	auto image = CreateGPUImage(texturePixelWidth, texturePixelHeight, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_USAGE_TRANSFER_DST | GFX_IMAGE_USAGE_SAMPLED, GFX_SAMPLE_COUNT_1);
+	auto image = CreateGPUImage(texturePixelWidth, texturePixelHeight, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_USAGE_TRANSFER_DST | GFX_IMAGE_USAGE_SAMPLED, GFX_SAMPLE_COUNT_1, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	auto commandBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	GfxTransitionImageLayout(commandBuffer, image, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	GfxRecordCopyBufferToImageCommand(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
 	GfxTransitionImageLayout(commandBuffer, image, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GFX_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	GfxEndCommandBuffer(commandBuffer);
-	QueueGPUTransfer(commandBuffer);
+	QueueGPUCommandBuffer(theBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT, NULL);
 	return 0;
 }
 
@@ -187,7 +187,7 @@ void LoadModel(void *jobParameterPointer) {
 	//auto indexStagingBuffer = CreateGPUStagingBuffer(indicesSize, (void **)&indexStagingMemory);
 
 	void *stagingMemory;
-	auto stagingBuffer = CreateGPUBuffer(verticesSize + indicesSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
+	auto stagingBuffer = CreateGPUBuffer(verticesSize + indicesSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
 
 	auto meshVertexOffset = 0;
 	auto meshIndexOffset = 0;
@@ -347,6 +347,8 @@ void LoadModel(void *jobParameterPointer) {
 	CopyMemory(index_buffer, (char *)stagingMemory + verticesSize, indicesSize);
 	mesh->gpuGeometry = QueueIndexedGeometryUploadToGPU(verticesSize, indicesSize, stagingBuffer, &mesh->loadStatus);
 	//mesh->gpu_mesh = Upload_Indexed_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
+
+	mesh->loadStatus = ASSET_LOADED;
 #if 0
 		if (assimp_mesh->mTextureCoords[0]) {
 			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.

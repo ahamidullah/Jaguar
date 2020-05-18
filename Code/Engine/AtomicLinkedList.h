@@ -11,7 +11,7 @@ T *PopFromFrontOfAtomicLinkedList(AtomicLinkedList<T> *l) {
 	do {
 		currentHead = l->head;
 		Assert(currentHead);
-	} while (AtomicCompareAndSwapPointer((void *volatile *)&l->head, currentHead, l->head->next) != currentHead);
+	} while (AtomicCompareAndSwap((void *volatile *)&l->head, currentHead, l->head->next) != currentHead);
 	return currentHead;
 }
 
@@ -21,6 +21,6 @@ void PushToFrontOfAtomicLinkedList(AtomicLinkedList<T> *l, T *newHead) {
 	do {
 		currentHead = l->head;
 		newHead->next = currentHead;
-	} while (AtomicCompareAndSwapPointer((void *volatile *)&l->head, currentHead, newHead) != currentHead);
+	} while (AtomicCompareAndSwap((void *volatile *)&l->head, currentHead, newHead) != currentHead);
 }
 

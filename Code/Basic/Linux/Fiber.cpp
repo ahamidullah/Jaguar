@@ -50,7 +50,7 @@ void RunFiber(void *fiberCreationInfoPointer)
 void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 {
 	getcontext(&fiber->context);
-	auto fiberIndex = AtomicFetchAndAdd64(&fibersContext.fiberCount, 1);
+	auto fiberIndex = AtomicFetchAndAdd(&fibersContext.fiberCount, 1);
 	fiber->context.uc_stack.ss_sp = fibersContext.fiberStackMemory + ((fiberIndex * FIBER_STACK_SIZE) + ((fiberIndex + 1) * fibersContext.pageSize));
 	fiber->context.uc_stack.ss_size = FIBER_STACK_SIZE;
 	fiber->context.uc_link = 0;

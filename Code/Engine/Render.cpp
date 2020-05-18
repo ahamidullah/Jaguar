@@ -8,12 +8,6 @@
 #define VERTEX_BUFFER_BIND_ID 0
 #define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE Megabyte(1)
 
-struct ThreadLocalRenderGlobals
-{
-	//GfxCommandPool graphicsCommandPools[GFX_MAX_FRAMES_IN_FLIGHT];
-	//GfxCommandPool computeCommandPools[GFX_MAX_FRAMES_IN_FLIGHT];
-};
-
 struct Shader
 {
 	String name;
@@ -21,6 +15,7 @@ struct Shader
 	Array<GfxShaderStage> stages;
 };
 
+// @TODO: Delete me.
 struct DescriptorSetGroup
 {
 	s64 setNumber;
@@ -29,33 +24,34 @@ struct DescriptorSetGroup
 	GfxBuffer *buffers;
 };
 
-struct
+struct RenderContext
 {
 	f32 aspectRatio;
 
 	s64 frameIndex;
 	GfxFence frameFences[GFX_MAX_FRAMES_IN_FLIGHT];
-	GfxSemaphore imageAvailableSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
-	GfxSemaphore renderFinishedSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 
 	s64 swapchainImageIndex; // @TODO
-	s64 swapchainImageCount;
+	//s64 swapchainImageCount;
 	GfxSwapchain swapchain;
+	Array<GfxImage> swapchainImages;
 	Array<GfxImageView> swapchainImageViews;
 
 	GfxPipelineLayout pipelineLayout;
+
 	GfxDescriptorPool descriptorPool;
 	Array<GfxDescriptorSetLayout> descriptorSetLayouts;
 	Array<Array<GfxDescriptorSet>> descriptorSets;
 	Array<Array<GfxBuffer>> descriptorSetBuffers;
-	GfxFence descriptorSetUpdateFence;
+	GfxFence descriptorSetUpdateFence; // @TODO: Delete me.
 
 	// @TODO TEMPORARY
 	GfxFramebuffer *framebuffers;
 
 	HashTable<String, Shader> shaders;
 
-	Array<ThreadLocalRenderGlobals> threadLocal;
+	GfxSemaphore swapchainImageAcquiredSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+	//GfxSemaphore drawCompleteSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } renderGlobals;
 
 s64 GetFrameIndex()
@@ -66,10 +62,10 @@ s64 GetFrameIndex()
 void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
 {
 	renderGlobals.descriptorSetLayouts[setIndex] = GfxCreateDescriptorSetLayout(bindingInfoCount, bindingInfos);
-	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
+	for (auto i = 0; i < renderGlobals.swapchainImages.count; i++)
 	{
 		GfxCreateDescriptorSets(renderGlobals.descriptorPool, renderGlobals.descriptorSetLayouts[setIndex], 1, &renderGlobals.descriptorSets[i][setIndex]);
-		renderGlobals.descriptorSetBuffers[i][setIndex] = CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_DEVICE_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+		renderGlobals.descriptorSetBuffers[i][setIndex] = CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	}
 }
 
@@ -108,7 +104,7 @@ void LoadShaders()
 			ArrayAppend(&shader.modules, GfxCreateShaderModule(GFX_FRAGMENT_SHADER_STAGE, spirv));
 		}
 		shader.name = "Model";
-		HashTableInsert(&renderGlobals.shaders, String{"Model"}, shader);
+		HashTableInsert(&renderGlobals.shaders, "Model", shader);
 
 // @TODO: Automatic loading.
 #if 0
@@ -328,32 +324,69 @@ void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 		GfxRecordBindPipelineCommand(commandBuffer, pass.gfxPipeline);
 		pass.execute(commandBuffer);
 
-		GfxWaitForFences(1, &renderGlobals.descriptorSetUpdateFence, true, U32_MAX);
+		QueueGPUCommandBuffer(commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME, NULL);
 
-		TEMPORARY_VULKAN_SUBMIT(commandBuffer, renderGlobals.frameIndex, renderGlobals.frameFences[renderGlobals.frameIndex]);
+		//GfxWaitForFences(1, &renderGlobals.descriptorSetUpdateFence, true, U32_MAX);
 
-		GfxResetFences(1, &renderGlobals.descriptorSetUpdateFence);
+		//GfxSubmitInfo submitInfo;
+		//ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
+		//GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.frameFences[renderGlobals.frameIndex]);
+
+		//GfxResetFences(1, &renderGlobals.descriptorSetUpdateFence);
 	}
 }
 
-void InitializeRenderer(void *job_parameter_pointer)
+void InitializeRenderer(void *jobParameterPointer)
 {
-	auto window = (PlatformWindow *)job_parameter_pointer;
-
-	GfxInitialize(window);
+	GfxInitialize((PlatformWindow *)jobParameterPointer);
 
 	InitializeGPU();
 
 	renderGlobals.swapchain = GfxCreateSwapchain();
-	renderGlobals.swapchainImageCount = GfxGetSwapchainImageCount(renderGlobals.swapchain);
-	ResizeArray(&renderGlobals.swapchainImageViews, renderGlobals.swapchainImageCount);
-	GfxGetSwapchainImageViews(renderGlobals.swapchain, renderGlobals.swapchainImageCount, &renderGlobals.swapchainImageViews[0]);
+	renderGlobals.swapchainImages = GfxGetSwapchainImages(renderGlobals.swapchain);
+	for (auto &img : renderGlobals.swapchainImages)
+	{
+		GfxSwizzleMapping swizzleMapping =
+		{
+			.r = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.g = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.b = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.a = GFX_SWIZZLE_MAPPING_IDENTITY,
+		};
+		GfxImageSubresourceRange subresourceRange =
+		{
+			.aspectMask = GFX_IMAGE_ASPECT_COLOR,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		};
+		ArrayAppend(&renderGlobals.swapchainImageViews, GfxCreateImageView(img, GFX_IMAGE_VIEW_TYPE_2D, GfxGetSurfaceFormat(), swizzleMapping, subresourceRange));
+	}
 
 	//auto shadowMapImage = CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
 	//auto shadowMapImageView = GfxCreateImageView(shadowMapImage, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
-	auto depthBufferImage = CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS);
-	depthBufferImageView = GfxCreateImageView(depthBufferImage, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS);
+	{
+		auto depthBufferImage = CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+
+		auto swizzleMapping = GfxSwizzleMapping
+		{
+			.r = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.g = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.b = GFX_SWIZZLE_MAPPING_IDENTITY,
+			.a = GFX_SWIZZLE_MAPPING_IDENTITY,
+		};
+		auto subresourceRange = GfxImageSubresourceRange
+		{
+			.aspectMask = GFX_IMAGE_ASPECT_DEPTH,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		};
+		depthBufferImageView = GfxCreateImageView(depthBufferImage, GFX_IMAGE_VIEW_TYPE_2D, DEPTH_BUFFER_FORMAT, swizzleMapping, subresourceRange);
+	}
 
 	for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -364,27 +397,14 @@ void InitializeRenderer(void *job_parameter_pointer)
 
 	renderGlobals.descriptorPool = GfxCreateDescriptorPool();
 
-	ResizeArray(&renderGlobals.threadLocal, GetWorkerThreadCount());
+	//ResizeArray(&renderGlobals.threadLocal, GetWorkerThreadCount());
 
-	renderGlobals.framebuffers = AllocateArrayMemory(GfxFramebuffer, renderGlobals.swapchainImageCount);
+	renderGlobals.framebuffers = AllocateArrayMemory(GfxFramebuffer, renderGlobals.swapchainImages.count);
 
-#if 0
-	renderGlobals.renderThreadCount = GetWorkerThreadCount();
-	renderGlobals.threadLocalContexts = (Thread_Local_Render_Context *)malloc(renderGlobals.render_thread_count * sizeof(Thread_Local_Render_Context)); // @TODO
-	for (s32 i = 0; i < renderGlobals.render_thread_count; i++) {
-		renderGlobals.thread_local_contexts[i].upload_command_pool = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
-		ConsolePrint("OBJ %u\n", renderGlobals.thread_local_contexts[i].upload_command_pool);
-		renderGlobals.thread_local_contexts[i].command_pools = (VkCommandPool *)malloc(renderGlobals.swapchain_image_count * sizeof(GPUCommandPool));
-		for (auto j = 0; j < renderGlobals.swapchain_image_count; j++) {
-			renderGlobals.thread_local_contexts[i].command_pools[j] = GPUCreateCommandPool(GPU_GRAPHICS_COMMAND_QUEUE);
-		}
-	}
-#endif
-
-	ResizeArray(&renderGlobals.descriptorSets, renderGlobals.swapchainImageCount);
-	ResizeArray(&renderGlobals.descriptorSetBuffers, renderGlobals.swapchainImageCount);
+	ResizeArray(&renderGlobals.descriptorSets, renderGlobals.swapchainImages.count);
+	ResizeArray(&renderGlobals.descriptorSetBuffers, renderGlobals.swapchainImages.count);
 	ResizeArray(&renderGlobals.descriptorSetLayouts, DESCRIPTOR_SET_COUNT);
-	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
+	for (auto i = 0; i < renderGlobals.swapchainImages.count; i++)
 	{
 		ResizeArray(&renderGlobals.descriptorSets[i], DESCRIPTOR_SET_COUNT);
 		ResizeArray(&renderGlobals.descriptorSetBuffers[i], DESCRIPTOR_SET_COUNT);
@@ -440,31 +460,10 @@ void InitializeRenderer(void *job_parameter_pointer)
 
 	renderGlobals.aspectRatio = windowWidth / (f32)windowHeight;
 
-	#if 0
-	VkWriteDescriptorSet descriptor_writes[10]; // @TODO
-	s32 write_count = 0;
-	uniform_buffer = Create_GPU_Device_Buffer(context, sizeof(M4) * renderGlobals.swapchain_image_count + 0x100 * renderGlobals.swapchain_image_count, GPU_UNIFORM_BUFFER | GPU_TRANSFER_DESTINATION_BUFFER);
-	VkDescriptorBufferInfo buffer_infos[renderGlobals.swapchain_image_count];
-	s32 buffer_info_count = 0;
-	for (s32 i = 0; i < renderGlobals.swapchain_image_count; i++) {
-		buffer_infos[buffer_info_count] = (VkDescriptorBufferInfo){
-			.buffer = uniform_buffer,
-			.offset = i * 0x100,
-			.range  = sizeof(M4),
-		};
-		descriptor_writes[write_count++] = (VkWriteDescriptorSet){
-			.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet          = renderGlobals.descriptor_sets.rusted_iron_vertex_bind_per_object_update_immediate[i],
-			.dstBinding      = 0,
-			.dstArrayElement = 0,
-			.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.descriptorCount = 1,
-			.pBufferInfo     = &buffer_infos[buffer_info_count],
-		};
-		buffer_info_count++;
+	for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		renderGlobals.swapchainImageAcquiredSemaphores[i] = GfxCreateSemaphore();
 	}
-	vkUpdateDescriptorSets(renderGlobals.api_context.device, write_count, descriptor_writes, 0, NULL);
-	#endif
 
 #if 0
 	for (auto i = 0; i < renderGlobals.swapchainImageCount; i++)
@@ -475,7 +474,7 @@ void InitializeRenderer(void *job_parameter_pointer)
 		//};
 		//Update_Descriptors(context, matrix_fence, i, &renderGlobals.rrdescriptor_sets, CArrayCount(update_infos), update_infos);
 		void *staging_memory;
-		GfxBuffer staging_buffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &staging_memory);
+		GfxBuffer staging_buffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &staging_memory);
 		CopyMemory(&m, staging_memory, sizeof(M4));
 		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
 		GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), staging_buffer, renderGlobals.descriptorSetBuffers[i][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
@@ -554,32 +553,32 @@ void Render()
 	GfxWaitForFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex], true, U32_MAX);
 	GfxResetFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex]);
 
-	auto swapchainImageIndex = GfxAcquireNextSwapchainImage(renderGlobals.swapchain, renderGlobals.frameIndex);
+	auto swapchainImageIndex = GfxAcquireNextSwapchainImage(renderGlobals.swapchain, renderGlobals.swapchainImageAcquiredSemaphores[renderGlobals.frameIndex]);
 
 	ClearGPUMemoryForFrameIndex(renderGlobals.frameIndex);
 	ClearGPUCommandPoolsForFrameIndex(renderGlobals.frameIndex);
 
 	// Update descriptor sets.
 	{
-		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
+		auto commandBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
 		u32 u = 0;
 		{
 			void *stagingMemory;
-			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
 			CopyMemory(&u, stagingMemory, sizeof(u32));
 			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], 0, 0);
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
 		}
 		{
 			void *stagingMemory;
-			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
 			CopyMemory(&u, stagingMemory, sizeof(u32));
 			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], 0, 0);
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
 		}
 		{
 			void *stagingMemory;
-			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
 			CopyMemory(&u, stagingMemory, sizeof(u32));
 			GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], 0, 0);
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
@@ -592,19 +591,21 @@ void Render()
 			//M4 m = projectionMatrix * viewMatrix;
 			M4 m = projectionMatrix * viewMatrix;
 			void *stagingMemory;
-			auto stagingBuffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_HOST_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+			auto stagingBuffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
 			CopyMemory(&m, stagingMemory, sizeof(M4));
 			GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 		}
 		GfxEndCommandBuffer(commandBuffer);
 
-		GfxSubmitInfo submitInfo;
-		ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
-		GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.descriptorSetUpdateFence);
+		QueueGPUCommandBuffer(commandBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME, NULL);
+
+		//GfxSubmitInfo submitInfo;
+		//ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
+		//GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.descriptorSetUpdateFence);
 	}
 
-	auto transferSemaphore = SubmitGPUTransferCommands();
+	auto frameTransfersCompleteSemaphore = SubmitQueuedGPUCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, {}, {}, NULL);
 
 	// Build and execute render graph.
 	{
@@ -643,7 +644,17 @@ void Render()
 		ExecuteRenderGraph(&renderGraph, swapchainImageIndex);
 	}
 
-	GfxPresentSwapchainImage(renderGlobals.swapchain, swapchainImageIndex, renderGlobals.frameIndex);
+	auto ss = Array<GfxSemaphore>{};
+	ArrayAppend(&ss, frameTransfersCompleteSemaphore);
+	ArrayAppend(&ss, renderGlobals.swapchainImageAcquiredSemaphores[renderGlobals.frameIndex]);
+
+	auto ww = Array<GfxPipelineStageFlags>{};
+	ArrayAppend(&ww, GFX_PIPELINE_STAGE_TOP_OF_PIPE);
+	ArrayAppend(&ww, GFX_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT);
+
+	auto frameGraphicsCompleteSemaphore = SubmitQueuedGPUCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, ss, ww, renderGlobals.frameFences[renderGlobals.frameIndex]);
+
+	GfxPresentSwapchainImage(renderGlobals.swapchain, swapchainImageIndex, CreateArray<GfxSemaphore>(1, &frameGraphicsCompleteSemaphore));
 
 	renderGlobals.frameIndex = (renderGlobals.frameIndex + 1) % GFX_MAX_FRAMES_IN_FLIGHT;
 

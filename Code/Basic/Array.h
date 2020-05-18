@@ -160,6 +160,7 @@ void RemoveArrayElement(Array<T> *a, s64 index)
 	a->count--;
 }
 
+// @TODO: Get rid of this in favor of using the count member variable.
 template <typename T>
 s64 ArrayLength(const Array<T> &a)
 {

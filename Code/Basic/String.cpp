@@ -335,3 +335,8 @@ u64 Hash(const String &s)
 	}
     return hash;
 }
+
+void ArrayAppend(Array<String> *a, const char *newElement)
+{
+	ArrayAppend<String>(a, String{newElement});
+}

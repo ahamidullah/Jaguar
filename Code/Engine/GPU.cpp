@@ -1,8 +1,59 @@
-GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(s64 blockSize, GfxMemoryType memoryType)
+// @TODO: Block pool.
+// @TODO: Free unused blocks back to the block pool.
+// @TODO: Different block sizes? Small, medium, large, etc.
+
+struct GPUContext
 {
-	GPUMemoryBlockAllocator allocator =
+	// @TODO: False sharing?
+	struct MemoryAllocators
 	{
-		.blockSize = blockSize,
+		// Due to buffer-image granularity requirements, allocations for buffers and images must be kept seperate.
+
+		GPUMemoryBlockAllocator bufferBlock;
+		GPUMemoryRingAllocator bufferRing;
+
+		GPUMemoryBlockAllocator imageBlock;
+		GPUMemoryRingAllocator imageRing;
+	} memoryAllocators[GFX_MEMORY_TYPE_COUNT];
+
+	// @TODO: False sharing?
+	GfxCommandQueue commandQueues[GFX_COMMAND_QUEUE_COUNT];
+
+	// @TODO: False sharing?
+	GfxCommandPool asyncCommandPools[GFX_COMMAND_QUEUE_COUNT];
+
+	s64 asyncCommandBufferQueueIndex = 0;
+
+	struct ThreadLocalGPUContext
+	{
+		// @TODO: False sharing?
+		GfxCommandPool frameCommandPools[GFX_MAX_FRAMES_IN_FLIGHT][GFX_COMMAND_QUEUE_COUNT];
+
+		Array<GfxCommandBuffer> queuedAsyncCommandBuffers[2][GFX_COMMAND_QUEUE_COUNT];
+		Array<GfxCommandBuffer> queuedFrameCommandBuffers[GFX_COMMAND_QUEUE_COUNT];
+	};
+	Array<ThreadLocalGPUContext> threadLocal;
+} gpuContext;
+
+enum GPUResourceType
+{
+	GPU_BUFFER_RESOURCE,
+	GPU_IMAGE_RESOURCE,
+};
+
+bool GPUMemoryTypeIsCPUVisible(GfxMemoryType memoryType)
+{
+	if (memoryType == GFX_CPU_TO_GPU_MEMORY || memoryType == GFX_GPU_TO_CPU_MEMORY)
+	{
+		return true;
+	}
+	return false;
+}
+
+GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(GfxMemoryType memoryType)
+{
+	auto allocator = GPUMemoryBlockAllocator
+	{
 		.baseBlock = NULL,
 		.activeBlock = NULL,
 		.memoryType = memoryType,
@@ -13,108 +64,99 @@ GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(s64 blockSize, GfxMemoryTy
 
 GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(s64 capacity, GfxMemoryType memoryType)
 {
-	GPUMemoryRingAllocator allocator =
+	auto allocator = GPUMemoryRingAllocator
 	{
-		.memoryType = memoryType,
 		.capacity = capacity,
-		.bottom = 0,
-		.top = 0,
+		.memoryType = memoryType,
 	};
 	if (!GfxAllocateMemory(capacity, memoryType, &allocator.memory))
 	{
-		Abort("Failed to allocate ring allocator memory");
+		Abort("Failed to allocate ring allocator memory.");
 	}
-	if (memoryType == GFX_HOST_MEMORY)
+	if (GPUMemoryTypeIsCPUVisible(memoryType))
 	{
-		allocator.mappedPointer = GfxMapMemory(allocator.memory, allocator.capacity, 0);
+		allocator.mappedMemory = GfxMapMemory(allocator.memory, allocator.capacity, 0);
 	}
 	else
 	{
-		allocator.mappedPointer = NULL;
+		allocator.mappedMemory = NULL;
 	}
 	return allocator;
 }
 
-struct ThreadLocalGPUContext
-{
-	struct GPUCommandPools
-	{
-		GfxCommandPool graphics;
-		GfxCommandPool transfer;
-		GfxCommandPool compute;
-	} commandPools[GFX_MAX_FRAMES_IN_FLIGHT];
-};
-
-struct GPUContext
-{
-	struct MemoryAllocators
-	{
-		GPUMemoryBlockAllocator deviceBlockBuffer;
-		GPUMemoryRingAllocator deviceRingBuffer;
-		GPUMemoryBlockAllocator hostBlockBuffer;
-		GPUMemoryRingAllocator hostRingBuffer;
-		GPUMemoryBlockAllocator deviceBlockImage;
-	} memoryAllocators;
-
-	struct CommandPools
-	{
-		GfxCommandPool graphics;
-		GfxCommandPool transfer;
-		GfxCommandPool compute;
-	} commandPools;
-
-	AtomicDoubleBuffer<GfxCommandBuffer, 100> transferDoubleBuffer; // @TODO: Fix size.
-
-	Array<ThreadLocalGPUContext> threadLocal;
-} gpuContext;
-
 void InitializeGPU()
 {
-	gpuContext.memoryAllocators.deviceBlockBuffer = CreateGPUMemoryBlockAllocator(Megabyte(8), GFX_DEVICE_MEMORY);
-	gpuContext.memoryAllocators.deviceRingBuffer = CreateGPUMemoryRingAllocator(Megabyte(8), GFX_DEVICE_MEMORY);
-	gpuContext.memoryAllocators.hostBlockBuffer = CreateGPUMemoryBlockAllocator(Megabyte(256), GFX_HOST_MEMORY);
-	gpuContext.memoryAllocators.hostRingBuffer = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_HOST_MEMORY);
-	gpuContext.memoryAllocators.deviceBlockImage = CreateGPUMemoryBlockAllocator(Megabyte(256), GFX_DEVICE_MEMORY);
+	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_ONLY_MEMORY);
+	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_GPU_ONLY_MEMORY);
 
-	gpuContext.commandPools.graphics = GfxCreateCommandPool(GFX_GRAPHICS_COMMAND_QUEUE);
-	gpuContext.commandPools.transfer = GfxCreateCommandPool(GFX_TRANSFER_COMMAND_QUEUE);
-	gpuContext.commandPools.compute = GfxCreateCommandPool(GFX_COMPUTE_COMMAND_QUEUE);
+	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_ONLY_MEMORY);
+	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_GPU_ONLY_MEMORY);
+
+	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_CPU_TO_GPU_MEMORY);
+	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_CPU_TO_GPU_MEMORY);
+
+	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_CPU_TO_GPU_MEMORY);
+	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_CPU_TO_GPU_MEMORY);
+
+	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_TO_CPU_MEMORY);
+	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_GPU_TO_CPU_MEMORY);
+
+	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_TO_CPU_MEMORY);
+	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_GPU_TO_CPU_MEMORY);
+
+	for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
+	{
+		gpuContext.asyncCommandPools[i] = GfxCreateCommandPool((GfxCommandQueueType)i);
+	}
 
 	ResizeArray(&gpuContext.threadLocal, GetWorkerThreadCount());
-	for (auto i = 0; i < GetWorkerThreadCount(); i++)
+	for (auto &tl : gpuContext.threadLocal)
 	{
-		for (auto j = 0; j < GFX_MAX_FRAMES_IN_FLIGHT; j++)
+		for (auto &cp : tl.frameCommandPools)
 		{
-			gpuContext.threadLocal[i].commandPools[j].graphics = GfxCreateCommandPool(GFX_GRAPHICS_COMMAND_QUEUE);
-			gpuContext.threadLocal[i].commandPools[j].transfer = GfxCreateCommandPool(GFX_TRANSFER_COMMAND_QUEUE);
-			gpuContext.threadLocal[i].commandPools[j].compute = GfxCreateCommandPool(GFX_COMPUTE_COMMAND_QUEUE);
+			for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
+			{
+				cp[i] = GfxCreateCommandPool((GfxCommandQueueType)i);
+			}
 		}
 	}
+
+	for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
+	{
+		gpuContext.commandQueues[i] = GfxGetCommandQueue((GfxCommandQueueType)i);
+	}
 }
+
+// @TODO: Get rid of binding -- doesn't fit with DX12.
+// @TODO: Mapping?????
+// @TODO: Buffer image granularity???????
 
 GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *allocator, GfxMemoryRequirements memoryRequirements)
 {
 	LockMutex(&allocator->mutex);
-	Assert(memoryRequirements.size < allocator->blockSize);
+	Defer(UnlockMutex(&allocator->mutex));
+
+	Assert(memoryRequirements.size < GPU_MEMORY_BLOCK_SIZE);
+
 	// @TODO: Try to allocate out of the freed allocations.
-	if (!allocator->activeBlock || allocator->activeBlock->frontier + memoryRequirements.size > allocator->blockSize)
+	if (!allocator->activeBlock || allocator->activeBlock->frontier + memoryRequirements.size > GPU_MEMORY_BLOCK_SIZE)
 	{
 		// Need to allocate a new block.
 		auto newBlock = (GPUMemoryBlock *)malloc(sizeof(GPUMemoryBlock)); // @TODO
-		if (!GfxAllocateMemory(allocator->blockSize, allocator->memoryType, &newBlock->memory))
+		if (!GfxAllocateMemory(GPU_MEMORY_BLOCK_SIZE, allocator->memoryType, &newBlock->memory))
 		{
 			free(newBlock); // @TODO
 			return NULL;
 		}
 		newBlock->frontier = 0;
 		newBlock->allocationCount = 0;
-		if (allocator->memoryType == GFX_HOST_MEMORY)
+		if (GPUMemoryTypeIsCPUVisible(allocator->memoryType))
 		{
-			newBlock->mappedPointer = GfxMapMemory(newBlock->memory, allocator->blockSize, 0);
+			newBlock->mappedMemory = GfxMapMemory(newBlock->memory, GPU_MEMORY_BLOCK_SIZE, 0);
 		}
 		else
 		{
-			newBlock->mappedPointer = NULL;
+			newBlock->mappedMemory = NULL;
 		}
 		newBlock->next = NULL;
 		if (allocator->baseBlock)
@@ -128,183 +170,222 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 			allocator->activeBlock = allocator->baseBlock;
 		}
 	}
+
 	// Allocate out of the active block's frontier.
-	GPUMemoryAllocation *newAllocation = &allocator->activeBlock->allocations[allocator->activeBlock->allocationCount++];
+	auto newAllocation = &allocator->activeBlock->allocations[allocator->activeBlock->allocationCount++];
 	auto allocationStartOffset = AlignS64(allocator->activeBlock->frontier, memoryRequirements.alignment);
 	*newAllocation =
 	{
 		.memory = allocator->activeBlock->memory,
 		.offset = allocationStartOffset,
 	};
-	if (allocator->memoryType == GFX_HOST_MEMORY)
+	if (GPUMemoryTypeIsCPUVisible(allocator->memoryType))
 	{
-		newAllocation->mappedPointer = (char *)allocator->activeBlock->mappedPointer + allocationStartOffset;
-		//ConsolePrint("MAPPED %x %u\n", newAllocation->mappedPointer, allocationStartOffset);
-	} else {
-		newAllocation->mappedPointer = NULL;
+		newAllocation->mappedMemory = (char *)allocator->activeBlock->mappedMemory + allocationStartOffset;
+	} else
+	{
+		newAllocation->mappedMemory = NULL;
 	}
 	Assert(allocator->activeBlock->allocationCount < GPU_MAX_MEMORY_ALLOCATIONS_PER_BLOCK);
 	allocator->activeBlock->frontier = allocationStartOffset + memoryRequirements.size;
-	Assert(allocator->activeBlock->frontier <= allocator->blockSize);
-	UnlockMutex(&allocator->mutex);
+	Assert(allocator->activeBlock->frontier <= GPU_MEMORY_BLOCK_SIZE);
 	return newAllocation;
 }
 
 GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator, GfxMemoryRequirements memoryRequirements, s64 frameIndex)
 {
-	auto newTop = 0, oldTop = 0, allocationStart = 0, allocationSize = 0;
+	auto newEnd = 0, oldEnd = 0, allocationStart = 0, allocationSize = 0;
 	do
 	{
-		oldTop = allocator->top;
-		auto alignmentOffset = AlignmentOffsetS64(oldTop, memoryRequirements.alignment);
+		oldEnd = allocator->end;
+		auto alignmentOffset = AlignmentOffsetS64(oldEnd, memoryRequirements.alignment);
 		allocationSize = alignmentOffset + memoryRequirements.size;
 		if (allocator->size + allocationSize > allocator->capacity)
 		{
 			// @TODO: Fallback to block allocators.
 			Abort("Ring buffer ran out of space.\n");
 		}
-		allocationStart = (oldTop + alignmentOffset) % allocator->capacity;
-		newTop = (allocationStart + memoryRequirements.size) % allocator->capacity;
-		//ConsolePrint("allocator->top: %d, oldTop: %d, newTop: %d\n", allocator->top, oldTop, newTop);
-	} while (AtomicCompareAndSwap32((s32 *)&allocator->top, oldTop, newTop) != oldTop);
-	AtomicFetchAndAdd32((s32 *)&allocator->size, allocationSize);
-	AtomicFetchAndAdd32((s32 *)&allocator->frameSizes[frameIndex], allocationSize);
+		allocationStart = (oldEnd + alignmentOffset) % allocator->capacity;
+		newEnd = (allocationStart + memoryRequirements.size) % allocator->capacity;
+	} while (AtomicCompareAndSwap(&allocator->end, oldEnd, newEnd) != oldEnd);
 
-	auto allocationIndex = AtomicFetchAndAdd32((s32 *)&allocator->allocationCounts[frameIndex], 1);
+	AtomicFetchAndAdd(&allocator->size, allocationSize);
+	AtomicFetchAndAdd(&allocator->frameSizes[frameIndex], allocationSize);
+
+	auto allocationIndex = AtomicFetchAndAdd(&allocator->allocationCounts[frameIndex], 1);
 	auto allocation = &allocator->allocations[frameIndex][allocationIndex];
 	allocation->memory = allocator->memory;
 	allocation->offset = allocationStart;
-	if (allocator->memoryType == GFX_HOST_MEMORY)
+	if (GPUMemoryTypeIsCPUVisible(allocator->memoryType))
 	{
-		allocation->mappedPointer = (char *)allocator->mappedPointer + allocationStart;
+		allocation->mappedMemory = (char *)allocator->mappedMemory + allocationStart;
 	}
 	return allocation;
 }
 
-void ClearGPUMemoryForFrameIndex(s64 frameIndex)
+GPUMemoryAllocation *AllocateGPUMemory(GPUResourceType resourceType, GfxMemoryRequirements memoryRequirements, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory)
 {
-	auto clear = [frameIndex](GPUMemoryRingAllocator *allocator)
-	{
-		allocator->bottom = (allocator->bottom + allocator->frameSizes[frameIndex]) % allocator->capacity;
-		allocator->frameSizes[frameIndex] = 0;
-		allocator->allocationCounts[frameIndex] = 0;
-		allocator->size = 0;
-	};
-	clear(&gpuContext.memoryAllocators.hostRingBuffer);
-	clear(&gpuContext.memoryAllocators.deviceRingBuffer);
-}
-
-GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedPointer = NULL)
-{
-	auto buffer = GfxCreateBuffer(size, usage);
-	auto memoryRequirements = GfxGetBufferMemoryRequirements(buffer);
-	GPUMemoryAllocation *allocation;
+	auto allocation = (GPUMemoryAllocation *){};
 	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		if (memoryType == GFX_HOST_MEMORY)
+		if (resourceType == GPU_BUFFER_RESOURCE)
 		{
-			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators.hostRingBuffer, memoryRequirements, GetFrameIndex());
+			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators[memoryType].bufferRing, memoryRequirements, GetFrameIndex());
 		}
 		else
 		{
-			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators.deviceRingBuffer, memoryRequirements, GetFrameIndex());
+			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators[memoryType].imageRing, memoryRequirements, GetFrameIndex());
 		}
 	}
 	else
 	{
-		if (memoryType == GFX_HOST_MEMORY)
+		if (resourceType == GPU_BUFFER_RESOURCE)
 		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.hostBlockBuffer, memoryRequirements); // @TODO: Store these allocations so the resource can be freed.
+			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators[memoryType].bufferBlock, memoryRequirements);
 		}
 		else
 		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockBuffer, memoryRequirements); // @TODO: Store these allocations so the resource can be freed.
+			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators[memoryType].imageBlock, memoryRequirements);
 		}
 	}
 	Assert(allocation);
-	if (mappedPointer)
+	if (mappedMemory)
 	{
-		Assert(memoryType == GFX_HOST_MEMORY);
-		*mappedPointer = allocation->mappedPointer;
+		Assert(GPUMemoryTypeIsCPUVisible(memoryType));
+		*mappedMemory = allocation->mappedMemory;
 	}
+	return allocation;
+}
+
+GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL)
+{
+	auto buffer = GfxCreateBuffer(size, usage);
+	auto memoryRequirements = GfxGetBufferMemoryRequirements(buffer);
+	auto allocation = AllocateGPUMemory(GPU_BUFFER_RESOURCE, memoryRequirements, memoryType, lifetime, mappedMemory);
 	GfxBindBufferMemory(buffer, allocation->memory, allocation->offset);
 	return buffer;
 }
 
-GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount)
+GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL)
 {
 	auto image = GfxCreateImage(width, height, format, initialLayout, usage, sampleCount);
 	auto memoryRequirements = GfxGetImageMemoryRequirements(image);
-	auto allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators.deviceBlockImage, memoryRequirements); // @TODO: Store these allocations so the resource can be freed.
+	auto allocation = AllocateGPUMemory(GPU_IMAGE_RESOURCE, memoryRequirements, memoryType, lifetime, mappedMemory);
 	Assert(allocation);
 	GfxBindImageMemory(image, allocation->memory, allocation->offset);
-	//Render_API_Create_Image_View(image, format, usage)
 	return image;
 }
 
-GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queue, GPUResourceLifetime lifetime)
+GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResourceLifetime lifetime)
 {
-	switch (queue)
+	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-	case GFX_GRAPHICS_COMMAND_QUEUE:
+		return GfxCreateCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].frameCommandPools[GetFrameIndex()][queueType]);
+	}
+	return GfxCreateCommandBuffer(gpuContext.asyncCommandPools[queueType]);
+}
+
+void QueueGPUCommandBuffer(GfxCommandBuffer commandBuffer, GfxCommandQueueType queueType, GPUResourceLifetime lifetime, bool *signalOnCompletion) // @TODO: Store the queue and lifetime.
+{
+	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
+		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[queueType], commandBuffer);
+		return;
+	}
+	ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferQueueIndex][queueType], commandBuffer);
+	return;
+}
+
+GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> waitSemaphores, Array<GfxPipelineStageFlags> waitStages, GfxFence fence)
+{
+	auto frameCommandsSemaphore = GfxSemaphore{}; // @TODO: We can pre-allocate these semaphores. GFX_MAX_FRAMES_IN_FLIGHT per queue.
+	{
+		auto commandBufferCount = 0;
+		for (auto &tl : gpuContext.threadLocal)
 		{
-			return GfxCreateCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].commandPools[GetFrameIndex()].graphics);
+			for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
+			{
+				commandBufferCount += tl.queuedFrameCommandBuffers[i].count;
+			}
 		}
-		else
+		Assert(commandBufferCount != 0);
+		auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
+		auto writeIndex = 0;
+		for (auto &tl : gpuContext.threadLocal)
 		{
-			// @TODO
-			Abort("Creating persistent graphics command buffers not implemented yet...\n");
+			for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
+			{
+				CopyMemory(tl.queuedFrameCommandBuffers[i].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[i].count * sizeof(GfxCommandBuffer));
+				writeIndex += tl.queuedFrameCommandBuffers[i].count;
+				ResizeArray(&tl.queuedFrameCommandBuffers[i], 0);
+				// @TODO: Change capacity to some default value?
+			}
 		}
-	} break;
-	case GFX_TRANSFER_COMMAND_QUEUE:
-	{
-		if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
+
+		frameCommandsSemaphore = GfxCreateSemaphore();
+		auto submitInfo = GfxSubmitInfo
 		{
-			return GfxCreateCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].commandPools[GetFrameIndex()].transfer);
-		}
-		else
-		{
-			return GfxCreateCommandBuffer(gpuContext.commandPools.transfer);
-		}
-	} break;
-	case GFX_COMPUTE_COMMAND_QUEUE:
-	{
-		// @TODO
-		Abort("Creating compute command buffers not supported yet...\n");
-	} break;
-	default:
-	{
-		Abort("Invalid queue type: %d\n", queue);
-	} break;
+			.commandBuffers = commandBuffers,
+			.waitStages = waitStages,
+			.waitSemaphores = waitSemaphores,
+			.signalSemaphores = CreateArray(1, &frameCommandsSemaphore),
+		};
+		GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, fence);
 	}
 
-	InvalidCodePath();
-	return GfxCommandBuffer{};
+#if 0
+	// Async
+	{
+		if (gpuContext.asyncCommandBufferQueueIndex == 0)
+		{
+			gpuContext.asyncCommandBufferQueueIndex = 1;
+		}
+		else
+		{
+			gpuContext.asyncCommandBufferQueueIndex = 0;
+		}
+
+		auto semaphore = GfxCreateSemaphore();
+		GfxSubmitInfo submitInfo =
+		{
+			.commandBuffers = CreateArray(gpuContext.transferDoubleBuffer.readBufferElementCount, gpuContext.transferDoubleBuffer.readBuffer->data),
+			.signalSemaphores = CreateArray(1, &semaphore),
+		};
+		GfxSubmitCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, submitInfo, NULL);
+	}
+#endif
+
+	return frameCommandsSemaphore;
+}
+
+void ClearGPUMemoryForFrameIndex(s64 frameIndex)
+{
+	auto Clear = [frameIndex](GPUMemoryRingAllocator *allocator)
+	{
+		allocator->start = (allocator->start + allocator->frameSizes[frameIndex]) % allocator->capacity;
+		allocator->frameSizes[frameIndex] = 0;
+		allocator->allocationCounts[frameIndex] = 0;
+		allocator->size = 0;
+	};
+	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+	{
+		Clear(&gpuContext.memoryAllocators[i].bufferRing);
+		Clear(&gpuContext.memoryAllocators[i].imageRing);
+	}
 }
 
 void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex)
 {
-	for (auto i = 0; i < GetWorkerThreadCount(); i++)
+	for (auto &tl : gpuContext.threadLocal)
 	{
-		GfxResetCommandPool(gpuContext.threadLocal[i].commandPools[frameIndex].graphics);
-		GfxResetCommandPool(gpuContext.threadLocal[i].commandPools[frameIndex].transfer);
-		GfxResetCommandPool(gpuContext.threadLocal[i].commandPools[frameIndex].compute);
+		GfxResetCommandPool(tl.frameCommandPools[frameIndex][GFX_GRAPHICS_COMMAND_QUEUE]);
+		GfxResetCommandPool(tl.frameCommandPools[frameIndex][GFX_TRANSFER_COMMAND_QUEUE]);
+		GfxResetCommandPool(tl.frameCommandPools[frameIndex][GFX_COMPUTE_COMMAND_QUEUE]);
 	}
 }
 
-void QueueGPUTransfer(GfxCommandBuffer commandBuffer)
-{
-	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
-}
-
-void QueueGPUAsyncTransfer(GfxCommandBuffer commandBuffer)
-{
-	WriteToAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer, commandBuffer);
-}
-
-GfxSemaphore SubmitGPUTransferCommands()
+#if 0
+GfxSemaphore SubmitQueuedGPUTransferCommands()
 {
 	SwitchAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer);
 
@@ -317,3 +398,4 @@ GfxSemaphore SubmitGPUTransferCommands()
 	GfxSubmitCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, submitInfo, NULL);
 	return semaphore;
 }
+#endif

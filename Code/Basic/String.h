@@ -61,3 +61,5 @@ char *begin(String *s);
 char *end(String *s);
 
 u64 Hash(const String &s);
+
+void ArrayAppend(Array<String> *a, const char *newElement);

@@ -26,10 +26,10 @@ constexpr auto MAX_JOBS_PER_QUEUE = 100;
 struct Job
 {
 	JobProcedure procedure;
-	void        *parameter;
-	JobPriority  priority;
-	JobCounter  *waitingCounter;
-	bool         finished;
+	void *parameter;
+	JobPriority priority;
+	JobCounter *waitingCounter;
+	bool finished;
 };
 
 struct JobFiberParameter
@@ -39,9 +39,9 @@ struct JobFiberParameter
 
 struct JobFiber
 {
-	Fiber             platformFiber;
+	Fiber platformFiber;
 	JobFiberParameter parameter;
-	struct JobFiber  *next;
+	struct JobFiber *next;
 };
 
 struct WorkerThreadParameter
@@ -51,7 +51,7 @@ struct WorkerThreadParameter
 
 struct WorkerThread
 {
-	ThreadHandle          platformThread;
+	ThreadHandle platformThread;
 	WorkerThreadParameter parameter;
 };
 
@@ -119,13 +119,13 @@ void *WorkerThreadProcedure(void *parameter)
 					continue;
 				}
 				// Check if the completion of this job caused the associated job counter to reach zero. If so, mark the job waiting on the counter as resumable.
-				auto unfinishedJobCount = AtomicAdd64(&scheduledJob->waitingCounter->unfinishedJobCount, -1);
+				auto unfinishedJobCount = AtomicAdd(&scheduledJob->waitingCounter->unfinishedJobCount, -1);
 				if (unfinishedJobCount > 0)
 				{
 					continue;
 				}
 				// Check to see if the parent job started waiting on the counter yet. If it hasn't then the job counter's waitingJobFiber will be NULL.
-				auto waitingJobFiber = (JobFiber *)AtomicFetchAndSetPointer((void *volatile *)&scheduledJob->waitingCounter->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
+				auto waitingJobFiber = (JobFiber *)AtomicFetchAndSet((void *volatile *)&scheduledJob->waitingCounter->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
 				if (!waitingJobFiber)
 				{
 					continue;
@@ -135,7 +135,7 @@ void *WorkerThreadProcedure(void *parameter)
 			}
 			else
 			{
-				if (AtomicCompareAndSwapPointer((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
+				if (AtomicCompareAndSwap((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
 				{
 					// The waitingJobFiber was not NULL, hence all dependency jobs already finished. This job can resume immediately.
 					WriteToAtomicRingBuffer(&resumableJobQueues[scheduledJob->priority], activeJobFiber);

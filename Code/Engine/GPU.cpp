@@ -22,7 +22,7 @@ struct GPUContext
 	// @TODO: False sharing?
 	GfxCommandPool asyncCommandPools[GFX_COMMAND_QUEUE_COUNT];
 
-	s64 asyncCommandBufferQueueIndex = 0;
+	volatile s64 asyncCommandBufferArrayIndex = 0;
 
 	struct ThreadLocalGPUContext
 	{
@@ -292,70 +292,83 @@ void QueueGPUCommandBuffer(GfxCommandBuffer commandBuffer, GfxCommandQueueType q
 		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[queueType], commandBuffer);
 		return;
 	}
-	ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferQueueIndex][queueType], commandBuffer);
-	return;
+	ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferArrayIndex][queueType], commandBuffer);
+}
+
+void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
+{
+	auto arrayIndex = gpuContext.asyncCommandBufferArrayIndex;
+
+	if (gpuContext.asyncCommandBufferArrayIndex == 0)
+	{
+		gpuContext.asyncCommandBufferArrayIndex = 1;
+	}
+	else
+	{
+		gpuContext.asyncCommandBufferArrayIndex = 0;
+	}
+
+	auto commandBufferCount = 0;
+	for (auto &tl : gpuContext.threadLocal)
+	{
+		commandBufferCount += tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count;
+	}
+	if (commandBufferCount == 0)
+	{
+		return;
+	}
+	auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
+	auto writeIndex = 0;
+	for (auto &tl : gpuContext.threadLocal)
+	{
+		CopyMemory(tl.queuedAsyncCommandBuffers[arrayIndex][queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count * sizeof(GfxCommandBuffer));
+		writeIndex += tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count;
+		ResizeArray(&tl.queuedAsyncCommandBuffers[arrayIndex][queueType], 0);
+		// @TODO: Change capacity to some default value?
+	}
+
+	auto submitInfo = GfxSubmitInfo
+	{
+		.commandBuffers = commandBuffers,
+	};
+	GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, NULL);
+}
+
+GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> waitSemaphores, Array<GfxPipelineStageFlags> waitStages, GfxFence fence)
+{
+	auto commandBufferCount = 0;
+	for (auto &tl : gpuContext.threadLocal)
+	{
+		commandBufferCount += tl.queuedFrameCommandBuffers[queueType].count;
+	}
+	Assert(commandBufferCount != 0);
+	auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
+	auto writeIndex = 0;
+	for (auto &tl : gpuContext.threadLocal)
+	{
+		CopyMemory(tl.queuedFrameCommandBuffers[queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[queueType].count * sizeof(GfxCommandBuffer));
+		writeIndex += tl.queuedFrameCommandBuffers[queueType].count;
+		ResizeArray(&tl.queuedFrameCommandBuffers[queueType], 0);
+		// @TODO: Change capacity to some default value?
+	}
+
+	auto result = GfxCreateSemaphore();
+	auto submitInfo = GfxSubmitInfo
+	{
+		.commandBuffers = commandBuffers,
+		.waitStages = waitStages,
+		.waitSemaphores = waitSemaphores,
+		.signalSemaphores = CreateArray(1, &result),
+	};
+	GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, fence);
+	return result;
 }
 
 GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> waitSemaphores, Array<GfxPipelineStageFlags> waitStages, GfxFence fence)
 {
-	auto frameCommandsSemaphore = GfxSemaphore{}; // @TODO: We can pre-allocate these semaphores. GFX_MAX_FRAMES_IN_FLIGHT per queue.
-	{
-		auto commandBufferCount = 0;
-		for (auto &tl : gpuContext.threadLocal)
-		{
-			for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
-			{
-				commandBufferCount += tl.queuedFrameCommandBuffers[i].count;
-			}
-		}
-		Assert(commandBufferCount != 0);
-		auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
-		auto writeIndex = 0;
-		for (auto &tl : gpuContext.threadLocal)
-		{
-			for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
-			{
-				CopyMemory(tl.queuedFrameCommandBuffers[i].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[i].count * sizeof(GfxCommandBuffer));
-				writeIndex += tl.queuedFrameCommandBuffers[i].count;
-				ResizeArray(&tl.queuedFrameCommandBuffers[i], 0);
-				// @TODO: Change capacity to some default value?
-			}
-		}
+	SubmitQueuedAsyncGPUCommmandBuffers(queueType);
 
-		frameCommandsSemaphore = GfxCreateSemaphore();
-		auto submitInfo = GfxSubmitInfo
-		{
-			.commandBuffers = commandBuffers,
-			.waitStages = waitStages,
-			.waitSemaphores = waitSemaphores,
-			.signalSemaphores = CreateArray(1, &frameCommandsSemaphore),
-		};
-		GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, fence);
-	}
-
-#if 0
-	// Async
-	{
-		if (gpuContext.asyncCommandBufferQueueIndex == 0)
-		{
-			gpuContext.asyncCommandBufferQueueIndex = 1;
-		}
-		else
-		{
-			gpuContext.asyncCommandBufferQueueIndex = 0;
-		}
-
-		auto semaphore = GfxCreateSemaphore();
-		GfxSubmitInfo submitInfo =
-		{
-			.commandBuffers = CreateArray(gpuContext.transferDoubleBuffer.readBufferElementCount, gpuContext.transferDoubleBuffer.readBuffer->data),
-			.signalSemaphores = CreateArray(1, &semaphore),
-		};
-		GfxSubmitCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, submitInfo, NULL);
-	}
-#endif
-
-	return frameCommandsSemaphore;
+	return SubmitQueuedFrameGPUCommandBuffers(queueType, waitSemaphores, waitStages, fence);
 }
 
 void ClearGPUMemoryForFrameIndex(s64 frameIndex)

@@ -287,6 +287,7 @@ GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResour
 
 void QueueGPUCommandBuffer(GfxCommandBuffer commandBuffer, GfxCommandQueueType queueType, GPUResourceLifetime lifetime, bool *signalOnCompletion) // @TODO: Store the queue and lifetime.
 {
+	GfxEndCommandBuffer(commandBuffer);
 	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
 		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[queueType], commandBuffer);
@@ -364,11 +365,11 @@ GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, A
 	return result;
 }
 
-GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> waitSemaphores, Array<GfxPipelineStageFlags> waitStages, GfxFence fence)
+GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> frameWaitSemaphores, Array<GfxPipelineStageFlags> frameWaitStages, GfxFence frameFence)
 {
 	SubmitQueuedAsyncGPUCommmandBuffers(queueType);
 
-	return SubmitQueuedFrameGPUCommandBuffers(queueType, waitSemaphores, waitStages, fence);
+	return SubmitQueuedFrameGPUCommandBuffers(queueType, frameWaitSemaphores, frameWaitStages, frameFence);
 }
 
 void ClearGPUMemoryForFrameIndex(s64 frameIndex)

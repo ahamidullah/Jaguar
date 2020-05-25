@@ -478,7 +478,6 @@ void InitializeRenderer(void *jobParameterPointer)
 		CopyMemory(&m, staging_memory, sizeof(M4));
 		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
 		GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), staging_buffer, renderGlobals.descriptorSetBuffers[i][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
-		GfxEndCommandBuffer(commandBuffer);
 		GfxSubmitCommandBuffers(1, &commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, matrix_fence);
 		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[i][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[i][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 
@@ -596,7 +595,6 @@ void Render()
 			GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 		}
-		GfxEndCommandBuffer(commandBuffer);
 
 		QueueGPUCommandBuffer(commandBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME, NULL);
 
@@ -636,7 +634,6 @@ void Render()
 					}
 				}
 				GfxRecordEndRenderPassCommand(commandBuffer);
-				GfxEndCommandBuffer(commandBuffer);
 			},
 		};
 		AddRenderGraphPass(&renderGraph, renderPass);

@@ -1,7 +1,3 @@
-#include <execinfo.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
 #define MAP_ANONYMOUS 0x20
 
 void *AllocatePlatformMemory(s64 size)

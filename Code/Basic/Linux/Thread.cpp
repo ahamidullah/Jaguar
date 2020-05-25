@@ -1,5 +1,3 @@
-#include <sys/syscall.h>
-
 s64 GetProcessorCount()
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <semaphore.h>
-
 typedef sem_t Semaphore;
 
 Semaphore CreateSemaphore(s64 initialValue);

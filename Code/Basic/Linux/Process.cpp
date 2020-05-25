@@ -1,6 +1,3 @@
-#include <unistd.h>
-#include <signal.h>
-
 void ExitProcess(ProcessExitCode exitCode)
 {
 	_exit((s32)exitCode);

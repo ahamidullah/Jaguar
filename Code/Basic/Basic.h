@@ -1,8 +1,6 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
-#include <stdarg.h>
+#include "PCH.h"
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -31,15 +29,15 @@ typedef double f64;
 #define InvalidCodePath() Abort("%s: %s: line %d: invalid code path\n", __FILE__, __func__, __LINE__);
 
 #if defined(DEVELOPMENT)
-	constexpr bool development = true;
+	constexpr auto development = true;
 #else
-	constexpr bool development = false;
+	constexpr auto development = false;
 #endif
 
 #if defined(DEBUG)
-	constexpr bool debug = true;
+	constexpr auto debug = true;
 #else
-	constexpr bool debug = false;
+	constexpr auto debug = false;
 #endif
 
 template <typename F>

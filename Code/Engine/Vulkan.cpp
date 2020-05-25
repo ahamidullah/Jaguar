@@ -1299,14 +1299,16 @@ GfxImageView GfxCreateImageView(GfxImage image, GfxImageViewType viewType, GfxFo
 
 void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout)
 {
-	VkImageMemoryBarrier barrier = {
+	auto barrier = VkImageMemoryBarrier
+	{
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 		.oldLayout = (VkImageLayout)oldLayout,
 		.newLayout = (VkImageLayout)newLayout,
 		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.image = image,
-		.subresourceRange = {
+		.subresourceRange =
+		{
 			.baseMipLevel = 0,
 			.levelCount = 1,
 			.baseArrayLayer = 0,
@@ -1325,8 +1327,8 @@ void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, Gf
 	{
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
-	VkPipelineStageFlags sourceStage;
-	VkPipelineStageFlags destinationStage;
+	auto sourceStage = VkPipelineStageFlags{};
+	auto destinationStage = VkPipelineStageFlags{};
 	if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{
 		barrier.srcAccessMask = 0;
@@ -1350,7 +1352,7 @@ void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, Gf
 	}
 	else
 	{
-		Abort("unsupported Vulkan image layout transition");
+		Abort("Unsupported Vulkan image layout transition.");
 	}
 	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
 }
@@ -1419,6 +1421,7 @@ void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, A
 	VK_CHECK(vkQueuePresentKHR(vulkanGlobals.presentQueue, &presentInfo));
 }
 
+#if 0
 void _Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, VkFormat format) {
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1464,6 +1467,7 @@ void _Vulkan_Transition_Image_Layout(VkCommandBuffer command_buffer, VkImage ima
 	}
 	vkCmdPipelineBarrier(command_buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
 }
+#endif
 
 GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass()
 {

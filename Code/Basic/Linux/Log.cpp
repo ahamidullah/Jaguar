@@ -1,6 +1,3 @@
-#include <errno.h>
-#include <string.h>
-
 void WriteToConsole(const String &writeString)
 {
 	WriteToFile(1, StringLength(writeString), &writeString[0]);

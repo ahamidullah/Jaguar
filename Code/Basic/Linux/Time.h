@@ -1,7 +1,5 @@
 #pragma once
 
-#include <time.h>
-
 struct PlatformTime
 {
 	timespec ts;

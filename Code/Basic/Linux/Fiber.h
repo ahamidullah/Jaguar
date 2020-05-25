@@ -1,8 +1,5 @@
 #pragma once
 
-#include <ucontext.h>
-#include <setjmp.h>
-
 struct Fiber
 {
 	ucontext_t context;

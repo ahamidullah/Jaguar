@@ -1,9 +1,6 @@
 #pragma once
 
-#include <dirent.h>
-#include <fcntl.h>
-
-#include "Basic/String.h"
+#include "../String.h"
 
 typedef s32 FileHandle;
 typedef off_t FileOffset;

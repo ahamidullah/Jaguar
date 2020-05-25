@@ -1,7 +1,5 @@
 #pragma once
 
-#include <pthread.h>
-
 #define THREAD_LOCAL __thread
 
 typedef pthread_t ThreadHandle;

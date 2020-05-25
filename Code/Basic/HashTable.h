@@ -1,5 +1,5 @@
-constexpr auto INITIAL_HASH_MAP_SIZE = 256;
-constexpr auto VACANT_HASH_KEY_SENTINEL = -1;
+const auto INITIAL_HASH_MAP_SIZE = 256;
+const auto VACANT_HASH_KEY_SENTINEL = -1;
 
 // @TODO: GROW THE HASH TABLE.
 
@@ -24,62 +24,65 @@ struct HashTable
 };
 
 template <typename K, typename V>
-void HashTableInsert(HashTable<K, V> *table, const K &key, const V &value)
+void InsertIntoHashTable(HashTable<K, V> *table, const K &key, const V &value)
 {
-	Assert(ArrayLength(table->buckets));
-	auto hash = Hash(key);
-	auto index = hash % ArrayLength(table->buckets);
-	for (auto i = (index + 1) % ArrayLength(table->buckets); i != index; i = (i + 1) % ArrayLength(table->buckets))
+	Assert(table->buckets.count > 0);
+
+	auto keyHash = Hash(key);
+	auto startIndex = keyHash % table->buckets.count;
+	auto index = startIndex;
+	do
 	{
-		if (table->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL || table->buckets[index].keyHash == hash)
+		if (table->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL || table->buckets[index].keyHash == keyHash)
 		{
-			table->buckets[index].keyHash = hash;
+			table->buckets[index].keyHash = keyHash;
 			table->buckets[index].value = value;
 			return;
 		}
-	}
-	// @TODO: Grow the table? Or the table should already have grown and we never get to this case.
+		index = (index + 1) % table->buckets.count;
+	} while(index != startIndex);
+
+	// @TODO: Grow the table? Or the table grew already and we should never get to this case.
 	Abort("Ran out of room in the hash table...");
 }
 
 template <typename V>
-void HashTableInsert(HashTable<String, V> *table, const String &key, const V &value)
+void InsertIntoHashTable(HashTable<String, V> *table, const String &key, const V &value)
 {
-	HashTableInsert<String, V>(table, key, value);
+	InsertIntoHashTable<String, V>(table, key, value);
 }
 
 template <typename K, typename V>
-bool HashTableInsertIfNonExistent(HashTable<K, V> *table, const K &key, const V &value)
+bool InsertIntoHashTableIfNonExistent(HashTable<K, V> *table, const K &key, const V &value)
 {
-	auto hash = Hash(key);
-	auto index = hash % ArrayLength(table->buckets);
-	for (auto i = index + 1 % ArrayLength(table->buckets); i != index; i = index + 1 % ArrayLength(table->buckets))
+	Assert(table->buckets.count > 0);
+
+	auto keyHash = Hash(key);
+	auto startIndex = keyHash % table->buckets.count;
+	auto index = startIndex;
+	do
 	{
 		if (table->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL)
 		{
-			table->buckets[index].keyHash = hash;
+			table->buckets[index].keyHash = keyHash;
 			table->buckets[index].value = value;
 			return true;
 		}
-		else if (table->buckets[index].keyHash == hash)
-		{
-			return false;
-		}
-	}
-	// @TODO: Grow the table? Or the table should already have grown and we never get to this case.
-	Abort("Ran out of room in the hash table...");
+		index = (index + 1) % table->buckets.count;
+	} while(index != startIndex);
+	return false;
 }
 
 template <typename K, typename V>
-V *HashTableLookup(HashTable<K, V> *table, const K &key)
+V *LookupInHashTable(HashTable<K, V> *table, const K &key)
 {
-	auto tableSize = ArrayLength(table->buckets);
-	if (tableSize == 0)
+	auto bucketCount = table->buckets.count;
+	if (bucketCount == 0)
 	{
 		return NULL;
 	}
-	auto hash = Hash(key);
-	auto index = hash % tableSize;
+	auto keyHash = Hash(key);
+	auto index = keyHash % bucketCount;
 	auto lastIndex = index;
 	do
 	{
@@ -87,17 +90,17 @@ V *HashTableLookup(HashTable<K, V> *table, const K &key)
 		{
 			return NULL;
 		}
-		else if (table->buckets[index].keyHash == hash)
+		else if (table->buckets[index].keyHash == keyHash)
 		{
 			return &table->buckets[index].value;
 		}
-		index = (index + 1) % tableSize;
+		index = (index + 1) % bucketCount;
 	} while (index != lastIndex);
 	return NULL;
 }
 
 template <typename K, typename V>
-void HashTableRemove(HashTable<K, V> *table, const K &key)
+void RemoveFromHashTable(HashTable<K, V> *table, const K &key)
 {
 	// @TODO
 }

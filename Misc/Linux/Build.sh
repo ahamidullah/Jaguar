@@ -3,24 +3,6 @@
 set -e
 
 BUILD_DIRECTORY=$PROJECT_DIRECTORY/Build
-if [ ! -e $BUILD_DIRECTORY ]; then
-	mkdir $BUILD_DIRECTORY
-fi
-if [ ! -e $BUILD_DIRECTORY/Linux ]; then
-	mkdir $BUILD_DIRECTORY/Linux
-fi
-if [ ! -e $BUILD_DIRECTORY/Linux/Binary ]; then
-	mkdir $BUILD_DIRECTORY/Linux/Binary
-fi
-if [ ! -e $BUILD_DIRECTORY/Shader ]; then
-	mkdir $BUILD_DIRECTORY/Shader
-fi
-if [ ! -e $BUILD_DIRECTORY/Shader/Binary ]; then
-	mkdir $BUILD_DIRECTORY/Shader/Binary
-fi
-if [ ! -e $BUILD_DIRECTORY/Shader/Code ]; then
-	mkdir $BUILD_DIRECTORY/Shader/Code
-fi
 
 CODE_DIRECTORY=$PROJECT_DIRECTORY/Code
 
@@ -37,6 +19,16 @@ else
 fi
 
 if [ ! -f $BUILD_DIRECTORY/Builder ] || [ "$1" = "Builder" ]; then
+	if [ ! -e $BUILD_DIRECTORY ]; then
+		mkdir $BUILD_DIRECTORY
+	fi
+	if [ ! -e $BUILD_DIRECTORY/Linux ]; then
+		mkdir $BUILD_DIRECTORY/Linux
+	fi
+	if [ ! -e $BUILD_DIRECTORY/Linux/Binary ]; then
+		mkdir $BUILD_DIRECTORY/Linux/Binary
+	fi
+
 	echo -e "Building Builder...\n"
 
 	BASIC_BUILD_COMMAND="g++ -c $BUILDER_COMPILER_FLAGS $CODE_DIRECTORY/Basic/Basic.cpp -o $BUILD_DIRECTORY/libBasic.o"

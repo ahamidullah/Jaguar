@@ -43,20 +43,14 @@ bool CStringsEqual(const char *a, const char *b)
 
 String CreateString(s64 length)
 {
-	String result =
-	{
-		.data = CreateArray<char>(length + 1),
-	};
+	auto result = String{CreateArray<char>(length + 1)};
 	result.data[length] = '\0';
 	return result;
 }
 
 String CreateString(s64 length, s64 capacity)
 {
-	String result =
-	{
-		.data = CreateArray<char>(length + 1, capacity + 1),
-	};
+	auto result = String{CreateArray<char>(length + 1, capacity + 1)};
 	result.data[length] = '\0';
 	return result;
 }
@@ -64,10 +58,7 @@ String CreateString(s64 length, s64 capacity)
 String CreateString(const String &copy)
 {
 	auto length = StringLength(copy);
-	String result =
-	{
-		.data = CreateArray<char>(length + 1),
-	};
+	auto result = String{CreateArray<char>(length + 1)};
 	CopyMemory(&copy[0], &result[0], length);
 	result[length] = '\0';
 	return result;

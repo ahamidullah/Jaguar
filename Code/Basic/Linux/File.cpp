@@ -1,5 +1,3 @@
-#include <sys/stat.h>
-
 FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error)
 {
 	auto file = open(&path[0], flags, 0666);

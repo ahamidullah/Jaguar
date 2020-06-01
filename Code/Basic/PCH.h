@@ -1,6 +1,11 @@
+#pragma once
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <string.h> // memcpy @TODO @DELETEME
+#include <stdlib.h> // realloc @TODO @DELETEME
+#include <new> // placement new
 
 #if defined(__linux__)
 	// DLL
@@ -9,6 +14,7 @@
 	// Fiber
 	#include <ucontext.h>
 	#include <setjmp.h>
+	#include <sys/mman.h>
 
 	// File
 	#include <sys/stat.h>

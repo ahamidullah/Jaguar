@@ -1,5 +1,13 @@
 #pragma once
 
+#if defined(__linux__)
+	#include "Linux/Input.h"
+#else
+	#error Unsupported platform.
+#endif
+
+#include "Code/Common.h"
+
 constexpr u32 SCANCODE_COUNT = 256;
 
 struct InputButtons
@@ -22,12 +30,9 @@ struct Mouse
 	InputButtons buttons;
 };
 
-struct WindowEvents
-{
-	bool quit = false;
-};
+void InitializeInput();
 
-void GetPlatformInput(PlatformWindow *window);
+WindowEvents GetInput(PlatformWindow *window);
 
 void PressButton(s64 buttonIndex, InputButtons *buttons);
 void ReleaseButton(s64 buttonIndex, InputButtons *buttons);
@@ -38,11 +43,10 @@ bool WasKeyReleased(KeySymbol keySymbol);
 
 f32 GetMouseX();
 f32 GetMouseY();
+
 f32 GetMouseDeltaX();
 f32 GetMouseDeltaY();
 f32 GetMouseSensitivity();
 bool IsMouseButtonDown(MouseButton mouseButton);
 bool WasMouseButtonPressed(MouseButton mouseButton);
 bool WasMouseButtonReleased(MouseButton mouseButton);
-
-bool QuitWindowEvent();

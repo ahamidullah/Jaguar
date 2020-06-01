@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../PCH.h"
+#include "../Window.h"
+
 enum KeySymbol
 {
 	W_KEY = XK_w,

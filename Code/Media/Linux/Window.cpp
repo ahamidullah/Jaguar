@@ -1,12 +1,35 @@
-#include <X11/Xutil.h>
-#include <X11/Xatom.h>
-#include <X11/extensions/XInput2.h>
+#include "../Window.h"
+#include "../Input.h"
+
+#include "Code/Basic/Assert.h"
+#include "Code/Basic/String.h"
+#include "Code/Basic/Log.h"
 
 struct WindowsContext
 {
 	Display *x11Display;
 	s32 xinputOpcode;
 } windowsContext;
+
+s32 X11ErrorHandler(Display *display, XErrorEvent *event)
+{
+	char buffer[256];
+	XGetErrorText(display, event->error_code, buffer, sizeof(buffer));
+	Abort("X11 error: %s.", buffer);
+	return 0;
+}
+
+void InitializeWindow(bool multithreaded)
+{
+	// Install a new error handler.
+	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
+	XSetErrorHandler(&X11ErrorHandler);
+
+	if (multithreaded)
+	{
+		XInitThreads();
+	}
+}
 
 Display *GetX11Display()
 {
@@ -25,8 +48,8 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 
 	// Initialize XInput2, which we require for raw input.
 	{
-		s32 firstEventReturn = 0;
-		s32 firstErrorReturn = 0;
+		auto firstEventReturn = s32{};
+		auto firstErrorReturn = s32{};
 		if (!XQueryExtension(windowsContext.x11Display, "XInputExtension", &windowsContext.xinputOpcode, &firstEventReturn, &firstErrorReturn))
 		{
 			Abort("The X server does not support the XInput extension.");
@@ -41,7 +64,7 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		}
 
 		u8 mask[] = {0, 0, 0};
-		XIEventMask eventMask =
+		auto eventMask = XIEventMask
 		{
 			.deviceid = XIAllMasterDevices,
 			.mask_len = sizeof(mask),
@@ -60,15 +83,15 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		}
 	}
 
-	XVisualInfo visualInfoTemplate =
+	auto visualInfoTemplate = XVisualInfo
 	{
 		.screen = screen,
 	};
 	auto numberOfVisuals = 0;
-	XVisualInfo *visualInfo = XGetVisualInfo(windowsContext.x11Display, VisualScreenMask, &visualInfoTemplate, &numberOfVisuals);
+	auto visualInfo = XGetVisualInfo(windowsContext.x11Display, VisualScreenMask, &visualInfoTemplate, &numberOfVisuals);
 	Assert(visualInfo->c_class == TrueColor);
 
-	XSetWindowAttributes windowAttributes =
+	auto windowAttributes = XSetWindowAttributes
 	{
 		.background_pixel = 0xFFFFFFFF,
 		.border_pixmap = None,
@@ -76,12 +99,12 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		.event_mask = StructureNotifyMask,
 		.colormap = XCreateColormap(windowsContext.x11Display, rootWindow, visualInfo->visual, AllocNone),
 	};
-	s32 windowAttributesMask =
+	auto windowAttributesMask =
 		CWBackPixel
 		| CWColormap
 		| CWBorderPixel
 		| CWEventMask;
-	PlatformWindow result;
+	auto result = PlatformWindow{};
 	result.x11Window = XCreateWindow(
 		windowsContext.x11Display,
 		rootWindow,
@@ -138,8 +161,9 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 	return result;
 }
 
-void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents)
+WindowEvents ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse)
 {
+	auto windowEvents = WindowEvents{};
 	XEvent event;
 	XGenericEventCookie *cookie = &event.xcookie;
 	XIRawEvent *rawEvent;
@@ -149,7 +173,7 @@ void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *
 		XNextEvent(windowsContext.x11Display, &event);
 		if (event.type == ClientMessage && (Atom)event.xclient.data.l[0] == window->x11DeleteWindowAtom)
 		{
-			windowEvents->quit = true;
+			windowEvents.quit = true;
 			break;
 		}
 		if (event.type == ConfigureNotify)
@@ -205,6 +229,7 @@ void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *
 		} break;
 		}
 	}
+	return windowEvents;
 }
 
 void ToggleFullscreen(PlatformWindow *window)
@@ -249,26 +274,6 @@ void DestroyWindow(PlatformWindow *window)
 {
 	XDestroyWindow(windowsContext.x11Display, window->x11Window);
 	XCloseDisplay(windowsContext.x11Display);
-}
-
-s32 X11ErrorHandler(Display *display, XErrorEvent *event)
-{
-	char buffer[256];
-	XGetErrorText(display, event->error_code, buffer, sizeof(buffer));
-	Abort("X11 error: %s.", buffer);
-	return 0;
-}
-
-void InitializeWindow(bool multithreaded)
-{
-	// Install a new error handler.
-	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
-	XSetErrorHandler(&X11ErrorHandler);
-
-	if (multithreaded)
-	{
-		XInitThreads();
-	}
 }
 
 #if defined(USE_VULKAN_RENDER_API)

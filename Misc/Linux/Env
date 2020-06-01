@@ -1,6 +1,7 @@
 export PROJECT_ROOT="/home/ahh/Development"
 export PROJECT_NAME="Jaguar"
 export PROJECT_DIRECTORY="$PROJECT_ROOT/$PROJECT_NAME"
+export ProjectDirectory="$PROJECT_ROOT/$PROJECT_NAME"
 export PATH=$PROJECT_DIRECTORY/Misc/Linux:$PROJECT_DIRECTORY/Build:$PATH
 
 export VULKAN_SDK_PATH="$PROJECT_DIRECTORY/Dependencies/Vulkan/1.1.106.0"

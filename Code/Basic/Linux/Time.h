@@ -1,12 +1,16 @@
 #pragma once
 
+#include "../PCH.h"
+
+#include "Code/Common.h"
+
 struct PlatformTime
 {
 	timespec ts;
 };
 
-bool operator>(PlatformTime &a, PlatformTime &b);
-bool operator<(PlatformTime &a, PlatformTime &b);
+bool operator>(PlatformTime a, PlatformTime b);
+bool operator<(PlatformTime a, PlatformTime b);
 
 PlatformTime GetPlatformTime();
 f64 PlatformTimeDifference(PlatformTime start, PlatformTime end);

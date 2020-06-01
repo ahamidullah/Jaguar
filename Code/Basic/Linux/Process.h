@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Code/Common.h"
+
 enum ProcessExitCode
 {
 	PROCESS_EXIT_SUCCESS = 0,

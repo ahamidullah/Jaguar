@@ -1,5 +1,7 @@
 #pragma once
 
+struct String;
+
 String GetFilepathDirectory(const String &path);
 String GetFilepathFilename(const String &path);
 String GetFilepathExtension(const String &path);

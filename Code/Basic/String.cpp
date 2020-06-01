@@ -1,5 +1,7 @@
+#include "String.h"
 #define STB_SPRINTF_IMPLEMENTATION
-#include "stb_sprintf.h"
+	#include "stb_sprintf.h"
+#undef STB_SPRINTF_IMPLEMENTATION
 
 char &String::operator[](s64 i)
 {
@@ -73,6 +75,15 @@ String CreateString(const String &copy, s64 startIndex, s64 endIndex)
 	return result;
 }
 
+s64 StringLength(const String &s)
+{
+	if (ArrayLength(s.data) == 0)
+	{
+		return 0;
+	}
+	return ArrayLength(s.data) - 1; // To account for the NULL terminator we insert at the end.
+}
+
 void ResizeString(String *string, s64 newSize)
 {
 	ResizeArray(&string->data, newSize + 1);
@@ -115,15 +126,6 @@ String JoinStrings(const String &a, const String &b)
 	CopyMemory(&a[0], &result[0], StringLength(a));
 	CopyMemory(&b[0], &result[StringLength(a)], StringLength(b));
 	return result;
-}
-
-s64 StringLength(const String &s)
-{
-	if (ArrayLength(s.data) == 0)
-	{
-		return 0;
-	}
-	return ArrayLength(s.data) - 1; // To account for the NULL terminator we insert at the end.
 }
 
 s64 CStringLength(const char *string)

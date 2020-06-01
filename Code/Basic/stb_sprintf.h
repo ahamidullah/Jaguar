@@ -185,6 +185,8 @@ STBSP__PUBLICDEF void STB_SPRINTF_DECORATE(set_separators)(char comma, char peri
 
 #ifdef STB_SPRINTF_IMPLEMENTATION
 
+#include "String.h"
+
 #include <stdlib.h> // for va_arg()
 
 #define stbsp__uint32 unsigned int

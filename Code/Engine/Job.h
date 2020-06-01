@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Code/Common.h"
+
 constexpr auto JOB_FIBER_COUNT = 160;
 
 enum JobPriority {
@@ -29,3 +31,4 @@ void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority
 void WaitForJobCounter(JobCounter *counter);
 void ClearJobCounter(JobCounter *counter);
 s64 GetWorkerThreadCount();
+u32 GetThreadIndex();

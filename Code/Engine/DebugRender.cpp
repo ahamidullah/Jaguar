@@ -1,3 +1,4 @@
+#if 0
 #define RANDOM_COLOR_TABLE_LENGTH 1024
 V3 random_color_table[RANDOM_COLOR_TABLE_LENGTH];
 
@@ -56,3 +57,4 @@ V3 random_color() {
 	float b = rand() / (f32)RAND_MAX;
 	return (V3){r, g, b};
 }
+#endif

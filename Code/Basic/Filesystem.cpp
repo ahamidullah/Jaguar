@@ -1,3 +1,6 @@
+#include "Filesystem.h"
+#include "String.h"
+
 // Returns all but the last component of the path.
 String GetFilepathDirectory(const String &path)
 {
@@ -18,7 +21,7 @@ String GetFilepathFilename(const String &path)
 	auto slashIndex = FindLastCharIndex(path, '/');
 	if (slashIndex < 0)
 	{
-		return "";
+		return CreateString(path);
 	}
 	auto filenameLength = StringLength(path) - (slashIndex + 1);
 	auto filename = CreateString(filenameLength);

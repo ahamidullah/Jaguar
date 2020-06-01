@@ -1,3 +1,7 @@
+#include "Entity.h"
+#include "Mesh.h"
+#include "Job.h"
+
 struct EntityMeshes
 {
 	Array<MeshInstance> instances;

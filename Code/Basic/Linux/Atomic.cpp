@@ -1,3 +1,5 @@
+#include "../Atomic.h"
+
 s32 AtomicAdd(volatile s32 *operand, s32 addend)
 {
 	return __sync_add_and_fetch(operand, addend);

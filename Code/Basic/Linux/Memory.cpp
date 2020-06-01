@@ -1,3 +1,8 @@
+#include "../Memory.h"
+#include "../Assert.h"
+#include "../Log.h"
+#include "../PCH.h"
+
 #define MAP_ANONYMOUS 0x20
 
 void *AllocatePlatformMemory(s64 size)
@@ -8,6 +13,13 @@ void *AllocatePlatformMemory(s64 size)
 		Assert(0); // @TODO
 	}
 	return memory;
+}
+
+void *AllocateAlignedMemory(s64 alignment, s64 size)
+{
+	auto result = aligned_alloc(alignment, size);
+	Assert(result);
+	return result;
 }
 
 void FreePlatformMemory(void *memory, s64 size)

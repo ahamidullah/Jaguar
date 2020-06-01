@@ -1,4 +1,8 @@
-void PrintPerformanceTimerActual(PerformanceTimer *timer)
+#include "Timer.h"
+
+#include "Code/Basic/Log.h"
+
+void PrintTimerActual(Timer *timer)
 {
 	PlatformTime end = GetPlatformTime();
 	timer->runningSum = timer->runningSum + PlatformTimeDifference(timer->start, end);

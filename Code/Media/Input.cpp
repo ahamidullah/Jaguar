@@ -1,3 +1,7 @@
+#include "Input.h"
+
+#include "Code/Basic/Memory.h"
+
 struct InputContext
 {
 	Mouse mouse;
@@ -137,7 +141,7 @@ bool QuitWindowEvent()
 	return inputContext.windowEvents.quit;
 }
 
-void GetPlatformInput(PlatformWindow *window)
+WindowEvents GetInput(PlatformWindow *window)
 {
 	// Clear per-frame input.
 	SetMemory(inputContext.mouse.buttons.pressed, false, sizeof(bool) * MOUSE_BUTTON_COUNT);
@@ -147,7 +151,7 @@ void GetPlatformInput(PlatformWindow *window)
 	inputContext.mouse.rawDeltaX = 0;
 	inputContext.mouse.rawDeltaY = 0;
 
-	ProcessWindowEvents(window, &inputContext.keyboard, &inputContext.mouse, &inputContext.windowEvents);
+	auto windowEvents = ProcessWindowEvents(window, &inputContext.keyboard, &inputContext.mouse);
 
 	// Update mouse position.
 	s32 oldX = inputContext.mouse.x;
@@ -155,4 +159,6 @@ void GetPlatformInput(PlatformWindow *window)
 	QueryMousePosition(window, &inputContext.mouse.x, &inputContext.mouse.y);
 	inputContext.mouse.deltaX = inputContext.mouse.x - oldX;
 	inputContext.mouse.deltaY = inputContext.mouse.y - oldY;
+
+	return windowEvents;
 }

@@ -1,3 +1,5 @@
+#include "../Semaphore.h"
+
 Semaphore CreateSemaphore(s64 initialValue)
 {
 	sem_t semaphore;
@@ -17,7 +19,7 @@ void WaitOnSemaphore(Semaphore *semaphore)
 
 s64 GetSemaphoreValue(Semaphore *semaphore)
 {
-	s32 value;
+	auto value = s32{};
 	sem_getvalue(semaphore, &value);
 	return value;
 }

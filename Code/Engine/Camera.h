@@ -1,5 +1,11 @@
 #pragma once
 
+#include "Transform.h"
+
+#include "Code/Basic/String.h"
+
+#include "Code/Common.h"
+
 struct Camera
 {
 	String name;

@@ -1,3 +1,6 @@
+#include "Code/Basic/Array.h"
+#include "Code/Basic/Log.h"
+
 const auto INITIAL_HASH_MAP_SIZE = 256;
 const auto VACANT_HASH_KEY_SENTINEL = -1;
 

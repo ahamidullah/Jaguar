@@ -1,6 +1,9 @@
 #pragma once
 
 #include "Asset.h"
+#include "Math.h"
+#include "Transform.h"
+#include "GPU.h"
 
 struct Vertex1P1C1UV1N1T
 {

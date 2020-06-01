@@ -1,3 +1,5 @@
+#include "Transform.h"
+
 void SetTransformRotation(Transform *transform, f32 pitch, f32 roll, f32 yaw)
 {
 	transform->rotation.x = pitch;

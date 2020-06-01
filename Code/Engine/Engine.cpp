@@ -1,37 +1,90 @@
 #include "Engine.h"
+#include "Render.h"
+#include "Entity.h"
+#include "Job.h"
+#include "Camera.h"
+
+#include "Code/Media/Media.h"
+#include "Code/Media/Input.h"
+
+#include "Code/Basic/Process.h"
+#include "Code/Basic/Log.h"
 
 u32 windowWidth, windowHeight;
 
-#include "Job.cpp"
-#include "Math.cpp"
-#include "Timer.cpp"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h" // @TODO: Move this out of here.
-#include "Vulkan.cpp"
-#include "GPU.cpp"
-#include "Render.cpp"
-#include "Asset.cpp"
-#include "Camera.cpp"
-#include "Entity.cpp"
-#include "Transform.cpp"
-
-void InitializeGame();
-void GameLoop(f32 deltaTime);
-
-bool Update()
+u32 GetWindowWidth()
 {
-	if (QuitWindowEvent())
+	return windowWidth;
+}
+
+u32 GetWindowHeight()
+{
+	return windowHeight;
+}
+
+void InitializeGameLoop()
+{
+	CreateCamera("main", {50000, 50000, 50000}, {0, 0, 0}, 1000.4f, DegreesToRadians(90.0f));
+
+	auto e = CreateEntity();
+	auto t = Transform{};
+	SetEntityTransform(e, t);
+	SetEntityModel(e, SPONZA_ASSET, t);
+}
+
+void GameLoop(f32 deltaTime)
+{
+	auto camera = GetCamera("main");
+	if (!camera)
 	{
-		return false;
+		return;
 	}
+
+	if (GetMouseDeltaX() != 0 || GetMouseDeltaY() != 0)
+	{
+		auto deltaPitch = -GetMouseDeltaY() * GetMouseSensitivity();
+		auto deltaYaw = -GetMouseDeltaX() * GetMouseSensitivity();
+		auto angles = ToAngles(camera->transform.rotation);
+		auto pitchRotation = ToQuaternion(EulerAngles{.pitch = angles.pitch + deltaPitch});
+		auto yawRotation = ToQuaternion(EulerAngles{.yaw = angles.yaw + deltaYaw});
+		camera->transform.rotation = Normalize(yawRotation * pitchRotation);
+	}
+
+	if (IsKeyDown(A_KEY))
+	{
+		camera->transform.position -= camera->speed * CalculateRightVector(camera->transform.rotation);
+	}
+	else if (IsKeyDown(D_KEY))
+	{
+		camera->transform.position += camera->speed * CalculateRightVector(camera->transform.rotation);
+	}
+	if (IsKeyDown(Q_KEY))
+	{
+		camera->transform.position.z -= camera->speed;
+	}
+	else if (IsKeyDown(E_KEY))
+	{
+		camera->transform.position.z += camera->speed;
+	}
+	if (IsKeyDown(W_KEY))
+	{
+		camera->transform.position += camera->speed * CalculateForwardVector(camera->transform.rotation);
+	}
+	else if (IsKeyDown(S_KEY))
+	{
+		camera->transform.position -= camera->speed * CalculateForwardVector(camera->transform.rotation);
+	}
+}
+
+void Update()
+{
 	GameLoop(0.0f);
-	return true;
 }
 
 void RunGame(void *)
 {
-	windowWidth = 1200;
-	windowHeight = 1000;
+	windowWidth = GetRenderWidth();
+	windowHeight = GetRenderHeight();
 	auto window = CreateWindow(windowWidth, windowHeight, false);
 
 	InitializeRenderer(&window);
@@ -47,13 +100,18 @@ void RunGame(void *)
 	}
 	InitializeEntities(); // @TODO
 
-	InitializeGame();
+	InitializeGameLoop();
 
-	bool running = true;
-	while (running)
+	while (true)
 	{
-		GetPlatformInput(&window);
-		running = Update();
+		auto windowEvents = GetInput(&window);
+		if (windowEvents.quit)
+		{
+			break;
+		}
+
+		Update();
+
 		Render();
 	}
 
@@ -62,9 +120,9 @@ void RunGame(void *)
 
 s32 ApplicationEntry(s32 argc, char *argv[])
 {
-	InitializeMedia(true, JOB_FIBER_COUNT);
+	InitializeMedia(true);
 	InitializeJobs(RunGame, NULL);
 
-	InvalidCodePath();
+	Abort("Invalid exit from ApplicationEntry.\n");
 	return PROCESS_EXIT_FAILURE;
 }

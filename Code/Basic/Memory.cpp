@@ -1,5 +1,4 @@
-#include <stdlib.h> // malloc @TODO
-#include <string.h> // memcpy @TODO
+#include "Memory.h"
 
 // @TODO: Use non-caching intrinsics?
 void SetMemory(void *destination, s8 setTo, s64 byteCount)

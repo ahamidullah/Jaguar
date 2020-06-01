@@ -2,6 +2,14 @@
 // @TODO: Free unused blocks back to the block pool.
 // @TODO: Different block sizes? Small, medium, large, etc.
 
+#include "GPU.h"
+#include "Job.h"
+#include "Math.h"
+#include "Render.h"
+
+#include "Code/Basic/Atomic.h"
+#include "Code/Basic/Log.h"
+
 struct GPUContext
 {
 	// @TODO: False sharing?
@@ -145,7 +153,7 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 		auto newBlock = (GPUMemoryBlock *)malloc(sizeof(GPUMemoryBlock)); // @TODO
 		if (!GfxAllocateMemory(GPU_MEMORY_BLOCK_SIZE, allocator->memoryType, &newBlock->memory))
 		{
-			free(newBlock); // @TODO
+			Abort("Failed to allocate GPU memory for block allocator...");
 			return NULL;
 		}
 		newBlock->frontier = 0;
@@ -173,7 +181,7 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 
 	// Allocate out of the active block's frontier.
 	auto newAllocation = &allocator->activeBlock->allocations[allocator->activeBlock->allocationCount++];
-	auto allocationStartOffset = AlignS64(allocator->activeBlock->frontier, memoryRequirements.alignment);
+	auto allocationStartOffset = AlignTo(allocator->activeBlock->frontier, memoryRequirements.alignment);
 	*newAllocation =
 	{
 		.memory = allocator->activeBlock->memory,
@@ -198,7 +206,7 @@ GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator
 	do
 	{
 		oldEnd = allocator->end;
-		auto alignmentOffset = AlignmentOffsetS64(oldEnd, memoryRequirements.alignment);
+		auto alignmentOffset = AlignmentOffset(oldEnd, memoryRequirements.alignment);
 		allocationSize = alignmentOffset + memoryRequirements.size;
 		if (allocator->size + allocationSize > allocator->capacity)
 		{
@@ -257,7 +265,7 @@ GPUMemoryAllocation *AllocateGPUMemory(GPUResourceType resourceType, GfxMemoryRe
 	return allocation;
 }
 
-GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL)
+GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory)
 {
 	auto buffer = GfxCreateBuffer(size, usage);
 	auto memoryRequirements = GfxGetBufferMemoryRequirements(buffer);
@@ -266,7 +274,7 @@ GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType mem
 	return buffer;
 }
 
-GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL)
+GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory)
 {
 	auto image = GfxCreateImage(width, height, format, initialLayout, usage, sampleCount);
 	auto memoryRequirements = GfxGetImageMemoryRequirements(image);
@@ -300,6 +308,7 @@ void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 {
 	auto arrayIndex = gpuContext.asyncCommandBufferArrayIndex;
 
+	// WRONG. NEED ONE PER QUEUE.
 	if (gpuContext.asyncCommandBufferArrayIndex == 0)
 	{
 		gpuContext.asyncCommandBufferArrayIndex = 1;
@@ -367,7 +376,10 @@ GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, A
 
 GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> frameWaitSemaphores, Array<GfxPipelineStageFlags> frameWaitStages, GfxFence frameFence)
 {
-	SubmitQueuedAsyncGPUCommmandBuffers(queueType);
+	if (queueType == GFX_TRANSFER_COMMAND_QUEUE)
+	{
+		SubmitQueuedAsyncGPUCommmandBuffers(queueType);
+	}
 
 	return SubmitQueuedFrameGPUCommandBuffers(queueType, frameWaitSemaphores, frameWaitStages, frameFence);
 }
@@ -385,6 +397,7 @@ void ClearGPUMemoryForFrameIndex(s64 frameIndex)
 	{
 		Clear(&gpuContext.memoryAllocators[i].bufferRing);
 		Clear(&gpuContext.memoryAllocators[i].imageRing);
+		// @TODO: Clear overflow.
 	}
 }
 

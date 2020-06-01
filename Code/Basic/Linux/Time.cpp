@@ -1,4 +1,7 @@
-bool operator>(PlatformTime &a, PlatformTime &b)
+#include "../Time.h"
+#include "../Log.h"
+
+bool operator>(PlatformTime a, const PlatformTime b)
 {
 	if (a.ts.tv_sec > b.ts.tv_sec)
 	{
@@ -19,7 +22,7 @@ bool operator>(PlatformTime &a, PlatformTime &b)
 	return false;
 }
 
-bool operator<(PlatformTime &a, PlatformTime &b)
+bool operator<(const PlatformTime a, const PlatformTime b)
 {
 	if (a.ts.tv_sec < b.ts.tv_sec)
 	{
@@ -42,7 +45,7 @@ bool operator<(PlatformTime &a, PlatformTime &b)
 
 PlatformTime GetPlatformTime()
 {
-	PlatformTime time;
+	auto time = PlatformTime{};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &time.ts);
 	return time;
 }
@@ -55,7 +58,7 @@ f64 PlatformTimeDifference(PlatformTime start, PlatformTime end)
 
 void Sleep(s64 milliseconds)
 {
-	struct timespec timespec =
+	auto timespec = (struct timespec)
 	{
 		.tv_sec = milliseconds / 1000,
 		.tv_nsec = (milliseconds % 1000) * 1000000,

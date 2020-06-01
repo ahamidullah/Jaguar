@@ -1,5 +1,15 @@
 #if defined(USE_VULKAN_RENDER_API)
 
+#include "Vulkan.h"
+#include "Render.h"
+#include "Math.h"
+
+#include "Code/Basic/DLL.h"
+#include "Code/Basic/Array.h"
+#include "Code/Basic/Log.h"
+
+#include "Code/Common.h"
+
 // @TODO: Move this to render.c.
 #define SHADOW_MAP_WIDTH  1024
 #define SHADOW_MAP_HEIGHT 1024
@@ -13,11 +23,6 @@
 // Slope depth bias factor is applied depending on the polygon's slope.
 #define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
 #define SHADOW_MAP_FILTER GFX_LINEAR_FILTER
-
-#define DEPTH_BUFFER_INITIAL_LAYOUT GFX_IMAGE_LAYOUT_UNDEFINED
-#define DEPTH_BUFFER_FORMAT GFX_FORMAT_D32_SFLOAT_S8_UINT
-#define DEPTH_BUFFER_IMAGE_USAGE_FLAGS GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT
-#define DEPTH_BUFFER_SAMPLE_COUNT_FLAGS GFX_SAMPLE_COUNT_1
 
 // @TODO: Make sure that all failable Vulkan calls are VK_CHECK'd.
 // @TODO: Do eg.
@@ -301,6 +306,7 @@ void GfxEndCommandBuffer(GfxCommandBuffer buffer)
 	VK_CHECK(vkEndCommandBuffer(buffer));
 }
 
+// @TODO: Store the queue family index in a GfxCommandQueue struct, and take that struct.
 GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType)
 {
 	VkCommandPoolCreateInfo commandPoolCreateInfo =
@@ -324,7 +330,7 @@ GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType)
 	} break;
 	default:
 	{
-		InvalidCodePath();
+		Abort("Invalid queue type %d.\n", queueType);
 	} break;
 	}
 	VkCommandPool pool;
@@ -441,7 +447,7 @@ void *GfxMapMemory(GfxMemory memory, GfxSize size, GfxSize offset)
 	return pointer;
 }
 
-GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, String &spirv)
+GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, String spirv)
 {
 	auto shaderModuleCreateInfo = VkShaderModuleCreateInfo
 	{
@@ -513,18 +519,18 @@ GfxSwapchain GfxCreateSwapchain()
 	VkExtent2D swapchainImageExtent;
 	if (surfaceCapabilities.currentExtent.width == U32_MAX && surfaceCapabilities.currentExtent.height == U32_MAX) // Indicates Vulkan will accept any extent dimension.
 	{
-		swapchainImageExtent.width = windowWidth;
-		swapchainImageExtent.height = windowHeight;
+		swapchainImageExtent.width = GetRenderWidth();
+		swapchainImageExtent.height = GetRenderHeight();
 	}
 	else
 	{
-		swapchainImageExtent.width = Maximum(surfaceCapabilities.minImageExtent.width, Minimum(surfaceCapabilities.maxImageExtent.width, windowWidth));
-		swapchainImageExtent.height = Maximum(surfaceCapabilities.minImageExtent.height, Minimum(surfaceCapabilities.maxImageExtent.height, windowHeight));
+		swapchainImageExtent.width = Maximum(surfaceCapabilities.minImageExtent.width, Minimum(surfaceCapabilities.maxImageExtent.width, GetRenderWidth()));
+		swapchainImageExtent.height = Maximum(surfaceCapabilities.minImageExtent.height, Minimum(surfaceCapabilities.maxImageExtent.height, GetRenderHeight()));
 	}
 	// @TODO: Why is this a problem?
-	if (swapchainImageExtent.width != windowWidth && swapchainImageExtent.height != windowHeight)
+	if (swapchainImageExtent.width != GetRenderWidth() && swapchainImageExtent.height != GetRenderHeight())
 	{
-		Abort("swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u\n", swapchainImageExtent.width, swapchainImageExtent.height, windowWidth, windowHeight);
+		Abort("swapchain image dimensions do not match the window dimensions: swapchain %ux%u, window %ux%u\n", swapchainImageExtent.width, swapchainImageExtent.height, GetRenderWidth(), GetRenderHeight());
 	}
 	u32 desiredSwapchainImageCount = surfaceCapabilities.minImageCount + 1;
 	if (surfaceCapabilities.maxImageCount > 0 && (desiredSwapchainImageCount > surfaceCapabilities.maxImageCount))
@@ -1022,56 +1028,6 @@ struct GfxPushConstantDescription
 	u32 offset;
 	u32 size;
 	GfxShaderStage shader_stage;
-};
-
-struct GfxFramebufferAttachmentColorBlendDescription
-{
-	bool enable_blend;
-	GfxBlendFactor source_color_blend_factor;
-	GfxBlendFactor destination_color_blend_factor;
-	GfxBlendOperation color_blend_operation;
-	GfxBlendFactor source_alpha_blend_factor;
-	GfxBlendFactor destination_alpha_blend_factor;
-	GfxBlendOperation alpha_blend_operation;
-	GfxColorComponentFlags color_write_mask;
-};
-
-struct GfxPipelineVertexInputAttributeDescription
-{
-	GfxFormat format;
-	u32 binding;
-	u32 location;
-	u32 offset;
-};
-
-struct GfxPipelineVertexInputBindingDescription
-{
-	u32 binding;
-	u32 stride;
-	GfxVertexInputRate input_rate;
-};
-
-struct GfxPipelineDescription
-{
-	GfxPipelineLayout layout;
-	GfxPipelineTopology topology;
-	f32 viewport_width;
-	f32 viewport_height;
-	u32 scissor_width;
-	u32 scissor_height;
-	GfxCompareOperation depth_compare_operation;
-	u32 framebuffer_attachment_color_blend_count;
-	GfxFramebufferAttachmentColorBlendDescription *framebuffer_attachment_color_blend_descriptions;
-	u32 vertex_input_attribute_count;
-	GfxPipelineVertexInputAttributeDescription *vertex_input_attribute_descriptions;
-	u32 vertex_input_binding_count;
-	GfxPipelineVertexInputBindingDescription *vertex_input_binding_descriptions;
-	u32 dynamic_state_count;
-	GfxDynamicPipelineState *dynamic_states;
-	Array<GfxShaderStage> shaderStages;
-	Array<GfxShaderModule> shaderModules;
-	GfxRenderPass render_pass;
-	bool enable_depth_bias;
 };
 
 // @TODO: Fix formatting.
@@ -1595,7 +1551,7 @@ void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPa
 		.renderArea =
 		{
 			.offset = {0, 0},
-			.extent = {windowWidth, windowHeight},
+			.extent = {(u32)GetRenderWidth(), (u32)GetRenderHeight()},
 		},
 		.clearValueCount = CArrayCount(clearValues),
 		.pClearValues = clearValues,

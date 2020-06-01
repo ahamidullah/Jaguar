@@ -3,26 +3,19 @@
 //        pipelines
 //        framebuffers
 
+#include "Render.h"
 #include "ShaderGlobal.h"
+#include "GPU.h"
+#include "Mesh.h"
+#include "Camera.h"
+#include "Shader.h"
+
+#include "Code/Basic/HashTable.h"
+#include "Code/Basic/File.h"
+#include "Code/Basic/Process.h"
 
 #define VERTEX_BUFFER_BIND_ID 0
 #define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE Megabyte(1)
-
-struct Shader
-{
-	String name;
-	Array<GfxShaderModule> modules;
-	Array<GfxShaderStage> stages;
-};
-
-// @TODO: Delete me.
-struct DescriptorSetGroup
-{
-	s64 setNumber;
-	GfxDescriptorSetLayout layout;
-	GfxDescriptorSet *sets;
-	GfxBuffer *buffers;
-};
 
 struct RenderContext
 {
@@ -48,8 +41,6 @@ struct RenderContext
 	// @TODO TEMPORARY
 	GfxFramebuffer *framebuffers;
 
-	HashTable<String, Shader> shaders;
-
 	GfxSemaphore swapchainImageAcquiredSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 	//GfxSemaphore drawCompleteSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } renderGlobals;
@@ -57,6 +48,16 @@ struct RenderContext
 s64 GetFrameIndex()
 {
 	return renderGlobals.frameIndex;
+}
+
+s64 GetRenderWidth()
+{
+	return 1200;
+}
+
+s64 GetRenderHeight()
+{
+	return 1000;
 }
 
 void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
@@ -67,115 +68,6 @@ void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetB
 		GfxCreateDescriptorSets(renderGlobals.descriptorPool, renderGlobals.descriptorSetLayouts[setIndex], 1, &renderGlobals.descriptorSets[i][setIndex]);
 		renderGlobals.descriptorSetBuffers[i][setIndex] = CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	}
-}
-
-void LoadShaders()
-{
-	bool error;
-
-	if (development)
-	{
-		String shaderDirectory = {};
-		String binaryDirectory = {};
-		String binaryFilenameExtension = {};
-		if (usingVulkanAPI)
-		{
-			shaderDirectory = "Code/Shader/GLSL";
-			binaryDirectory = "Build/Shader/GLSL/Binary";
-			binaryFilenameExtension = "spirv";
-		}
-		else
-		{
-			InvalidCodePath();
-		}
-
-		Shader shader;
-		RunProcess("ShaderCompiler");
-		{
-			auto spirv = ReadEntireFile("Build/Shader/Binary/Model.vert.spirv", &error);
-			Assert(!error);
-			ArrayAppend(&shader.stages, GFX_VERTEX_SHADER_STAGE);
-			ArrayAppend(&shader.modules, GfxCreateShaderModule(GFX_VERTEX_SHADER_STAGE, spirv));
-		}
-		{
-			auto spirv = ReadEntireFile("Build/Shader/Binary/Model.frag.spirv", &error);
-			Assert(!error);
-			ArrayAppend(&shader.stages, GFX_FRAGMENT_SHADER_STAGE);
-			ArrayAppend(&shader.modules, GfxCreateShaderModule(GFX_FRAGMENT_SHADER_STAGE, spirv));
-		}
-		shader.name = "Model";
-		HashTableInsert(&renderGlobals.shaders, "Model", shader);
-
-// @TODO: Automatic loading.
-#if 0
-		s64 shaderIndex = 0;
-		DirectoryIteration iteration;
-		while (IterateDirectory(shaderDirectory, &iteration))
-		{
-			auto sourceFilepath = JoinFilepaths(shaderDirectory, iteration.filename);
-			RunProcess(FormatString("ShaderCompiler %s", &sourceFilepath[0]));
-			String moduleNames[] =
-			{
-				"vert",
-				"frag",
-				"comp",
-			};
-			Shader shader;
-			shader.name = "abc";
-			for (auto &module : moduleNames)
-			{
-				auto binaryFilepath = JoinFilepaths(binaryDirectory, iteration.filename);
-				SetFilepathExtension(&binaryFilepath, FormatString(".%s.%s", &module[0], &binaryFilenameExtension[0]));
-				if (!FileExists(binaryFilepath))
-				{
-					continue;
-				}
-				auto [spirv, error] = ReadEntireFile(binaryFilepath);
-				if (error)
-				{
-					continue;
-				}
-				GfxShaderStage stage;
-				if (module == "vert")
-				{
-					stage = GFX_VERTEX_SHADER_STAGE;
-				}
-				else if (module == "frag")
-				{
-					stage = GFX_FRAGMENT_SHADER_STAGE;
-				}
-				else if (module == "comp")
-				{
-					stage = GFX_COMPUTE_SHADER_STAGE;
-				}
-				else
-				{
-					InvalidCodePath();
-				}
-				Append(&shader.stages, stage);
-				Append(&shader.modules, GfxCreateShaderModule(stage, spirv));
-			}
-			Assert(0);
-			//CreateShader(infos, &shaders[shaderIndex]); // @TODO: Wrong!
-			shaderIndex++;
-		}
-#endif
-	}
-	else
-	{
-		InvalidCodePath(); // Should just load the binaries from somewhere...
-	}
-}
-
-Shader *GetShader(const String &name)
-{
-	auto shader = HashTableLookup(&renderGlobals.shaders, name);
-	if (!shader)
-	{
-		LogPrint(ERROR_LOG, "Failed to get non-existent shader %s\n", &name[0]);
-		return NULL;
-	}
-	return shader;
 }
 
 GfxPipeline GetShaderGraphicsPipeline(Shader *shader, GfxRenderPass renderPass)
@@ -227,10 +119,10 @@ GfxPipeline GetShaderGraphicsPipeline(Shader *shader, GfxRenderPass renderPass)
 		{
 			.layout = renderGlobals.pipelineLayout,
 			.topology = GFX_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-			.viewport_width = (f32)windowWidth,
-			.viewport_height = (f32)windowHeight,
-			.scissor_width = windowWidth,
-			.scissor_height = windowHeight,
+			.viewport_width = (f32)GetRenderWidth(),
+			.viewport_height = (f32)GetRenderHeight(),
+			.scissor_width = (u32)GetRenderWidth(),
+			.scissor_height = (u32)GetRenderHeight(),
 			.depth_compare_operation = GFX_COMPARE_OP_LESS,
 			.framebuffer_attachment_color_blend_count = 1,
 			.framebuffer_attachment_color_blend_descriptions = &colorBlendDescription,
@@ -247,7 +139,7 @@ GfxPipeline GetShaderGraphicsPipeline(Shader *shader, GfxRenderPass renderPass)
 		};
 		return GfxCreatePipeline(pipelineDescription);
 	}
-	InvalidCodePath();
+	Abort("Can't handle shader %k.\n", shader->name);
 	return GfxPipeline{};
 }
 
@@ -314,7 +206,7 @@ void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 			renderGlobals.swapchainImageViews[swapchainImageIndex],
 			depthBufferImageView,
 		};
-		renderGlobals.framebuffers[swapchainImageIndex] = GfxCreateFramebuffer(pass.gfxPass, windowWidth, windowHeight, CArrayCount(attachments), attachments);
+		renderGlobals.framebuffers[swapchainImageIndex] = GfxCreateFramebuffer(pass.gfxPass, GetRenderWidth(), GetRenderHeight(), CArrayCount(attachments), attachments);
 
 		auto commandBuffer = CreateGPUCommandBuffer(GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
 
@@ -368,7 +260,12 @@ void InitializeRenderer(void *jobParameterPointer)
 	//auto shadowMapImageView = GfxCreateImageView(shadowMapImage, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
 	{
-		auto depthBufferImage = CreateGPUImage(windowWidth, windowHeight, DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+		const auto DEPTH_BUFFER_INITIAL_LAYOUT = GFX_IMAGE_LAYOUT_UNDEFINED;
+		const auto DEPTH_BUFFER_FORMAT = GFX_FORMAT_D32_SFLOAT_S8_UINT;
+		const auto DEPTH_BUFFER_IMAGE_USAGE_FLAGS = GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT;
+		const auto DEPTH_BUFFER_SAMPLE_COUNT_FLAGS = GFX_SAMPLE_COUNT_1;
+
+		auto depthBufferImage = CreateGPUImage(GetRenderWidth(), GetRenderHeight(), DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 
 		auto swizzleMapping = GfxSwizzleMapping
 		{
@@ -458,7 +355,7 @@ void InitializeRenderer(void *jobParameterPointer)
 
 	renderGlobals.pipelineLayout = GfxCreatePipelineLayout(ArrayLength(renderGlobals.descriptorSetLayouts), &renderGlobals.descriptorSetLayouts[0]);
 
-	renderGlobals.aspectRatio = windowWidth / (f32)windowHeight;
+	renderGlobals.aspectRatio = GetRenderWidth() / (f32)GetRenderHeight();
 
 	for (auto i = 0; i < GFX_MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -614,8 +511,8 @@ void Render()
 			.shader = GetShader("Model"),
 			.execute = [](GfxCommandBuffer commandBuffer)
 			{
-				GfxRecordSetViewportCommand(commandBuffer, windowWidth, windowHeight);
-				GfxRecordSetScissorCommand(commandBuffer, windowWidth, windowHeight);
+				GfxRecordSetViewportCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());
+				GfxRecordSetScissorCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());
 
 				auto meshInstances = GetMeshInstances();
 				for (auto &mesh : meshInstances)

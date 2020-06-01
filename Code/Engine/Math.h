@@ -1,7 +1,6 @@
 #pragma once
 
-#include <math.h>
-#include <float.h>
+#include "Code/Common.h"
 
 struct V2
 {
@@ -85,26 +84,6 @@ constexpr f32 RadiansToDegrees(f32 radians)
 
 #define FLOAT_EPSILON FLT_EPSILON
 
-template <typename T>
-T Minimum(T a, T b)
-{
-	if (a < b)
-	{
-		return a;
-	}
-	return b;
-}
-
-template <typename T>
-T Maximum(T a, T b)
-{
-	if (a > b)
-	{
-		return a;
-	}
-	return b;
-}
-
 #define PrintF32(f) PrintF32Actual(#f, (f))
 void PrintF32Actual(const char *name, f32 number);
 #define PrintV3(v) PrintV3Actual(#v, (v))
@@ -113,15 +92,30 @@ void PrintV3Actual(const char *name, V3 v);
 void PrintQuaternionActual(const char *name, Quaternion q);
 #define PrintM4(m) PrintM4Actual(#m, (m))
 void PrintM4Actual(const char *name, M4 m);
+template <typename T>
 
 f32 SquareRoot();
-u32 DivideAndRoundUp(u32 a, u32 b);
 f32 Tan(f32 f);
 f32 Sin(f32 f);
 f32 Cos(f32 f);
 f32 Acos(f32 f);
 f32 Abs(f32 f);
 
+u32 DivideAndRoundUp(u32 a, u32 b); // @TODO: Use this?
+s64 AlignTo(s64 number, s64 alignment);
+s64 AlignmentOffset(s64 number, s64 alignment);
+s64 Minimum(s64 a, s64 b);
+s64 Maximum(s64 a, s64 b);
+
+bool NotNAN(V3 v);
+bool NotZero(V3 v);
+f32 Length(V3 v);
+f32 LengthSquared(V3 v);
+V3 Normalize(V3 v);
+f32 DotProduct(V3 a, V3 b);
+V3 CrossProduct(V3 a, V3 b);
+V3 Lerp(V3 start, V3 end, f32 t);
+V4 V3ToV4(V3 v, f32 w);
 V3 operator-(V3 v);
 V3 operator*(f32 s, V3 v);
 V3 operator/(V3 v, f32 s);
@@ -130,15 +124,6 @@ V3 operator-(V3 a, V3 b);
 bool operator==(const V3 &a, const V3 &b);
 V3 &operator+=(V3 &a, V3 b);
 V3 &operator-=(V3 &a, V3 b);
-bool NotNAN(V3 v);
-bool NotZero(V3 v);
-V4 V3ToV4(V3 v, f32 w);
-f32 Length(V3 v);
-f32 LengthSquared(V3 v);
-V3 Normalize(V3 v);
-f32 DotProduct(V3 a, V3 b);
-V3 CrossProduct(V3 a, V3 b);
-V3 Lerp(V3 start, V3 end, f32 t);
 
 M3 CreateMatrix(V3 column1, V3 column2, V3 column3);
 void SetRotationMatrix(M4 *m, M3 r);
@@ -146,11 +131,14 @@ Quaternion ToQuaternion(M3 m);
 M4 CreateViewMatrix(V3 position, V3 forward);
 M4 CreateInfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspectRatio);
 M4 CreateOrthographicProjectionMatrix(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far);
+M4 operator*(M4 a, M4 b);
+M4 operator*(f32 s, M4 m);
+V4 operator*(M4 m, V4 v);
 
 Quaternion CreateQuaternion(f32 x, f32 y, f32 z, f32 w);
 Quaternion CreateQuaternion(V3 axis, f32 angle);
 Quaternion CreateQuaternion(f32 yaw, f32 pitch, f32 roll);
-Quaternion CreateUprightQuaternion(V3 forward);
+Quaternion CreateQuaternion(V3 forward);
 Quaternion operator*(Quaternion a, Quaternion b);
 Quaternion operator*(f32 s, Quaternion q);
 Quaternion Concatenate(Quaternion a, Quaternion b);

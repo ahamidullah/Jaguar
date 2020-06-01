@@ -1,0 +1,133 @@
+.ProjectDirectory = "$_WORKING_DIR_$"
+.BuildDirectory = "$ProjectDirectory$/Build/Linux"
+.CodeDirectory = "$ProjectDirectory$/Code"
+.DependencyDirectory = "$ProjectDirectory$/Dependency"
+
+Settings
+{
+	.CachePath = "$BuildDirectory$/Cache"
+}
+
+.Compiler = "/usr/bin/clang++"
+.CommonCompilerOptions =
+	" -O0"
+	+ " -g"
+	+ " -DDEBUG"
+	+ " -DDEVELOPMENT"
+	+ " -I$ProjectDirectory$"
+	+ " -std=c++17"
+	+ " -DUSE_VULKAN_RENDER_API"
+	+ " -ffast-math -fno-exceptions"
+	+ " -Wall -Wextra -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-unused-parameter -Wno-varargs -Wno-cast-align -Wno-non-pod-varargs -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces"
+
+.BinaryCompilerOptions =
+	"$CommonCompilerOptions$"
+	+ " -c %1"
+	+ " -o %2"
+
+.LibraryCompilerOptions =
+	"$CommonCompilerOptions$"
+	+ " -fPIC"
+	+ " -c %1"
+	+ " -o %2"
+
+.PCHCompilerOptions =
+	"$CommonCompilerOptions$"
+	+ " -fPIC"
+	+ " -Xclang -fno-pch-timestamp"
+    + " -x c++-header"
+    + " %1"
+    + " -o %2"
+
+.Linker = "/usr/bin/clang++"
+
+Unity("Basic-Unity")
+{
+	.UnityInputPath = "$CodeDirectory$/Basic"
+	.UnityOutputPath = "$BuildDirectory$/Code"
+	.UnityOutputPattern = "BasicUnity*.cpp"
+}
+
+ObjectList("Basic-Objects")
+{
+    .PCHInputFile = "$CodeDirectory$/Basic/PCH.h"
+    .PCHOutputFile = "$BuildDirectory$/PCH/Basic.pch"
+    .PCHOptions = "$PCHCompilerOptions$"
+
+    .CompilerInputUnity = "Basic-Unity"
+    .CompilerOutputPath = "$BuildDirectory$/Objects"
+    .CompilerOptions =
+    	"$LibraryCompilerOptions$"
+    	+ " -include-pch $PCHOutputFile$"
+}
+
+DLL("Basic-DLL")
+{
+    .LinkerOutput = "$BuildDirectory$/Binaries/libBasic.so"
+    .LinkerOptions = "-shared -o %2 %1"
+    .Libraries = {"Basic-Objects"}
+}
+
+Unity("Media-Unity")
+{
+	.UnityInputPath = "$CodeDirectory$/Media"
+	.UnityOutputPath = "$BuildDirectory$/Code"
+	.UnityOutputPattern = "MediaUnity*.cpp"
+}
+
+ObjectList("Media-Objects")
+{
+    .PCHInputFile = "$CodeDirectory$/Media/PCH.h"
+    .PCHOutputFile = "$BuildDirectory$/PCH/Media.pch"
+    .PCHOptions = "$PCHCompilerOptions$"
+
+    .CompilerInputUnity = "Media-Unity"
+    .CompilerOutputPath = "$BuildDirectory$/Objects"
+    .CompilerOptions =
+    	"$LibraryCompilerOptions$"
+    	+ " -include-pch $PCHOutputFile$"
+}
+
+DLL("Media-DLL")
+{
+    .LinkerOutput = "$BuildDirectory$/Binaries/libMedia.so"
+    .LinkerOptions = "-shared -o %2 %1"
+    .Libraries = {"Media-Objects"}
+}
+
+Unity("Engine-Unity")
+{
+	.UnityInputPath = "$CodeDirectory$/Engine"
+	.UnityOutputPath = "$BuildDirectory$/Code"
+	.UnityOutputPattern = "EngineUnity*.cpp"
+}
+
+ObjectList("Engine-Objects")
+{
+    .PCHInputFile = "$CodeDirectory$/Engine/PCH.h"
+    .PCHOutputFile = "$BuildDirectory$/PCH/Engine.pch"
+    .PCHOptions = "$PCHCompilerOptions$"
+
+    .CompilerInputUnity = "Engine-Unity"
+    .CompilerOutputPath = "$BuildDirectory$/Objects"
+    .CompilerOptions =
+    	"$LibraryCompilerOptions$"
+    	+ " -include-pch $PCHOutputFile$"
+}
+
+Executable("Engine")
+{
+    .LinkerOutput = "$BuildDirectory$/Binaries/Engine"
+    .LinkerOptions = "Build/Linux/Binaries/libBasic.so Build/Linux/Binaries/libMedia.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread -o %2 %1"
+    .Libraries = {"Engine-Objects"}
+}
+
+Alias("all")
+{
+	.Targets =
+	{
+		"Basic-DLL"
+		"Media-DLL",
+		"Engine",
+	}
+}

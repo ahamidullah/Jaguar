@@ -28,6 +28,8 @@ enum OpenFileFlagBits
 	OPEN_FILE_CREATE = O_CREAT | O_TRUNC,
 };
 
+struct PlatformTime;
+
 FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error);
 bool CloseFile(FileHandle file);
 String ReadFromFile(FileHandle file, s64 byteCount, bool *error);
@@ -38,3 +40,4 @@ bool IterateDirectory(const String &path, DirectoryIteration *context);
 PlatformTime GetFileLastModifiedTime(FileHandle file, bool *error);
 bool FileExists(const String &path);
 bool CreateDirectoryIfItDoesNotExist(const String &path);
+bool DeleteFile(const String &path);

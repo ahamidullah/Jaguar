@@ -7,7 +7,7 @@ cd $PROJECT_DIRECTORY
 if [ "$1" = "ShaderCompiler" ]; then
 	Build/ShaderCompiler
 else
-	Build/Game
+	Build/Linux/Binaries/Engine
 fi
 
 cd - >& /dev/null

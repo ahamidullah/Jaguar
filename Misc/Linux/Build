@@ -1,2 +1,12 @@
 #!/bin/bash
-/usr/bin/time --format='Build time: %es' Build.sh "$@"
+
+set -e
+
+pushd . >& /dev/null
+cd $ProjectDirectory
+
+fbuild -fastcancel -config Misc/Linux/fbuild.bff $@
+
+popd >& /dev/null
+
+exit

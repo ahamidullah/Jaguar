@@ -11,7 +11,6 @@
 * Fiber-based job system
 * Matrix-vector math library
 * Asynchronous asset loading
-* Custom build system
 * Custom logging system
 * Custom platform layer (X11)
 

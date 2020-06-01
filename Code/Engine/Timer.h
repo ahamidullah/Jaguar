@@ -1,6 +1,8 @@
 #pragma once
 
-struct PerformanceTimer
+#include "Code/Basic/Time.h"
+
+struct Timer
 {
 	PlatformTime start;
 	f64 runningSum;
@@ -8,6 +10,5 @@ struct PerformanceTimer
 	const char *name;
 };
 
-#define StartPerformanceTimer(timerName) PerformanceTimer TIMER_#timerName = {.name = #timerName, .start = GetPlatformTime(), .iteration = 1}
-
-#define PrintPerformanceTimer(timerName) PrintPerformanceTimerActual(&TIMER_##timerName)
+#define StartTimer(timerName) Timer TIMER_#timerName = {.name = #timerName, .start = GetPlatformTime(), .iteration = 1}
+#define PrintTimer(timerName) PrintTimerActual(&TIMER_##timerName)

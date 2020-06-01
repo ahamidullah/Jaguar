@@ -1,3 +1,7 @@
+#include "Parser.h"
+#include "File.h"
+#include "Assert.h"
+
 Parser CreateParser(const String &filepath, const String &delimiters, bool *error)
 {
 	auto fileString = ReadEntireFile(filepath, error);

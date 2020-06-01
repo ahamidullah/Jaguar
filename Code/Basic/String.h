@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Memory.h"
 #include "Array.h"
 
 s64 CStringLength(const char *s);
@@ -19,6 +18,7 @@ struct String
 
 bool operator==(const String &a, const String &b);
 bool operator!=(const String &a, const String &b);
+
 bool CStringsEqual(const char *a, const char *b);
 
 String CreateString(s64 length);
@@ -35,6 +35,7 @@ void StringAppend(String *destination, const char *source);
 void StringAppend(String *destination, String source, s64 rangeStartIndex, s64 rangeLength);
 void StringAppend(String *destination, char source);
 
+// @TODO: Change back to Concatenate.
 String JoinStrings(const String &a, const String &b);
 
 String FormatString(const String &format, ...);
@@ -47,6 +48,7 @@ bool IsCharWhitespace(char c);
 bool IsCharDigit(char c);
 
 void TrimString(String *s, s64 leftIndex, s64 rightIndex);
+Array<String> SplitString(const String &s, char seperator);
 
 bool ParseInteger(const String &string, s64 *result);
 

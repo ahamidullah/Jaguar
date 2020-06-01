@@ -1,3 +1,6 @@
+#include "../File.h"
+#include "../Log.h"
+
 FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error)
 {
 	auto file = open(&path[0], flags, 0666);
@@ -36,7 +39,7 @@ String ReadFromFile(FileHandle file, s64 byteCount, bool *error)
 	} while (totalBytesRead < byteCount && currentBytesRead != 0 && currentBytesRead != -1);
 	if (currentBytesRead == -1)
 	{
-		LogPrint(ERROR_LOG, "ReadFile failed: could not read from file: %s.\n", GetPlatformError());
+		LogPrint(ERROR_LOG, "ReadFromFile failed: could not read from file: %s.\n", GetPlatformError());
 		*error = true;
 		return "";
 	}
@@ -153,6 +156,17 @@ bool CreateDirectoryIfItDoesNotExist(const String &path)
 	if (mkdir(&path[0], 0700) == -1)
 	{
 		LogPrint(ERROR_LOG, "Failed to create directory %s: %s.\n", &path[0], GetPlatformError());
+		return false;
+	}
+	return true;
+}
+
+bool DeleteFile(const String &path)
+{
+	auto returnCode = unlink(path.data.elements);
+	if (returnCode != 0)
+	{
+		LogPrint(ERROR_LOG, "Failed to delete file %k: %k.\n", path, GetPlatformError());
 		return false;
 	}
 	return true;

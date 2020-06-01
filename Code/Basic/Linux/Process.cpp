@@ -1,3 +1,7 @@
+#include "../Process.h"
+#include "../PCH.h"
+#include "../String.h"
+
 void ExitProcess(ProcessExitCode exitCode)
 {
 	_exit((s32)exitCode);

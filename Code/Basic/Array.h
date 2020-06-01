@@ -1,6 +1,7 @@
 #pragma once
 
-#include <stdlib.h> // realloc @TODO
+#include "Memory.h"
+#include "Assert.h"
 
 template <typename T>
 struct Array
@@ -117,7 +118,7 @@ void ResizeArray(Array<T> *a, s64 newCount)
 }
 
 template <typename T>
-void ArrayAppend(Array<T> *a, const T &newElement)
+void DoAppendElement(Array<T> *a, const T &newElement)
 {
 	auto newElementIndex = a->count;
 	SetMinimumArrayCapacity(a, a->count + 1);
@@ -125,6 +126,18 @@ void ArrayAppend(Array<T> *a, const T &newElement)
 	Assert(newElementIndex < a->capacity);
 	a->elements[newElementIndex] = newElement;
 	a->count += 1;
+}
+
+template <typename T>
+void ArrayAppend(Array<T> *a, const T &newElement)
+{
+	DoAppendElement(a, newElement);
+}
+
+template <typename T>
+void ArrayAppend(Array<T> *a, u32 newElement)
+{
+	DoAppendElement(a, newElement);
 }
 
 template <typename T>

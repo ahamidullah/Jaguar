@@ -1,5 +1,7 @@
 #pragma once
 
+#include "String.h"
+
 #define STANDARD_PARSER_DELIMITERS " \t:;\",(){}=-+*/\n"
 
 struct Parser

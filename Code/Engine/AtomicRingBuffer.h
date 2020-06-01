@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Code/Basic/Atomic.h"
+
+#include "Code/Common.h"
+
 template <typename T, s64 Size>
 struct AtomicRingBuffer {
 	T Elements[Size] = {};

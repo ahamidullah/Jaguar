@@ -1,3 +1,6 @@
+#include "../DLL.h"
+#include "../Log.h"
+
 DLLHandle OpenDLL(const String &filename, bool *error)
 {
 	auto library = dlopen(&filename[0], RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);

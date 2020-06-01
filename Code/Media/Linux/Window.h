@@ -1,8 +1,8 @@
 #pragma once
 
-#include <X11/X.h>
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
+#include "../PCH.h"
+
+#include "Code/Common.h"
 
 struct PlatformWindow
 {
@@ -12,25 +12,26 @@ struct PlatformWindow
 	u32 height;
 };
 
+struct WindowEvents
+{
+	bool quit = false;
+};
+
 struct InputButtons;
 struct Mouse;
-struct WindowEvents;
+
+void InitializeWindow(bool multithreaded);
+
+Display *GetX11Display();
 
 PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen);
-void ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse, WindowEvents *windowEvents);
+WindowEvents ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse);
 void ToggleFullscreen(PlatformWindow *window);
 void CaptureCursor(PlatformWindow *window);
 void UncaptureCursor(PlatformWindow *window);
 void DestroyWindow(PlatformWindow *window);
-void InitializeWindow();
 
 #if defined(USE_VULKAN_RENDER_API)
-
-#define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h> 
-
-const char *GetRequiredVulkanSurfaceInstanceExtension();
-VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface);
-
+	const char *GetRequiredVulkanSurfaceInstanceExtension();
+	VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface);
 #endif

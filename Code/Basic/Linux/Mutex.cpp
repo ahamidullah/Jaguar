@@ -1,8 +1,10 @@
+#include "../Mutex.h"
+
 Mutex CreateMutex()
 {
-	Mutex m;
-	pthread_mutex_init(&m, NULL);
-	return m;
+	auto mutex = Mutex{};
+	pthread_mutex_init(&mutex, NULL);
+	return mutex;
 }
 
 void LockMutex(Mutex *mutex)

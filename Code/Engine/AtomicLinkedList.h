@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Code/Basic/Assert.h"
+
 template <typename T>
 struct AtomicLinkedList {
 	T *head = NULL;

@@ -2,6 +2,15 @@
 
 set -e
 
+pushd . >& /dev/null
+cd $ProjectDirectory
+
+fbuild -config Misc/Linux/fbuild.bff $@
+
+popd >& /dev/null
+
+exit
+
 BUILD_DIRECTORY=$PROJECT_DIRECTORY/Build
 
 CODE_DIRECTORY=$PROJECT_DIRECTORY/Code

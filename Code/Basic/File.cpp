@@ -1,3 +1,5 @@
+#include "File.h"
+
 String ReadEntireFile(const String &path, bool *error)
 {
 	auto file = OpenFile(path, OPEN_FILE_READ_ONLY, error);

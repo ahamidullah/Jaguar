@@ -11,6 +11,16 @@
 // Per-frame state. Delta time, frame number, skinning matrices, etc.
 // Per-thread memory heap. 2mb?
 
+#include "Job.h"
+#include "AtomicLinkedList.h"
+#include "AtomicRingBuffer.h"
+
+#include "Code/Basic/Fiber.h"
+#include "Code/Basic/Thread.h"
+#include "Code/Basic/Semaphore.h"
+#include "Code/Basic/Atomic.h"
+#include "Code/Basic/Array.h"
+
 // @TODO: If the parent job does not wait on the counter, and the counter gets deallocated, then the job may access the freed counter memory.
 //        Need a better way to handle jobs not waiting on the counter. Maybe the jobs system should own the counter memory?
 // @TODO: Check to see what should be volatile.

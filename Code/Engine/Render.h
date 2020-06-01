@@ -1,14 +1,12 @@
 #pragma once
 
-struct DescriptorSetBindingInfo
-{
-	u32 binding;
-	GfxDescriptorType descriptorType;
-	u32 descriptorCount;
-	GfxShaderStageFlags stageFlags;
-};
+#include "Code/Common.h"
 
+void InitializeRenderer(void *jobParameterPointer);
 s64 GetFrameIndex();
+s64 GetRenderWidth();
+s64 GetRenderHeight();
+void Render();
 
 #if 0
 enum RenderPrimitive

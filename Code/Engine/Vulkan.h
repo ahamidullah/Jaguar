@@ -4,13 +4,15 @@
 
 #if defined(USE_VULKAN_RENDER_API)
 
+#include "PCH.h"
+
+#include "Code/Media/Window.h"
+
+#include "Code/Basic/String.h"
+
 constexpr bool usingVulkanAPI = true;
 
 #define GFX_MAX_FRAMES_IN_FLIGHT 2
-
-#define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h> 
 
 typedef VkFlags GfxShaderStageFlags;
 typedef VkShaderStageFlagBits GfxShaderStage;
@@ -232,23 +234,33 @@ typedef VkDeviceSize GfxSize;
 typedef VkImageSubresourceRange GfxImageSubresourceRange;
 typedef VkQueue GfxCommandQueue;
 
+void GfxInitialize(PlatformWindow *window);
+
+VkFormat GfxGetSurfaceFormat();
+
 struct GfxSubmitInfo;
 GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool);
 void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, GfxFence fence);
 void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GfxCommandBuffer *buffers);
 void GfxEndCommandBuffer(GfxCommandBuffer buffer);
 
+#include "Gfx.h" // @TODO @DELTEME
+
+GfxCommandQueue GfxGetCommandQueue(GfxCommandQueueType queueType);
+
+GfxCommandPool GfxCreateCommandPool(GfxCommandQueueType queueType);
 void GfxResetCommandPool(GfxCommandPool pool);
 
 GfxBuffer GfxCreateBuffer(GfxSize size, GfxBufferUsageFlags usage);
 void GfxDestroyBuffer(GfxBuffer buffer);
 void GfxRecordCopyBufferCommand(GfxCommandBuffer buffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset);
 GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer);
-void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, GfxSize memoryOffset);
+void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, s64 memoryOffset);
 
+bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory);
 void *GfxMapMemory(GfxMemory memory, GfxSize size, GfxSize offset);
 
-GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, const String &spirv);
+GfxShaderModule GfxCreateShaderModule(GfxShaderStage stage, String spirv);
 
 GfxFence GfxCreateFence(bool startSignalled);
 bool GfxWasFenceSignalled(GfxFence fence);
@@ -256,9 +268,9 @@ void GfxWaitForFences(u32 count, GfxFence *fences, bool waitForAllFences, u64 ti
 void GfxResetFences(u32 count, GfxFence *fences);
 
 GfxSwapchain GfxCreateSwapchain();
-u32 GfxAcquireNextSwapchainImage(GfxSwapchain swapchain, u32 currentFrameIndex);
+u32 GfxAcquireNextSwapchainImage(GfxSwapchain swapchain, GfxSemaphore semaphore);
 u32 GfxGetSwapchainImageCount(GfxSwapchain swapchain);
-void GfxGetSwapchainImageViews(GfxSwapchain swapchain, u32 count, GfxImageView *imageViews);
+Array<GfxImage> GfxGetSwapchainImages(GfxSwapchain swapchain);
 void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, u32 currentFrame);
 
 GfxDescriptorPool GfxCreateDescriptorPool();
@@ -266,10 +278,36 @@ GfxDescriptorPool GfxCreateDescriptorPool();
 GfxFramebuffer GfxCreateFramebuffer(GfxRenderPass renderPass, u32 width, u32 height, u32 attachmentCount, GfxImageView *attachments);
 
 GfxMemoryRequirements GfxGetImageMemoryRequirements(GfxImage image);
-GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsage usage, VkSampleCountFlagBits sampleCount);
-void GfxBindImageMemory(GfxImage image, GfxMemory memory, GfxSize offset);
+GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, VkSampleCountFlagBits sampleCount);
+void GfxBindImageMemory(GfxImage image, GfxMemory memory, s64 offset);
 void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout);
+GfxImageView GfxCreateImageView(GfxImage image, GfxImageViewType viewType, GfxFormat format, GfxSwizzleMapping swizzleMapping, GfxImageSubresourceRange subresourceRange);
 void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight);
+
+GfxSemaphore GfxCreateSemaphore();
+
+GfxDescriptorSetLayout GfxCreateDescriptorSetLayout(u32 bindingCount, DescriptorSetBindingInfo *bindingInfos);
+void GfxUpdateDescriptorSets(GfxDescriptorSet set, GfxBuffer buffer, GfxDescriptorType descriptorType, u32 binding, GfxSize offset, GfxSize range);
+
+void GfxCreateDescriptorSets(GfxDescriptorPool pool, GfxDescriptorSetLayout layout, u32 setCount, GfxDescriptorSet *sets);
+void GfxRecordBindDescriptorSetsCommand(GfxCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, s64 firstSetNumber, s64 setCount, GfxDescriptorSet *sets);
+
+GfxPipeline GfxCreatePipeline(GfxPipelineDescription pipeline_description);
+void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline);
+
+GfxPipelineLayout GfxCreatePipelineLayout(u32 layoutCount, GfxDescriptorSetLayout *layouts);
+
+GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass();
+void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer);
+
+void GfxRecordSetViewportCommand(GfxCommandBuffer commandBuffer, s64 width, s64 height);
+void GfxRecordSetScissorCommand(GfxCommandBuffer commandBuffer, u32 width, u32 height);
+void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline);
+void GfxRecordBindVertexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer vertexBuffer);
+void GfxRecordBindIndexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer indexBuffer);
+void GfxDrawIndexedVertices(GfxCommandBuffer commandBuffer, s64 indexCount, s64 firstIndex, s64 vertexOffset);
+void GfxRecordEndRenderPassCommand(GfxCommandBuffer commandBuffer);
+void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, Array<GfxSemaphore> waitSemaphores);
 
 #define GFX_ERROR_OBJECT 0
 
@@ -300,11 +338,6 @@ typedef struct Render_API_Context
 	VkSemaphore image_available_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 	VkSemaphore render_finished_semaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } Render_API_Context;
-
-void ArrayAppend(Array<u32> *a, const VkFlags &newElement)
-{
-	ArrayAppend<u32>(a, newElement);
-}
 
 #else
 

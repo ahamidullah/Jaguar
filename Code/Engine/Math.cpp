@@ -1,3 +1,8 @@
+#include "Math.h"
+#include "GPU.h"
+
+#include "Code/Basic/Log.h"
+
 void PrintM4Actual(const char *name, M4 m)
 {
 	ConsolePrint("%s:\n", name);
@@ -88,7 +93,7 @@ bool NotZero(V3 v)
 	return (v.x != 0.0f) || (v.y != 0.0f) || (v.z != 0.0f);
 }
 
-s64 AlignS64(s64 number, s64 alignment)
+s64 AlignTo(s64 number, s64 alignment)
 {
 	auto remainder = number % alignment;
 	if (remainder == 0)
@@ -98,7 +103,7 @@ s64 AlignS64(s64 number, s64 alignment)
 	return number + alignment - remainder;
 }
 
-s64 AlignmentOffsetS64(s64 number, s64 alignment)
+s64 AlignmentOffset(s64 number, s64 alignment)
 {
 	auto remainder = number % alignment;
 	if (remainder == 0)
@@ -106,6 +111,24 @@ s64 AlignmentOffsetS64(s64 number, s64 alignment)
 		return 0;
 	}
 	return alignment - remainder;
+}
+
+s64 Minimum(s64 a, s64 b)
+{
+	if (a < b)
+	{
+		return a;
+	}
+	return b;
+}
+
+s64 Maximum(s64 a, s64 b)
+{
+	if (a > b)
+	{
+		return a;
+	}
+	return b;
 }
 
 V4 V3ToV4(V3 v, f32 w)
@@ -358,9 +381,9 @@ f32 Length(V3 v)
 	return SquareRoot(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-V3 Normalize(V3 V)
+V3 Normalize(V3 v)
 {
-	V3 Result = (1 / Length(V)) * V;
+	V3 Result = (1 / Length(v)) * v;
 	Assert(NotNAN(Result));
 	return Result;
 }

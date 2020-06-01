@@ -1,17 +1,12 @@
-#include "Media.h"
+#include "Input.h"
+#include "Window.h"
 
-#if defined(__linux__)
-	#include "Linux/Window.cpp"
-	#include "Linux/Input.cpp"
-#else
-	#error unsupported platform
-#endif
+#include "Code/Basic/Basic.h"
 
-#include "Input.cpp"
-
-void InitializeMedia(bool multithreaded, s64 maxFiberCount)
+void InitializeMedia(bool multithreaded)
 {
-	InitializeBasic(maxFiberCount);
+	InitializeBasic();
+
 	InitializeInput();
 	InitializeWindow(multithreaded);
 }

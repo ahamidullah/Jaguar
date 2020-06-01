@@ -1,3 +1,6 @@
+#include "../Thread.h"
+#include "../Log.h"
+
 s64 GetProcessorCount()
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);

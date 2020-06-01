@@ -1,14 +1,10 @@
 #pragma once
 
-struct ShaderModule
-{
-	GPUShaderStage stage;
-	GPUShaderModule module;
-};
-
 struct Shader
 {
-	Array<ShaderModule> modules;
+	String name;
+	Array<GfxShaderModule> modules;
+	Array<GfxShaderStage> stages;
 };
 
 void LoadShaders();

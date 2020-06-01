@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Math.h"
+
 struct Transform
 {
 	V3 position;

@@ -1,7 +1,0 @@
-struct
-{
-} descriptorSetGlobals;
-
-void InitializeDescriptorSets()
-{
-}

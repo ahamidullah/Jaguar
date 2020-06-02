@@ -559,7 +559,7 @@ M4 CreateInfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspe
 		//   x points right, and y points down, z points forward
 		//   x from -1 to 1, y from -1 to 1, and z from 0 to 1 (half of opengl)
 		// @TODO: Divide z by 1/2?
-		f32 focalLength = 1.0f / Tan(verticalFOV / 2.0f);
+		auto focalLength = 1.0f / Tan(verticalFOV / 2.0f);
 		return
 		{
 			focalLength,   0.0f,                         0.0f,     0.0f,
@@ -567,6 +567,10 @@ M4 CreateInfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspe
 			0.0f,          0.0f,                         1.0f,    -2.0f * near,
 			0.0f,          0.0f,                         1.0f,    0.0f,
 		};
+	}
+	else
+	{
+		Abort("Unknown render API.");
 	}
 }
 

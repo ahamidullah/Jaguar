@@ -5,7 +5,7 @@ set -e
 pushd . >& /dev/null
 cd $ProjectDirectory
 
-fbuild -fastcancel -config Misc/Linux/fbuild.bff $@
+fbuild -cache -fastcancel -config Misc/Linux/fbuild.bff $@
 
 popd >& /dev/null
 

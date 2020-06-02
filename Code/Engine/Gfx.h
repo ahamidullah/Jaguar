@@ -2,7 +2,7 @@
 
 struct GfxSubmitInfo
 {
-	Array<GfxCommandBuffer> commandBuffers;
+	Array<GPUBackendCommandBuffer> commandBuffers;
 	Array<GfxPipelineStageFlags> waitStages;
     Array<GfxSemaphore> waitSemaphores;
     Array<GfxSemaphore> signalSemaphores;

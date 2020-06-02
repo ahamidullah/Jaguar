@@ -80,11 +80,18 @@ struct GPUBuffer
 	s64 size;
 };
 
+struct GPUCommandBuffer
+{
+	GPUBackendCommandBuffer backend;
+	GPUResourceLifetime lifetime;
+	GfxCommandQueueType queueType;
+};
+
 void InitializeGPU();
 GfxBuffer CreateGPUBuffer(s64 size, GfxBufferUsageFlags usage, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL);
 GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, GfxSampleCount sampleCount, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory = NULL);
-GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResourceLifetime lifetime);
-void QueueGPUCommandBuffer(GfxCommandBuffer commandBuffer, GfxCommandQueueType queueType, GPUResourceLifetime lifetime, bool *signalOnCompletion);
+GPUCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResourceLifetime lifetime);
+void QueueGPUCommandBuffer(GPUCommandBuffer commandBuffer, bool *signalOnCompletion);
 GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> frameWaitSemaphores, Array<GfxPipelineStageFlags> frameWaitStages, GfxFence frameFence);
 void ClearGPUMemoryForFrameIndex(s64 frameIndex);
 void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex);

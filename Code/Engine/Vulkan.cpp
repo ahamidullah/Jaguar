@@ -260,7 +260,7 @@ GfxCommandQueue GfxGetCommandQueue(GfxCommandQueueType queueType)
 	return queue;
 }
 
-GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool)
+GPUBackendCommandBuffer CreateGPUBackendCommandBuffer(GfxCommandPool commandPool)
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo =
     {
@@ -296,14 +296,14 @@ void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, G
 	VK_CHECK(vkQueueSubmit(queue, 1, &vulkanSubmitInfo, fence));
 }
 
-void GfxFreeCommandBuffers(GfxCommandPool pool, s64 count, GfxCommandBuffer *buffers)
+void GfxFreeCommandBuffers(GfxCommandPool pool, s64 count, GPUBackendCommandBuffer *buffers)
 {
 	vkFreeCommandBuffers(vulkanGlobals.device, pool, count, buffers); // No return.
 }
 
-void GfxEndCommandBuffer(GfxCommandBuffer buffer)
+void GfxEndCommandBuffer(GPUCommandBuffer commandBuffer)
 {
-	VK_CHECK(vkEndCommandBuffer(buffer));
+	VK_CHECK(vkEndCommandBuffer(commandBuffer.backend));
 }
 
 // @TODO: Store the queue family index in a GfxCommandQueue struct, and take that struct.
@@ -362,7 +362,7 @@ void GfxDestroyBuffer(GfxBuffer buffer)
 	vkDestroyBuffer(vulkanGlobals.device, buffer, NULL);
 }
 
-void GfxRecordCopyBufferCommand(GfxCommandBuffer commandBuffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset)
+void GfxRecordCopyBufferCommand(GPUCommandBuffer commandBuffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset)
 {
 	VkBufferCopy bufferCopy =
 	{
@@ -370,7 +370,7 @@ void GfxRecordCopyBufferCommand(GfxCommandBuffer commandBuffer, GfxSize size, Gf
 		.dstOffset = destinationOffset,
 		.size = size,
 	};
-	vkCmdCopyBuffer(commandBuffer, source, destination, 1, &bufferCopy);
+	vkCmdCopyBuffer(commandBuffer.backend, source, destination, 1, &bufferCopy);
 }
 
 GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer)
@@ -849,9 +849,9 @@ void GfxUpdateDescriptorSets(GfxDescriptorSet set, GfxBuffer buffer, GfxDescript
 	vkUpdateDescriptorSets(vulkanGlobals.device, 1, &descriptorWrite, 0, NULL);
 }
 
-void GfxRecordBindDescriptorSetsCommand(GfxCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, s64 firstSetNumber, s64 setCount, GfxDescriptorSet *sets)
+void GfxRecordBindDescriptorSetsCommand(GPUCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, s64 firstSetNumber, s64 setCount, GfxDescriptorSet *sets)
 {
-	vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, pipelineLayout, firstSetNumber, setCount, sets, 0, NULL);
+	vkCmdBindDescriptorSets(commandBuffer.backend, pipelineBindPoint, pipelineLayout, firstSetNumber, setCount, sets, 0, NULL);
 }
 
 #if 0
@@ -1253,7 +1253,7 @@ GfxImageView GfxCreateImageView(GfxImage image, GfxImageViewType viewType, GfxFo
 	return imageView;
 }
 
-void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout)
+void GfxTransitionImageLayout(GPUCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout)
 {
 	auto barrier = VkImageMemoryBarrier
 	{
@@ -1310,10 +1310,10 @@ void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, Gf
 	{
 		Abort("Unsupported Vulkan image layout transition.");
 	}
-	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
+	vkCmdPipelineBarrier(commandBuffer.backend, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier); // No return.
 }
 
-void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight)
+void GfxRecordCopyBufferToImageCommand(GPUCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight)
 {
 	VkBufferImageCopy region =
 	{
@@ -1335,7 +1335,7 @@ void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer
 			1,
 		},
 	};
-	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	vkCmdCopyBufferToImage(commandBuffer.backend, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, Array<GfxSemaphore> waitSemaphores)
@@ -1534,7 +1534,7 @@ VkSampler Vulkan_Create_Sampler(Render_API_Context *context, VkSamplerCreateInfo
 #endif
 }
 
-void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer)
+void GfxRecordBeginRenderPassCommand(GPUCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer)
 {
 	VkClearValue clearColor = {{{0.04f, 0.19f, 0.34f, 1.0f}}};
 	VkClearValue clearDepthStencil = {{{1.0f, 0.0f}}};
@@ -1556,15 +1556,15 @@ void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPa
 		.clearValueCount = CArrayCount(clearValues),
 		.pClearValues = clearValues,
 	};
-	vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(commandBuffer.backend, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void GfxRecordEndRenderPassCommand(GfxCommandBuffer commandBuffer)
+void GfxRecordEndRenderPassCommand(GPUCommandBuffer commandBuffer)
 {
-	vkCmdEndRenderPass(commandBuffer);
+	vkCmdEndRenderPass(commandBuffer.backend);
 }
 
-void GfxRecordSetViewportCommand(GfxCommandBuffer commandBuffer, s64 width, s64 height)
+void GfxRecordSetViewportCommand(GPUCommandBuffer commandBuffer, s64 width, s64 height)
 {
 	VkViewport viewport =
 	{
@@ -1575,40 +1575,40 @@ void GfxRecordSetViewportCommand(GfxCommandBuffer commandBuffer, s64 width, s64 
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f,
 	};
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	vkCmdSetViewport(commandBuffer.backend, 0, 1, &viewport);
 }
 
-void GfxRecordSetScissorCommand(GfxCommandBuffer commandBuffer, u32 width, u32 height)
+void GfxRecordSetScissorCommand(GPUCommandBuffer commandBuffer, u32 width, u32 height)
 {
 	VkRect2D scissor =
 	{
 		.offset = {0, 0},
 		.extent = {width, height},
 	};
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+	vkCmdSetScissor(commandBuffer.backend, 0, 1, &scissor);
 }
 
-void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline)
+void GfxRecordBindPipelineCommand(GPUCommandBuffer commandBuffer, GfxPipeline pipeline)
 {
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	vkCmdBindPipeline(commandBuffer.backend, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 #define VULKAN_VERTEX_BUFFER_BIND_ID 0
 
-void GfxRecordBindVertexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer vertexBuffer)
+void GfxRecordBindVertexBufferCommand(GPUCommandBuffer commandBuffer, GfxBuffer vertexBuffer)
 {
 	VkDeviceSize offset = 0;
-	vkCmdBindVertexBuffers(commandBuffer, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &vertexBuffer, &offset);
+	vkCmdBindVertexBuffers(commandBuffer.backend, VULKAN_VERTEX_BUFFER_BIND_ID, 1, &vertexBuffer, &offset);
 }
 
-void GfxRecordBindIndexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer indexBuffer)
+void GfxRecordBindIndexBufferCommand(GPUCommandBuffer commandBuffer, GfxBuffer indexBuffer)
 {
-	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(commandBuffer.backend, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 }
 
-void GfxDrawIndexedVertices(GfxCommandBuffer commandBuffer, s64 indexCount, s64 firstIndex, s64 vertexOffset)
+void GfxDrawIndexedVertices(GPUCommandBuffer commandBuffer, s64 indexCount, s64 firstIndex, s64 vertexOffset)
 {
-	vkCmdDrawIndexed(commandBuffer, indexCount, 1, firstIndex, vertexOffset, 0);
+	vkCmdDrawIndexed(commandBuffer.backend, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
 void GfxInitialize(PlatformWindow *window)

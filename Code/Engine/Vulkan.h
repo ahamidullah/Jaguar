@@ -215,7 +215,7 @@ typedef VkSemaphore GfxSemaphore;
 typedef VkDescriptorSetLayout GfxDescriptorSetLayout;
 typedef VkDescriptorSet GfxDescriptorSet;
 typedef VkFence GfxFence;
-typedef VkCommandBuffer GfxCommandBuffer;
+typedef VkCommandBuffer GPUBackendCommandBuffer;
 typedef VkCommandPool GfxCommandPool;
 typedef VkDeviceMemory GfxMemory;
 typedef VkSampler GfxSampler;
@@ -238,11 +238,12 @@ void GfxInitialize(PlatformWindow *window);
 
 VkFormat GfxGetSurfaceFormat();
 
+struct GPUCommandBuffer;
 struct GfxSubmitInfo;
-GfxCommandBuffer GfxCreateCommandBuffer(GfxCommandPool commandPool);
+GPUBackendCommandBuffer CreateGPUBackendCommandBuffer(GfxCommandPool commandPool);
 void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, GfxFence fence);
-void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GfxCommandBuffer *buffers);
-void GfxEndCommandBuffer(GfxCommandBuffer buffer);
+void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GPUCommandBuffer *buffers);
+void GfxEndCommandBuffer(GPUCommandBuffer buffer);
 
 #include "Gfx.h" // @TODO @DELTEME
 
@@ -253,7 +254,7 @@ void GfxResetCommandPool(GfxCommandPool pool);
 
 GfxBuffer GfxCreateBuffer(GfxSize size, GfxBufferUsageFlags usage);
 void GfxDestroyBuffer(GfxBuffer buffer);
-void GfxRecordCopyBufferCommand(GfxCommandBuffer buffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset);
+void GfxRecordCopyBufferCommand(GPUCommandBuffer buffer, GfxSize size, GfxBuffer source, GfxBuffer destination, GfxSize sourceOffset, GfxSize destinationOffset);
 GfxMemoryRequirements GfxGetBufferMemoryRequirements(GfxBuffer buffer);
 void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, s64 memoryOffset);
 
@@ -280,9 +281,9 @@ GfxFramebuffer GfxCreateFramebuffer(GfxRenderPass renderPass, u32 width, u32 hei
 GfxMemoryRequirements GfxGetImageMemoryRequirements(GfxImage image);
 GfxImage GfxCreateImage(u32 width, u32 height, GfxFormat format, GfxImageLayout initialLayout, GfxImageUsageFlags usage, VkSampleCountFlagBits sampleCount);
 void GfxBindImageMemory(GfxImage image, GfxMemory memory, s64 offset);
-void GfxTransitionImageLayout(GfxCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout);
+void GfxTransitionImageLayout(GPUCommandBuffer commandBuffer, GfxImage image, GfxFormat format, GfxImageLayout oldLayout, GfxImageLayout newLayout);
 GfxImageView GfxCreateImageView(GfxImage image, GfxImageViewType viewType, GfxFormat format, GfxSwizzleMapping swizzleMapping, GfxImageSubresourceRange subresourceRange);
-void GfxRecordCopyBufferToImageCommand(GfxCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight);
+void GfxRecordCopyBufferToImageCommand(GPUCommandBuffer commandBuffer, GfxBuffer buffer, GfxImage image, u32 imageWidth, u32 imageHeight);
 
 GfxSemaphore GfxCreateSemaphore();
 
@@ -290,23 +291,23 @@ GfxDescriptorSetLayout GfxCreateDescriptorSetLayout(u32 bindingCount, Descriptor
 void GfxUpdateDescriptorSets(GfxDescriptorSet set, GfxBuffer buffer, GfxDescriptorType descriptorType, u32 binding, GfxSize offset, GfxSize range);
 
 void GfxCreateDescriptorSets(GfxDescriptorPool pool, GfxDescriptorSetLayout layout, u32 setCount, GfxDescriptorSet *sets);
-void GfxRecordBindDescriptorSetsCommand(GfxCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, s64 firstSetNumber, s64 setCount, GfxDescriptorSet *sets);
+void GfxRecordBindDescriptorSetsCommand(GPUCommandBuffer commandBuffer, GfxPipelineBindPoint pipelineBindPoint, GfxPipelineLayout pipelineLayout, s64 firstSetNumber, s64 setCount, GfxDescriptorSet *sets);
 
 GfxPipeline GfxCreatePipeline(GfxPipelineDescription pipeline_description);
-void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline);
+void GfxRecordBindPipelineCommand(GPUCommandBuffer commandBuffer, GfxPipeline pipeline);
 
 GfxPipelineLayout GfxCreatePipelineLayout(u32 layoutCount, GfxDescriptorSetLayout *layouts);
 
 GfxRenderPass TEMPORARY_Render_API_Create_Render_Pass();
-void GfxRecordBeginRenderPassCommand(GfxCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer);
+void GfxRecordBeginRenderPassCommand(GPUCommandBuffer commandBuffer, GfxRenderPass renderPass, GfxFramebuffer framebuffer);
 
-void GfxRecordSetViewportCommand(GfxCommandBuffer commandBuffer, s64 width, s64 height);
-void GfxRecordSetScissorCommand(GfxCommandBuffer commandBuffer, u32 width, u32 height);
-void GfxRecordBindPipelineCommand(GfxCommandBuffer commandBuffer, GfxPipeline pipeline);
-void GfxRecordBindVertexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer vertexBuffer);
-void GfxRecordBindIndexBufferCommand(GfxCommandBuffer commandBuffer, GfxBuffer indexBuffer);
-void GfxDrawIndexedVertices(GfxCommandBuffer commandBuffer, s64 indexCount, s64 firstIndex, s64 vertexOffset);
-void GfxRecordEndRenderPassCommand(GfxCommandBuffer commandBuffer);
+void GfxRecordSetViewportCommand(GPUCommandBuffer commandBuffer, s64 width, s64 height);
+void GfxRecordSetScissorCommand(GPUCommandBuffer commandBuffer, u32 width, u32 height);
+void GfxRecordBindPipelineCommand(GPUCommandBuffer commandBuffer, GfxPipeline pipeline);
+void GfxRecordBindVertexBufferCommand(GPUCommandBuffer commandBuffer, GfxBuffer vertexBuffer);
+void GfxRecordBindIndexBufferCommand(GPUCommandBuffer commandBuffer, GfxBuffer indexBuffer);
+void GfxDrawIndexedVertices(GPUCommandBuffer commandBuffer, s64 indexCount, s64 firstIndex, s64 vertexOffset);
+void GfxRecordEndRenderPassCommand(GPUCommandBuffer commandBuffer);
 void GfxPresentSwapchainImage(GfxSwapchain swapchain, u32 swapchainImageIndex, Array<GfxSemaphore> waitSemaphores);
 
 #define GFX_ERROR_OBJECT 0

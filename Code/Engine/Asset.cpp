@@ -26,7 +26,7 @@ struct AssetsContext
 
 // @TODO: Trying to load the same asset multiple times simultaneously?
 
-GfxCommandBuffer theBuffer;
+GPUCommandBuffer theBuffer;
 bool ready = false;
 
 GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer, AssetLoadStatus *loadStatus)
@@ -37,7 +37,7 @@ GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 ind
 	theBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	GfxRecordCopyBufferCommand(theBuffer, verticesByteSize, vertexStagingBuffer, vertexBuffer, 0, 0);
 	GfxRecordCopyBufferCommand(theBuffer, indicesByteSize, vertexStagingBuffer, indexBuffer, verticesByteSize, 0);
-	QueueGPUCommandBuffer(theBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT, NULL);
+	QueueGPUCommandBuffer(theBuffer, NULL);
 	ready = true;
 	//auto fence = GfxCreateFence(false);
 	//GfxSubmitCommandBuffers(1, &theBuffer, GFX_GRAPHICS_COMMAND_QUEUE, fence);
@@ -60,7 +60,7 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelH
 	GfxTransitionImageLayout(commandBuffer, image, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	GfxRecordCopyBufferToImageCommand(commandBuffer, stagingBuffer, image, texturePixelWidth, texturePixelHeight);
 	GfxTransitionImageLayout(commandBuffer, image, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, GFX_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	QueueGPUCommandBuffer(theBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT, NULL);
+	QueueGPUCommandBuffer(theBuffer, NULL);
 	return 0;
 }
 
@@ -119,7 +119,7 @@ void LoadModel(void *jobParameterPointer) {
 	Assert(foundModel);
 
 	String modelName = GetFilepathFilename(modelDirectory);
-	String fbxFilename = "test2.fbx";//Concatenate(modelName, ".fbx");
+	String fbxFilename = JoinStrings(modelName, ".fbx");
 	String fbxFilepath = JoinFilepaths(modelDirectory, fbxFilename);
 	auto assimpScene = aiImportFile(&fbxFilepath[0], aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace | aiProcess_RemoveRedundantMaterials);
 	if (!assimpScene || assimpScene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !assimpScene->mRootNode)
@@ -127,8 +127,8 @@ void LoadModel(void *jobParameterPointer) {
 		Abort("assimp error: %s", aiGetErrorString());
 	}
 
-	//u32 submeshCount = assimpScene->mNumMeshes;
-	auto submeshCount = 1;
+	u32 submeshCount = assimpScene->mNumMeshes;
+	//auto submeshCount = 50;
 
 	ResizeArray(&mesh->submeshes, submeshCount);
 	ResizeArray(&mesh->materials, submeshCount);
@@ -137,27 +137,27 @@ void LoadModel(void *jobParameterPointer) {
 		LoadTextureJobParameter *loadTextureJobParameters = (LoadTextureJobParameter *)malloc(5 * sizeof(LoadTextureJobParameter)); // @TODO
 		loadTextureJobParameters[0] =
 		LoadTextureJobParameter{
-			.path = JoinFilepaths(modelDirectory, "albedo.png"),
+			.path = JoinFilepaths(modelDirectory, "_albedo.png"),
 			.outputTextureID = &mesh->materials[i].albedo_map,
 		};
 		loadTextureJobParameters[1] =
 		LoadTextureJobParameter{
-			.path = JoinFilepaths(modelDirectory, "normal.png"),
+			.path = JoinFilepaths(modelDirectory, "_normal.png"),
 			.outputTextureID = &mesh->materials[i].normal_map,
 		};
 		loadTextureJobParameters[2] =
 		LoadTextureJobParameter{
-			.path = JoinFilepaths(modelDirectory, "roughness.png"),
+			.path = JoinFilepaths(modelDirectory, "_roughness.png"),
 			.outputTextureID = &mesh->materials[i].roughness_map,
 		};
 		loadTextureJobParameters[3] =
 		LoadTextureJobParameter{
-			.path = JoinFilepaths(modelDirectory, "metallic.png"),
+			.path = JoinFilepaths(modelDirectory, "_metallic.png"),
 			.outputTextureID = &mesh->materials[i].metallic_map,
 		};
 		loadTextureJobParameters[4] =
 		LoadTextureJobParameter{
-			.path = JoinFilepaths(modelDirectory, "ambient_occlusion.png"),
+			.path = JoinFilepaths(modelDirectory, "_ambient_occlusion.png"),
 			.outputTextureID = &mesh->materials[i].ambient_occlusion_map,
 		};
 		JobDeclaration loadTextureJobDeclarations[5]; // @TODO

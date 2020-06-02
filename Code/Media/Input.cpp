@@ -11,12 +11,16 @@ struct InputContext
 
 InputButtons CreateInputButtons(s64 size)
 {
-	return
+	auto buttons = InputButtons
 	{
 		.down = AllocateArrayMemory(bool, size),
 		.pressed = AllocateArrayMemory(bool, size),
 		.released = AllocateArrayMemory(bool, size),
 	};
+	SetMemory(buttons.pressed, false, sizeof(bool) * size);
+	SetMemory(buttons.released, false, sizeof(bool) * size);
+	SetMemory(buttons.down, false, sizeof(bool) * size);
+	return buttons;
 }
 
 void InitializeInput()

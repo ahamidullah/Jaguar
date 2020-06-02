@@ -10,6 +10,7 @@
 
 constexpr u32 SCANCODE_COUNT = 256;
 
+// @TODO: Make these regular Arrays?
 struct InputButtons
 {
 	bool *down;

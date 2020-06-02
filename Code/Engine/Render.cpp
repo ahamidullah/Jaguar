@@ -157,14 +157,14 @@ struct RenderPass
 	Array<RenderGraphResource> read;
 	Array<RenderGraphResource> write;
 	Array<RenderGraphResource> create;
-	void (*execute)(GfxCommandBuffer commandBuffer);
+	void (*execute)(GPUCommandBuffer commandBuffer);
 };
 
 struct PhyisicalRenderPass
 {
 	GfxRenderPass gfxPass;
 	GfxPipeline gfxPipeline;
-	void (*execute)(GfxCommandBuffer commandBuffer);
+	void (*execute)(GPUCommandBuffer commandBuffer);
 };
 
 struct RenderGraph
@@ -216,7 +216,7 @@ void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 		GfxRecordBindPipelineCommand(commandBuffer, pass.gfxPipeline);
 		pass.execute(commandBuffer);
 
-		QueueGPUCommandBuffer(commandBuffer, GFX_GRAPHICS_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME, NULL);
+		QueueGPUCommandBuffer(commandBuffer, NULL);
 
 		//GfxWaitForFences(1, &renderGlobals.descriptorSetUpdateFence, true, U32_MAX);
 
@@ -457,7 +457,7 @@ void Render()
 	// Update descriptor sets.
 	{
 		auto commandBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
-		u32 u = 0;
+		u32 u = 1;
 		{
 			void *stagingMemory;
 			auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
@@ -482,6 +482,7 @@ void Render()
 		{
 			auto projectionMatrix = CreateInfinitePerspectiveProjectionMatrix(0.01f, camera->fov, renderGlobals.aspectRatio);
 			auto viewMatrix = CreateViewMatrix(camera->transform.position, CalculateForwardVector(camera->transform.rotation));
+			//auto viewMatrix = CreateViewMatrix({20000, -20000, 20000}, Normalize(V3{0, 0, 0} - V3{20000, -20000, 20000}));
 			//SetRotationMatrix(&viewMatrix, ToMatrix(camera->transform.rotation));
 			//auto viewMatrix = ViewMatrix(camera->transform.position, -camera->transform.position);
 			//M4 m = projectionMatrix * viewMatrix;
@@ -493,7 +494,7 @@ void Render()
 			GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
 		}
 
-		QueueGPUCommandBuffer(commandBuffer, GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME, NULL);
+		QueueGPUCommandBuffer(commandBuffer, NULL);
 
 		//GfxSubmitInfo submitInfo;
 		//ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
@@ -509,7 +510,7 @@ void Render()
 		{
 			.name = "test",
 			.shader = GetShader("Model"),
-			.execute = [](GfxCommandBuffer commandBuffer)
+			.execute = [](GPUCommandBuffer commandBuffer)
 			{
 				GfxRecordSetViewportCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());
 				GfxRecordSetScissorCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());

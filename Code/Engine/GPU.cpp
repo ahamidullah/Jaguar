@@ -30,15 +30,15 @@ struct GPUContext
 	// @TODO: False sharing?
 	GfxCommandPool asyncCommandPools[GFX_COMMAND_QUEUE_COUNT];
 
-	volatile s64 asyncCommandBufferArrayIndex = 0;
+	volatile s64 asyncCommandBufferArrayIndices[GFX_COMMAND_QUEUE_COUNT];
 
 	struct ThreadLocalGPUContext
 	{
 		// @TODO: False sharing?
 		GfxCommandPool frameCommandPools[GFX_MAX_FRAMES_IN_FLIGHT][GFX_COMMAND_QUEUE_COUNT];
 
-		Array<GfxCommandBuffer> queuedAsyncCommandBuffers[2][GFX_COMMAND_QUEUE_COUNT];
-		Array<GfxCommandBuffer> queuedFrameCommandBuffers[GFX_COMMAND_QUEUE_COUNT];
+		Array<GPUBackendCommandBuffer> queuedAsyncCommandBuffers[2][GFX_COMMAND_QUEUE_COUNT];
+		Array<GPUBackendCommandBuffer> queuedFrameCommandBuffers[GFX_COMMAND_QUEUE_COUNT];
 	};
 	Array<ThreadLocalGPUContext> threadLocal;
 } gpuContext;
@@ -284,38 +284,48 @@ GfxImage CreateGPUImage(s64 width, s64 height, GfxFormat format, GfxImageLayout 
 	return image;
 }
 
-GfxCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResourceLifetime lifetime)
+GPUCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResourceLifetime lifetime)
 {
+	auto commandBuffer = GPUCommandBuffer
+	{
+		.queueType = queueType,
+		.lifetime = lifetime,
+	};
 	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		return GfxCreateCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].frameCommandPools[GetFrameIndex()][queueType]);
+		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].frameCommandPools[GetFrameIndex()][queueType]);
 	}
-	return GfxCreateCommandBuffer(gpuContext.asyncCommandPools[queueType]);
+	else
+	{
+		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuContext.asyncCommandPools[queueType]);
+	}
+	return commandBuffer;
 }
 
-void QueueGPUCommandBuffer(GfxCommandBuffer commandBuffer, GfxCommandQueueType queueType, GPUResourceLifetime lifetime, bool *signalOnCompletion) // @TODO: Store the queue and lifetime.
+void QueueGPUCommandBuffer(GPUCommandBuffer commandBuffer, bool *signalOnCompletion)
 {
 	GfxEndCommandBuffer(commandBuffer);
-	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
+	if (commandBuffer.lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[queueType], commandBuffer);
-		return;
+		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[commandBuffer.queueType], commandBuffer.backend);
 	}
-	ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferArrayIndex][queueType], commandBuffer);
+	else
+	{
+		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferArrayIndices[commandBuffer.queueType]][commandBuffer.queueType], commandBuffer.backend);
+	}
 }
 
 void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 {
-	auto arrayIndex = gpuContext.asyncCommandBufferArrayIndex;
+	auto arrayIndex = gpuContext.asyncCommandBufferArrayIndices[queueType];
 
-	// WRONG. NEED ONE PER QUEUE.
-	if (gpuContext.asyncCommandBufferArrayIndex == 0)
+	if (gpuContext.asyncCommandBufferArrayIndices[queueType] == 0)
 	{
-		gpuContext.asyncCommandBufferArrayIndex = 1;
+		gpuContext.asyncCommandBufferArrayIndices[queueType] = 1;
 	}
 	else
 	{
-		gpuContext.asyncCommandBufferArrayIndex = 0;
+		gpuContext.asyncCommandBufferArrayIndices[queueType] = 0;
 	}
 
 	auto commandBufferCount = 0;
@@ -327,11 +337,11 @@ void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 	{
 		return;
 	}
-	auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
+	auto commandBuffers = CreateArray<GPUBackendCommandBuffer>(commandBufferCount);
 	auto writeIndex = 0;
 	for (auto &tl : gpuContext.threadLocal)
 	{
-		CopyMemory(tl.queuedAsyncCommandBuffers[arrayIndex][queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count * sizeof(GfxCommandBuffer));
+		CopyMemory(tl.queuedAsyncCommandBuffers[arrayIndex][queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count * sizeof(GPUBackendCommandBuffer));
 		writeIndex += tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count;
 		ResizeArray(&tl.queuedAsyncCommandBuffers[arrayIndex][queueType], 0);
 		// @TODO: Change capacity to some default value?
@@ -352,11 +362,11 @@ GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, A
 		commandBufferCount += tl.queuedFrameCommandBuffers[queueType].count;
 	}
 	Assert(commandBufferCount != 0);
-	auto commandBuffers = CreateArray<GfxCommandBuffer>(commandBufferCount);
+	auto commandBuffers = CreateArray<GPUBackendCommandBuffer>(commandBufferCount);
 	auto writeIndex = 0;
 	for (auto &tl : gpuContext.threadLocal)
 	{
-		CopyMemory(tl.queuedFrameCommandBuffers[queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[queueType].count * sizeof(GfxCommandBuffer));
+		CopyMemory(tl.queuedFrameCommandBuffers[queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[queueType].count * sizeof(GPUBackendCommandBuffer));
 		writeIndex += tl.queuedFrameCommandBuffers[queueType].count;
 		ResizeArray(&tl.queuedFrameCommandBuffers[queueType], 0);
 		// @TODO: Change capacity to some default value?
@@ -376,11 +386,7 @@ GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, A
 
 GfxSemaphore SubmitQueuedGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> frameWaitSemaphores, Array<GfxPipelineStageFlags> frameWaitStages, GfxFence frameFence)
 {
-	if (queueType == GFX_TRANSFER_COMMAND_QUEUE)
-	{
-		SubmitQueuedAsyncGPUCommmandBuffers(queueType);
-	}
-
+	SubmitQueuedAsyncGPUCommmandBuffers(queueType);
 	return SubmitQueuedFrameGPUCommandBuffers(queueType, frameWaitSemaphores, frameWaitStages, frameFence);
 }
 

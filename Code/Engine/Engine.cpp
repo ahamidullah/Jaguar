@@ -24,7 +24,7 @@ u32 GetWindowHeight()
 
 void InitializeGameLoop()
 {
-	CreateCamera("main", {50000, 50000, 50000}, {0, 0, 0}, 1000.4f, DegreesToRadians(90.0f));
+	CreateCamera("main", {10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
 
 	auto e = CreateEntity();
 	auto t = Transform{};

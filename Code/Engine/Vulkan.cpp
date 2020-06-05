@@ -1668,10 +1668,10 @@ void GfxInitialize(PlatformWindow *window)
 
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)GetDLLFunction(vulkan_library, #name, &error); \
-	if (error) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required.", #name);
+	if (error) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required.", #name);
 #define VK_GLOBAL_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
 #include "VulkanFunction.h"
@@ -1702,9 +1702,9 @@ void GfxInitialize(PlatformWindow *window)
 
 	auto version = u32{};
 	vkEnumerateInstanceVersion(&version);
-	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 2))
+	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1))
 	{
-		Abort("Vulkan version 1.2.0 or greater required: version %d.%d.%d is installed", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+		Abort("Vulkan version 1.1.0 or greater required: version %d.%d.%d is installed", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 	}
 	LogPrint(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
@@ -1768,7 +1768,7 @@ void GfxInitialize(PlatformWindow *window)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(vulkanGlobals.instance, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
 #define VK_DEVICE_FUNCTION(name)
 #include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
@@ -2049,7 +2049,7 @@ void GfxInitialize(PlatformWindow *window)
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
 	name = (PFN_##name)vkGetDeviceProcAddr(vulkanGlobals.device, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 is required.", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 is required.", #name);
 #include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION

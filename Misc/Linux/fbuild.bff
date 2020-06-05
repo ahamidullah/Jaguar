@@ -86,7 +86,7 @@ Settings
 	.Module = "Engine"
 	.CompilerOptions +
 		" -DUSING_VULKAN_API"
-		+ " -I$VulkanSDKDirectory$"
+		+ " -I$VulkanSDKDirectory$/include"
 	.LinkModules =
 	{
 		"Basic"

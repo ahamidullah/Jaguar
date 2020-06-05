@@ -80,7 +80,7 @@ String CompileShader(const String &filepath, bool *error)
 	}
 
 	auto spirvFilepath = FormatString("Build/Linux/Shader/Binary/%k%k.spirv", name, fileExtension);
-	auto command = FormatString("$VulkanSDKDirectory/bin/glslangValidator -V %k -o %k", processedFilepath, spirvFilepath);
+	auto command = FormatString("glslangValidator -V %k -o %k", processedFilepath, spirvFilepath);
 	if (RunProcess(command) != 0)
 	{
 		LogPrint(ERROR_LOG, "\nShader compilation command failed: %k.\n", command);

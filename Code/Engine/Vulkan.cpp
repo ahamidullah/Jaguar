@@ -1700,10 +1700,11 @@ void GfxInitialize(PlatformWindow *window)
 #endif
 	};
 
-	u32 version;
+	auto version = u32{};
 	vkEnumerateInstanceVersion(&version);
-	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 2)) {
-		Abort("Vulkan version 1.2 or greater required: version %d.%d.%d is installed");
+	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 2))
+	{
+		Abort("Vulkan version 1.2.0 or greater required: version %d.%d.%d is installed", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 	}
 	LogPrint(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 

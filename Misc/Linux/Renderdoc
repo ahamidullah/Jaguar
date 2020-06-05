@@ -1,3 +1,2 @@
 #!/bin/bash
-echo $VK_LAYER_PATH
-$PROJECT_DIRECTORY/Misc/Linux/Tools/Renderdoc/1.8/bin/qrenderdoc &
+~/local/renderdoc-1.8/bin/qrenderdoc &

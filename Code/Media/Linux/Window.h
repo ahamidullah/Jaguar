@@ -6,7 +6,7 @@
 
 struct PlatformWindow
 {
-	Window x11Window;
+	Window x11Handle;
 	Atom x11DeleteWindowAtom;
 	Cursor x11BlankCursor;
 	u32 height;
@@ -20,7 +20,7 @@ struct WindowEvents
 struct InputButtons;
 struct Mouse;
 
-void InitializeWindow(bool multithreaded);
+void InitializeWindows(bool multithreaded);
 
 Display *GetX11Display();
 
@@ -30,8 +30,3 @@ void ToggleFullscreen(PlatformWindow *window);
 void CaptureCursor(PlatformWindow *window);
 void UncaptureCursor(PlatformWindow *window);
 void DestroyWindow(PlatformWindow *window);
-
-#if defined(USE_VULKAN_RENDER_API)
-	const char *GetRequiredVulkanSurfaceInstanceExtension();
-	VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface);
-#endif

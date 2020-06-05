@@ -103,7 +103,7 @@ struct LoadModelJobParameter {
 void LoadModel(void *jobParameterPointer) {
 	LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)jobParameterPointer;
 
-	MeshAsset *mesh = (MeshAsset *)malloc(sizeof(MeshAsset));
+	auto mesh = AllocateStructMemory(MeshAsset);
 
 	String modelDirectory;
 	bool foundModel = false;
@@ -128,7 +128,7 @@ void LoadModel(void *jobParameterPointer) {
 	}
 
 	u32 submeshCount = assimpScene->mNumMeshes;
-	//auto submeshCount = 50;
+	//auto submeshCount = 1;
 
 	ResizeArray(&mesh->submeshes, submeshCount);
 	ResizeArray(&mesh->materials, submeshCount);

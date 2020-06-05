@@ -121,7 +121,7 @@ bool IterateDirectory(const String &path, DirectoryIteration *context)
 		context->dir = opendir(&path[0]);
 		if (!context->dir)
 		{
-			LogPrint(ERROR_LOG, "Failed to open directory %s: %s.\n", &path[0], GetPlatformError());
+			LogPrint(ERROR_LOG, "Failed to open directory %k: %k.\n", path, GetPlatformError());
 			return false;
 		}
 	}

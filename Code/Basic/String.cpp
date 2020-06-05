@@ -181,7 +181,7 @@ s64 FindFirstCharIndex(const String &s, char c)
 {
 	for (auto i = 0; i < StringLength(s); i++)
 	{
-		if (s.data[i] == c)
+		if (s[i] == c)
 		{
 			return i;
 		}
@@ -191,15 +191,15 @@ s64 FindFirstCharIndex(const String &s, char c)
 
 s64 FindLastCharIndex(const String &s, char c)
 {
-	s64 occurrence = -1;
+	auto lastOccurrence = -1;
 	for (auto i = 0; i < StringLength(s); i++)
 	{
-		if (s.data[i] == c)
+		if (s[i] == c)
 		{
-			occurrence = i;
+			lastOccurrence = i;
 		}
 	}
-	return occurrence;
+	return lastOccurrence;
 }
 
 bool IsCharWhitespace(char c)
@@ -222,7 +222,7 @@ void TrimString(String *s, s64 leftIndex, s64 rightIndex)
 
 Array<String> SplitString(const String &s, char seperator)
 {
-	Array<String> result;
+	auto result = Array<String>{};
 	auto splitStartIndex = 0;
 	auto splitLength = 0;
 	for (auto i = 0; i < StringLength(s); i++)
@@ -321,7 +321,7 @@ void LowercaseString(String *s)
 
 u64 Hash(const String &s)
 {
-    u64 hash = 5381;
+    auto hash = u64{5381};
     for (auto c : s)
     {
         hash = ((hash << 5) + hash) + c;
@@ -329,6 +329,7 @@ u64 Hash(const String &s)
     return hash;
 }
 
+// This overload allows us to append a c-string to an Array of Strings without explicitly constructing a String.
 void ArrayAppend(Array<String> *a, const char *newElement)
 {
 	ArrayAppend<String>(a, String{newElement});

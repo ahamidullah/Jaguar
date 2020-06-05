@@ -6,8 +6,8 @@
 
 // Vulkan
 #define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h> 
+#define VK_USE_PLATFORM_XLIB_KHR
+#include "vulkan/vulkan.h"
 
 // Asset
 #include <assimp/cimport.h>

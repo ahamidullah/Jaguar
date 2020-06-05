@@ -10,38 +10,33 @@
 #include "Code/Basic/Atomic.h"
 #include "Code/Basic/Log.h"
 
-struct GPUContext
+#define GPU_MEMORY_BLOCK_SIZE MegabytesToBytes(256)
+#define GPU_MEMORY_RING_SIZE MegabytesToBytes(128)
+
+// @TODO: False sharing?
+struct GPUGlobals
 {
-	// @TODO: False sharing?
 	struct MemoryAllocators
 	{
-		// Due to buffer-image granularity requirements, allocations for buffers and images must be kept seperate.
-
-		GPUMemoryBlockAllocator bufferBlock;
-		GPUMemoryRingAllocator bufferRing;
-
-		GPUMemoryBlockAllocator imageBlock;
-		GPUMemoryRingAllocator imageRing;
+		GPUMemoryBlockAllocator block;
+		GPUMemoryRingAllocator ring;
 	} memoryAllocators[GFX_MEMORY_TYPE_COUNT];
 
-	// @TODO: False sharing?
 	GfxCommandQueue commandQueues[GFX_COMMAND_QUEUE_COUNT];
 
-	// @TODO: False sharing?
 	GfxCommandPool asyncCommandPools[GFX_COMMAND_QUEUE_COUNT];
 
 	volatile s64 asyncCommandBufferArrayIndices[GFX_COMMAND_QUEUE_COUNT];
 
 	struct ThreadLocalGPUContext
 	{
-		// @TODO: False sharing?
 		GfxCommandPool frameCommandPools[GFX_MAX_FRAMES_IN_FLIGHT][GFX_COMMAND_QUEUE_COUNT];
 
 		Array<GPUBackendCommandBuffer> queuedAsyncCommandBuffers[2][GFX_COMMAND_QUEUE_COUNT];
 		Array<GPUBackendCommandBuffer> queuedFrameCommandBuffers[GFX_COMMAND_QUEUE_COUNT];
 	};
 	Array<ThreadLocalGPUContext> threadLocal;
-} gpuContext;
+} gpuGlobals;
 
 enum GPUResourceType
 {
@@ -70,14 +65,14 @@ GPUMemoryBlockAllocator CreateGPUMemoryBlockAllocator(GfxMemoryType memoryType)
 	return allocator;
 }
 
-GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(s64 capacity, GfxMemoryType memoryType)
+GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(GfxMemoryType memoryType)
 {
 	auto allocator = GPUMemoryRingAllocator
 	{
-		.capacity = capacity,
+		.capacity = GPU_MEMORY_RING_SIZE,
 		.memoryType = memoryType,
 	};
-	if (!GfxAllocateMemory(capacity, memoryType, &allocator.memory))
+	if (!GfxAllocateMemory(allocator.capacity, memoryType, &allocator.memory))
 	{
 		Abort("Failed to allocate ring allocator memory.");
 	}
@@ -92,33 +87,75 @@ GPUMemoryRingAllocator CreateGPUMemoryRingAllocator(s64 capacity, GfxMemoryType 
 	return allocator;
 }
 
+void LogGPUInitialization()
+{
+	LogPrint(INFO_LOG, "GPU info:\n");
+	LogPrint(INFO_LOG, "	Heap indices:\n");
+	LogPrint(INFO_LOG, "		GPU only: %d\n", GetGPUMemoryHeapIndex(GFX_GPU_ONLY_MEMORY));
+	LogPrint(INFO_LOG, "		CPU-to-GPU: %d\n", GetGPUMemoryHeapIndex(GFX_CPU_TO_GPU_MEMORY));
+	LogPrint(INFO_LOG, "		GPU-to-CPU: %d\n", GetGPUMemoryHeapIndex(GFX_GPU_TO_CPU_MEMORY));
+	LogPrint(INFO_LOG, "	Memory budget:\n");
+	LogPrint(INFO_LOG, "	Buffer-image granularity: %d\n", GetGPUBufferImageGranularity());
+	PrintGPUMemoryInfo();
+}
+
 void InitializeGPU()
 {
-	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_ONLY_MEMORY);
-	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_GPU_ONLY_MEMORY);
+	s64 minimumRequiredMemoryPerType[GFX_MEMORY_TYPE_COUNT] = {};
+	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+	{
+		switch (i)
+		{
+		case GFX_GPU_ONLY_MEMORY:
+		{
+			minimumRequiredMemoryPerType[i] += GPU_MEMORY_BLOCK_SIZE + GPU_MEMORY_RING_SIZE;
+		} break;
+		case GFX_CPU_TO_GPU_MEMORY:
+		{
+			minimumRequiredMemoryPerType[i] += GPU_MEMORY_BLOCK_SIZE + GPU_MEMORY_RING_SIZE;
+		} break;
+		case GFX_GPU_TO_CPU_MEMORY:
+		{
+			minimumRequiredMemoryPerType[i] += MegabytesToBytes(64); // @TODO: Revisit this number once we start using this memory type...
+		} break;
+		default:
+		{
+			Abort("Unknown memory type %d.", i);
+		} break;
+		}
+	}
+	Assert(CArrayCount(minimumRequiredMemoryPerType) == GFX_MEMORY_TYPE_COUNT); // @TODO: Switch to a fixed size array.
+	s64 minimumMemoryRequirementsPerHeap[GPU_MAX_MEMORY_HEAP_COUNT] = {};
+	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+	{
+		minimumMemoryRequirementsPerHeap[GetGPUMemoryHeapIndex((GfxMemoryType)i)] += minimumRequiredMemoryPerType[i];
+	}
+	auto memoryInfo = GetGPUMemoryInfo();
+	for (auto i = 0; i < memoryInfo.count; i++)
+	{
+		if (memoryInfo[i].budget < minimumMemoryRequirementsPerHeap[i])
+		{
+			Abort("Not enough GPU memory for heap %d: require at least %fmb, got %fmb.", i, BytesToMegabytes(minimumMemoryRequirementsPerHeap[i]), BytesToMegabytes(memoryInfo[i].budget));
+		}
+	}
 
-	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_ONLY_MEMORY);
-	gpuContext.memoryAllocators[GFX_GPU_ONLY_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_GPU_ONLY_MEMORY);
-
-	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_CPU_TO_GPU_MEMORY);
-	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_CPU_TO_GPU_MEMORY);
-
-	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_CPU_TO_GPU_MEMORY);
-	gpuContext.memoryAllocators[GFX_CPU_TO_GPU_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_CPU_TO_GPU_MEMORY);
-
-	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].bufferBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_TO_CPU_MEMORY);
-	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].bufferRing = CreateGPUMemoryRingAllocator(Megabyte(128), GFX_GPU_TO_CPU_MEMORY);
-
-	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].imageBlock = CreateGPUMemoryBlockAllocator(GFX_GPU_TO_CPU_MEMORY);
-	gpuContext.memoryAllocators[GFX_GPU_TO_CPU_MEMORY].imageRing = CreateGPUMemoryRingAllocator(Megabyte(256), GFX_GPU_TO_CPU_MEMORY);
+	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+	{
+		gpuGlobals.memoryAllocators[i].block = CreateGPUMemoryBlockAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+	}
 
 	for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
 	{
-		gpuContext.asyncCommandPools[i] = GfxCreateCommandPool((GfxCommandQueueType)i);
+		gpuGlobals.asyncCommandPools[i] = GfxCreateCommandPool((GfxCommandQueueType)i);
 	}
 
-	ResizeArray(&gpuContext.threadLocal, GetWorkerThreadCount());
-	for (auto &tl : gpuContext.threadLocal)
+	ResizeArray(&gpuGlobals.threadLocal, GetWorkerThreadCount());
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		for (auto &cp : tl.frameCommandPools)
 		{
@@ -131,13 +168,13 @@ void InitializeGPU()
 
 	for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
 	{
-		gpuContext.commandQueues[i] = GfxGetCommandQueue((GfxCommandQueueType)i);
+		gpuGlobals.commandQueues[i] = GfxGetCommandQueue((GfxCommandQueueType)i);
 	}
+
+	LogGPUInitialization();
 }
 
-// @TODO: Get rid of binding -- doesn't fit with DX12.
-// @TODO: Mapping?????
-// @TODO: Buffer image granularity???????
+// @TODO: Buffer-image granularity.
 
 GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *allocator, GfxMemoryRequirements memoryRequirements)
 {
@@ -153,7 +190,7 @@ GPUMemoryAllocation *AllocateFromGPUMemoryBlocks(GPUMemoryBlockAllocator *alloca
 		auto newBlock = (GPUMemoryBlock *)malloc(sizeof(GPUMemoryBlock)); // @TODO
 		if (!GfxAllocateMemory(GPU_MEMORY_BLOCK_SIZE, allocator->memoryType, &newBlock->memory))
 		{
-			Abort("Failed to allocate GPU memory for block allocator...");
+			Abort("Failed to allocate GPU memory for block allocator..."); // @TODO
 			return NULL;
 		}
 		newBlock->frontier = 0;
@@ -238,22 +275,22 @@ GPUMemoryAllocation *AllocateGPUMemory(GPUResourceType resourceType, GfxMemoryRe
 	{
 		if (resourceType == GPU_BUFFER_RESOURCE)
 		{
-			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators[memoryType].bufferRing, memoryRequirements, GetFrameIndex());
+			allocation = AllocateFromGPUMemoryRing(&gpuGlobals.memoryAllocators[memoryType].ring, memoryRequirements, GetFrameIndex());
 		}
 		else
 		{
-			allocation = AllocateFromGPUMemoryRing(&gpuContext.memoryAllocators[memoryType].imageRing, memoryRequirements, GetFrameIndex());
+			allocation = AllocateFromGPUMemoryRing(&gpuGlobals.memoryAllocators[memoryType].ring, memoryRequirements, GetFrameIndex());
 		}
 	}
 	else
 	{
 		if (resourceType == GPU_BUFFER_RESOURCE)
 		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators[memoryType].bufferBlock, memoryRequirements);
+			allocation = AllocateFromGPUMemoryBlocks(&gpuGlobals.memoryAllocators[memoryType].block, memoryRequirements);
 		}
 		else
 		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuContext.memoryAllocators[memoryType].imageBlock, memoryRequirements);
+			allocation = AllocateFromGPUMemoryBlocks(&gpuGlobals.memoryAllocators[memoryType].block, memoryRequirements);
 		}
 	}
 	Assert(allocation);
@@ -293,11 +330,11 @@ GPUCommandBuffer CreateGPUCommandBuffer(GfxCommandQueueType queueType, GPUResour
 	};
 	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuContext.threadLocal[GetThreadIndex()].frameCommandPools[GetFrameIndex()][queueType]);
+		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuGlobals.threadLocal[GetThreadIndex()].frameCommandPools[GetFrameIndex()][queueType]);
 	}
 	else
 	{
-		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuContext.asyncCommandPools[queueType]);
+		commandBuffer.backend = CreateGPUBackendCommandBuffer(gpuGlobals.asyncCommandPools[queueType]);
 	}
 	return commandBuffer;
 }
@@ -307,29 +344,29 @@ void QueueGPUCommandBuffer(GPUCommandBuffer commandBuffer, bool *signalOnComplet
 	GfxEndCommandBuffer(commandBuffer);
 	if (commandBuffer.lifetime == GPU_RESOURCE_LIFETIME_FRAME)
 	{
-		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[commandBuffer.queueType], commandBuffer.backend);
+		ArrayAppend(&gpuGlobals.threadLocal[GetThreadIndex()].queuedFrameCommandBuffers[commandBuffer.queueType], commandBuffer.backend);
 	}
 	else
 	{
-		ArrayAppend(&gpuContext.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuContext.asyncCommandBufferArrayIndices[commandBuffer.queueType]][commandBuffer.queueType], commandBuffer.backend);
+		ArrayAppend(&gpuGlobals.threadLocal[GetThreadIndex()].queuedAsyncCommandBuffers[gpuGlobals.asyncCommandBufferArrayIndices[commandBuffer.queueType]][commandBuffer.queueType], commandBuffer.backend);
 	}
 }
 
 void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 {
-	auto arrayIndex = gpuContext.asyncCommandBufferArrayIndices[queueType];
+	auto arrayIndex = gpuGlobals.asyncCommandBufferArrayIndices[queueType];
 
-	if (gpuContext.asyncCommandBufferArrayIndices[queueType] == 0)
+	if (gpuGlobals.asyncCommandBufferArrayIndices[queueType] == 0)
 	{
-		gpuContext.asyncCommandBufferArrayIndices[queueType] = 1;
+		gpuGlobals.asyncCommandBufferArrayIndices[queueType] = 1;
 	}
 	else
 	{
-		gpuContext.asyncCommandBufferArrayIndices[queueType] = 0;
+		gpuGlobals.asyncCommandBufferArrayIndices[queueType] = 0;
 	}
 
 	auto commandBufferCount = 0;
-	for (auto &tl : gpuContext.threadLocal)
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		commandBufferCount += tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count;
 	}
@@ -339,7 +376,7 @@ void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 	}
 	auto commandBuffers = CreateArray<GPUBackendCommandBuffer>(commandBufferCount);
 	auto writeIndex = 0;
-	for (auto &tl : gpuContext.threadLocal)
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		CopyMemory(tl.queuedAsyncCommandBuffers[arrayIndex][queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count * sizeof(GPUBackendCommandBuffer));
 		writeIndex += tl.queuedAsyncCommandBuffers[arrayIndex][queueType].count;
@@ -351,20 +388,20 @@ void SubmitQueuedAsyncGPUCommmandBuffers(GfxCommandQueueType queueType)
 	{
 		.commandBuffers = commandBuffers,
 	};
-	GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, NULL);
+	GfxSubmitCommandBuffers(gpuGlobals.commandQueues[queueType], submitInfo, NULL);
 }
 
 GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, Array<GfxSemaphore> waitSemaphores, Array<GfxPipelineStageFlags> waitStages, GfxFence fence)
 {
 	auto commandBufferCount = 0;
-	for (auto &tl : gpuContext.threadLocal)
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		commandBufferCount += tl.queuedFrameCommandBuffers[queueType].count;
 	}
 	Assert(commandBufferCount != 0);
 	auto commandBuffers = CreateArray<GPUBackendCommandBuffer>(commandBufferCount);
 	auto writeIndex = 0;
-	for (auto &tl : gpuContext.threadLocal)
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		CopyMemory(tl.queuedFrameCommandBuffers[queueType].elements, &commandBuffers.elements[writeIndex], tl.queuedFrameCommandBuffers[queueType].count * sizeof(GPUBackendCommandBuffer));
 		writeIndex += tl.queuedFrameCommandBuffers[queueType].count;
@@ -380,7 +417,7 @@ GfxSemaphore SubmitQueuedFrameGPUCommandBuffers(GfxCommandQueueType queueType, A
 		.waitSemaphores = waitSemaphores,
 		.signalSemaphores = CreateArray(1, &result),
 	};
-	GfxSubmitCommandBuffers(gpuContext.commandQueues[queueType], submitInfo, fence);
+	GfxSubmitCommandBuffers(gpuGlobals.commandQueues[queueType], submitInfo, fence);
 	return result;
 }
 
@@ -401,15 +438,14 @@ void ClearGPUMemoryForFrameIndex(s64 frameIndex)
 	};
 	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
 	{
-		Clear(&gpuContext.memoryAllocators[i].bufferRing);
-		Clear(&gpuContext.memoryAllocators[i].imageRing);
+		Clear(&gpuGlobals.memoryAllocators[i].ring);
 		// @TODO: Clear overflow.
 	}
 }
 
 void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex)
 {
-	for (auto &tl : gpuContext.threadLocal)
+	for (auto &tl : gpuGlobals.threadLocal)
 	{
 		GfxResetCommandPool(tl.frameCommandPools[frameIndex][GFX_GRAPHICS_COMMAND_QUEUE]);
 		GfxResetCommandPool(tl.frameCommandPools[frameIndex][GFX_TRANSFER_COMMAND_QUEUE]);
@@ -420,12 +456,12 @@ void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex)
 #if 0
 GfxSemaphore SubmitQueuedGPUTransferCommands()
 {
-	SwitchAtomicDoubleBuffer(&gpuContext.transferDoubleBuffer);
+	SwitchAtomicDoubleBuffer(&gpuGlobals.transferDoubleBuffer);
 
 	auto semaphore = GfxCreateSemaphore();
 	GfxSubmitInfo submitInfo =
 	{
-		.commandBuffers = CreateArray(gpuContext.transferDoubleBuffer.readBufferElementCount, gpuContext.transferDoubleBuffer.readBuffer->data),
+		.commandBuffers = CreateArray(gpuGlobals.transferDoubleBuffer.readBufferElementCount, gpuGlobals.transferDoubleBuffer.readBuffer->data),
 		.signalSemaphores = CreateArray(1, &semaphore),
 	};
 	GfxSubmitCommandBuffers(GFX_TRANSFER_COMMAND_QUEUE, submitInfo, NULL);

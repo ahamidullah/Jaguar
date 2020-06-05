@@ -42,13 +42,13 @@ struct GPUMemoryBlock
 	GPUMemoryBlock *next;
 };
 
-#define GPU_MEMORY_BLOCK_SIZE Megabyte(256)
-
 struct GPUMemoryBlockAllocator
 {
 	Mutex mutex;
-	GPUMemoryBlock *baseBlock;
 	GPUMemoryBlock *activeBlock;
+
+	s64 blockSize;
+	GPUMemoryBlock *baseBlock;
 	GfxMemoryType memoryType;
 };
 

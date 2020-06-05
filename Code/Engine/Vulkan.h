@@ -2,7 +2,7 @@
 
 // @TODO: Switch all enums to match Vulkan name.
 
-#if defined(USE_VULKAN_RENDER_API)
+#if defined(USING_VULKAN_API)
 
 #include "PCH.h"
 
@@ -13,6 +13,8 @@
 constexpr bool usingVulkanAPI = true;
 
 #define GFX_MAX_FRAMES_IN_FLIGHT 2
+
+#define GPU_MAX_MEMORY_HEAP_COUNT VK_MAX_MEMORY_HEAPS
 
 typedef VkFlags GfxShaderStageFlags;
 typedef VkShaderStageFlagBits GfxShaderStage;
@@ -234,9 +236,15 @@ typedef VkDeviceSize GfxSize;
 typedef VkImageSubresourceRange GfxImageSubresourceRange;
 typedef VkQueue GfxCommandQueue;
 
+#include "Gfx.h" // @TODO @DELTEME
+
 void GfxInitialize(PlatformWindow *window);
 
-VkFormat GfxGetSurfaceFormat();
+Array<GPUMemoryHeapInfo> GetGPUMemoryInfo();
+void PrintGPUMemoryInfo();
+s64 GetGPUMemoryHeapIndex(GfxMemoryType memoryType);
+s64 GetGPUBufferImageGranularity();
+GfxFormat GfxGetSurfaceFormat();
 
 struct GPUCommandBuffer;
 struct GfxSubmitInfo;
@@ -244,8 +252,6 @@ GPUBackendCommandBuffer CreateGPUBackendCommandBuffer(GfxCommandPool commandPool
 void GfxSubmitCommandBuffers(GfxCommandQueue queue, GfxSubmitInfo &submitInfo, GfxFence fence);
 void GfxFreeCommandBuffers(GfxCommandPool pool, size_t count, GPUCommandBuffer *buffers);
 void GfxEndCommandBuffer(GPUCommandBuffer buffer);
-
-#include "Gfx.h" // @TODO @DELTEME
 
 GfxCommandQueue GfxGetCommandQueue(GfxCommandQueueType queueType);
 

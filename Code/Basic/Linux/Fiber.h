@@ -8,6 +8,10 @@ struct Fiber
 {
 	ucontext_t context;
 	jmp_buf jumpBuffer;
+
+#if defined(THREAD_SANITIZER_BUILD)
+	void *tsanFiber;
+#endif
 };
 
 typedef void (*FiberProcedure)(void *);

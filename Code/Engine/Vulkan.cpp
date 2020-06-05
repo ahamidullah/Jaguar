@@ -1,4 +1,4 @@
-#if defined(USE_VULKAN_RENDER_API)
+#if defined(USING_VULKAN_API)
 
 #include "Vulkan.h"
 #include "Render.h"
@@ -79,6 +79,13 @@ struct VulkanContext
 	VkSurfaceFormatKHR surfaceFormat;
 
     VkSemaphore imageOwnershipSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
+
+    s64 bufferImageGranularity;
+
+    s64 memoryHeapCount;
+    VkMemoryPropertyFlags memoryTypeToMemoryFlags[GFX_MEMORY_TYPE_COUNT];
+    s64 memoryTypeToMemoryIndex[GFX_MEMORY_TYPE_COUNT];
+    s64 memoryTypeToHeapIndex[GFX_MEMORY_TYPE_COUNT];
 } vulkanGlobals; // @TODO: Rename me.
 
 #define VK_CHECK(x)\
@@ -223,7 +230,7 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 
 	if (severityString == "Error")
 	{
-		Abort("Vulkan debug message: %k: %k: %s\n", severityString, typeString, callbackData->pMessage);
+		Abort("Vulkan debug message: %k: %k: %s", severityString, typeString, callbackData->pMessage);
 	}
 
 	LogPrint(logType, "Vulkan debug message: %k: %k: %s\n", severityString, typeString, callbackData->pMessage);
@@ -233,6 +240,53 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, 
 	}
 
     return 0;
+}
+
+s64 GetGPUMemoryHeapIndex(GfxMemoryType memoryType)
+{
+	return vulkanGlobals.memoryTypeToHeapIndex[memoryType];
+}
+
+Array<GPUMemoryHeapInfo> GetGPUMemoryInfo()
+{
+	auto budgetProperties = VkPhysicalDeviceMemoryBudgetPropertiesEXT
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT
+	};
+	auto memoryProperties = VkPhysicalDeviceMemoryProperties2
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+		.pNext = &budgetProperties,
+	};
+	vkGetPhysicalDeviceMemoryProperties2(vulkanGlobals.physicalDevice, &memoryProperties);
+
+	auto heapInfos = CreateArray<GPUMemoryHeapInfo>(vulkanGlobals.memoryHeapCount);
+	for (auto i = 0; i < vulkanGlobals.memoryHeapCount; i++)
+	{
+		heapInfos[i].usage = budgetProperties.heapUsage[i];
+		heapInfos[i].budget = budgetProperties.heapBudget[i];
+	}
+	return heapInfos;
+}
+
+void PrintGPUMemoryInfo()
+{
+	LogPrint(INFO_LOG, "GPU memory info:\n");
+	auto info = GetGPUMemoryInfo();
+	for (auto i = 0; i < info.count; i++)
+	{
+		LogPrint(
+			INFO_LOG,
+			"	Heap: %d, Usage: %fmb, Total: %fmb\n",
+			i,
+			BytesToMegabytes(info[i].usage),
+			BytesToMegabytes(info[i].budget));
+	}
+}
+
+s64 GetGPUBufferImageGranularity()
+{
+	return vulkanGlobals.bufferImageGranularity;
 }
 
 GfxCommandQueue GfxGetCommandQueue(GfxCommandQueueType queueType)
@@ -385,58 +439,32 @@ void GfxBindBufferMemory(GfxBuffer buffer, GfxMemory memory, s64 memoryOffset)
 	VK_CHECK(vkBindBufferMemory(vulkanGlobals.device, buffer, memory, memoryOffset));
 }
 
-bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory)
+bool GfxAllocateMemory(GfxSize size, GfxMemoryType memoryType, GfxMemory *memory) // @TODO: Move memory up to the first parameter.
 {
-	auto memoryFlags = VkMemoryPropertyFlags{};
-	switch (memoryType)
-	{
-		case GFX_GPU_ONLY_MEMORY:
-		{
-			memoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-		} break;
-		case GFX_CPU_TO_GPU_MEMORY:
-		{
-			memoryFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-		} break;
-		case GFX_GPU_TO_CPU_MEMORY:
-		{
-			memoryFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-		} break;
-		default:
-		{
-			Abort("Unknown memory type: %d.\n", memoryType);
-		} break;
-	}
-
-	auto physicalDeviceMemoryProperties = VkPhysicalDeviceMemoryProperties{};
-	vkGetPhysicalDeviceMemoryProperties(vulkanGlobals.physicalDevice, &physicalDeviceMemoryProperties);
-	auto selectedMemoryTypeIndex = -1;
-	for (auto i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
-	{
-		if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & memoryFlags) == memoryFlags)
-		{
-			selectedMemoryTypeIndex = i;
-			break;
-		}
-	}
-	if (selectedMemoryTypeIndex < 0)
-	{
-		Abort("Failed to find suitable Gfx memory type.");
-	}
-
+	PrintGPUMemoryInfo();
+	LogPrint(INFO_LOG, "Allocating: %lu, %d\n", size, memoryType);
+	auto index = vulkanGlobals.memoryTypeToMemoryIndex[memoryType];
 	auto memoryAllocateInfo = VkMemoryAllocateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = size,
-		.memoryTypeIndex = (u32)selectedMemoryTypeIndex,
+		.memoryTypeIndex = (u32)index,
 	};
 	auto result = vkAllocateMemory(vulkanGlobals.device, &memoryAllocateInfo, NULL, memory);
-	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+	if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY || result == VK_ERROR_OUT_OF_HOST_MEMORY)
 	{
+		if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+		{
+			LogPrint(INFO_LOG, "******** DEVICE\n");
+		}
+		else
+		{
+			LogPrint(INFO_LOG, "******** HOST\n");
+		}
+
 		return false;
 	}
 	VK_CHECK(result);
-
 	return true;
 }
 
@@ -1611,6 +1639,24 @@ void GfxDrawIndexedVertices(GPUCommandBuffer commandBuffer, s64 indexCount, s64 
 	vkCmdDrawIndexed(commandBuffer.backend, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
+#if defined(__linux__)
+	const char *GetRequiredVulkanSurfaceInstanceExtension()
+	{
+		return "VK_KHR_xlib_surface";
+	}
+
+	VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface)
+	{
+		auto surfaceCreateInfo = VkXlibSurfaceCreateInfoKHR
+		{
+			.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+			.dpy = GetX11Display(),
+			.window = window->x11Handle,
+		};
+		return vkCreateXlibSurfaceKHR(instance, &surfaceCreateInfo, NULL, surface);
+	}
+#endif
+
 void GfxInitialize(PlatformWindow *window)
 {
 	bool error;
@@ -1622,10 +1668,10 @@ void GfxInitialize(PlatformWindow *window)
 
 #define VK_EXPORTED_FUNCTION(name) \
 	name = (PFN_##name)GetDLLFunction(vulkan_library, #name, &error); \
-	if (error) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required.", #name);
+	if (error) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required.", #name);
 #define VK_GLOBAL_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required", #name);
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name)
 #include "VulkanFunction.h"
@@ -1638,32 +1684,40 @@ void GfxInitialize(PlatformWindow *window)
 	{
 		"VK_KHR_swapchain",
 		"VK_EXT_descriptor_indexing",
+		"VK_EXT_memory_budget",
 	};
 	const char *required_instance_layers[] = {
-#if defined(DEBUG)
+#if defined(DEBUG_BUILD)
 		"VK_LAYER_KHRONOS_validation",
 #endif
 	};
 	const char *required_instance_extensions[] = {
 		"VK_KHR_surface",
 		GetRequiredVulkanSurfaceInstanceExtension(),
-#if defined(DEBUG)
+		"VK_KHR_get_physical_device_properties2",
+#if defined(DEBUG_BUILD)
 		"VK_EXT_debug_utils",
 #endif
 	};
 
 	u32 version;
 	vkEnumerateInstanceVersion(&version);
-	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1)) {
-		Abort("Vulkan version 1.1 or greater required: version %d.%d.%d is installed");
+	if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 2)) {
+		Abort("Vulkan version 1.2 or greater required: version %d.%d.%d is installed");
 	}
 	LogPrint(INFO_LOG, "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {
-#if defined(DEBUG)
+#if defined(DEBUG_BUILD)
 		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+			| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
 		.pfnUserCallback = VulkanDebugMessageCallback,
 #endif
 	};
@@ -1692,12 +1746,12 @@ void GfxInitialize(PlatformWindow *window)
 			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
 			.pEngineName = "Jaguar",
 			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
-			.apiVersion = VK_MAKE_VERSION(1, 1, 0),
+			.apiVersion = VK_MAKE_VERSION(1, 2, 0),
 		};
 		// @TODO: Check that all required extensions/layers are available.
 		VkInstanceCreateInfo instance_create_info = {
 			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-#if defined(DEBUG)
+#if defined(DEBUG_BUILD)
 			.pNext = &debug_create_info,
 #endif
 			.pApplicationInfo = &ApplicationInfo,
@@ -1713,7 +1767,7 @@ void GfxInitialize(PlatformWindow *window)
 #define VK_GLOBAL_FUNCTION(name)
 #define VK_INSTANCE_FUNCTION(name) \
 	name = (PFN_##name)vkGetInstanceProcAddr(vulkanGlobals.instance, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 required", #name);
 #define VK_DEVICE_FUNCTION(name)
 #include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
@@ -1721,10 +1775,7 @@ void GfxInitialize(PlatformWindow *window)
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
-	if (debug)
-	{
-		VK_CHECK(vkCreateDebugUtilsMessengerEXT(vulkanGlobals.instance, &debug_create_info, NULL, &vulkanGlobals.debugMessenger));
-	}
+	VK_CHECK(vkCreateDebugUtilsMessengerEXT(vulkanGlobals.instance, &debug_create_info, NULL, &vulkanGlobals.debugMessenger));
 
 	CreateVulkanSurface(window, vulkanGlobals.instance, &vulkanGlobals.surface);
 
@@ -1742,8 +1793,6 @@ void GfxInitialize(PlatformWindow *window)
 		VK_CHECK(vkEnumeratePhysicalDevices(vulkanGlobals.instance, &availablePhysicalDeviceCount, availablePhysicalDevices));
 		for (auto i = 0; i < availablePhysicalDeviceCount; i++)
 		{
-			VkPhysicalDeviceProperties physical_device_properties;
-			vkGetPhysicalDeviceProperties(availablePhysicalDevices[i], &physical_device_properties);
 			VkPhysicalDeviceFeatures physical_device_features;
 			vkGetPhysicalDeviceFeatures(availablePhysicalDevices[i], &physical_device_features);
 			if (!physical_device_features.samplerAnisotropy || !physical_device_features.shaderSampledImageArrayDynamicIndexing)
@@ -1877,6 +1926,62 @@ void GfxInitialize(PlatformWindow *window)
 		}
 	}
 
+	// Physical device info.
+	{
+		for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+		{
+			switch (i)
+			{
+			case GFX_GPU_ONLY_MEMORY:
+			{
+				vulkanGlobals.memoryTypeToMemoryFlags[i] = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			} break;
+			case GFX_CPU_TO_GPU_MEMORY:
+			{
+				vulkanGlobals.memoryTypeToMemoryFlags[i] = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			} break;
+			case GFX_GPU_TO_CPU_MEMORY:
+			{
+				vulkanGlobals.memoryTypeToMemoryFlags[i] =
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+					| VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					| VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			} break;
+			default:
+			{
+				Abort("Unknown memory type %d.", i);
+			} break;
+			}
+		}
+
+		auto deviceProperties = VkPhysicalDeviceProperties{};
+		vkGetPhysicalDeviceProperties(vulkanGlobals.physicalDevice, &deviceProperties);
+		vulkanGlobals.bufferImageGranularity = deviceProperties.limits.bufferImageGranularity;
+
+		auto memoryProperties = VkPhysicalDeviceMemoryProperties{};
+		vkGetPhysicalDeviceMemoryProperties(vulkanGlobals.physicalDevice, &memoryProperties);
+		vulkanGlobals.memoryHeapCount = memoryProperties.memoryHeapCount;
+		for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
+		{
+			auto foundMemoryType = false;
+			for (auto j = 0; j < memoryProperties.memoryTypeCount; j++)
+			{
+				auto memoryFlags = vulkanGlobals.memoryTypeToMemoryFlags[i];
+				if ((memoryProperties.memoryTypes[j].propertyFlags & memoryFlags) == memoryFlags)
+				{
+					vulkanGlobals.memoryTypeToMemoryIndex[i] = j;
+					vulkanGlobals.memoryTypeToHeapIndex[i] = memoryProperties.memoryTypes[j].heapIndex;
+					foundMemoryType = true;
+					break;
+				}
+			}
+			if (!foundMemoryType)
+			{
+				Abort("Unable to find GPU memory index and heap index for memory type %d.", i);
+			}
+		}
+	}
+
 	// Create logical device.
 	{
 		auto queuePriority = 1.0f;
@@ -1943,7 +2048,7 @@ void GfxInitialize(PlatformWindow *window)
 #define VK_INSTANCE_FUNCTION(name)
 #define VK_DEVICE_FUNCTION(name) \
 	name = (PFN_##name)vkGetDeviceProcAddr(vulkanGlobals.device, (const char *)#name); \
-	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 is required.", #name);
+	if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.2 is required.", #name);
 #include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION

@@ -87,6 +87,8 @@ void RunGame(void *)
 	windowHeight = GetRenderHeight();
 	auto window = CreateWindow(windowWidth, windowHeight, false);
 
+	LogPrint(INFO_LOG, "Window dimensions: %dx%d\n", windowWidth, windowHeight);
+
 	InitializeRenderer(&window);
 	{
 		JobDeclaration jobs[] = {
@@ -118,8 +120,39 @@ void RunGame(void *)
 	ExitProcess(PROCESS_EXIT_SUCCESS);
 }
 
+void LogBuildOptions()
+{
+	LogPrint(
+		INFO_LOG,
+		"Build options:\n"
+		"	Speed: "
+#if defined(DEBUG_BUILD)
+		"Debug\n"
+#elif defined(OPTIMIZED_BUILD)
+		"Optimized\n"
+#endif
+		"	Runtime: "
+#if defined(DEVELOPMENT_BUILD)
+		"Development\n"
+#elif defined(RELEASE_BUILD)
+		"Release\n"
+#endif
+		"	Rendering API: "
+#if defined(USING_VULKAN_API)
+		"Vulkan\n"
+#endif
+#if defined(ADDRESS_SANITIZER_BUILD)
+		"Extra: AddressSanitizer\n"
+#elif defined(THREAD_SANITIZER_BUILD)
+		"Extra: ThreadSanitizer\n"
+#endif
+	);
+}
+
 s32 ApplicationEntry(s32 argc, char *argv[])
 {
+	LogBuildOptions();
+
 	InitializeMedia(true);
 	InitializeJobs(RunGame, NULL);
 

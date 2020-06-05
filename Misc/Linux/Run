@@ -4,10 +4,18 @@ set -e
 
 cd $PROJECT_DIRECTORY
 
-if [ "$1" = "ShaderCompiler" ]; then
-	Build/ShaderCompiler
+if [ "$#" = 0 ]; then
+	Build/Linux/Debug/Development/Binary/Engine
+elif [ "$#" = 1 && "$1" = "AddressSanitizer" ]; then
+	Build/Linux/AddressSanitizer/Debug/Development/Binary/Engine
+elif [ "$#" = 1 && "$1" = "ThreadSanitizer" ]; then
+	Build/Linux/ThreadSanitizer/Debug/Development/Binary/Engine
+elif [ "$#" = 2 ]; then
+	Build/Linux/"$1"/"$2"/Binary/Engine
+elif [ "$#" = 3 ]; then
+	Build/Linux/"$1"/"$2"/"$3"/Binary/Engine
 else
-	Build/Linux/Binaries/Engine
+	echo "Invalid number of arguments."
 fi
 
 cd - >& /dev/null

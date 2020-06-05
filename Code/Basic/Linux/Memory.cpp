@@ -1,6 +1,5 @@
 #include "../Memory.h"
 #include "../Assert.h"
-#include "../Log.h"
 #include "../PCH.h"
 
 #define MAP_ANONYMOUS 0x20

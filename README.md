@@ -14,10 +14,17 @@
 * Custom logging system
 * Custom platform layer (X11)
 
+## Building
+@TODO
+
+## Running
+@TODO
+
 ## Dependencies
 * Vulkan (link @TODO)
 * stb_image (link @TODO)
 * Assimp (link @TODO)
+* Freetype (link @TODO)
 
 ## Resources
 @TODO

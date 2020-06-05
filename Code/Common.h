@@ -18,25 +18,17 @@ typedef double f64;
 #define S32_MAX INT32_MAX
 #define S64_MAX INT64_MAX
 
-#define Kilobyte(b) ((size_t)b*1024)
-#define Megabyte(b) (Kilobyte(b)*1024)
-#define Gigabyte(b) (Megabyte(b)*1024)
+#define KilobytesToBytes(k) ((u32)k * 1024)
+#define MegabytesToBytes(m) (KilobytesToBytes(m) * 1024)
+#define GigabytesToBytes(g) (MegabyteToBytes(g) * 1024)
+
+#define BytesToKilobytes(k) (k / 1024.0)
+#define BytesToMegabytes(m) (BytesToKilobytes(m) / 1024.0)
+#define BytesToGigabytes(g) (BytesToMegabytes(g) / 1024.0)
 
 #define Milliseconds(t) (t * 1000)
 
 #define CArrayCount(x) (sizeof(x)/sizeof(x[0]))
-
-#if defined(DEVELOPMENT)
-	constexpr auto development = true;
-#else
-	constexpr auto development = false;
-#endif
-
-#if defined(DEBUG)
-	constexpr auto debug = true;
-#else
-	constexpr auto debug = false;
-#endif
 
 template <typename F>
 struct ScopeExit

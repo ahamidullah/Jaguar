@@ -8,5 +8,5 @@ void InitializeMedia(bool multithreaded)
 	InitializeBasic();
 
 	InitializeInput();
-	InitializeWindow(multithreaded);
+	InitializeWindows(multithreaded);
 }

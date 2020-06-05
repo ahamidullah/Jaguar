@@ -15,7 +15,7 @@
 #include "Code/Basic/Process.h"
 
 #define VERTEX_BUFFER_BIND_ID 0
-#define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE Megabyte(1)
+#define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE MegabytesToBytes(1)
 
 struct RenderContext
 {

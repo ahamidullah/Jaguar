@@ -1,7 +1,7 @@
 #include "Filesystem.h"
 #include "String.h"
 
-// Returns all but the last component of the path.
+// GetFilepathDirectory returns all but the last component of the path.
 String GetFilepathDirectory(const String &path)
 {
 	auto slashIndex = FindLastCharIndex(path, '/');
@@ -15,7 +15,7 @@ String GetFilepathDirectory(const String &path)
 	return directory;
 }
 
-// Returns the last component of the path.
+// GetFilepathFilename returns the last component of the path.
 String GetFilepathFilename(const String &path)
 {
 	auto slashIndex = FindLastCharIndex(path, '/');
@@ -29,7 +29,7 @@ String GetFilepathFilename(const String &path)
 	return filename;
 }
 
-// Returns the file extension including the dot.
+// GetFilepathExtension returns the file extension including the dot.
 String GetFilepathExtension(const String &path)
 {
 	auto dotIndex = FindLastCharIndex(path, '.');
@@ -43,6 +43,8 @@ String GetFilepathExtension(const String &path)
 	return fileExtension;
 }
 
+// SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
+// If no dot character is found, a dot character and the supplied extension are appended to the path.
 void SetFilepathExtension(String *path, const String &extension)
 {
 	auto dotIndex = FindLastCharIndex(*path, '.');
@@ -57,7 +59,7 @@ void SetFilepathExtension(String *path, const String &extension)
 	CopyMemory(&extension[0], &(*path)[dotIndex], extensionLength);
 }
 
-// Concatenates two strings and inserts a '/' between them.
+// JoinFilepaths concatenates two strings and inserts a '/' between them.
 String JoinFilepaths(const String &a, const String &b)
 {
 	auto result = CreateString(StringLength(a) + StringLength(b) + 1);
@@ -68,6 +70,8 @@ String JoinFilepaths(const String &a, const String &b)
 }
 
 // This is probably buggy/full of corner cases, but oh well!
+// @TODO: Do we still use this?
+// Don't remember what this does lol.
 String CleanFilepath(const String &filepath)
 {
 	auto components = SplitString(filepath, '/');

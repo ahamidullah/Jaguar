@@ -1,133 +1,307 @@
 .ProjectDirectory = "$_WORKING_DIR_$"
-.BuildDirectory = "$ProjectDirectory$/Build/Linux"
 .CodeDirectory = "$ProjectDirectory$/Code"
 .DependencyDirectory = "$ProjectDirectory$/Dependency"
 
+#import VulkanSDKDirectory
+
 Settings
 {
-	.CachePath = "$BuildDirectory$/Cache"
+	.CachePath = "/tmp/FastBuildCache"
 }
 
-.Compiler = "/usr/bin/clang++"
-.CommonCompilerOptions =
-	" -O0"
-	+ " -g"
-	+ " -DDEBUG"
-	+ " -DDEVELOPMENT"
-	+ " -I$ProjectDirectory$"
-	+ " -std=c++17"
-	+ " -DUSE_VULKAN_RENDER_API"
-	+ " -ffast-math -fno-exceptions"
-	+ " -Wall -Wextra -Wfatal-errors -Wcast-align -Wdisabled-optimization -Wformat=2 -Winit-self -Wredundant-decls -Wshadow -Wstrict-overflow=2 -Wundef -Wno-unused -Wno-unused-parameter -Wno-varargs -Wno-cast-align -Wno-non-pod-varargs -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces"
+// @TODO: Document compiler options.
+.ClangBaseConfig =
+[
+	.PlatformName = "Linux"
+	.Compiler = "/usr/bin/clang++"
+	.CompilerOptions =
+		"%1 -o %2"
+		+ " -I$ProjectDirectory$"
+		+ " -std=c++2a"
+		+ " -ffast-math"
+		+ " -fno-exceptions"
+		+ " -Wall"
+		+ " -Wextra"
+		+ " -Wfatal-errors"
+		+ " -Wcast-align"
+		+ " -Wdisabled-optimization"
+		+ " -Wformat=2"
+		+ " -Winit-self"
+		+ " -Wredundant-decls"
+		+ " -Wshadow"
+		+ " -Wstrict-overflow=2"
+		+ " -Wundef"
+		+ " -Wno-unused"
+		+ " -Wno-unused-parameter"
+		+ " -Wno-varargs"
+		+ " -Wno-cast-align"
+		+ " -Wno-non-pod-varargs"
+		+ " -Wno-sign-compare"
+		+ " -Wno-missing-field-initializers"
+		+ " -Wno-missing-braces"
+	.Linker = "/usr/bin/clang++"
+	.LinkerOptions = "%1 -o %2"
+	.PCHOptions =
+		"-Xclang -fno-pch-timestamp"
+		+ " -x c++-header"
+		+ " $CompilerOptions$"
+]
 
-.BinaryCompilerOptions =
-	"$CommonCompilerOptions$"
-	+ " -c %1"
-	+ " -o %2"
+.BinaryTypeLibrary = "Library"
+.BinaryTypeExecutable = "Executable"
 
-.LibraryCompilerOptions =
-	"$CommonCompilerOptions$"
-	+ " -fPIC"
-	+ " -c %1"
-	+ " -o %2"
+.ClangLibraryConfig =
+[
+	Using(.ClangBaseConfig)
+	.BinaryType = "$BinaryTypeLibrary$"
+	.CompilerOptions +
+		" -fPIC"
+		+ " -c"
+	.LinkerOptions + " -shared"
+	.PCHOptions + " -fPIC"
+]
 
-.PCHCompilerOptions =
-	"$CommonCompilerOptions$"
-	+ " -fPIC"
-	+ " -Xclang -fno-pch-timestamp"
-    + " -x c++-header"
-    + " %1"
-    + " -o %2"
+.ClangExecutableConfig =
+[
+	Using(.ClangBaseConfig)
+	.BinaryType = "$BinaryTypeExecutable$"
+	.CompilerOptions + " -c"
+]
 
-.Linker = "/usr/bin/clang++"
+.BasicConfig =
+[
+	Using(.ClangLibraryConfig)
+	.Module = "Basic"
+]
 
-Unity("Basic-Unity")
+.MediaConfig =
+[
+	Using(.ClangLibraryConfig)
+	.Module = "Media"
+]
+
+.EngineConfig =
+[
+	Using(.ClangExecutableConfig)
+	.Module = "Engine"
+	.CompilerOptions +
+		" -DUSING_VULKAN_API"
+		+ " -I$VulkanSDKDirectory$"
+	.LinkModules =
+	{
+		"Basic"
+		"Media"
+	}
+	.LinkerOptions +
+		" -lX11"
+		+ " -ldl"
+		+ " -lm"
+		+ " -lfreetype"
+		+ " -lXi"
+		+ " -lassimp"
+		+ " -lpthread"
+]
+
+.ModuleConfigs =
 {
-	.UnityInputPath = "$CodeDirectory$/Basic"
-	.UnityOutputPath = "$BuildDirectory$/Code"
-	.UnityOutputPattern = "BasicUnity*.cpp"
+	.BasicConfig,
+	.MediaConfig,
+	.EngineConfig,
 }
 
-ObjectList("Basic-Objects")
+//
+// Speed
+//
+
+.ClangDebugConfig =
+[
+	.Speed = "Debug"
+	.CompilerOptions =
+		" -O0"
+		+ " -g"
+		+ " -DDEBUG_BUILD"
+]
+
+.ClangOptimizedConfig =
+[
+	.Speed = "Optimized"
+	.CompilerOptions =
+		" -Ofast"
+		+ " -DOPTIMIZED_BUILD"
+]
+
+.ClangSpeedConfigs =
 {
-    .PCHInputFile = "$CodeDirectory$/Basic/PCH.h"
-    .PCHOutputFile = "$BuildDirectory$/PCH/Basic.pch"
-    .PCHOptions = "$PCHCompilerOptions$"
-
-    .CompilerInputUnity = "Basic-Unity"
-    .CompilerOutputPath = "$BuildDirectory$/Objects"
-    .CompilerOptions =
-    	"$LibraryCompilerOptions$"
-    	+ " -include-pch $PCHOutputFile$"
+	.ClangDebugConfig,
+	.ClangOptimizedConfig,
 }
 
-DLL("Basic-DLL")
+//
+// Runtime
+//
+
+.ClangDevelopmentConfig =
+[
+	.Runtime = "Development"
+	.CompilerOptions = " -DDEVELOPMENT_BUILD"
+]
+
+.ClangReleaseConfig =
+[
+	.Runtime = "Release"
+	.CompilerOptions = " -DRELEASE_BUILD"
+]
+
+.ClangRuntimeConfigs =
 {
-    .LinkerOutput = "$BuildDirectory$/Binaries/libBasic.so"
-    .LinkerOptions = "-shared -o %2 %1"
-    .Libraries = {"Basic-Objects"}
+	.ClangDevelopmentConfig,
+	.ClangReleaseConfig,
 }
 
-Unity("Media-Unity")
+//
+// Extra
+//
+
+.ClangAddressSanitizerConfig =
+[
+	.Extra = "AddressSanitizer"
+	.CompilerOptions =
+		" -fsanitize=address"
+		+ " -DADDRESS_SANITIZER_BUILD"
+	.LinkerOptions = " -fsanitize=address"
+	.PCHOptions = " -fsanitize=address"
+]
+
+.ClangThreadSanitizerConfig =
+[
+	.Extra = "ThreadSanitizer"
+	.CompilerOptions =
+		" -fsanitize=thread"
+		+ " -mllvm -tsan-instrument-atomics=false"
+		+ " -DTHREAD_SANITIZER_BUILD"
+	.LinkerOptions = " -fsanitize=thread"
+	.PCHOptions = " -fsanitize=thread"
+]
+
+.ClangExtraConfigs =
 {
-	.UnityInputPath = "$CodeDirectory$/Media"
-	.UnityOutputPath = "$BuildDirectory$/Code"
-	.UnityOutputPattern = "MediaUnity*.cpp"
+	.ClangAddressSanitizerConfig,
+	.ClangThreadSanitizerConfig,
 }
 
-ObjectList("Media-Objects")
+.Configs = {}
+
+ForEach(.ModuleConfig in .ModuleConfigs)
 {
-    .PCHInputFile = "$CodeDirectory$/Media/PCH.h"
-    .PCHOutputFile = "$BuildDirectory$/PCH/Media.pch"
-    .PCHOptions = "$PCHCompilerOptions$"
+	ForEach(.SpeedConfig in .ClangSpeedConfigs)
+	{
+		ForEach(.RuntimeConfig in .ClangRuntimeConfigs)
+		{
+			.Config = .ModuleConfig + .SpeedConfig + .RuntimeConfig
+			Using(.Config)
+			.BuildConfig =
+			[
+				.BuildTag = "$Module$-$PlatformName$-$Speed$-$Runtime$"
+				.BuildDirectory = "$ProjectDirectory$/Build/$PlatformName$/$Speed$/$Runtime$"
+			]
+			.FinalConfig = .Config + .BuildConfig
+			^Configs + .FinalConfig
 
-    .CompilerInputUnity = "Media-Unity"
-    .CompilerOutputPath = "$BuildDirectory$/Objects"
-    .CompilerOptions =
-    	"$LibraryCompilerOptions$"
-    	+ " -include-pch $PCHOutputFile$"
+			ForEach(.ExtraConfig in .ClangExtraConfigs)
+			{
+				.Config = .ModuleConfig + .SpeedConfig + .RuntimeConfig + .ExtraConfig
+				Using(.Config)
+				.BuildConfig =
+				[
+					.BuildTag = "$Module$-$PlatformName$-$Extra$-$Speed$-$Runtime$"
+					.BuildDirectory = "$ProjectDirectory$/Build/$PlatformName$/$Extra$/$Speed$/$Runtime$"
+				]
+				.FinalConfig = .Config + .BuildConfig
+				^Configs + .FinalConfig
+			}
+		}
+	}
 }
 
-DLL("Media-DLL")
+ForEach(.Config in .Configs)
 {
-    .LinkerOutput = "$BuildDirectory$/Binaries/libMedia.so"
-    .LinkerOptions = "-shared -o %2 %1"
-    .Libraries = {"Media-Objects"}
+	Using(.Config)
+
+	Unity("$BuildTag$-Unity")
+	{
+		.UnityInputPath = "$CodeDirectory$/$Module$"
+		.UnityOutputPath = "$BuildDirectory$/Code"
+		.UnityOutputPattern = "$Module$Unity*.cpp"
+	}
+
+	ObjectList("$BuildTag$-Objects")
+	{
+		.PCHInputFile = "$CodeDirectory$/$Module$/PCH.h"
+		.PCHOutputFile = "$BuildDirectory$/PCH/$Module$.pch"
+		.CompilerInputUnity = "$BuildTag$-Unity"
+		.CompilerOutputPath = "$BuildDirectory$/Objects"
+		.CompilerOptions + " -include-pch $PCHOutputFile$"
+	}
+
+	If(.BinaryType == .BinaryTypeLibrary)
+	{
+		DLL("$BuildTag$-DLL")
+		{
+			.LinkerOutput = "$BuildDirectory$/Binary/lib$Module$.so"
+			.Libraries = {"$BuildTag$-Objects"}
+		}
+
+		Alias("$BuildTag$")
+		{
+			.Targets = "$BuildTag$-DLL"
+		}
+	}
+
+	If(.BinaryType == .BinaryTypeExecutable)
+	{
+		ForEach(.LinkModule in .LinkModules)
+		{
+			^LinkerOptions + " $BuildDirectory$/Binary/lib$LinkModule$.so"
+		}
+		Executable("$BuildTag$-EXE")
+		{
+			.LinkerOutput = "$BuildDirectory$/Binary/$Module$"
+			.Libraries = {"$BuildTag$-Objects"}
+		}
+
+		Alias("$BuildTag$")
+		{
+			.Targets = "$BuildTag$-EXE"
+		}
+	}
 }
 
-Unity("Engine-Unity")
-{
-	.UnityInputPath = "$CodeDirectory$/Engine"
-	.UnityOutputPath = "$BuildDirectory$/Code"
-	.UnityOutputPattern = "EngineUnity*.cpp"
-}
-
-ObjectList("Engine-Objects")
-{
-    .PCHInputFile = "$CodeDirectory$/Engine/PCH.h"
-    .PCHOutputFile = "$BuildDirectory$/PCH/Engine.pch"
-    .PCHOptions = "$PCHCompilerOptions$"
-
-    .CompilerInputUnity = "Engine-Unity"
-    .CompilerOutputPath = "$BuildDirectory$/Objects"
-    .CompilerOptions =
-    	"$LibraryCompilerOptions$"
-    	+ " -include-pch $PCHOutputFile$"
-}
-
-Executable("Engine")
-{
-    .LinkerOutput = "$BuildDirectory$/Binaries/Engine"
-    .LinkerOptions = "Build/Linux/Binaries/libBasic.so Build/Linux/Binaries/libMedia.so -lX11 -ldl -lm -lfreetype -lXi -lassimp -lpthread -o %2 %1"
-    .Libraries = {"Engine-Objects"}
-}
-
-Alias("all")
+Alias("All")
 {
 	.Targets =
 	{
-		"Basic-DLL"
-		"Media-DLL",
-		"Engine",
+		"Basic-Linux-Debug-Development"
+		"Media-Linux-Debug-Development"
+		"Engine-Linux-Debug-Development"
+	}
+}
+
+Alias("AddressSanitizer")
+{
+	.Targets =
+	{
+		"Basic-Linux-AddressSanitizer-Debug-Development"
+		"Media-Linux-AddressSanitizer-Debug-Development"
+		"Engine-Linux-AddressSanitizer-Debug-Development"
+	}
+}
+
+Alias("ThreadSanitizer")
+{
+	.Targets =
+	{
+		"Basic-Linux-ThreadSanitizer-Debug-Development"
+		"Media-Linux-ThreadSanitizer-Debug-Development"
+		"Engine-Linux-ThreadSanitizer-Debug-Development"
 	}
 }

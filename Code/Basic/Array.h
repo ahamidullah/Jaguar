@@ -6,9 +6,9 @@
 template <typename T>
 struct Array
 {
+	T *elements = NULL;
 	s64 count = 0;
 	s64 capacity = 0;
-	T *elements = NULL;
 
 	T &operator[](s64 i);
 	T &operator[](s64 i) const;
@@ -134,6 +134,7 @@ void ArrayAppend(Array<T> *a, const T &newElement)
 	DoAppendElement(a, newElement);
 }
 
+// This overload is necessary to allow appending enum values to u32 arrays.
 template <typename T>
 void ArrayAppend(Array<T> *a, u32 newElement)
 {

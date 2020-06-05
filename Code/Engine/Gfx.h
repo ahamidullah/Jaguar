@@ -1,5 +1,11 @@
 #pragma once
 
+struct GPUMemoryHeapInfo
+{
+    s64 usage;
+    s64 budget;
+};
+
 struct GfxSubmitInfo
 {
 	Array<GPUBackendCommandBuffer> commandBuffers;

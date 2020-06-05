@@ -19,7 +19,7 @@ s32 X11ErrorHandler(Display *display, XErrorEvent *event)
 	return 0;
 }
 
-void InitializeWindow(bool multithreaded)
+void InitializeWindows(bool multithreaded)
 {
 	// Install a new error handler.
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
@@ -105,7 +105,7 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		| CWBorderPixel
 		| CWEventMask;
 	auto result = PlatformWindow{};
-	result.x11Window = XCreateWindow(
+	result.x11Handle = XCreateWindow(
 		windowsContext.x11Display,
 		rootWindow,
 		0,
@@ -118,20 +118,20 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		visualInfo->visual,
 		windowAttributesMask,
 		&windowAttributes);
-	if (!result.x11Window)
+	if (!result.x11Handle)
 	{
 		Abort("Failed to create a window.");
 	}
 
 	XFree(visualInfo);
-	XStoreName(windowsContext.x11Display, result.x11Window, "Jaguar");
-	XMapWindow(windowsContext.x11Display, result.x11Window);
+	XStoreName(windowsContext.x11Display, result.x11Handle, "Jaguar");
+	XMapWindow(windowsContext.x11Display, result.x11Handle);
 	XFlush(windowsContext.x11Display);
 
 	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
 	if ((result.x11DeleteWindowAtom = XInternAtom(windowsContext.x11Display, "WM_DELETE_WINDOW", 1)))
 	{
-		XSetWMProtocols(windowsContext.x11Display, result.x11Window, &result.x11DeleteWindowAtom, 1);
+		XSetWMProtocols(windowsContext.x11Display, result.x11Handle, &result.x11DeleteWindowAtom, 1);
 	}
 	else
 	{
@@ -143,7 +143,7 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 		s32 windowX, windowY;
 		u32 windowWidth;
 		u32 borderWidth, depth;
-		if (!XGetGeometry(windowsContext.x11Display, result.x11Window, &rootWindow, &windowX, &windowY, &windowWidth, &result.height, &borderWidth, &depth))
+		if (!XGetGeometry(windowsContext.x11Display, result.x11Handle, &rootWindow, &windowX, &windowY, &windowWidth, &result.height, &borderWidth, &depth))
 		{
 			Abort("Failed to get the screen's geometry.");
 		}
@@ -152,8 +152,8 @@ PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
 	// Create a blank cursor for when we want to hide the cursor.
 	{
 		XColor xcolor;
-		static char cursorPixels[] = {};
-		Pixmap pixmap = XCreateBitmapFromData(windowsContext.x11Display, result.x11Window, cursorPixels, 1, 1);
+		char cursorPixels[1] = {};
+		auto pixmap = XCreateBitmapFromData(windowsContext.x11Display, result.x11Handle, cursorPixels, 1, 1);
 		result.x11BlankCursor = XCreatePixmapCursor(windowsContext.x11Display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
 		XFreePixmap(windowsContext.x11Display, pixmap);
 	}
@@ -239,7 +239,7 @@ void ToggleFullscreen(PlatformWindow *window)
 		.xclient =
 		{
 			.type = ClientMessage,
-			.window = window->x11Window,
+			.window = window->x11Handle,
 			.message_type = XInternAtom(windowsContext.x11Display, "_NET_WM_STATE", True),
 			.format = 32,
 			.data =
@@ -260,40 +260,23 @@ void ToggleFullscreen(PlatformWindow *window)
 
 void CaptureCursor(PlatformWindow *window)
 {
-	XDefineCursor(windowsContext.x11Display, window->x11Window, window->x11BlankCursor);
-	XGrabPointer(windowsContext.x11Display, window->x11Window, True, 0, GrabModeAsync, GrabModeAsync, None, window->x11BlankCursor, CurrentTime);
+	XDefineCursor(windowsContext.x11Display, window->x11Handle, window->x11BlankCursor);
+	XGrabPointer(windowsContext.x11Display, window->x11Handle, True, 0, GrabModeAsync, GrabModeAsync, None, window->x11BlankCursor, CurrentTime);
 }
 
 void UncaptureCursor(PlatformWindow *window)
 {
-	XUndefineCursor(windowsContext.x11Display, window->x11Window);
+	XUndefineCursor(windowsContext.x11Display, window->x11Handle);
 	XUngrabPointer(windowsContext.x11Display, CurrentTime);
 }
 
 void DestroyWindow(PlatformWindow *window)
 {
-	XDestroyWindow(windowsContext.x11Display, window->x11Window);
+	XDestroyWindow(windowsContext.x11Display, window->x11Handle);
 	XCloseDisplay(windowsContext.x11Display);
 }
 
-#if defined(USE_VULKAN_RENDER_API)
-
-const char *GetRequiredVulkanSurfaceInstanceExtension()
+Display *GetDisplay()
 {
-	return "VK_KHR_xlib_surface";
+	return windowsContext.x11Display;
 }
-
-extern VkResult (*vkCreateXlibSurfaceKHR)(VkInstance, const VkXlibSurfaceCreateInfoKHR *, const VkAllocationCallbacks *, VkSurfaceKHR *);
-
-VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface)
-{
-	VkXlibSurfaceCreateInfoKHR surfaceCreateInfo =
-	{
-		.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-		.dpy = windowsContext.x11Display,
-		.window = window->x11Window,
-	};
-	return vkCreateXlibSurfaceKHR(instance, &surfaceCreateInfo, NULL, surface);
-}
-
-#endif

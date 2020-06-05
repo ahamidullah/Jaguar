@@ -8,6 +8,7 @@ s64 CStringLength(const char *s);
 struct String
 {
 	Array<char> data;
+	s64 length;
 
 	String() : String("") {};
 	String(const Array<char> &a) : data{a} {}

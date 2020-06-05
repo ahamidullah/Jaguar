@@ -4,6 +4,6 @@ export PROJECT_DIRECTORY="$PROJECT_ROOT/$PROJECT_NAME"
 export ProjectDirectory="$PROJECT_ROOT/$PROJECT_NAME"
 export PATH=$PROJECT_DIRECTORY/Misc/Linux:$PROJECT_DIRECTORY/Build:$PATH
 
-export VULKAN_SDK_PATH="$PROJECT_DIRECTORY/Dependencies/Vulkan/1.1.106.0"
-export VK_LAYER_PATH="$VULKAN_SDK_PATH/etc/explicit_layer.d"
-export LD_LIBRARY_PATH="$VULKAN_SDK_PATH/lib:${LD_LIBRARY_PATH:-}"
+export VulkanSDKDirectory="$ProjectDirectory/Dependencies/Vulkan/1.2.135.0/x86_64"
+export VK_LAYER_PATH="$VulkanSDKDirectory/etc/vulkan/explicit_layer.d/"
+export LD_LIBRARY_PATH="$VulkanSDKDirectory/lib:${LD_LIBRARY_PATH:-}"

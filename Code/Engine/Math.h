@@ -101,7 +101,7 @@ f32 Cos(f32 f);
 f32 Acos(f32 f);
 f32 Abs(f32 f);
 
-u32 DivideAndRoundUp(u32 a, u32 b); // @TODO: Use this?
+s64 DivideAndRoundUp(s64 a, s64 b);
 s64 AlignTo(s64 number, s64 alignment);
 s64 AlignmentOffset(s64 number, s64 alignment);
 s64 Minimum(s64 a, s64 b);

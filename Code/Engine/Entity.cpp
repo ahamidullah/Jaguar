@@ -6,19 +6,23 @@ struct EntityMeshes
 {
 	Array<MeshInstance> instances;
 	Array<BoundingSphere> boundingSpheres;
-
-	// Per-mesh data
-	//Mesh_Render_Info render_info[MAX_ENITTY_MESHES];
-	//Transform        transforms[MAX_ENITTY_MESHES];
-	//Bounding_Sphere  bounding_spheres[MAX_ENITTY_MESHES];
-	//u32              submesh_counts[MAX_ENITTY_MESHES];
-	//u32              count;
-
-	// Per-submesh data
-	//u32      submesh_index_counts[MAX_ENITTY_SUBMESHES];
-	//Material submesh_materials[MAX_ENITTY_SUBMESHES];
-	//u32      submesh_count;
 };
+
+template <typename T>
+struct EntityComponentList
+{
+	// SpinLock spinLock;
+	// BucketArray<T> components;
+};
+
+struct Entities
+{
+	u64 count;
+	// EntityComponentList<Transform> transforms;
+	Array<Transform> transforms;
+	Array<ModelInstance> models;
+	Array<MeshInstance> meshes;
+} entityGlobals;
 
 // @TODO: Use sparse arrays to store entity attributes.
 struct
@@ -31,11 +35,6 @@ struct
 	s64 ids[100]; // @TODO
 	s64 id_count;
 } entitiesContext;
-
-u32 guy_id;
-u32 nanosuit_id;
-
-// @TODO: Multithreading?
 
 EntityID CreateEntity()
 {
@@ -51,14 +50,14 @@ void SetEntityTransform(EntityID entity_id, Transform transform)
 
 struct Set_Entity_Model_Job_Parameter
 {
-	AssetID asset_id;
+	String modelName;
 	Transform transform;
 };
 
 void Set_Entity_Model_Job(void *job_parameter_pointer)
 {
 	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)job_parameter_pointer;
-	MeshAsset *asset = GetMeshAsset(job_parameter->asset_id);
+	MeshAsset *asset = GetMeshAsset(job_parameter->modelName);
 	ArrayAppend(&entitiesContext.meshes.instances,
 	            {
 	            	.transform = job_parameter->transform,
@@ -71,11 +70,11 @@ void Set_Entity_Model_Job(void *job_parameter_pointer)
 	            });
 }
 
-void SetEntityModel(EntityID entity_id, AssetID asset_id, Transform transform)
+void SetEntityModel(EntityID entity_id, String modelName, Transform transform)
 {
 	Set_Entity_Model_Job_Parameter *job_parameter = (Set_Entity_Model_Job_Parameter *)malloc(sizeof(Set_Entity_Model_Job_Parameter)); // @TODO
 	*job_parameter = (Set_Entity_Model_Job_Parameter){
-		.asset_id = asset_id,
+		.modelName = modelName,
 		.transform = transform,
 	};
 	JobCounter *job_counter = (JobCounter *)malloc(sizeof(JobCounter)); // @TODO
@@ -90,10 +89,4 @@ Array<MeshInstance> GetMeshInstances()
 
 void InitializeEntities()
 {
-/*
-	nanosuit_id = CreateEntity();
-	Transform t = {.position = {0.0f, 0.0f, 0.0f}};
-	SetEntityTransform(nanosuit_id, t);
-	SetEntityModel(nanosuit_id, ANVIL_ASSET, t);
-*/
 }

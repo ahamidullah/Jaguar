@@ -1,2 +1,2 @@
 #!/bin/bash
-dolphin $PROJECT_DIRECTORY >& /dev/null &
+thunar $PROJECT_DIRECTORY >& /dev/null &

@@ -230,7 +230,7 @@ void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 
 void InitializeRenderer(void *jobParameterPointer)
 {
-	GfxInitialize((PlatformWindow *)jobParameterPointer);
+	GfxInitialize((OSWindow *)jobParameterPointer);
 
 	InitializeGPU();
 
@@ -514,20 +514,18 @@ void Render()
 			{
 				GfxRecordSetViewportCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());
 				GfxRecordSetScissorCommand(commandBuffer, GetRenderWidth(), GetRenderHeight());
-
-				auto meshInstances = GetMeshInstances();
-				for (auto &mesh : meshInstances)
+				for (auto &model : GetModelInstances())
 				{
-					// @TODO
-					if (mesh.asset->loadStatus != ASSET_LOADED)
+					auto modelAsset = LockAsset(model.assetName);
+					if (!modelAsset)
 					{
-						ConsolePrint("CONTINUE\n");
 						continue;
 					}
-					for (auto &submesh : mesh.asset->submeshes)
+					Defer(UnlockAsset(model.assetName));
+					for (auto &submesh : modelAsset->mesh.submeshes)
 					{
-						GfxRecordBindVertexBufferCommand(commandBuffer, mesh.asset->gpuGeometry.vertexBuffer);
-						GfxRecordBindIndexBufferCommand(commandBuffer, mesh.asset->gpuGeometry.indexBuffer);
+						GfxRecordBindVertexBufferCommand(commandBuffer, modelAsset->mesh.gpuGeometry.vertexBuffer);
+						GfxRecordBindIndexBufferCommand(commandBuffer, modelAsset->mesh.gpuGeometry.indexBuffer);
 						GfxDrawIndexedVertices(commandBuffer, submesh.indexCount, submesh.firstIndex, submesh.vertexOffset);
 					}
 				}

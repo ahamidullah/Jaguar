@@ -16,6 +16,7 @@ struct JobFiber;
 struct JobCounter {
 	volatile s64 unfinishedJobCount;
 	JobFiber *waitingJobFiber;
+	// Array<JobFiber *> waitingFibers;
 };
 
 typedef void (*JobProcedure)(void *);

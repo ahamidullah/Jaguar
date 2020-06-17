@@ -29,7 +29,7 @@ void InitializeGameLoop()
 	auto e = CreateEntity();
 	auto t = Transform{};
 	SetEntityTransform(e, t);
-	SetEntityModel(e, SPONZA_ASSET, t);
+	SetEntityModel(e, "Sponza", t);
 }
 
 void GameLoop(f32 deltaTime)

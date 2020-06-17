@@ -9,8 +9,12 @@
 typedef pthread_t ThreadHandle;
 typedef void *(*ThreadProcedure)(void *);
 
-s64 GetProcessorCount();
-s64 GetThreadID();
-ThreadHandle GetCurrentThread();
 ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter);
+ThreadHandle GetCurrentThread();
 void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex);
+s64 GetThreadID();
+
+typedef u8 SpinLock;
+
+void AcquireSpinLock(SpinLock *lock);
+void ReleaseSpinLock(SpinLock *lock);

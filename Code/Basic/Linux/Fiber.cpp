@@ -34,9 +34,26 @@ struct FiberGlobals
 	s64 pageSize;
 	s64 stackSize;
 	s64 guardPageCount;
-	char *fiberStackMemory;
 	volatile s64 fiberCount;
 } fiberGlobals;
+
+void InitializeFibers()
+{
+	fiberGlobals = FiberGlobals
+	{
+		.pageSize = GetPageSize(),
+		.stackSize = 100 * fiberGlobals.pageSize,
+		.guardPageCount = 1,
+		.fiberCount = 0,
+	};
+	LogPrint(
+		INFO_LOG,
+		"Fiber info:\n"
+		"	pageSize: %d\n"
+		"	stackSize: %d\n"
+		"	guardPageCount: %d\n",
+		fiberGlobals.pageSize, fiberGlobals.stackSize, fiberGlobals.guardPageCount);
+}
 
 struct FiberCreationInfo
 {
@@ -82,19 +99,17 @@ void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 	};
 	makecontext(&fiber->context, (void(*)())RunFiber, 1, &fiberCreationInfo);
 	swapcontext(&temporaryContext, &fiber->context);
-
-#if defined(THREAD_SANITIZER_BUILD)
-	fiber->tsanFiber = __tsan_create_fiber(0);
-#endif
+	#if defined(THREAD_SANITIZER_BUILD)
+		fiber->tsanFiber = __tsan_create_fiber(0);
+	#endif
 }
 
 void ConvertThreadToFiber(Fiber *fiber)
 {
 	threadLocalFibersContext.activeFiber = fiber;
-
-#if defined(THREAD_SANITIZER_BUILD)
+	#if defined(THREAD_SANITIZER_BUILD)
 		fiber->tsanFiber = __tsan_create_fiber(0);
-#endif
+	#endif
 }
 
 // @TODO: Prevent two fibers from running at the same time.
@@ -102,11 +117,10 @@ void SwitchToFiber(Fiber *fiber)
 {
 	if (!_setjmp(threadLocalFibersContext.activeFiber->jumpBuffer))
 	{
-#if defined(THREAD_SANITIZER_BUILD)
-		Assert(fiber->tsanFiber);
-		__tsan_switch_to_fiber(fiber->tsanFiber, 0);
-#endif
-
+		#if defined(THREAD_SANITIZER_BUILD)
+			Assert(fiber->tsanFiber);
+			__tsan_switch_to_fiber(fiber->tsanFiber, 0);
+		#endif
 		threadLocalFibersContext.activeFiber = fiber;
 		_longjmp(fiber->jumpBuffer, 1);
 	}
@@ -115,19 +129,4 @@ void SwitchToFiber(Fiber *fiber)
 Fiber *GetCurrentFiber()
 {
 	return threadLocalFibersContext.activeFiber;
-}
-
-void InitializeFibers()
-{
-	fiberGlobals.pageSize = GetPageSize();
-	fiberGlobals.stackSize = 100 * fiberGlobals.pageSize;
-	fiberGlobals.guardPageCount = 1;
-	fiberGlobals.fiberCount = 0;
-	LogPrint(
-		INFO_LOG,
-		"Fiber info:\n"
-		"	pageSize: %d\n"
-		"	stackSize: %d\n"
-		"	guardPageCount: %d\n",
-		fiberGlobals.pageSize, fiberGlobals.stackSize, fiberGlobals.guardPageCount);
 }

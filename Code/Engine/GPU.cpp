@@ -18,9 +18,9 @@ struct GPUGlobals
 {
 	struct MemoryAllocators
 	{
-		GPUMemoryBlockAllocator block;
-		GPUMemoryRingAllocator ring;
-	} memoryAllocators[GFX_MEMORY_TYPE_COUNT];
+		GPUMemoryBlockAllocator block[GFX_MEMORY_TYPE_COUNT];
+		GPUMemoryRingAllocator cpuToGPURing;
+	} memoryAllocators;
 
 	GfxCommandQueue commandQueues[GFX_COMMAND_QUEUE_COUNT];
 
@@ -141,13 +141,9 @@ void InitializeGPU()
 
 	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
 	{
-		gpuGlobals.memoryAllocators[i].block = CreateGPUMemoryBlockAllocator((GfxMemoryType)i);
-		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
-		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
-		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
-		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
-		gpuGlobals.memoryAllocators[i].ring = CreateGPUMemoryRingAllocator((GfxMemoryType)i);
+		gpuGlobals.memoryAllocators.block[i] = CreateGPUMemoryBlockAllocator((GfxMemoryType)i);
 	}
+	gpuGlobals.memoryAllocators.cpuToGPURing = CreateGPUMemoryRingAllocator(GFX_CPU_TO_GPU_MEMORY);
 
 	for (auto i = 0; i < GFX_COMMAND_QUEUE_COUNT; i++)
 	{
@@ -271,27 +267,13 @@ GPUMemoryAllocation *AllocateFromGPUMemoryRing(GPUMemoryRingAllocator *allocator
 GPUMemoryAllocation *AllocateGPUMemory(GPUResourceType resourceType, GfxMemoryRequirements memoryRequirements, GfxMemoryType memoryType, GPUResourceLifetime lifetime, void **mappedMemory)
 {
 	auto allocation = (GPUMemoryAllocation *){};
-	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME)
+	if (lifetime == GPU_RESOURCE_LIFETIME_FRAME && memoryType == GFX_CPU_TO_GPU_MEMORY)
 	{
-		if (resourceType == GPU_BUFFER_RESOURCE)
-		{
-			allocation = AllocateFromGPUMemoryRing(&gpuGlobals.memoryAllocators[memoryType].ring, memoryRequirements, GetFrameIndex());
-		}
-		else
-		{
-			allocation = AllocateFromGPUMemoryRing(&gpuGlobals.memoryAllocators[memoryType].ring, memoryRequirements, GetFrameIndex());
-		}
+		allocation = AllocateFromGPUMemoryRing(&gpuGlobals.memoryAllocators.ring, memoryRequirements, GetFrameIndex());
 	}
 	else
 	{
-		if (resourceType == GPU_BUFFER_RESOURCE)
-		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuGlobals.memoryAllocators[memoryType].block, memoryRequirements);
-		}
-		else
-		{
-			allocation = AllocateFromGPUMemoryBlocks(&gpuGlobals.memoryAllocators[memoryType].block, memoryRequirements);
-		}
+		allocation = AllocateFromGPUMemoryBlocks(&gpuGlobals.memoryAllocators.block[memoryType], memoryRequirements);
 	}
 	Assert(allocation);
 	if (mappedMemory)
@@ -436,11 +418,7 @@ void ClearGPUMemoryForFrameIndex(s64 frameIndex)
 		allocator->allocationCounts[frameIndex] = 0;
 		allocator->size = 0;
 	};
-	for (auto i = 0; i < GFX_MEMORY_TYPE_COUNT; i++)
-	{
-		Clear(&gpuGlobals.memoryAllocators[i].ring);
-		// @TODO: Clear overflow.
-	}
+	Clear(&gpuGlobals.memoryAllocators.cpuToGPURing);
 }
 
 void ClearGPUCommandPoolsForFrameIndex(s64 frameIndex)

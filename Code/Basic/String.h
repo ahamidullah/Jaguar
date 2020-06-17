@@ -12,7 +12,7 @@ struct String
 
 	String() : String("") {};
 	String(const Array<char> &a) : data{a} {}
-	String(const char *cString) : data{CreateArray(CStringLength(cString) + 1, cString)} {};
+	String(const char *cString) : data{CreateArrayFromData(cString, CStringLength(cString) + 1, activeAllocator)} {};
 	char &operator[](s64 i);
 	char &operator[](s64 i) const;
 };
@@ -66,3 +66,17 @@ char *end(String *s);
 u64 Hash(const String &s);
 
 void ArrayAppend(Array<String> *a, const char *newElement);
+
+template <typename... StringPack>
+String JoinStrings(StringPack... strings)
+{
+	auto stringCount = sizeof...(strings);
+	if (stringCount == 0)
+	{
+		return "";
+	}
+	auto totalStringLengths = (strings.count + ...);
+	auto result = CreateString(0, totalStringLengths);
+	(StringAppend(&result, strings), ...);
+	return result;
+}

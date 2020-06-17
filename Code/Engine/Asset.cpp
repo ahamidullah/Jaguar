@@ -1,28 +1,80 @@
 #include "Asset.h"
 #include "GPU.h"
 #include "PCH.h"
-#define STB_IMAGE_IMPLEMENTATION
-	#include "stb_image.h"
-#undef STB_IMAGE_IMPLEMENTATION
 #include "Mesh.h"
 #include "Job.h"
 
 #include "Code/Basic/Log.h"
 #include "Code/Basic/Filesystem.h"
+#include "Code/Basic/HashTable.h"
+#include "Code/Basic/Hash.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#undef STB_IMAGE_IMPLEMENTATION
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#undef STB_IMAGE_WRITE_IMPLEMENTATION
+
+#define TINYGLTF_IMPLEMENTATION
+#include "tiny_gltf.h"
+#undef TINYGLTF_IMPLEMENTATION
 
 // @TODO
 #define ASSET_COUNT 100
 
-struct AssetsContext
+enum AssetType
 {
-	void *lookup[ASSET_COUNT]; // @TODO: Use a hash table.
-	AssetLoadStatus loadStatuses[ASSET_COUNT];
-	//AssetUploadDoubleBuffer uploadCommandBuffers;
-	//s32 uploadFenceCount;
-	//GfxFence uploadFences[MAX_UPLOAD_COMMAND_BUFFERS];
-	//s32 pendingLoadStatusCounts[MAX_UPLOAD_FENCES];
-	//AssetLoadStatus *pendingLoadStatuses[MAX_UPLOAD_FENCES][MAX_UPLOAD_COMMAND_BUFFERS];
-} assetsContext;
+	MODEL_ASSET,
+
+	ASSET_TYPE_COUNT
+};
+
+// Subassets can be referenced by assets (including other Subassets), but are not usable outside of the asset system.
+template <typename T>
+struct Subassets
+{
+	T data;
+	s64 referenceCount;
+}
+
+struct AssetReference
+{
+	void *asset;
+	AssetType type;
+	bool loading;
+	bool scheduledForUnload;
+	s64 lockCount;
+	String filepath;
+};
+
+struct AssetGlobals
+{
+	SpinLock lock;
+	HashTable<String, AssetReference> lookup;
+	SlotAllocator assetAllocators[ASSET_TYPE_COUNT];
+	HeapAllocator heap;
+} assetGlobals;
+
+void InitializeAssets(void *)
+{
+	assetGlobals.heapAllocator = CreateHeapAllocator(KilobytesToBytes(64), 2, systemMemoryAllocator, systemMemoryAllocator);
+	for (auto i = 0; i < ASSET_TYPE_COUNT; i++)
+	{
+		switch (i)
+		{
+		case MODEL_ASSET:
+		{
+			assetGlobals.slotAllocators[i] = CreateSlotAllocator(KilobytesToBytes(64), 0, assetGlobals.heapAllocator, assetGlobals.heapAllocator);
+		} break;
+		default:
+		{
+			Abort("Unknown asset type %d.", i);
+		} break;
+		}
+	}
+}
 
 // @TODO: Trying to load the same asset multiple times simultaneously?
 
@@ -64,60 +116,65 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelH
 	return 0;
 }
 
-struct LoadTextureJobParameter
+void LoadModelAsset(String name, String filepath, Model *model)
 {
-	String path;
-	AssetLoadStatus *loadStatus;
-	u32 *outputTextureID;
-};
+	//auto modelFilepath = JoinFilepaths(String{"Data/Models"}, jobParameter->assetName, JoinStrings(jobParameter->assetName, ".bin"));
 
-void LoadTexture(void *jobParameterPointer)
-{
-	LoadTextureJobParameter *jobParameter = (LoadTextureJobParameter *)jobParameterPointer;
-	s32 texturePixelWidth, texturePixelHeight, textureChannels;
-	u8 *pixels = stbi_load(&jobParameter->path[0], &texturePixelWidth, &texturePixelHeight, &textureChannels, STBI_rgb_alpha);
-	if (!pixels)
+	auto gltfModel = tinygltf::Model{};
+	auto gltfLoader = tinygltf::TinyGLTF{};
+	auto gltfError = std::string{};
+	auto gltfWarning = std::string{};
+
+	auto gltfLoadResult = gltfLoader.LoadBinaryFromFile(&gltfModel, &gltfError, &gltfWarning, filepath.data.elements);
+	if (!gltfWarning.empty())
 	{
-		LogPrint(ERROR_LOG, "failed to load texture %s\n", &jobParameter->path[0]);
-		return;
+		LogPrint(INFO_LOG, "GLTF warning: %s.\n", gltfWarning.c_str());
 	}
-	Defer(free(pixels));
-	*jobParameter->outputTextureID = QueueTextureUploadToGPU(pixels, texturePixelWidth, texturePixelHeight, jobParameter->loadStatus);
-}
+	if (!gltfError.empty())
+	{
+		LogPrint(ERROR_LOG, "GLTF error: %s.\n", gltfError.c_str());
+	}
+	if (!gltfLoadResult)
+	{
+		LogPrint(ERROR_LOG, "Failed to parse gltf asset file %k.\n", filepath);
+	}
+	Abort("");
+#if 0
+	auto jobParameter = (LoadModelJobParameter *)jobParameterPointer;
 
-// @TODO @PREPROCESSOR: Generate these.
-struct {
-	AssetID asset_id;
-	const char *filepath;
-} asset_id_to_filepath_map[] = {
-	{ANVIL_ASSET, "Data/Model/Anvil"},
-	{GUY_ASSET, "Data/Model/Guy"},
-	{SPONZA_ASSET, "Data/Model/Sponza"},
-};
+	auto modelFilepath = JoinFilepaths(String{"Data/Models"}, jobParameter->assetName, JoinStrings(jobParameter->assetName, ".bin"));
 
-struct LoadModelJobParameter {
-	AssetID assetID;
-	void **outputMeshAssetAddress;
-};
+	auto gltfModel = tinygltf::Model{};
+	auto gltfLoader = tinygltf::TinyGLTF{};
+	auto gltfError = std::string{};
+	auto gltfWarning = std::string{};
 
-void LoadModel(void *jobParameterPointer) {
-	LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)jobParameterPointer;
+	auto gltfLoadResult = gltfLoader.LoadBinaryFromFile(&gltfModel, &gltfError, &gltfWarning, modelFilepath.data.elements);
+	if (!gltfWarning.empty())
+	{
+		LogPrint(INFO_LOG, "GLTF warning: %s.\n", gltfWarning.c_str());
+	}
+	if (!gltfError.empty())
+	{
+		LogPrint(ERROR_LOG, "GLTF error: %s.\n", gltfError.c_str());
+	}
+	if (!gltfLoadResult)
+	{
+		LogPrint(ERROR_LOG, "Failed to parse gltf asset file %k.\n", modelFilepath);
+	}
 
 	auto mesh = AllocateStructMemory(MeshAsset);
-
-	String modelDirectory;
-	bool foundModel = false;
-	for (auto i = 0; i < CArrayCount(asset_id_to_filepath_map); i++)
+	for (auto &gltfMesh : gltfModel.meshes)
 	{
-		if (asset_id_to_filepath_map[i].asset_id == jobParameter->assetID)
+		auto gltfScene = gltfModel.scenes[gltfModel.defaultScene];
+		for (auto &gltfNode : gltfScene.nodes)
 		{
-			modelDirectory = asset_id_to_filepath_map[i].filepath;
-			foundModel = true;
-			break;
 		}
 	}
-	Assert(foundModel);
+	Abort("TODO");
+#endif
 
+#if 0
 	String modelName = GetFilepathFilename(modelDirectory);
 	String fbxFilename = JoinStrings(modelName, ".fbx");
 	String fbxFilepath = JoinFilepaths(modelDirectory, fbxFilename);
@@ -354,311 +411,302 @@ void LoadModel(void *jobParameterPointer) {
 	mesh->gpuGeometry = QueueIndexedGeometryUploadToGPU(verticesSize, indicesSize, stagingBuffer, &mesh->loadStatus);
 	//mesh->gpu_mesh = Upload_Indexed_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
 
+#endif
+
 	mesh->loadStatus = ASSET_LOADED;
-#if 0
-		if (assimp_mesh->mTextureCoords[0]) {
-			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
-			aiReturn has_diffuse = mat->GetTexture(aiTextureType_DIFFUSE, 0, &diffuse_path);
-			if (has_diffuse == aiReturn_SUCCESS) {
-				auto texture_path = join_paths(model_directory, diffuse_path.C_Str());
-				mesh->texture_id = load_texture(texture_path);
-			} else {
-				asset->material = UNTEXTURED_MATERIAL;
-			}
-		}
-#endif
-
-#if 0
-
-	//glUseProgram(animated_mesh_shader);
-
-	//model->meshes.resize(assimp_scene->mNumMeshes);
-
-	//models_.lookup[id] = models_.instances.count;
-	//Model_ *model_ = array_add(&models_.instances, 1);
-	//allocate_array(&model_->meshes, assimp_scene->mNumMeshes);
-	//model->num_meshes = assimp_scene->mNumMeshes;
-	//model->meshes.resize(model->mesh_count);
-
-	//if (num_joints == 0) {
-		for (s32 i = 0; i < assimp_scene->mNumMeshes; i++) {
-			assert(i == 0);
-
-			aiMesh* assimp_mesh = assimp_scene->mMeshes[i];
-			assert(assimp_mesh->HasPositions() && assimp_mesh->HasNormals() && assimp_mesh->HasFaces());
-
-			//Mesh *mesh = &model->meshes[i];
-			vulkan_context.vertices.resize(assimp_mesh->mNumVertices);
-			vulkan_context.indices.resize(assimp_mesh->mNumFaces * 3);
-			//glGenVertexArrays(1, &mesh->vao);
-			//glBindVertexArray(mesh->vao);
-
-			//Static_Array<Vertex> vertex_buffer;
-			//allocate_array(&vertex_buffer, assimp_mesh->mNumVertices);
-			//Vertex *vertex_buffer = (Vertex *)malloc(sizeof(Vertex) * assimp_mesh->mNumVertices);
-
-			for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
-				Vertex *v = &vulkan_context.vertices[j];
-
-				v->position[0] = assimp_mesh->mVertices[j].x;
-				v->position[1] = assimp_mesh->mVertices[j].y;
-				v->position[2] = assimp_mesh->mVertices[j].z;
-
-				if (assimp_mesh->mNormals) {
-					v->normal[0] = assimp_mesh->mNormals[j].x;
-					v->normal[1] = assimp_mesh->mNormals[j].y;
-					v->normal[2] = assimp_mesh->mNormals[j].z;
-				}
-				if (assimp_mesh->mTextureCoords[0]) {
-					v->uv[0] = assimp_mesh->mTextureCoords[0][j].x;
-					v->uv[1] = assimp_mesh->mTextureCoords[0][j].y;
-				}
-			}
-
-			//glGenBuffers(1, &mesh->vbo);
-			//glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-			//glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * assimp_mesh->mNumVertices, vertex_buffer.data, GL_DYNAMIC_DRAW);
-			//free_array(&vertex_buffer);
-
-			//mesh->index_count = assimp_mesh->mNumFaces * 3;
-			//Static_Array<u32> index_buffer;
-			//allocate_array(&index_buffer, mesh->index_count);
-
-			for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
-				aiFace assimp_face = assimp_mesh->mFaces[j];
-
-				assert(assimp_face.mNumIndices == 3);
-
-				for (s32 k = 0; k < assimp_face.mNumIndices; k++) {
-					vulkan_context.indices[(3 * j) + k] = assimp_face.mIndices[k];
-				}
-			}
-#endif
-			//glGenBuffers(1, &mesh->ebo);
-			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
-			//glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->index_count, index_buffer.data, GL_DYNAMIC_DRAW);
-			//free_array(&index_buffer);
-
-			// Doesn't handle multiple textures per mesh.
-			/*
-			mesh->texture_id = 0;
-			aiMaterial* mat = assimp_scene->mMaterials[assimp_mesh->mMaterialIndex];
-			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
-			aiReturn has_diffuse = mat->GetTexture(aiTextureType_DIFFUSE, 0, &diffuse_path);
-			if (has_diffuse == aiReturn_SUCCESS) {
-				auto texture_path = join_paths(model_directory, diffuse_path.C_Str());
-				mesh->texture_id = load_texture(texture_path);
-			}
-			*/
-
-			/*
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)offsetof(Vertex, position));
-			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)offsetof(Vertex, normal));
-			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid *)offsetof(Vertex, uv));
-
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(1);
-			glEnableVertexAttribArray(2);
-			*/
-		/*
-		}
-	} else {
-		skeletons_.lookup[id] = skeletons_.instances.count;
-
-		Skeleton_Instance *skeleton_instance = array_add(&skeletons_.instances, 1);
-		allocate_array(&skeleton_instance->local_joint_poses, num_joints);
-		allocate_array(&skeleton_instance->global_joint_poses, num_joints);
-
-		Skeleton_Asset *skeleton_asset = array_add(&skeletons_.assets, 1);
-		skeleton_asset->num_joints = num_joints;
-		allocate_array(&skeleton_asset->names, num_joints);
-		allocate_array(&skeleton_asset->skinning_info , num_joints);
-		allocate_array(&skeleton_asset->parent_indices, num_joints);
-		allocate_array(&skeleton_asset->inverse_rest_pose, num_joints);
-
-		s32 num_leaf_nodes = 0;
-		for (s32 i = 0; i < assimp_scene->mNumMeshes; i++) {
-			aiMesh* assimp_mesh = assimp_scene->mMeshes[i];
-
-			for (s32 j = 0; j < assimp_mesh->mNumBones; j++) {
-				aiNode *n = assimp_scene->mRootNode->FindNode(assimp_mesh->mBones[j]->mName);
-
-				for (s32  k = 0; k < n->mNumChildren; k++) {
-					if (n->mChildren[k]->mName == aiString(std::string(n->mName.C_Str()) + "_end")) {
-						num_leaf_nodes += 1;
-					}
-				}
-			}
-		}
-
-		skeleton_asset->num_leaf_nodes = num_leaf_nodes;
-		allocate_array(&skeleton_asset->leaf_node_parent_indices, num_leaf_nodes);
-		allocate_array(&skeleton_asset->leaf_node_translations, num_leaf_nodes);
-		skeleton_asset->parent_indices[0] = UINT8_MAX;
-
-		skeleton_instance->asset = skeleton_asset;
-
-		s32 joint_base_index = 0;
-
-		for (s32 i = 0; i < assimp_scene->mNumMeshes; i++) {
-			aiMesh* assimp_mesh = assimp_scene->mMeshes[i];
-			assert(assimp_mesh->HasPositions() && assimp_mesh->HasNormals() && assimp_mesh->HasFaces());
-
-			Mesh_ *mesh = &model_->meshes[i];
-
-			glGenVertexArrays(1, &mesh->vao);
-			glBindVertexArray(mesh->vao);
-
-			Static_Array<Skinned_Vertex> vertex_buffer;
-			allocate_array(&vertex_buffer, assimp_mesh->mNumVertices);
-
-			for (s32 j = 0; j < assimp_mesh->mNumVertices; j++) {
-				Skinned_Vertex *v = &vertex_buffer[j];
-
-				v->position[0] = assimp_mesh->mVertices[j].x;
-				v->position[1] = assimp_mesh->mVertices[j].y;
-				v->position[2] = assimp_mesh->mVertices[j].z;
-
-				v->joint_indices[0] = 0;
-				v->joint_indices[1] = 0;
-				v->joint_indices[2] = 0;
-				v->joint_indices[3] = 0;
-
-				v->weights[0] = 0;
-				v->weights[1] = 0;
-				v->weights[2] = 0;
-				v->weights[3] = 0;
-
-				if (assimp_mesh->mNormals) {
-					v->normal[0] = assimp_mesh->mNormals[j].x;
-					v->normal[1] = assimp_mesh->mNormals[j].y;
-					v->normal[2] = assimp_mesh->mNormals[j].z;
-				}
-				if (assimp_mesh->mTextureCoords[0]) {
-					v->uv[0] = assimp_mesh->mTextureCoords[0][j].x;
-					v->uv[1] = assimp_mesh->mTextureCoords[0][j].y;
-				}
-			}
-
-			for (s32 j = 0; j < assimp_mesh->mNumBones; j++) {
-				s32 joint_index = joint_base_index + j;
-
-				skeleton_asset->names[joint_index] = assimp_mesh->mBones[j]->mName;
-				allocate_array(&skeleton_asset->skinning_info[joint_index].vertices, assimp_mesh->mBones[j]->mNumWeights);
-				allocate_array(&skeleton_asset->skinning_info[joint_index].weights , assimp_mesh->mBones[j]->mNumWeights);
-
-				for (s32 k = 0; k < assimp_mesh->mBones[j]->mNumWeights; k++) {
-					skeleton_asset->skinning_info[joint_index].vertices[k] = assimp_mesh->mBones[j]->mWeights[k].mVertexId;
-					skeleton_asset->skinning_info[joint_index].weights[k] = assimp_mesh->mBones[j]->mWeights[k].mWeight;
-
-					u32 id = assimp_mesh->mBones[j]->mWeights[k].mVertexId;
-					for (s32 l = 0; l < 4; l++) {
-						if (vertex_buffer[id].weights[l] == 0) {
-							vertex_buffer[id].joint_indices[l] = j;
-							vertex_buffer[id].weights[l] = assimp_mesh->mBones[j]->mWeights[k].mWeight;
-							break;
-						}
-					}
-
-					skeleton_asset->inverse_rest_pose[joint_index] = assimp_matrix_to_m4(&assimp_mesh->mBones[j]->mOffsetMatrix);
-				}
-
-				aiNode *bone_node = assimp_scene->mRootNode->FindNode(skeleton_asset->names[joint_index]);
-				assert(bone_node != NULL);
-
-				if (joint_index == 0) {
-					skeleton_instance->global_joint_poses[joint_index] = assimp_matrix_to_m4(&bone_node->mTransformation);
-					continue;
-				}
-
-				if (bone_node->mParent == NULL) {
-					continue;
-				}
-
-				for (s32 k = 0; k < joint_index; k++) {
-					if (skeleton_asset->names[k] == bone_node->mParent->mName) {
-						skeleton_asset->parent_indices[joint_index] = k;
-						skeleton_instance->global_joint_poses[joint_index] = skeleton_instance->global_joint_poses[k] * assimp_matrix_to_m4(&bone_node->mTransformation);
-						break;
-					}
-				}
-			}
-
-			joint_base_index += assimp_mesh->mNumBones;
-
-			glGenBuffers(1, &mesh->vbo);
-			glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(Skinned_Vertex) * assimp_mesh->mNumVertices, vertex_buffer.data, GL_DYNAMIC_DRAW);
-			free_array(&vertex_buffer);
-
-			mesh->index_count = assimp_mesh->mNumFaces * 3;
-			Static_Array<u32> index_buffer;
-			allocate_array(&index_buffer, mesh->index_count);
-
-			for (s32 j = 0; j < assimp_mesh->mNumFaces; j++) {
-				aiFace assimp_face = assimp_mesh->mFaces[j];
-
-				assert(assimp_face.mNumIndices == 3);
-
-				for (s32 k = 0; k < assimp_face.mNumIndices; k++) {
-					index_buffer[(3 * j) + k] = assimp_face.mIndices[k];
-				}
-			}
-
-			glGenBuffers(1, &mesh->ebo);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->ebo);
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->index_count, index_buffer.data, GL_DYNAMIC_DRAW);
-			free_array(&index_buffer);
-
-			// Doesn't handle multiple textures per mesh.
-			mesh->texture_id = 0;
-			aiMaterial* mat = assimp_scene->mMaterials[assimp_mesh->mMaterialIndex];
-			aiString diffuse_path, specular_path; // Relative to the fbx file's directory.
-			aiReturn has_diffuse = mat->GetTexture(aiTextureType_DIFFUSE, 0, &diffuse_path);
-			if (has_diffuse == aiReturn_SUCCESS) {
-				auto texture_path = join_paths(model_directory, diffuse_path.C_Str());
-				mesh->texture_id = load_texture(texture_path);
-			}
-
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Skinned_Vertex), (GLvoid *)offsetof(Skinned_Vertex, position));
-			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Skinned_Vertex), (GLvoid *)offsetof(Skinned_Vertex, normal));
-			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Skinned_Vertex), (GLvoid *)offsetof(Skinned_Vertex, uv));
-			glVertexAttribIPointer(3, 4, GL_INT, sizeof(Skinned_Vertex), (GLvoid *)offsetof(Skinned_Vertex, joint_indices));
-			glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Skinned_Vertex), (GLvoid *)offsetof(Skinned_Vertex, weights));
-
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(1);
-			glEnableVertexAttribArray(2);
-			glEnableVertexAttribArray(3);
-			glEnableVertexAttribArray(4);
-		}
-	}
-	*/
 }
 
-// @TODO: Shouldn't we call Get_Model_Asset?
-MeshAsset *GetMeshAsset(AssetID assetID)
+struct LoadTextureJobParameter
 {
-	if (assetsContext.lookup[assetID])
+	String path;
+	AssetLoadStatus *loadStatus;
+	u32 *outputTextureID;
+};
+
+void LoadTexture(void *jobParameterPointer)
+{
+	LoadTextureJobParameter *jobParameter = (LoadTextureJobParameter *)jobParameterPointer;
+	s32 texturePixelWidth, texturePixelHeight, textureChannels;
+	u8 *pixels = stbi_load(&jobParameter->path[0], &texturePixelWidth, &texturePixelHeight, &textureChannels, STBI_rgb_alpha);
+	if (!pixels)
 	{
-		return (MeshAsset *)assetsContext.lookup[assetID];
+		LogPrint(ERROR_LOG, "failed to load texture %s\n", &jobParameter->path[0]);
+		return;
 	}
-
-	// @TODO: Call load model asset. No outputMeshAssetAddress.
-	LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)malloc(sizeof(LoadModelJobParameter)); // @TODO
-	jobParameter->assetID = assetID;
-	jobParameter->outputMeshAssetAddress = &assetsContext.lookup[assetID];
-	JobDeclaration jobDeclaration = CreateJob(LoadModel, jobParameter);
-	JobCounter jobCounter;
-	RunJobs(1, &jobDeclaration, NORMAL_PRIORITY_JOB, &jobCounter);
-	WaitForJobCounter(&jobCounter); // @TODO: Get rid of this wait!
-
-	return (MeshAsset *)assetsContext.lookup[assetID];
+	Defer(free(pixels));
+	*jobParameter->outputTextureID = QueueTextureUploadToGPU(pixels, texturePixelWidth, texturePixelHeight, jobParameter->loadStatus);
 }
 
-bool IsAssetLoaded(AssetID assetID)
+
+void *LockAsset(String assetName)
 {
-	return assetsContext.loadStatuses[assetID] == ASSET_LOADED;
+	AcquireSpinLock(assetGlobals.lock);
+	Defer(ReleaseSpinLock(assetGlobals.lock));
+
+	auto assetReference = LookupInHashTable(&assetGlobals.lookup, assetName);
+	if (!assetReference)
+	{
+		LogPrint(ERROR_LOG, "Tried to lock asset %k, but asset does not exist.\n", assetName);
+		return NULL;
+	}
+	if (assetReference->scheduledForUnload)
+	{
+		LogPrint(ERROR_LOG, "Tried to lock asset %k, but asset is scheduled for unload.\n", assetName);
+		return NULL;
+	}
+	if (assetReference->loading)
+	{
+		return NULL;
+	}
+	Assert(!assetReference->scheduledForUnload && !assetReference->loading);
+	assetReference->lockCount += 1;
+	return assetReference->asset;
+}
+
+void UnlockAsset(String assetName)
+{
+	auto unloadAsset = (void *){};
+	auto unloadAssetType = AssetType{};
+	{
+		AcquireSpinLock(assetGlobals.lock);
+
+		auto assetReference = LookupInHashTable(&assetGlobals.lookup, assetName);
+		if (!assetReference)
+		{
+			LogPrint(ERROR_LOG, "Tried to unlock asset %k, but asset does not exist.\n", assetName);
+			return;
+		}
+		assetReference->lockCount -= 1;
+		if (assetReference->lockCount == 0 && assetReference->scheduledForUnload)
+		{
+			unloadAsset = assetReference->asset;
+			unloadAssetType = assetReference->assetType;
+			RemoveFromHashTable(&assetGlobals.lookup, assetName);
+			// Once we unlock the spinlock, this asset will be capable of loading again.
+			// This means we can have the same asset simultanously loading and unloading.
+		}
+
+		ReleaseSpinLock(assetGlobals.lock);
+	}
+	if (unloadAsset)
+	{
+		switch (unloadAssetType)
+		{
+		case MODEL_ASSET:
+		{
+			UnloadModelAsset((ModelAsset *)unloadAsset->data);
+		} break;
+		default: {
+			Abort("Unknown asset type %d.\n", unloadAssetType);
+		} break;
+		}
+		FreeSlotMemory(unloadAsset);
+	}
+}
+
+struct LoadAssetJobParameters
+{
+	String assetName;
+	AssetType assetType;
+	String assetFilepath;
+};
+
+void LoadAsset(void *jobParameter)
+{
+	auto parameters = (LoadAssetJobParameters *)jobParameter;
+
+	AcquireSpinLock(assetGlobals.lock);
+
+	if (auto assetReference = LookupInHashTable(&assetGlobals.lookup, parameters->assetName); assetReference)
+	{
+		// The asset is either already loaded or is in the process of loading.
+		if (parameters->assetType != assetReference->type || parameters->assetFilepath != assetReference->filepath)
+		{
+			LogPrint(ERROR_LOG, "Tried to load asset %k:%d:%k, but a different asset with the same name %k:%d:%k is already loaded.\n", parameters->assetName, parameters->assetType, parameters->assetFilepath, assetReference->name, assetReference->type, assetReference->filepath);
+		}
+		if (assetReference->scheduledForUnload)
+		{
+			assetReference->scheduledForUnload = false;
+		}
+		return;
+	}
+
+	// The asset is not loaded, so we need to actually load the asset from file.
+	InsertIntoHashTable(
+		&assetGlobals.lookup,
+		parameters->assetName,
+		AssetReference
+		{
+			.type = parameters->assetType,
+			.loading = true,
+			.filepath = parameters->assetFilepath,
+		});
+
+	ReleaseSpinLock(assetGlobals.lock);
+
+	auto asset = (void *){};
+	switch (parameters->assetType)
+	{
+	case MODEL_ASSET:
+	{
+		asset = (ModelAsset *)AllocateSlotMemory(&assetGlobals.assetAllocators[parameters->assetType], sizeof(ModelAsset)),
+		LoadModelAsset(asset, parameters->assetName, parameters->assetFilepath);
+	} break;
+	default:
+	{
+		Abort("Unknown asset type %d.\n", parameters->assetType);
+	} break;
+	}
+
+	AcquireSpinLock(assetGlobals.lock);
+
+	// Pointers aren't stable once we release the lock, so we have to lookup the asset again.
+	auto newAssetReference = LookupInHashTable(&assetGlobals.lookup, parameters->assetName);
+	newAssetReference->asset = asset;
+	newAssetReference->loading = false;
+
+	ReleaseSpinLock(assetGlobals.lock);
+}
+
+void UnloadAssetWhenFullyUnlocked(String assetName)
+{
+	// @TODO
+	// Mark the asset for unload then actually do it when its lockCount hits zero.
+	// Be careful not to unload assets which are still loading.
+	// Should be fine if everyone locks the table correctly.
+	auto asset = LookupInHashTable(&assetGlobals.lookup, parameters->assetName);
+	if (!asset)
+	{
+		LogPrint(ERROR_LOG, "Tried to unload asset %k, but asset does not exist.\n", assetName);
+		return;
+	}
+	asset->scheduledForUnload = true;
+}
+
+
+
+
+
+
+void GetLockedAsset(void *jobParameters)
+{
+	auto parameters = (GetLockedAssetJobParameters *)jobParameters;
+	return LoadLockedAssetActual();
+	AcquireSpinLock(assetGlobals.lock);
+	auto *asset = LoadAssetActual(parameters->assetType, parameters->assetName);
+	asset->lockCount += 1;
+	ReleaseSpinLock(assetGlobals.lock);
+
+#if 0
+	AcquireSpinLock(assetGlobals.lock);
+	auto needsToBeLoaded = false;
+	auto asset = LookupInHashTable(&assetGlobals.lookupTable, AssetLookupKey{parameters->assetType, parameters->assetName});
+	if (!asset)
+	{
+	#if 0
+		switch (parameters->assetType)
+		{
+		case MODEL_ASSET:
+		{
+			ResizeArray(&assetGlobals.models, assetGlobals.models.count + 1);
+			asset = &assetGlobals.models[assetGlobals.models.count - 1];
+		} break;
+		case MESH_ASSET:
+		{
+			ResizeArray(&assetGlobals.models, assetGlobals.meshes.count + 1);
+			asset = &assetGlobals.models[assetGlobals.meshes.count - 1];
+		} break;
+		case TEXTURE_ASSET:
+		{
+			// @TODO
+		} break;
+		default:
+		{
+			Abort("Unknown asset type %d.\n", parameters->assetType);
+		} break;
+		}
+		InsertIntoHashTable(&assetGlobals.lookupTable, parameters->assetName, asset);
+	#endif
+		needsToBeLoaded = true;
+	}
+	else
+	{
+		asset->lockCount += 1;
+	}
+	ReleaseSpinLock(assetGlobals.lock);
+
+	if (needsToBeLoaded)
+	{
+		DoLoadAsset(parameters->assetName);
+		asset = LoadAsset();
+		switch (parameters->assetType)
+		{
+		case MODEL_ASSET:
+		{
+			LoadModelAsset();
+		} break;
+		case MESH_ASSET:
+		{
+			LoadMeshAsset();
+		} break;
+		case TEXTURE_ASSET:
+		{
+		} break;
+		default:
+		{
+			Abort("Unknown asset type %d.\n", parameters->assetType);
+		} break;
+		}
+	}
+#endif
+}
+
+void UnlockAsset(String name)
+{
+	AcquireSpinLock(assetGlobals.lock);
+	Defer(ReleaseSpinLock(assetGlobals.lock));
+	auto asset = LookupInHashTable(&assetGlobals.catalog);
+	Assert(asset);
+	asset->lockCount -= 1;
+}
+
+template <typename T>
+void GetAsset(void *jobParameterPointer)
+{
+	auto Load() = [&name]()
+	{
+		// @TODO: Call load model asset. No outputMeshAssetAddress.
+		LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)malloc(sizeof(LoadModelJobParameter)); // @TODO
+		jobParameter->assetName = name;
+		jobParameter->outputMeshAssetAddress = &addr;
+		JobDeclaration jobDeclaration = CreateJob(LoadModel, jobParameter);
+		JobCounter jobCounter;
+		RunJobs(1, &jobDeclaration, NORMAL_PRIORITY_JOB, &jobCounter);
+		WaitForJobCounter(&jobCounter); // @TODO: Get rid of this wait!
+	}
+
+	AcquireSpinLock(assetGlobals.catalogLock);
+	auto asset = LookupInHashTable(&assetGlobals.catalog, name);
+	if (asset && asset->loadStatus == ASSET_LOADED)
+	{
+		auto IsCorrectAssetLoaded = []()
+		{
+		}
+		AtomicCompareAndSwap(&modelAsset->loadStatus, ASSET_LOADED, ASSET_LOCKED_FOR_FRAME_DURATION);
+		if (modelAsset->loadStatus != ASSET_LOADED || modelAsset->name != name)
+		{
+			Load();
+			return NULL;
+		}
+		auto meshAsset = LookupInHashTable(&assetGlobals.catalog, modelAsset->meshAssetName);
+		return (ModelAsset *)modelAsset;
+	}
+	else
+	if (!modelAssetPointer)
+	{
+		Load();
+	}
+	return NULL;
 }
 
 bool done = false;
@@ -678,53 +726,45 @@ void FinalizeAssetUploadsToGPU()
 	{
 		if (GfxWasFenceSignalled(theFence))
 		{
-			*assetsContext.uploadCommandBuffers.writeBuffer->loadStatuses[0] = ASSET_LOADED;
+			*assetGlobals.uploadCommandBuffers.writeBuffer->loadStatuses[0] = ASSET_LOADED;
 		}
 	}
 	return;
 
 	// Submit queued asset upload commands.
-	SwitchAssetUploadDoubleBuffer(&assetsContext.uploadCommandBuffers);
-	if (assetsContext.uploadCommandBuffers.readBufferElementCount > 0)
+	SwitchAssetUploadDoubleBuffer(&assetGlobals.uploadCommandBuffers);
+	if (assetGlobals.uploadCommandBuffers.readBufferElementCount > 0)
 	{
-		ConsolePrint("READING FROM: %x\n", assetsContext.uploadCommandBuffers.readBuffer->commandBuffers);
-		ConsolePrint("c: %u\n", assetsContext.uploadCommandBuffers.readBufferElementCount);
-		GfxSubmitCommandBuffers(assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.readBuffer->commandBuffers, GFX_GRAPHICS_COMMAND_QUEUE, assetsContext.uploadFences[assetsContext.uploadFenceCount]);
-		assetsContext.pendingLoadStatusCounts[assetsContext.uploadFenceCount] = assetsContext.uploadCommandBuffers.readBufferElementCount;
-		CopyMemory(assetsContext.uploadCommandBuffers.readBuffer->loadStatuses, &assetsContext.pendingLoadStatuses[assetsContext.uploadFenceCount], assetsContext.uploadCommandBuffers.readBufferElementCount * sizeof(AssetLoadStatus *));
-		assetsContext.uploadFenceCount += 1;
-		// @TODO: Render_API_Free_Command_Buffers(assetsContext.gpu_upload_command_pool, assetsContext.uploadCommandBuffers.readBufferElementCount, assetsContext.uploadCommandBuffers.read_buffer->command_buffers);
+		ConsolePrint("READING FROM: %x\n", assetGlobals.uploadCommandBuffers.readBuffer->commandBuffers);
+		ConsolePrint("c: %u\n", assetGlobals.uploadCommandBuffers.readBufferElementCount);
+		GfxSubmitCommandBuffers(assetGlobals.uploadCommandBuffers.readBufferElementCount, assetGlobals.uploadCommandBuffers.readBuffer->commandBuffers, GFX_GRAPHICS_COMMAND_QUEUE, assetGlobals.uploadFences[assetGlobals.uploadFenceCount]);
+		assetGlobals.pendingLoadStatusCounts[assetGlobals.uploadFenceCount] = assetGlobals.uploadCommandBuffers.readBufferElementCount;
+		CopyMemory(assetGlobals.uploadCommandBuffers.readBuffer->loadStatuses, &assetGlobals.pendingLoadStatuses[assetGlobals.uploadFenceCount], assetGlobals.uploadCommandBuffers.readBufferElementCount * sizeof(AssetLoadStatus *));
+		assetGlobals.uploadFenceCount += 1;
+		// @TODO: Render_API_Free_Command_Buffers(assetGlobals.gpu_upload_command_pool, assetGlobals.uploadCommandBuffers.readBufferElementCount, assetGlobals.uploadCommandBuffers.read_buffer->command_buffers);
 	}
 
 	// Check whether submitted asset upload commands have finished.
-	for (auto i = 0; i < assetsContext.uploadFenceCount; i++)
+	for (auto i = 0; i < assetGlobals.uploadFenceCount; i++)
 	{
-		if (!GfxWasFenceSignalled(assetsContext.uploadFences[i]))
+		if (!GfxWasFenceSignalled(assetGlobals.uploadFences[i]))
 		{
 			continue;
 		}
-		GfxResetFences(1, &assetsContext.uploadFences[i]);
-		for (auto j = 0; j < assetsContext.pendingLoadStatusCounts[i]; j++)
+		GfxResetFences(1, &assetGlobals.uploadFences[i]);
+		for (auto j = 0; j < assetGlobals.pendingLoadStatusCounts[i]; j++)
 		{
-			*assetsContext.pendingLoadStatuses[i][j] = ASSET_LOADED;
+			*assetGlobals.pendingLoadStatuses[i][j] = ASSET_LOADED;
 		}
 		// Remove the fence.
-		assetsContext.uploadFenceCount -= 1;
-		if (i != assetsContext.uploadFenceCount)
+		assetGlobals.uploadFenceCount -= 1;
+		if (i != assetGlobals.uploadFenceCount)
 		{
-			GfxFence temporary = assetsContext.uploadFences[i];
-			assetsContext.uploadFences[i] = assetsContext.uploadFences[assetsContext.uploadFenceCount];
-			assetsContext.uploadFences[assetsContext.uploadFenceCount] = temporary;
+			GfxFence temporary = assetGlobals.uploadFences[i];
+			assetGlobals.uploadFences[i] = assetGlobals.uploadFences[assetGlobals.uploadFenceCount];
+			assetGlobals.uploadFences[assetGlobals.uploadFenceCount] = temporary;
 			i -= 1;
 		}
 	}
 }
 #endif
-
-void InitializeAssets(void *job_parameter)
-{
-	//for (s32 i = 0; i < MAX_UPLOAD_FENCES; i++)
-	//{
-		//assetsContext.uploadFences[i] = GfxCreateFence(false);
-	//}
-}

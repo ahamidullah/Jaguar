@@ -13,6 +13,8 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 
+typedef intptr_t IntegerPointer;
+
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX
 #define S32_MAX INT32_MAX
@@ -26,7 +28,7 @@ typedef double f64;
 #define BytesToMegabytes(m) (BytesToKilobytes(m) / 1024.0)
 #define BytesToGigabytes(g) (BytesToMegabytes(g) / 1024.0)
 
-#define Milliseconds(t) (t * 1000)
+#define SecondsToMilliseconds(t) (t * 1000)
 
 #define CArrayCount(x) (sizeof(x)/sizeof(x[0]))
 
@@ -39,11 +41,11 @@ struct ScopeExit
 };
 
 template <typename F>
-ScopeExit<F> MakeScopeExit(F f)
+ScopeExit<F> CreateScopeExit(F f)
 {
 	return ScopeExit<F>(f);
 }
 
 #define DO_STRING_JOIN(arg1, arg2) arg1 ## arg2
 #define STRING_JOIN(arg1, arg2) DO_STRING_JOIN(arg1, arg2)
-#define Defer(code) auto STRING_JOIN(scope_exit_, __LINE__) = MakeScopeExit([=](){code;})
+#define Defer(code) auto STRING_JOIN(scope_exit_, __LINE__) = CreateScopeExit([=](){code;})

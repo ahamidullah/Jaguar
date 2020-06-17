@@ -80,13 +80,16 @@ Settings
 	.Module = "Media"
 ]
 
+.VulkanCompilerOptions =
+	" -DUSING_VULKAN_API"
+	+ " -I$VulkanSDKDirectory$/include"
+
 .EngineConfig =
 [
 	Using(.ClangExecutableConfig)
 	.Module = "Engine"
-	.CompilerOptions +
-		" -DUSING_VULKAN_API"
-		+ " -I$VulkanSDKDirectory$/include"
+	.CompilerOptions + "$VulkanCompilerOptions$"
+	.PCHOptions + "$VulkanCompilerOptions$"
 	.LinkModules =
 	{
 		"Basic"

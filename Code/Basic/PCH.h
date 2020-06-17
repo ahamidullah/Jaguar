@@ -3,9 +3,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <xmmintrin.h>
+#include <initializer_list>
 #include <string.h> // memcpy @TODO @DELETEME
 #include <stdlib.h> // realloc @TODO @DELETEME
-#include <new> // placement new
+#include <new> // placement new @TODO @DELETEME
 
 #if defined(__linux__)
 	// DLL

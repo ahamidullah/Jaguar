@@ -13,13 +13,13 @@ InputButtons CreateInputButtons(s64 size)
 {
 	auto buttons = InputButtons
 	{
-		.down = AllocateArrayMemory(bool, size),
-		.pressed = AllocateArrayMemory(bool, size),
-		.released = AllocateArrayMemory(bool, size),
+		.down = (bool *)AllocateMemory(size),
+		.pressed = (bool *)AllocateMemory(size),
+		.released = (bool *)AllocateMemory(size),
 	};
-	SetMemory(buttons.pressed, false, sizeof(bool) * size);
-	SetMemory(buttons.released, false, sizeof(bool) * size);
-	SetMemory(buttons.down, false, sizeof(bool) * size);
+	SetMemory(buttons.pressed, false, size);
+	SetMemory(buttons.released, false, size);
+	SetMemory(buttons.down, false, size);
 	return buttons;
 }
 

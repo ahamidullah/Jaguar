@@ -84,10 +84,10 @@ s64 StringLength(const String &s)
 	return ArrayLength(s.data) - 1; // To account for the NULL terminator we insert at the end.
 }
 
-void ResizeString(String *string, s64 newSize)
+void ResizeString(String *s, s64 newSize)
 {
-	ResizeArray(&string->data, newSize + 1);
-	string->data[newSize] = '\0';
+	ResizeArray(&s->data, newSize + 1);
+	s->data[newSize] = '\0';
 }
 
 void StringAppend(String *destination, const String &source)

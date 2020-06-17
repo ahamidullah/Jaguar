@@ -3,37 +3,38 @@
 
 #include "Code/Basic/Log.h"
 
-void PrintM4Actual(const char *name, M4 m)
+void PrintM4Actual(String name, M4 m)
 {
-	ConsolePrint("%s:\n", name);
-	for (s32 i = 0; i < 4; i++) {
-		ConsolePrint("%f %f %f %f\n", m[i][0], m[i][1], m[i][2], m[i][3]);
+	ConsolePrint("%k:\n", name);
+	for (auto i = 0; i < 4; i++)
+	{
+		ConsolePrint("\t%f %f %f %f\n", m[i][0], m[i][1], m[i][2], m[i][3]);
 	}
 }
 
-void PrintV3Actual(const char *name, V3 v)
+void PrintV3Actual(String name, V3 v)
 {
-	ConsolePrint("%s: %f %f %f\n", name, v.x, v.y, v.z);
+	ConsolePrint("%k: %f %f %f\n", name, v.x, v.y, v.z);
 }
 
-void PrintQuaternionActual(const char *name, Quaternion q)
+void PrintQuaternionActual(String name, Quaternion q)
 {
-	ConsolePrint("%s: %f %f %f %f\n", name, q.x, q.y, q.z, q.w);
+	ConsolePrint("%k: %f %f %f %f\n", name, q.x, q.y, q.z, q.w);
 }
 
-void PrintF32Actual(const char *name, f32 number)
+void PrintF32Actual(String name, f32 number)
 {
-	ConsolePrint("%s: %f\n", name, number);
+	ConsolePrint("%k: %f\n", name, number);
 }
 
-f32 SquareRoot(f32 f)
+f32 SquareRoot(f32 x)
 {
-	return sqrt(f);
+	return sqrt(x);
 }
 
-f32 Tan(f32 f)
+f32 Tan(f32 x)
 {
-	return tan(f);
+	return tan(x);
 }
 
 f32 Atan2(f32 x, f32 y)
@@ -41,24 +42,24 @@ f32 Atan2(f32 x, f32 y)
 	return atan2(x, y);
 }
 
-f32 Sin(f32 f)
+f32 Sin(f32 x)
 {
-	return sin(f);
+	return sin(x);
 }
 
-f32 Asin(f32 f)
+f32 Asin(f32 x)
 {
-	return asin(f);
+	return asin(x);
 }
 
-f32 Cos(f32 f)
+f32 Cos(f32 x)
 {
-	return cos(f);
+	return cos(x);
 }
 
-f32 Acos(f32 f)
+f32 Acos(f32 x)
 {
-	return acos(f);
+	return acos(x);
 }
 
 void SinCos(f32 angle, f32 *sin, f32 *cos)
@@ -68,19 +69,24 @@ void SinCos(f32 angle, f32 *sin, f32 *cos)
 	*cos = Cos(angle);
 }
 
-f32 Abs(f32 f)
+f32 Abs(f32 x)
 {
-	return fabs(f);
+	return fabs(x);
 }
 
-f32 Fmod(f32 f, f32 mod)
+f32 Fmod(f32 x, f32 mod)
 {
-	return fmodf(f, mod);
+	return fmodf(x, mod);
 }
 
-u32 DivideAndRoundUp(u32 a, u32 b)
+s64 DivideAndRoundUp(s64 x, s64 y)
 {
-	return (a + (b - 1)) / b;
+	auto result = s64{x / y};
+	if (x % y != 0)
+	{
+		result += 1;
+	}
+	return result;
 }
 
 bool NotNAN(V3 v)

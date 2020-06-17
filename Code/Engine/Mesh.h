@@ -54,7 +54,6 @@ struct MeshAsset
 {
 	// @TODO: Seperate hot and cold data?
 	// Hot. Potentially accessed every frame.
-	AssetLoadStatus loadStatus;
 	GPUIndexedGeometry gpuGeometry;
 	struct Submesh
 	{
@@ -73,8 +72,5 @@ struct MeshAsset
 
 struct MeshInstance
 {
-	Transform transform;
 	MeshAsset *asset;
 };
-
-//@TODO: MeshAsset *LoadMeshAsset(const String &path);

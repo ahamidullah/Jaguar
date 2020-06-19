@@ -1,4 +1,10 @@
-#include "../Basic.h"
+#include "../Fiber.h"
+#include "../CPU.h"
+#include "../Thread.h"
+#include "../Log.h"
+#include "../Atomic.h"
+#include "../Memory.h"
+#include "../Process.h"
 
 // ucontext_t is the recommended method for implementing fibers on Linux, but it is apparently very
 // slow because it preserves each fiber's signal mask.
@@ -38,64 +44,64 @@ struct FiberCreationInfo
 	ucontext_t *callingContext;
 };
 
-void RunFiber(void *fiberCreationInfoPointer)
+void RunFiber(void *p)
 {
-	auto fiberCreationInfo = (FiberCreationInfo *)fiberCreationInfoPointer;
-	auto procedure = fiberCreationInfo->procedure;
-	auto parameter = fiberCreationInfo->parameter;
-	if (!_setjmp(*fiberCreationInfo->jumpBuffer))
+	auto fci = (FiberCreationInfo *)p;
+	auto proc = fci->procedure;
+	auto param = fci->parameter;
+	if (!_setjmp(*fci->jumpBuffer))
 	{
 		auto context = ucontext_t{};
-		swapcontext(&context, fiberCreationInfo->callingContext);
+		swapcontext(&context, fci->callingContext);
 	}
-	procedure(parameter);
+	proc(param);
 	pthread_exit(NULL);
 }
 
-void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
+void CreateFiber(Fiber *f, FiberProcedure proc, void *param)
 {
-	getcontext(&fiber->context);
-	auto fiberIndex = AtomicFetchAndAdd(&fiberCount, 1);
-	auto fiberStack = (char *)AllocateAlignedMemory(GetCPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * GetCPUPageSize()));
-	if (mprotect(fiberStack, (fiberStackGuardPageCount * GetCPUPageSize()), PROT_NONE) == -1)
+	getcontext(&f->context);
+	auto index = AtomicFetchAndAdd(&fiberCount, 1);
+	auto stack = (char *)AllocateAlignedMemory(GetCPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * GetCPUPageSize()));
+	if (mprotect(stack, (fiberStackGuardPageCount * GetCPUPageSize()), PROT_NONE) == -1)
 	{
-		Abort("mprotect failed for fiber index %d: %k.", fiberIndex, GetPlatformError());
+		Abort("mprotect failed for fiber index %d: %k.", index, GetPlatformError());
 	}
-	fiber->context.uc_stack.ss_sp = fiberStack + (fiberStackGuardPageCount * GetCPUPageSize());
-	fiber->context.uc_stack.ss_size = fiberStackSize;
-	fiber->context.uc_link = 0;
+	f->context.uc_stack.ss_sp = stack + (fiberStackGuardPageCount * GetCPUPageSize());
+	f->context.uc_stack.ss_size = fiberStackSize;
+	f->context.uc_link = 0;
 	auto temporaryContext = ucontext_t{};
-	auto fiberCreationInfo = FiberCreationInfo
+	auto fci = FiberCreationInfo
 	{
-		.procedure = procedure,
-		.parameter = parameter,
-		.jumpBuffer = &fiber->jumpBuffer,
+		.procedure = proc,
+		.parameter = param,
+		.jumpBuffer = &f->jumpBuffer,
 		.callingContext = &temporaryContext,
 	};
-	makecontext(&fiber->context, (void(*)())RunFiber, 1, &fiberCreationInfo);
-	swapcontext(&temporaryContext, &fiber->context);
+	makecontext(&f->context, (void(*)())RunFiber, 1, &fci);
+	swapcontext(&temporaryContext, &f->context);
 	#if defined(THREAD_SANITIZER_BUILD)
-		fiber->tsanFiber = __tsan_create_fiber(0);
+		f->tsanFiber = __tsan_create_fiber(0);
 	#endif
 }
 
-void ConvertThreadToFiber(Fiber *fiber)
+void ConvertThreadToFiber(Fiber *f)
 {
-	runningFiber = fiber;
+	runningFiber = f;
 	#if defined(THREAD_SANITIZER_BUILD)
-		fiber->tsanFiber = __tsan_create_fiber(0);
+		f->tsanFiber = __tsan_create_fiber(0);
 	#endif
 }
 
 // @TODO: Prevent two fibers from running at the same time.
-void SwitchToFiber(Fiber *fiber)
+void SwitchToFiber(Fiber *f)
 {
 	if (!_setjmp(runningFiber->jumpBuffer))
 	{
 		#if defined(THREAD_SANITIZER_BUILD)
-			__tsan_switch_to_fiber(fiber->tsanFiber, 0);
+			__tsan_switch_to_fiber(f->tsanFiber, 0);
 		#endif
-		runningFiber = fiber;
-		_longjmp(fiber->jumpBuffer, 1);
+		runningFiber = f;
+		_longjmp(f->jumpBuffer, 1);
 	}
 }

@@ -1,4 +1,6 @@
-#include "../Basic.h"
+#include "../Log.h"
+#include "../File.h"
+#include "../Process.h"
 
 void WriteToConsole(String s)
 {

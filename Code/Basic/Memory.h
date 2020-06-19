@@ -6,6 +6,10 @@
 	#error Unsupported platform.
 #endif
 
+#include "AllocatorInterface.h"
+#include "Thread.h"
+#include "Array.h"
+
 void InitializeMemory();
 
 IntegerPointer AlignAddress(IntegerPointer address, s64 alignment);
@@ -19,31 +23,11 @@ void *AllocateAlignedMemory(s64 size, s64 alignment);
 void *ResizeMemory(void *memory, s64 newSize);
 void FreeMemory(void *memory);
 
-typedef void *(*AllocateMemoryProcedure)(void *allocator, s64 size);
-typedef void *(*AllocateAlignedMemoryProcedure)(void *allocator, s64 size, s64 alignment);
-typedef void *(*ResizeMemoryProcedure)(void *allocator, void *memory, s64 newSize);
-typedef void (*FreeMemoryProcedure)(void *allocator, void *memory);
-typedef void (*ClearAllocatorProcedure)(void *allocator);
-typedef void (*FreeAllocatorProcedure)(void *allocator);
-
-struct AllocatorInterface
-{
-	void *data;
-	AllocateMemoryProcedure allocateMemory;
-	AllocateAlignedMemoryProcedure allocateAlignedMemory;
-	ResizeMemoryProcedure resizeMemory;
-	FreeMemoryProcedure freeMemory;
-	ClearAllocatorProcedure clearAllocator;
-	FreeAllocatorProcedure freeAllocator;
-};
-
 void PushContextAllocator(AllocatorInterface allocator);
 void PopContextAllocator(AllocatorInterface allocator);
 
 extern AllocatorInterface globalHeapAllocator;
 extern THREAD_LOCAL AllocatorInterface contextAllocator;
-
-#include "Array.h"
 
 struct AllocatorBlockList
 {

@@ -1,4 +1,4 @@
-#include "../Basic.h"
+#include "../CPU.h"
 
 s64 GetCPUProcessorCount()
 {

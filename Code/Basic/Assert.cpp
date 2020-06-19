@@ -1,6 +1,8 @@
-#include "Basic.h"
+#include "Assert.h"
+#include "Log.h"
+#include "Process.h"
 
-void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName)
+void AssertActual(bool test, const char *fileName, const char *functionName, s64 lineNumber, const char *testName)
 {
 	#if defined(DEBUG_BUILD)
 		if (!test)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../String.h"
+#include "../Time.h"
 
 struct File
 {
@@ -32,8 +33,6 @@ enum OpenFileFlagBits
 	OPEN_FILE_WRITE_ONLY = O_WRONLY,
 	OPEN_FILE_CREATE = O_CREAT | O_TRUNC,
 };
-
-struct PlatformTime;
 
 File OpenFile(String path, OpenFileFlags f, bool *error);
 bool CloseFile(File f);

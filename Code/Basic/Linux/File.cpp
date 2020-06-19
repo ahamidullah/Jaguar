@@ -1,10 +1,11 @@
-#include "../Basic.h"
+#include "../File.h"
+#include "../Log.h"
 
 File OpenFile(String path, OpenFileFlags f, bool *error)
 {
 	auto file = File
 	{
-		.path = path,
+		.path = NewStringCopy(path),
 	};
 	file.handle = open(&path[0], f, 0666);
 	if (file.handle < 0)

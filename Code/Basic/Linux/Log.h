@@ -1,6 +1,6 @@
 #pragma once
 
-struct String;
+#include "../String.h"
 
 void PrintStacktrace();
 String GetPlatformError();

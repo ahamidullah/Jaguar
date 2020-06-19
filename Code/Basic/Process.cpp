@@ -1,4 +1,6 @@
-#include "Basic.h"
+#include "Process.h"
+#include "String.h"
+#include "Log.h"
 
 void DoAbortActual(String format, String fileName, String functionName, s64 lineNumber, va_list arguments)
 {

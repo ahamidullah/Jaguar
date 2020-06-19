@@ -1,4 +1,6 @@
-#include "Basic.h"
+#include "File.h"
+#include "String.h"
+#include "Time.h"
 
 String ReadEntireFile(String path, bool *error)
 {

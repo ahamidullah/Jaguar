@@ -1,4 +1,7 @@
-#include "Basic.h"
+#include "Memory.h"
+#include "CPU.h"
+#include "Log.h"
+#include "Process.h"
 
 const auto GLOBAL_HEAP_BLOCK_SIZE = MegabytesToBytes(64);
 const auto GLOBAL_HEAP_INITIAL_BLOCK_COUNT = 32;
@@ -41,10 +44,10 @@ void FreeGlobalHeapArray(void *, void *memory)
 	FreePlatformMemory(memory, size);
 }
 
-void *ResizeGlobalHeapArray(void *, void *memory, s64 newSize)
+void *ResizeGlobalHeapArray(void *, void *memory, s64 size)
 {
 	FreeGlobalHeapArray(NULL, memory);
-	return AllocateGlobalHeapArray(NULL, newSize);
+	return AllocateGlobalHeapArray(NULL, size);
 }
 
 void InitializeMemory()
@@ -109,14 +112,14 @@ void *AllocateAlignedMemory(s64 size, s64 alignment)
 	return contextAllocator.allocateAlignedMemory(contextAllocator.data, size, alignment);
 }
 
-void *ResizeMemory(void *memory, s64 newSize)
+void *ResizeMemory(void *memory, s64 size)
 {
 	if (!isContextAllocatorSet)
 	{
 		contextAllocator = baseContextAllocator;
 		isContextAllocatorSet = true;
 	}
-	return contextAllocator.resizeMemory(contextAllocator.data, memory, newSize);
+	return contextAllocator.resizeMemory(contextAllocator.data, memory, size);
 }
 
 void FreeMemory(void *memory)
@@ -273,9 +276,9 @@ void *AllocateAlignedPoolMemory(void *pool, s64 size, s64 alignment)
 	return result;
 }
 
-void *ResizePoolMemory(void *pool, void *memory, s64 newSize)
+void *ResizePoolMemory(void *pool, void *memory, s64 size)
 {
-	return AllocatePoolMemory(pool, newSize);
+	return AllocatePoolMemory(pool, size);
 }
 
 void FreePoolMemory(void *pool, void *memory)
@@ -346,7 +349,7 @@ void *AllocateAlignedSlotMemory(void *slots, s64 size, s64 alignment)
 	return AllocateSlotMemory(slots, size);
 }
 
-void *ResizeSlotMemory(void *slots, void *memory, s64 newSize)
+void *ResizeSlotMemory(void *slots, void *memory, s64 size)
 {
 	Abort("Attempted to resize a slot memory allocation.\n");
 	return NULL;
@@ -439,11 +442,11 @@ void *AllocateAlignedHeapMemory(void *heap, s64 size, s64 alignment)
 	return data;
 }
 
-void *ResizeHeapMemory(void *heap, void *memory, s64 newSize)
+void *ResizeHeapMemory(void *heap, void *memory, s64 size)
 {
 	// @TODO
 	FreeHeapMemory(heap, memory);
-	return AllocateHeapMemory(heap, newSize);
+	return AllocateHeapMemory(heap, size);
 }
 
 void FreeHeapMemory(void *heap, void *memory)

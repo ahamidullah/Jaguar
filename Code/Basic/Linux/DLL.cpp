@@ -1,29 +1,34 @@
-#include "../Basic.h"
+#include "../DLL.h"
+#include "../Log.h"
 
-DLLHandle OpenDLL(const String &filename, bool *error)
+DLL OpenDLL(String path, bool *error)
 {
-	auto library = dlopen(&filename[0], RTLD_NOW | RTLD_LOCAL);
-	if (!library)
+	auto result = DLL
 	{
-		LogPrint(ERROR_LOG, "Failed to open DLL %k: %s.\n", filename, dlerror());
+		.path = NewStringCopy(path),
+	};
+	result.handle = dlopen(&path[0], RTLD_NOW | RTLD_LOCAL);
+	if (!result.handle)
+	{
+		LogPrint(ERROR_LOG, "Failed to open DLL %k: %s.\n", path, dlerror());
 		*error = true;
 		return {};
 	}
 	*error = false;
-	return library;
+	return result;
 }
 
-bool CloseDLL(DLLHandle library)
+bool CloseDLL(DLL dll)
 {
-	if (dlclose(library) < 0)
+	if (dlclose(dll.handle) < 0)
 	{
-		LogPrint(ERROR_LOG, "Failed to close DLL: %s.\n", dlerror());
+		LogPrint(ERROR_LOG, "Failed to close DLL %k: %s.\n", dll.path, dlerror());
 		return false;
 	}
 	return true;
 }
 
-DLLFunction GetDLLFunction(DLLHandle library, const String &functionName, bool *error)
+DLLFunction GetDLLFunction(DLL dll, String functionName, bool *error)
 {
 	// According to https://linux.die.net/man/3/dlsym:
 	//     "If the symbol is not found, in the specified library or any of the libraries that were
@@ -33,11 +38,10 @@ DLLFunction GetDLLFunction(DLLHandle library, const String &functionName, bool *
 	//     old error conditions, then call dlsym(), and then call dlerror() again, saving its return
 	//     value into a variable, and check whether this saved value is not NULL."
 	dlerror();
-	auto function = dlsym(library, &functionName[0]);
-	auto errorString = dlerror();
-	if (errorString)
+	auto function = dlsym(dll.handle, &functionName[0]);
+	if (auto e = dlerror(); e)
 	{
-		LogPrint(ERROR_LOG, "Failed to load DLL function %k: %s.\n", functionName, errorString);
+		LogPrint(ERROR_LOG, "Failed to load DLL function %k from file %k: %s.\n", functionName, dll.path, e);
 		*error = true;
 		return {};
 	}

@@ -1,4 +1,6 @@
-#include "../Basic.h"
+#include "../Memory.h"
+#include "../Log.h"
+#include "../Process.h"
 
 #define MAP_ANONYMOUS 0x20
 

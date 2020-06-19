@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Array.h"
+
+#include "Code/Common.h"
+
 s64 CStringLength(const char *s);
 
 // @TODO: CreateString with allocator.
@@ -39,9 +43,6 @@ void AppendDataToString(String *d, const char *s);
 void AppendRangeToString(String *d, String s, s64 start, s64 length);
 void AppendCharToString(String *d, char s);
 
-// @TODO: Change back to Concatenate.
-String JoinStrings(String a, String b);
-
 String FormatString(String format, ...);
 String FormatStringVarArgs(String format, va_list arguments);
 
@@ -52,7 +53,6 @@ bool IsCharWhitespace(char c);
 bool IsCharDigit(char c);
 
 void TrimString(String *s, s64 left, s64 right);
-
 Array<String> SplitString(String s, char seperator);
 
 bool ParseInteger(String string, s64 *result);
@@ -72,15 +72,15 @@ u64 Hash(const String &s);
 void ArrayAppend(Array<String> *a, const char *newElement);
 
 template <typename... StringPack>
-String JoinStrings(StringPack... strings)
+String JoinStrings(StringPack... sp)
 {
-	auto stringCount = sizeof...(strings);
-	if (stringCount == 0)
+	auto count = sizeof...(sp);
+	if (count == 0)
 	{
 		return "";
 	}
-	auto totalStringLengths = (strings.count + ...);
-	auto result = CreateString(0, totalStringLengths);
-	(StringAppend(&result, strings), ...);
+	auto length = (sp.count + ...);
+	auto result = NewStringWithCapacity(0, length);
+	(AppendToString(&result, sp), ...);
 	return result;
 }

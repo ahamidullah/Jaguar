@@ -1,4 +1,8 @@
-#include "../Basic.h"
+#include "../Thread.h"
+#include "../Log.h"
+#include "../Process.h"
+#include "../Atomic.h"
+#include "../CPU.h"
 
 ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter)
 {

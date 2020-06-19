@@ -1,10 +1,15 @@
 #pragma once
 
-struct String;
+#include "../String.h"
 
-typedef void *DLLHandle;
+struct DLL
+{
+	void *handle;
+	String path;
+};
+
 typedef void *DLLFunction;
 
-DLLHandle OpenDLL(const String &filename, bool *error);
-bool CloseDLL(DLLHandle library);
-DLLFunction GetDLLFunction(DLLHandle library, const String &functionName, bool *error);
+DLL OpenDLL(String path, bool *error);
+bool CloseDLL(DLL dll);
+DLLFunction GetDLLFunction(DLL dll, String functionName, bool *error);

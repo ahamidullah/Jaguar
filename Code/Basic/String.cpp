@@ -1,4 +1,4 @@
-#include "Basic.h"
+#include "String.h"
 
 #define STB_SPRINTF_IMPLEMENTATION
 #include "stb_sprintf.h"
@@ -142,14 +142,6 @@ void AppendCharToString(String *d, char s)
 {
 	ResizeString(d, d->length + 1);
 	(*d)[d->length - 1] = s;
-}
-
-String JoinStrings(String a, String b)
-{
-	auto result = NewString(a.length + b.length);
-	CopyMemory(&a[0], &result[0], a.length);
-	CopyMemory(&b[0], &result[a.length], b.length);
-	return result;
 }
 
 s64 CStringLength(const char *s)

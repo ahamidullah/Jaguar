@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../String.h"
+
 #include "Code/Common.h"
 
 enum ProcessExitCode

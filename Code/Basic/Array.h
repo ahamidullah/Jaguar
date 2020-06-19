@@ -1,5 +1,15 @@
 #pragma once
 
+#include "AllocatorInterface.h"
+#include "Thread.h"
+#include "Assert.h"
+
+#include "Code/Common.h"
+
+extern THREAD_LOCAL AllocatorInterface contextAllocator;
+void CopyMemory(const void *source, void *destination, s64 byteCount);
+void MoveMemory(void *source, void *destination, s64 byteCount);
+
 template <typename T>
 struct Array
 {

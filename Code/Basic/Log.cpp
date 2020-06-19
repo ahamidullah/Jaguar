@@ -1,4 +1,5 @@
-#include "Basic.h"
+#include "Log.h"
+#include "String.h"
 
 void ConsolePrintVarArgs(String format, va_list arguments)
 {

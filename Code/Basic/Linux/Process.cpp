@@ -1,6 +1,4 @@
-#include "../Process.h"
-#include "../PCH.h"
-#include "../String.h"
+#include "../Basic.h"
 
 void ExitProcess(ProcessExitCode exitCode)
 {

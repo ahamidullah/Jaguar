@@ -15,6 +15,7 @@ typedef double f64;
 
 typedef intptr_t IntegerPointer;
 
+#define U8_MAX UINT8_MAX
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX
 #define S32_MAX INT32_MAX

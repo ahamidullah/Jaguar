@@ -14,7 +14,7 @@ ThreadHandle GetCurrentThread();
 void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex);
 s64 GetThreadID();
 
-typedef u8 SpinLock;
+typedef s64 SpinLock;
 
 void AcquireSpinLock(SpinLock *lock);
 void ReleaseSpinLock(SpinLock *lock);

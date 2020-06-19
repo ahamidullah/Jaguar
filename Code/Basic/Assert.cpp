@@ -1,6 +1,4 @@
-#include "Assert.h"
-#include "Log.h"
-#include "Process.h"
+#include "Basic.h"
 
 void AssertActual(bool test, const char *fileName, const char *functionName, s32 lineNumber, const char *testName)
 {

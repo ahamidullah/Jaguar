@@ -1,18 +1,17 @@
 #pragma once
 
-#include "Array.h"
-
 s64 CStringLength(const char *s);
 
+// @TODO: CreateString with allocator.
 // @TODO: Make this utf-8 by default?
 struct String
 {
-	Array<char> data;
+	Array<char> buffer;
 	s64 length;
 
 	String() : String("") {};
-	String(const Array<char> &a) : data{a} {}
-	String(const char *cString) : data{CreateArrayFromData(cString, CStringLength(cString) + 1, activeAllocator)} {};
+	String(Array<char> a) : buffer{a} {}
+	String(const char *s) : buffer{NewArrayFromData(s, CStringLength(s) + 1)} {};
 	char &operator[](s64 i);
 	char &operator[](s64 i) const;
 };
@@ -22,36 +21,41 @@ bool operator!=(const String &a, const String &b);
 
 bool CStringsEqual(const char *a, const char *b);
 
-String CreateString(s64 length);
-String CreateString(s64 length, s64 capacity);
-String CreateString(const String &copy);
-String CreateString(const String &copy, s64 startIndex, s64 endIndex);
+String NewString(s64 length);
+String NewStringIn(s64 length, AllocatorInterface a);
+String NewStringWithCapacity(s64 length, s64 capacity);
+String NewStringWithCapacityIn(s64 length, s64 capacity, AllocatorInterface a);
+String NewStringCopy(String s);
+String NewStringCopyIn(String s, AllocatorInterface a);
+String NewStringCopyRange(String s, s64 start, s64 end);
+String NewStringCopyRangeIn(String s, s64 start, s64 end, AllocatorInterface a);
 
-s64 StringLength(const String &s);
+s64 StringLength(String s);
 
 void ResizeString(String *s, s64 newSize);
 
-void StringAppend(String *destination, const String &source);
-void StringAppend(String *destination, const char *source);
-void StringAppend(String *destination, String source, s64 rangeStartIndex, s64 rangeLength);
-void StringAppend(String *destination, char source);
+void AppendToString(String *d, String s);
+void AppendDataToString(String *d, const char *s);
+void AppendRangeToString(String *d, String s, s64 start, s64 length);
+void AppendCharToString(String *d, char s);
 
 // @TODO: Change back to Concatenate.
-String JoinStrings(const String &a, const String &b);
+String JoinStrings(String a, String b);
 
-String FormatString(const String &format, ...);
-String FormatStringVarArgs(const String &format, va_list arguments);
+String FormatString(String format, ...);
+String FormatStringVarArgs(String format, va_list arguments);
 
-s64 FindFirstCharIndex(const String &s, char c);
-s64 FindLastCharIndex(const String &s, char c);
+s64 FindFirstChar(String s, char c);
+s64 FindLastChar(String s, char c);
 
 bool IsCharWhitespace(char c);
 bool IsCharDigit(char c);
 
-void TrimString(String *s, s64 leftIndex, s64 rightIndex);
-Array<String> SplitString(const String &s, char seperator);
+void TrimString(String *s, s64 left, s64 right);
 
-bool ParseInteger(const String &string, s64 *result);
+Array<String> SplitString(String s, char seperator);
+
+bool ParseInteger(String string, s64 *result);
 
 char UppercaseChar(char c);
 char LowercaseChar(char c);

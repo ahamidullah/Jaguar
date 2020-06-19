@@ -5,9 +5,6 @@
 #else
 	#error Unsupported platform.
 #endif
-#include "Time.h"
 
-struct String;
-
-String ReadEntireFile(const String &path, bool *error);
-PlatformTime GetFilepathLastModifiedTime(const String &filepath, bool *error);
+String ReadEntireFile(String path, bool *error);
+PlatformTime GetFilepathLastModifiedTime(String path, bool *error);

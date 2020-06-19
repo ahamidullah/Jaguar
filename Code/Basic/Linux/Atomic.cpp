@@ -1,4 +1,4 @@
-#include "../Atomic.h"
+#include "../Basic.h"
 
 s32 AtomicAdd(volatile s32 *operand, s32 addend)
 {

@@ -1,10 +1,4 @@
-#include "../Thread.h"
-#include "../CPU.h"
-#include "../Log.h"
-
-//
-// Thread
-//
+#include "../Basic.h"
 
 ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter)
 {
@@ -41,10 +35,6 @@ s64 GetThreadID()
 {
 	return syscall(__NR_gettid);
 }
-
-//
-// Spin lock
-//
 
 void AcquireSpinLock(SpinLock *lock)
 {

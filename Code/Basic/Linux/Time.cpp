@@ -1,5 +1,4 @@
-#include "../Time.h"
-#include "../Log.h"
+#include "../Basic.h"
 
 bool operator>(PlatformTime a, const PlatformTime b)
 {

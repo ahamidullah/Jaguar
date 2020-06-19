@@ -18,12 +18,9 @@ enum LogType
 
 struct String;
 
-#define Abort(format, ...) AbortActual(format, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
-void AbortActual(const String &format, const String &fileName, const String &functionName, s32 lineNumber, ...);
-void AbortActual(const char *format, const char *fileName, const char *functionName, s32 lineNumber, ...);
-
-void ConsolePrint(const String &format, ...);
+void ConsolePrint(String format, ...);
 void ConsolePrint(const char *format, ...);
 
-void LogPrint(LogType logType, const String &format, ...);
-void LogPrint(LogType logType, const char *format, ...);
+void LogPrint(LogType t, String format, ...);
+void LogPrint(LogType t, const char *format, ...);
+void LogPrintVarArgs(LogType t, String format, va_list arguments);

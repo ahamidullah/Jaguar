@@ -1,16 +1,4 @@
-#include "../Fiber.h"
-#include "../Thread.h"
-#include "../Atomic.h"
-#include "../Memory.h"
-
-#if defined(THREAD_SANITIZER_BUILD)
-	#include <sanitizer/tsan_interface.h>
-#endif
-
-// @TODO:
-//    __tsan_get_current_fiber()
-//    __tsan_destroy_fiber()
-//    __tsan_set_fiber_name()
+#include "../Basic.h"
 
 // ucontext_t is the recommended method for implementing fibers on Linux, but it is apparently very
 // slow because it preserves each fiber's signal mask.
@@ -22,37 +10,24 @@
 // to the calling context.  Now, when we want to switch to the fiber, we can _longjmp directly into
 // the fiber's context. 
 
-// @TODO: Remove all THREAD_LOCAL.
-THREAD_LOCAL struct ThreadLocalFibersContext
-{
-	Fiber threadFiber;
-	Fiber *activeFiber;
-} threadLocalFibersContext;
+// @TODO:
+//    __tsan_get_current_fiber()
+//    __tsan_destroy_fiber()
+//    __tsan_set_fiber_name()
 
-struct FiberGlobals
-{
-	s64 pageSize;
-	s64 stackSize;
-	s64 guardPageCount;
-	volatile s64 fiberCount;
-} fiberGlobals;
+auto fiberStackSize = 100 * GetCPUPageSize();
+auto fiberStackGuardPageCount = 1;
+volatile auto fiberCount = 0;
+THREAD_LOCAL auto runningFiber = (Fiber *){};
 
 void InitializeFibers()
 {
-	fiberGlobals = FiberGlobals
-	{
-		.pageSize = GetPageSize(),
-		.stackSize = 100 * fiberGlobals.pageSize,
-		.guardPageCount = 1,
-		.fiberCount = 0,
-	};
 	LogPrint(
 		INFO_LOG,
 		"Fiber info:\n"
-		"	pageSize: %d\n"
 		"	stackSize: %d\n"
 		"	guardPageCount: %d\n",
-		fiberGlobals.pageSize, fiberGlobals.stackSize, fiberGlobals.guardPageCount);
+		fiberStackSize, fiberStackGuardPageCount);
 }
 
 struct FiberCreationInfo
@@ -80,14 +55,14 @@ void RunFiber(void *fiberCreationInfoPointer)
 void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 {
 	getcontext(&fiber->context);
-	auto fiberIndex = AtomicFetchAndAdd(&fiberGlobals.fiberCount, 1);
-	auto stack = (char *)AllocateAlignedMemory(fiberGlobals.pageSize, fiberGlobals.stackSize + (2 * fiberGlobals.guardPageCount * fiberGlobals.pageSize)); // @TODO
-	if (mprotect(stack, (fiberGlobals.guardPageCount * fiberGlobals.pageSize), PROT_NONE) == -1)
+	auto fiberIndex = AtomicFetchAndAdd(&fiberCount, 1);
+	auto fiberStack = (char *)AllocateAlignedMemory(GetCPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * GetCPUPageSize()));
+	if (mprotect(fiberStack, (fiberStackGuardPageCount * GetCPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("mprotect failed for fiber index %d: %k.", fiberIndex, GetPlatformError());
 	}
-	fiber->context.uc_stack.ss_sp = stack + (fiberGlobals.guardPageCount * fiberGlobals.pageSize);
-	fiber->context.uc_stack.ss_size = fiberGlobals.stackSize;
+	fiber->context.uc_stack.ss_sp = fiberStack + (fiberStackGuardPageCount * GetCPUPageSize());
+	fiber->context.uc_stack.ss_size = fiberStackSize;
 	fiber->context.uc_link = 0;
 	auto temporaryContext = ucontext_t{};
 	auto fiberCreationInfo = FiberCreationInfo
@@ -106,7 +81,7 @@ void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter)
 
 void ConvertThreadToFiber(Fiber *fiber)
 {
-	threadLocalFibersContext.activeFiber = fiber;
+	runningFiber = fiber;
 	#if defined(THREAD_SANITIZER_BUILD)
 		fiber->tsanFiber = __tsan_create_fiber(0);
 	#endif
@@ -115,18 +90,12 @@ void ConvertThreadToFiber(Fiber *fiber)
 // @TODO: Prevent two fibers from running at the same time.
 void SwitchToFiber(Fiber *fiber)
 {
-	if (!_setjmp(threadLocalFibersContext.activeFiber->jumpBuffer))
+	if (!_setjmp(runningFiber->jumpBuffer))
 	{
 		#if defined(THREAD_SANITIZER_BUILD)
-			Assert(fiber->tsanFiber);
 			__tsan_switch_to_fiber(fiber->tsanFiber, 0);
 		#endif
-		threadLocalFibersContext.activeFiber = fiber;
+		runningFiber = fiber;
 		_longjmp(fiber->jumpBuffer, 1);
 	}
-}
-
-Fiber *GetCurrentFiber()
-{
-	return threadLocalFibersContext.activeFiber;
 }

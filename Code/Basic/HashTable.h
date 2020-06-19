@@ -1,10 +1,9 @@
-#include "Array.h"
-#include "Log.h"
-
-const auto VACANT_HASH_TABLE_KEY_SENTINEL = -1;
-const auto DELETED_HASH_TABLE_KEY_SENTINEL = -2;
+constexpr auto VACANT_HASH_TABLE_KEY_SENTINEL = -1;
+constexpr auto DELETED_HASH_TABLE_KEY_SENTINEL = -2;
 
 // @TODO: Initializer list.
+// @TODO: Handle zero type.
+//        How to handle empty hash? Maybe try to guess the hash function based on the type of key and abort if we fail.
 
 typedef u64 (*HashProcedure)(void *);
 
@@ -18,22 +17,37 @@ struct KeyValuePair
 template <typename K, typename V>
 struct HashTable
 {
-	Array<KeyValuePair> buckets;
+	Array<KeyValuePair<K, V>> buckets;
 	HashProcedure hash;
 	s64 occupiedSlotCount;
 	f32 loadFactor;
 };
 
 template <typename K, typename V>
-void CreateHashTable(s64 initialCapacity, HashProcedure hash)
+void NewHashTable(s64 capacity, HashProcedure h)
 {
 	auto result = HashTable<K, V>
 	{
-		.keys = CreateArray(initialCapacity),
-		.values = CreateArray(initialCapacity),
-		.hash = hash,
+		.buckets = NewArray<KeyValuePair<K, V>>(capacity),
+		.hash = h,
+	};
+	for (auto &b : result.buckets)
+	{
+		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
+		b.value = {};
 	}
-	for (auto b : result.buckets)
+	return result;
+}
+
+template <typename K, typename V>
+void NewHashTableIn(s64 capacity, HashProcedure h, AllocatorInterface a)
+{
+	auto result = HashTable<K, V>
+	{
+		.buckets = NewArrayIn<KeyValuePair<K, V>>(capacity, a),
+		.hash = h,
+	};
+	for (auto &b : result.buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
 		b.value = {};
@@ -52,10 +66,10 @@ void ClearHashTable(HashTable<K, V> *h)
 }
 
 template <typename K, typename V>
-void ClearAndResizeHashTable(HashTable<K, V> *h, s64 newCapacity)
+void ClearAndResizeHashTable(HashTable<K, V> *h, s64 capacity)
 {
 	h->occupiedSlotCount = 0;
-	ResizeArray(&h->buckets, newCapacity);
+	ResizeArray(&h->buckets, capacity);
 	for (auto &b : h->buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
@@ -69,11 +83,11 @@ void ResizeHashTable(HashTable<K, V> *h)
 }
 
 template <typename K, typename V>
-void DoInsertIntoHashTable(HashTable<K, V> *h, K key, V value, bool overwriteIfExists)
+void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwriteIfExists)
 {
 	Assert(h->buckets.count > 0);
 
-	auto keyHash = h->hash(&key);
+	auto keyHash = h->hash(&k);
 	if (keyHash == VACANT_HASH_TABLE_KEY_SENTINEL)
 	{
 		keyHash = 0;
@@ -88,16 +102,16 @@ void DoInsertIntoHashTable(HashTable<K, V> *h, K key, V value, bool overwriteIfE
 	{
 		if (h->buckets[index].key == VACANT_HASH_TABLE_KEY_SENTINEL)
 		{
-			h->buckets[index].key = key;
-			h->buckets[index].value = value;
+			h->buckets[index].key = k;
+			h->buckets[index].value = v;
 			return;
 		}
-		else if (h->buckets[index].key == key)
+		else if (h->buckets[index].key == k)
 		{
 			if (overwriteIfExists)
 			{
-				h->buckets[index].key = key;
-				h->buckets[index].value = value;
+				h->buckets[index].key = k;
+				h->buckets[index].value = v;
 			}
 			return;
 		}
@@ -111,50 +125,58 @@ void DoInsertIntoHashTable(HashTable<K, V> *h, K key, V value, bool overwriteIfE
 		auto newBuckets = CreateArray<KeyValuePair<K, V>>(h->buckets.count * 2);
 		for (auto i = 0; i < h->buckets.count; i++)
 		{
-			auto index = h->hash(h->keys[i]) % newBuckets.count;
-			newBuckets[index].key = h->buckets[i].key;
-			newBuckets[index].value = h->buckets[i].value;
+			auto ni = h->hash(h->keys[i]) % newBuckets.count;
+			newBuckets[ni].key = h->buckets[i].key;
+			newBuckets[ni].value = h->buckets[i].value;
 		}
-		DestroyArray(&h->buckets);
+		FreeArray(&h->buckets);
 		h->buckets = newBuckets;
 	}
 }
 
 template <typename K, typename V>
-void InsertIntoHashTable(HashTable<K, V> *h, K key, V value)
+void InsertIntoHashTable(HashTable<K, V> *h, K k, V v)
 {
-	DoInsertIntoHashTable(h, key, value, false);
+	DoInsertIntoHashTable(h, k, v, false);
 }
 
 template <typename V>
-void InsertIntoHashTable(HashTable<String, V> *h, const String &key, const V &value)
+void InsertIntoHashTable(HashTable<String, V> *h, const String &k, const V &v)
 {
-	DoInsertIntoHashTable(h, key, value, false);
+	DoInsertIntoHashTable(h, k, v, false);
 }
 
 template <typename K, typename V>
-V *InsertIntoHashTableIfNonExistent(HashTable<K, V> *h, const K &key, const V &value)
+V *InsertIntoHashTableIfNonExistent(HashTable<K, V> *h, const K &k, const V &v)
 {
-	DoInsertIntoHashTable(h, key, value, true);
+	DoInsertIntoHashTable(h, k, v, true);
 }
 
 template <typename K, typename V>
-V *LookupInHashTable(HashTable<K, V> *h, const K &key)
+V *LookupInHashTable(HashTable<K, V> *h, const K &k)
 {
 	if (h->buckets.count == 0)
 	{
 		return NULL;
 	}
-	auto keyHash = Hash(key);
+	auto keyHash = h->hash(k);
+	if (keyHash == VACANT_HASH_TABLE_KEY_SENTINEL)
+	{
+		keyHash = 0;
+	}
+	else if (keyHash == DELETED_HASH_TABLE_KEY_SENTINEL)
+	{
+		keyHash = 1;
+	}
 	auto index = keyHash % h->buckets.count;
 	auto lastIndex = index;
 	do
 	{
-		if (h->buckets[index].keyHash == VACANT_HASH_KEY_SENTINEL)
+		if (h->buckets[index].key == VACANT_HASH_TABLE_KEY_SENTINEL)
 		{
 			return NULL;
 		}
-		else if (h->buckets[index].keyHash == keyHash)
+		else if (h->buckets[index].key == k)
 		{
 			return &h->buckets[index].value;
 		}

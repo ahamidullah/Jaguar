@@ -1,6 +1,5 @@
-#include "Parser.h"
-#include "File.h"
-#include "Assert.h"
+#if 0
+#include "Basic.h"
 
 Parser CreateParser(const String &filepath, const String &delimiters, bool *error)
 {
@@ -67,7 +66,7 @@ String GetParserToken(Parser *parser)
 		}
 	}
 	Assert(parser->index > tokenStartIndex);
-	return CreateString(parser->string, tokenStartIndex, parser->index - 1);
+	return NewStringCopyRange(parser->string, tokenStartIndex, parser->index - 1);
 }
 
 String GetParserLine(Parser *parser)
@@ -160,3 +159,4 @@ bool GetUntilEndOfLine(Parser *parser, String *line)
 	return true;
 }
 */
+#endif

@@ -1,3 +1,4 @@
+#if 0
 #pragma once
 
 #include "String.h"
@@ -16,3 +17,4 @@ struct Parser
 Parser CreateParser(const String &filepath, const String &delimiters, bool *error);
 String GetParserToken(Parser *parser);
 String GetParserLine(Parser *parser);
+#endif

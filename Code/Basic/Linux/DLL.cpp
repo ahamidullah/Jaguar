@@ -1,5 +1,4 @@
-#include "../DLL.h"
-#include "../Log.h"
+#include "../Basic.h"
 
 DLLHandle OpenDLL(const String &filename, bool *error)
 {

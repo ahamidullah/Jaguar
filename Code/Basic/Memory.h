@@ -6,33 +6,49 @@
 	#error Unsupported platform.
 #endif
 
-#include "MemoryAllocatorInterface.h"
-#include "Array.h"
-#include "PCH.h"
-
 void InitializeMemory();
 
 IntegerPointer AlignAddress(IntegerPointer address, s64 alignment);
 void *AlignPointer(void *address, s64 alignment);
-void SetMemory(void *destination, s8 setTo, s64 byteCount);
+void SetMemory(void *destination, s64 byteCount, s8 setTo);
 void CopyMemory(const void *source, void *destination, s64 byteCount);
 void MoveMemory(void *source, void *destination, s64 byteCount);
 
 void *AllocateMemory(s64 size);
 void *AllocateAlignedMemory(s64 size, s64 alignment);
-void *ResizeMemory(void *memory);
+void *ResizeMemory(void *memory, s64 newSize);
 void FreeMemory(void *memory);
 
-extern MemoryAllocatorInterface globalHeapAllocator;
-extern MemoryAllocatorInterface activeAllocator;
+typedef void *(*AllocateMemoryProcedure)(void *allocator, s64 size);
+typedef void *(*AllocateAlignedMemoryProcedure)(void *allocator, s64 size, s64 alignment);
+typedef void *(*ResizeMemoryProcedure)(void *allocator, void *memory, s64 newSize);
+typedef void (*FreeMemoryProcedure)(void *allocator, void *memory);
+typedef void (*ClearAllocatorProcedure)(void *allocator);
+typedef void (*FreeAllocatorProcedure)(void *allocator);
 
-void PushMemoryAllocator(MemoryAllocatorInterface allocator);
-void PopMemoryAllocator(MemoryAllocatorInterface allocator);
+struct AllocatorInterface
+{
+	void *data;
+	AllocateMemoryProcedure allocateMemory;
+	AllocateAlignedMemoryProcedure allocateAlignedMemory;
+	ResizeMemoryProcedure resizeMemory;
+	FreeMemoryProcedure freeMemory;
+	ClearAllocatorProcedure clearAllocator;
+	FreeAllocatorProcedure freeAllocator;
+};
 
-struct MemoryBlockList
+void PushContextAllocator(AllocatorInterface allocator);
+void PopContextAllocator(AllocatorInterface allocator);
+
+extern AllocatorInterface globalHeapAllocator;
+extern THREAD_LOCAL AllocatorInterface contextAllocator;
+
+#include "Array.h"
+
+struct AllocatorBlockList
 {
 	s64 blockSize;
-	MemoryAllocatorInterface blockAllocator;
+	AllocatorInterface blockAllocator;
 	Array<u8 *> usedBlocks;
 	Array<u8 *> unusedBlocks;
 	u8 *frontier;
@@ -41,35 +57,35 @@ struct MemoryBlockList
 
 struct PoolAllocator
 {
-	MemoryBlockList blockList;
+	AllocatorBlockList blockList;
 	s64 defaultAlignment;
 };
 
-PoolAllocator CreatePoolAllocator(s64 blockSize, s64 initialBlockCount);
-MemoryAllocatorInterface CreatePoolAllocatorInterface(PoolAllocator *pool);
-void *AllocatePoolMemory(PoolAllocator *pool, s64 size);
-void *AllocateAlignedPoolMemory(PoolAllocator *pool, s64 size, s64 alignment);
-void *ResizePoolMemory(PoolAllocator *pool, void *memory, s64 newSize);
-void FreePoolMemory(PoolAllocator *pool, void *memory);
-void ResetPoolAllocator(PoolAllocator *pool);
-void DestroyPoolAllocator(PoolAllocator *pool);
+PoolAllocator NewPoolAllocator(s64 blockSize, s64 blockCount, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc);
+AllocatorInterface NewPoolAllocatorInterface(PoolAllocator *pool);
+void *AllocatePoolMemory(void *pool, s64 size);
+void *AllocateAlignedPoolMemory(void *pool, s64 size, s64 alignment);
+void *ResizePoolMemory(void *pool, void *memory, s64 newSize);
+void FreePoolMemory(void *pool, void *memory);
+void ClearPoolAllocator(void *pool);
+void FreePoolAllocator(void *pool);
 
 struct SlotAllocator
 {
-	MemoryBlockList blockList;
+	AllocatorBlockList blockList;
 	s64 slotSize;
 	s64 slotAlignment;
 	Array<void *> freeSlots;
 };
 
-SlotAllocator CreateSlotAllocator(s64 slotSize, s64 initialSlotCount, s64 bucketCapacity);
-MemoryAllocatorInterface CreateSlotAllocatorInterface(SlotAllocator *slots);
-void *AllocateSlotMemory(SlotAllocator *slots, s64 size);
-void *AllocateAlignedSlotMemory(SlotAllocator *slots, s64 size, s64 alignment);
-void *ResizeSlotMemory(SlotAllocator *slots, void *memory, s64 newSize);
-void FreeSlotMemory(SlotAllocator *buckets, void *memory);
-void ResetSlotAllocator(SlotAllocator *buckets);
-void DestroySlotAllocator(SlotAllocator *buckets);
+SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlignment, s64 slotCount, s64 slotsPerBlock, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc);
+AllocatorInterface NewSlotAllocatorInterface(SlotAllocator *slots);
+void *AllocateSlotMemory(void *slots, s64 size);
+void *AllocateAlignedSlotMemory(void *slots, s64 size, s64 alignment);
+void *ResizeSlotMemory(void *slots, void *memory, s64 newSize);
+void FreeSlotMemory(void *slots, void *memory);
+void ClearSlotAllocator(void *slots);
+void FreeSlotAllocator(void *slots);
 
 struct HeapAllocationHeader
 {
@@ -79,16 +95,16 @@ struct HeapAllocationHeader
 
 struct HeapAllocator
 {
-	MemoryBlockList blockList;
+	AllocatorBlockList blockList;
 	s64 defaultAlignment;
 	Array<HeapAllocationHeader *> freeAllocations;
 };
 
-HeapAllocator CreateHeapAllocator(s64 blockSize, s64 initialBlockCount, MemoryAllocatorInterface blockAllocator, MemoryAllocatorInterface arrayAllocator);
-MemoryAllocatorInterface CreateHeapAllocatorInterface(HeapAllocator *heap);
-void *AllocateHeapMemory(HeapAllocator *heap, s64 size);
-void *AllocateAlignedHeapMemory(HeapAllocator *heap, s64 size, s64 alignment);
-void *ResizeSlotMemory(SlotAllocator *slots, void *memory, s64 newSize);
-void FreeHeapMemory(HeapAllocator *heap, void *memory);
-void ResetHeapAllocator(HeapAllocator *heap);
-void DestroyHeapAllocator(HeapAllocator *heap);
+HeapAllocator NewHeapAllocator(s64 blockSize, s64 blockCount, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc);
+AllocatorInterface NewHeapAllocatorInterface(HeapAllocator *heap);
+void *AllocateHeapMemory(void *heap, s64 size);
+void *AllocateAlignedHeapMemory(void *heap, s64 size, s64 alignment);
+void *ResizeHeapMemory(void *heap, void *memory, s64 newSize);
+void FreeHeapMemory(void *heap, void *memory);
+void ClearHeapAllocator(void *heap);
+void FreeHeapAllocator(void *heap);

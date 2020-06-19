@@ -2,7 +2,12 @@
 
 #include "../String.h"
 
-typedef s32 FileHandle;
+struct File
+{
+	s32 handle;
+	String path;
+};
+
 typedef off_t FileOffset;
 
 struct DirectoryIteration
@@ -30,14 +35,14 @@ enum OpenFileFlagBits
 
 struct PlatformTime;
 
-FileHandle OpenFile(const String &path, OpenFileFlags flags, bool *error);
-bool CloseFile(FileHandle file);
-String ReadFromFile(FileHandle file, s64 byteCount, bool *error);
-bool WriteToFile(FileHandle file, s64 byteCount, void *buffer);
-FileOffset GetFileLength(FileHandle file, bool *error);
-FileOffset SeekFile(FileHandle file, FileOffset offset, FileSeekRelative relative);
-bool IterateDirectory(const String &path, DirectoryIteration *context);
-PlatformTime GetFileLastModifiedTime(FileHandle file, bool *error);
-bool FileExists(const String &path);
-bool CreateDirectoryIfItDoesNotExist(const String &path);
-bool DeleteFile(const String &path);
+File OpenFile(String path, OpenFileFlags f, bool *error);
+bool CloseFile(File f);
+String ReadFromFile(File f, s64 count, bool *error);
+bool WriteToFile(File f, s64 count, void *buffer);
+FileOffset GetFileLength(File f, bool *error);
+FileOffset SeekInFile(File f, FileOffset o, FileSeekRelative r, bool *error);
+PlatformTime GetFileLastModifiedTime(File f, bool *error);
+bool IterateDirectory(DirectoryIteration *context, String path);
+bool FileExists(String path);
+bool CreateDirectoryIfItDoesNotExist(String path);
+bool DeleteFile(String path);

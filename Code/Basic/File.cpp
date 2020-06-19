@@ -1,19 +1,19 @@
-#include "File.h"
+#include "Basic.h"
 
-String ReadEntireFile(const String &path, bool *error)
+String ReadEntireFile(String path, bool *error)
 {
-	auto file = OpenFile(path, OPEN_FILE_READ_ONLY, error);
+	auto f = OpenFile(path, OPEN_FILE_READ_ONLY, error);
 	if (*error)
 	{
 		return "";
 	}
-	Defer(CloseFile(file));
-	auto fileLength = GetFileLength(file, error);
+	Defer(CloseFile(f));
+	auto length = GetFileLength(f, error);
 	if (*error)
 	{
 		return "";
 	}
-	auto result = ReadFromFile(file, fileLength, error);
+	auto result = ReadFromFile(f, length, error);
 	if (*error)
 	{
 		return "";
@@ -22,15 +22,15 @@ String ReadEntireFile(const String &path, bool *error)
 	return result;
 }
 
-PlatformTime GetFilepathLastModifiedTime(const String &filepath, bool *error)
+PlatformTime GetFilepathLastModifiedTime(String path, bool *error)
 {
-	auto sourceFile = OpenFile(filepath, OPEN_FILE_READ_ONLY, error);
+	auto f = OpenFile(path, OPEN_FILE_READ_ONLY, error);
 	if (*error)
 	{
 		return PlatformTime{};
 	}
-	Defer(CloseFile(sourceFile));
-	auto result = GetFileLastModifiedTime(sourceFile, error);
+	Defer(CloseFile(f));
+	auto result = GetFileLastModifiedTime(f, error);
 	if (*error)
 	{
 		return PlatformTime{};

@@ -1,4 +1,4 @@
-#include "../Semaphore.h"
+#include "../Basic.h"
 
 Semaphore CreateSemaphore(s64 initialValue)
 {

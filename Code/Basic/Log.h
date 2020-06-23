@@ -10,18 +10,24 @@
 
 #include "Code/Common.h"
 
-enum LogType
+enum LogLevel
 {
-	INFO_LOG,
-	ERROR_LOG,
-	ABORT_LOG,
+	LogLevelVerbose,
+	LogLevelInfo,
+	LogLevelError,
+	LogLevelAbort,
 };
 
 struct String;
 
-void ConsolePrint(String format, ...);
-void ConsolePrint(const char *format, ...);
+void InitializeLog();
 
-void LogPrint(LogType t, String format, ...);
-void LogPrint(LogType t, const char *format, ...);
-void LogPrintVarArgs(LogType t, String format, va_list arguments);
+void ConsolePrint(String fmt, ...);
+void ConsolePrint(const char *fmt, ...);
+
+#define LogPrint(lvl, cat, fmt, ...) LogPrintActual(__FILE__, __func__, __LINE__, lvl, cat, fmt, ##__VA_ARGS__);
+void LogPrintActual(String file, String func, s64 line, LogLevel l, String fmt, ...);
+void LogPrintActual(const char *file, const char *func, s64 line, LogLevel l, String category, const char *fmt, ...);
+void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String fmt, String category, va_list args);
+
+void SetLogLevel(LogLevel l);

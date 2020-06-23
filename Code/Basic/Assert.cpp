@@ -2,12 +2,12 @@
 #include "Log.h"
 #include "Process.h"
 
-void AssertActual(bool test, const char *fileName, const char *functionName, s64 lineNumber, const char *testName)
+void AssertActual(bool test, const char *file, const char *func, s64 line, const char *src)
 {
-	#if defined(DEBUG_BUILD)
+	#if DEBUG_BUILD
 		if (!test)
 		{
-			LogPrint(ERROR_LOG, "%s: %s: line %d: assertion failed '%s'.\n", fileName, functionName, lineNumber, testName);
+			LogPrint(LogLevelError, "Abort", "%s: %s: line %d: assertion failed '%s'.\n", file, func, line, src);
 			PrintStacktrace();
 			SignalDebugBreakpoint();
 			ExitProcess(PROCESS_EXIT_FAILURE);

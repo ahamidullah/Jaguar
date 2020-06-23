@@ -9,8 +9,7 @@ typedef void (*FreeMemoryProcedure)(void *allocator, void *memory);
 typedef void (*ClearAllocatorProcedure)(void *allocator);
 typedef void (*FreeAllocatorProcedure)(void *allocator);
 
-struct AllocatorInterface
-{
+struct AllocatorInterface {
 	void *data;
 	AllocateMemoryProcedure allocateMemory;
 	AllocateAlignedMemoryProcedure allocateAlignedMemory;

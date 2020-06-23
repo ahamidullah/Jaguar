@@ -6,7 +6,7 @@
 
 typedef sem_t Semaphore;
 
-Semaphore CreateSemaphore(s64 initialValue);
-void SignalSemaphore(Semaphore *semaphore);
-void WaitOnSemaphore(Semaphore *semaphore);
-s64 GetSemaphoreValue(Semaphore *semaphore);
+Semaphore CreateSemaphore(s64 val);
+void SignalSemaphore(Semaphore *s);
+void WaitOnSemaphore(Semaphore *s);
+s64 GetSemaphoreValue(Semaphore *s);

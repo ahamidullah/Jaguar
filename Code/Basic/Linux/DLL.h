@@ -8,8 +8,6 @@ struct DLL
 	String path;
 };
 
-typedef void *DLLFunction;
-
-DLL OpenDLL(String path, bool *error);
+DLL OpenDLL(String path, bool *err);
 bool CloseDLL(DLL dll);
-DLLFunction GetDLLFunction(DLL dll, String functionName, bool *error);
+void *LookupDLLSymbol(DLL dll, String sym, bool *err);

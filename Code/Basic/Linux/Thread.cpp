@@ -1,35 +1,60 @@
 #include "../Thread.h"
 #include "../Log.h"
 #include "../Process.h"
-#include "../Atomic.h"
-#include "../CPU.h"
+#include "../String.h"
+#include "../Memory.h"
 
-ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter)
+Thread NewThread(ThreadProcedure proc, void *param)
 {
-	pthread_attr_t threadAttributes;
-	if (pthread_attr_init(&threadAttributes))
+	auto attrs = pthread_attr_t{};
+	if (pthread_attr_init(&attrs))
 	{
 		Abort("Failed on pthread_attr_init(): %k.", GetPlatformError());
 	}
-	ThreadHandle thread;
-	if (pthread_create(&thread, &threadAttributes, procedure, parameter))
+	auto t = Thread{};
+	if (pthread_create(&t, &attrs, proc, param))
 	{
 		Abort("Failed on pthread_create(): %k.", GetPlatformError());
 	}
-	return thread;
+	return t;
 }
 
-ThreadHandle GetCurrentThread()
+const auto MaxThreadNameLength = 15;
+
+void SetCurrentThreadName(String n)
+{
+	if (n.length > MaxThreadNameLength)
+	{
+		LogPrint(LogLevelError, "Thread", "Failed to set name for thread %k: name is too long (max: %d).\n", n, MaxThreadNameLength);
+		return;
+	}
+	if (prctl(PR_SET_NAME, &n[0], 0, 0, 0) != 0)
+	{
+		LogPrint(LogLevelError, "Thread", "Failed to set name for thread %k: %k.\n", n, GetPlatformError());
+	}
+}
+
+String GetCurrentThreadName()
+{
+	auto buf = (char *)AllocateMemory(MaxThreadNameLength);
+	if (prctl(PR_GET_NAME, buf, 0, 0, 0) != 0)
+	{
+		LogPrint(LogLevelError, "Thread", "Failed to get thread name: %k.\n", GetPlatformError());
+	}
+	return String{buf};
+}
+
+Thread CurrentThread()
 {
 	return pthread_self();
 }
 
-void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex)
+void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
 {
-	cpu_set_t cpuSet;
-	CPU_ZERO(&cpuSet);
-	CPU_SET(cpuIndex, &cpuSet);
-	if (pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuSet))
+	auto cs = cpu_set_t{};
+	CPU_ZERO(&cs);
+	CPU_SET(cpuIndex, &cs);
+	if (pthread_setaffinity_np(t, sizeof(cs), &cs))
 	{
 		Abort("Failed on pthread_setaffinity_np(): %k.", GetPlatformError());
 	}
@@ -38,25 +63,4 @@ void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex)
 s64 GetThreadID()
 {
 	return syscall(__NR_gettid);
-}
-
-void AcquireSpinLock(SpinLock *lock)
-{
-	for (;;)
-	{
-		if (AtomicCompareAndSwap(lock, 0, 1) == 1)
-		{
-			return;
-		}
-		while (*lock != 0)
-		{
-			CPUHintSpinWaitLoop();
-		}
-	}
-}
-
-void ReleaseSpinLock(SpinLock *lock)
-{
-	Assert(*lock == 1);
-	*lock = 0;
 }

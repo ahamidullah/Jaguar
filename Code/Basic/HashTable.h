@@ -1,5 +1,6 @@
 constexpr auto VACANT_HASH_TABLE_KEY_SENTINEL = -1;
 constexpr auto DELETED_HASH_TABLE_KEY_SENTINEL = -2;
+constexpr auto DEFAULT_INITIAL_HASH_TABLE_LENGTH = 16;
 
 // @TODO: Initializer list.
 // @TODO: Handle zero type.
@@ -19,46 +20,46 @@ struct HashTable
 {
 	Array<KeyValuePair<K, V>> buckets;
 	HashProcedure hash;
-	s64 occupiedSlotCount;
+	s64 occupied;
 	f32 loadFactor;
 };
 
 template <typename K, typename V>
-void NewHashTable(s64 capacity, HashProcedure h)
+void NewHashTable(s64 len, HashProcedure h)
 {
-	auto result = HashTable<K, V>
+	auto r = HashTable<K, V>
 	{
-		.buckets = NewArray<KeyValuePair<K, V>>(capacity),
+		.buckets = NewArray<KeyValuePair<K, V>>(len),
 		.hash = h,
 	};
-	for (auto &b : result.buckets)
+	for (auto &b : r.buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
 		b.value = {};
 	}
-	return result;
+	return r;
 }
 
 template <typename K, typename V>
-void NewHashTableIn(s64 capacity, HashProcedure h, AllocatorInterface a)
+void NewHashTableIn(s64 len, HashProcedure h, AllocatorInterface a)
 {
-	auto result = HashTable<K, V>
+	auto r = HashTable<K, V>
 	{
-		.buckets = NewArrayIn<KeyValuePair<K, V>>(capacity, a),
+		.buckets = NewArrayIn<KeyValuePair<K, V>>(len, a),
 		.hash = h,
 	};
-	for (auto &b : result.buckets)
+	for (auto &b : r.buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
 		b.value = {};
 	}
-	return result;
+	return r;
 }
 
 template <typename K, typename V>
 void ClearHashTable(HashTable<K, V> *h)
 {
-	h->occupiedSlotCount = 0;
+	h->occupied = 0;
 	for (auto &b : h->buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
@@ -66,10 +67,10 @@ void ClearHashTable(HashTable<K, V> *h)
 }
 
 template <typename K, typename V>
-void ClearAndResizeHashTable(HashTable<K, V> *h, s64 capacity)
+void ClearAndResizeHashTable(HashTable<K, V> *h, s64 len)
 {
-	h->occupiedSlotCount = 0;
-	ResizeArray(&h->buckets, capacity);
+	h->occupied = 0;
+	ResizeArray(&h->buckets, len);
 	for (auto &b : h->buckets)
 	{
 		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
@@ -83,10 +84,13 @@ void ResizeHashTable(HashTable<K, V> *h)
 }
 
 template <typename K, typename V>
-void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwriteIfExists)
+void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwrite)
 {
-	Assert(h->buckets.count > 0);
-
+	Assert(h->hash); // The user has to set the hash procedure, even if the HashTable is zero-initialized.
+	if (h->buckets.count > 0)
+	{
+		*h = NewHashTable(DEFAULT_INITIAL_HASH_TABLE_LENGTH, h->hash);
+	}
 	auto keyHash = h->hash(&k);
 	if (keyHash == VACANT_HASH_TABLE_KEY_SENTINEL)
 	{
@@ -108,7 +112,7 @@ void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwriteIfExists)
 		}
 		else if (h->buckets[index].key == k)
 		{
-			if (overwriteIfExists)
+			if (overwrite)
 			{
 				h->buckets[index].key = k;
 				h->buckets[index].value = v;
@@ -117,9 +121,8 @@ void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwriteIfExists)
 		}
 		index = (index + 1) % h->buckets.count;
 	} while(index != startIndex);
-
-	h->occupiedSlotCount += 1;
-	h->loadFactor = h->occupiedSlotCount / h->buckets.count;
+	h->occupied += 1;
+	h->loadFactor = h->occupied / h->buckets.count;
 	if (h->loadFactor > 0.75f)
 	{
 		auto newBuckets = CreateArray<KeyValuePair<K, V>>(h->buckets.count * 2);

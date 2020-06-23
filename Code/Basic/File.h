@@ -6,5 +6,5 @@
 	#error Unsupported platform.
 #endif
 
-String ReadEntireFile(String path, bool *error);
-PlatformTime GetFilepathLastModifiedTime(String path, bool *error);
+String ReadEntireFile(String path, bool *err);
+PlatformTime GetFilepathLastModifiedTime(String path, bool *err);

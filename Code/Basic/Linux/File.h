@@ -5,7 +5,7 @@
 
 struct File
 {
-	s32 handle;
+	s64 handle;
 	String path;
 };
 
@@ -13,35 +13,36 @@ typedef off_t FileOffset;
 
 struct DirectoryIteration
 {
-	DIR *dir = NULL;
-	struct dirent *dirent = NULL;
-	String filename = "";
-	bool isDirectory = false;
+	DIR *dir;
+	struct dirent *dirent;
+	String filename;
+	bool isDir;
 };
 
 enum FileSeekRelative
 {
-	FILE_SEEK_RELATIVE_TO_START = SEEK_SET,
-	FILE_SEEK_RELATIVE_TO_CURRENT = SEEK_CUR,
-	FILE_SEEK_RELATIVE_TO_END = SEEK_END,
+	FileSeekStart = SEEK_SET,
+	FileSeekCurrent = SEEK_CUR,
+	FileSeekEnd = SEEK_END,
 };
 
-typedef s64 OpenFileFlags;
-enum OpenFileFlagBits
+enum OpenFileFlags
 {
-	OPEN_FILE_READ_ONLY = O_RDONLY,
-	OPEN_FILE_WRITE_ONLY = O_WRONLY,
-	OPEN_FILE_CREATE = O_CREAT | O_TRUNC,
+	OpenFileReadOnly = O_RDONLY,
+	OpenFileWriteOnly = O_WRONLY,
+	OpenFileReadWrite = O_RDWR,
+	OpenFileCreate = O_CREAT | O_TRUNC,
 };
 
-File OpenFile(String path, OpenFileFlags f, bool *error);
+File OpenFile(String path, s64 flags, bool *err);
 bool CloseFile(File f);
-String ReadFromFile(File f, s64 count, bool *error);
-bool WriteToFile(File f, s64 count, void *buffer);
-FileOffset GetFileLength(File f, bool *error);
-FileOffset SeekInFile(File f, FileOffset o, FileSeekRelative r, bool *error);
-PlatformTime GetFileLastModifiedTime(File f, bool *error);
+void ReadFromFile(File f, s64 n, StringBuilder *sb, bool *err);
+bool WriteToFile(File f, s64 count, const void *buffer);
+FileOffset FileLength(File f, bool *err);
+FileOffset SeekInFile(File f, FileOffset seek, FileSeekRelative rel, bool *err);
+PlatformTime FileLastModifiedTime(File f, bool *err);
 bool IterateDirectory(DirectoryIteration *context, String path);
 bool FileExists(String path);
+bool CreateDirectory(String path);
 bool CreateDirectoryIfItDoesNotExist(String path);
 bool DeleteFile(String path);

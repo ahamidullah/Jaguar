@@ -9,25 +9,25 @@ void WriteToConsole(String s)
 
 void PrintStacktrace()
 {
-	LogPrint(INFO_LOG, "Stack trace:\n");
-	auto addressBufferSize = 100;
-	void *addresses[addressBufferSize];
-	auto addressCount = backtrace(addresses, addressBufferSize);
-	if (addressCount == addressBufferSize)
+	LogPrint(LogLevelInfo, "Log", "Stack trace:\n");
+	auto maxAddrs = 100;
+	void *addrs[maxAddrs];
+	auto numAddrs = backtrace(addrs, maxAddrs);
+	if (numAddrs == maxAddrs)
 	{
-		LogPrint(ERROR_LOG, "Stack trace is probably truncated.\n");
+		LogPrint(LogLevelError, "Log", "Stack trace is probably truncated.\n");
 	}
-	auto **strings = backtrace_symbols(addresses, addressCount);
-	if (!strings)
+	auto **trace = backtrace_symbols(addrs, numAddrs);
+	if (!trace)
 	{
-		LogPrint(ERROR_LOG, "Failed to get stack trace function names.\n");
+		LogPrint(LogLevelError, "Log", "Failed to get stack trace function names.\n");
 		return;
 	}
-	for (auto i = 0; i < addressCount; i++)
+	for (auto i = 0; i < numAddrs; i++)
 	{
-		LogPrint(INFO_LOG, "\t%s\n", strings[i]);
+		LogPrint(LogLevelInfo, "Log", "\t%s\n", trace[i]);
 	}
-	free(strings);
+	free(trace);
 }
 
 String GetPlatformError()

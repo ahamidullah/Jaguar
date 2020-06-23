@@ -1,20 +1,18 @@
 #pragma once
 
+#include "../String.h"
 #include "../PCH.h"
 
 #include "Code/Common.h"
 
 #define THREAD_LOCAL __thread
 
-typedef pthread_t ThreadHandle;
+typedef pthread_t Thread;
 typedef void *(*ThreadProcedure)(void *);
 
-ThreadHandle CreateThread(ThreadProcedure procedure, void *parameter);
-ThreadHandle GetCurrentThread();
-void SetThreadProcessorAffinity(ThreadHandle thread, s64 cpuIndex);
-s64 GetThreadID();
-
-typedef s64 SpinLock;
-
-void AcquireSpinLock(SpinLock *lock);
-void ReleaseSpinLock(SpinLock *lock);
+Thread NewThread(ThreadProcedure proc, void *param);
+void SetThreadName(Thread t, String n);
+String ThreadName(Thread t);
+Thread CurrentThread();
+void SetThreadProcessorAffinity(Thread t, s64 cpuIndex);
+s64 ThreadID();

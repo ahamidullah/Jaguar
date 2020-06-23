@@ -3,6 +3,8 @@
 #include "Log.h"
 #include "Process.h"
 
+const auto DefaultMemoryAlignment = 16;
+
 const auto GLOBAL_HEAP_BLOCK_SIZE = MegabytesToBytes(64);
 const auto GLOBAL_HEAP_INITIAL_BLOCK_COUNT = 32;
 
@@ -14,16 +16,21 @@ THREAD_LOCAL auto contextAllocatorStack = Array<AllocatorInterface>{};
 THREAD_LOCAL auto isContextAllocatorSet = false;
 THREAD_LOCAL auto contextAllocator = AllocatorInterface{};
 
+AllocatorInterface ContextAllocator()
+{
+	return contextAllocator;
+}
+
 void *AllocateGlobalHeapBlock(void *, s64 size)
 {
 	Assert(size == GLOBAL_HEAP_BLOCK_SIZE);
-	Assert(size % GetCPUPageSize() == 0);
+	Assert(size % CPUPageSize() == 0);
 	return AllocatePlatformMemory(size);
 }
 
-void FreeGlobalHeapBlock(void *, void *memory)
+void FreeGlobalHeapBlock(void *, void *mem)
 {
-	FreePlatformMemory(memory, GLOBAL_HEAP_BLOCK_SIZE);
+	FreePlatformMemory(mem, GLOBAL_HEAP_BLOCK_SIZE);
 }
 
 void *AllocateGlobalHeapArray(void *, s64 size)
@@ -32,38 +39,38 @@ void *AllocateGlobalHeapArray(void *, s64 size)
 	// data is necessary.  This should be fine since this allocator is only ever used to
 	// allocate arrays of pointers for the global heap allocator.
 	Assert(alignof(u8 *) % alignof(s64) == 0);
-	size = AlignAddress(size + sizeof(size), GetCPUPageSize());
-	auto allocation = AllocatePlatformMemory(size);
-	*(s64 *)allocation = size;
-	return (u8 *)allocation + sizeof(size);
+	size = AlignAddress(size + sizeof(size), CPUPageSize());
+	auto alloc = AllocatePlatformMemory(size);
+	*(s64 *)alloc = size;
+	return (u8 *)alloc + sizeof(size);
 }
 
-void FreeGlobalHeapArray(void *, void *memory)
+void FreeGlobalHeapArray(void *, void *mem)
 {
-	auto size = *(s64 *)((u8 *)memory - sizeof(s64));
-	FreePlatformMemory(memory, size);
+	auto size = *(s64 *)((u8 *)mem - sizeof(s64));
+	FreePlatformMemory(mem, size);
 }
 
-void *ResizeGlobalHeapArray(void *, void *memory, s64 size)
+void *ResizeGlobalHeapArray(void *, void *mem, s64 size)
 {
-	FreeGlobalHeapArray(NULL, memory);
+	FreeGlobalHeapArray(NULL, mem);
 	return AllocateGlobalHeapArray(NULL, size);
 }
 
 void InitializeMemory()
 {
-	auto globalHeapBlockAllocator = AllocatorInterface
+	auto block = AllocatorInterface
 	{
 		.allocateMemory = AllocateGlobalHeapBlock,
 		.freeMemory = FreeGlobalHeapBlock,
 	};
-	auto globalHeapArrayAllocator = AllocatorInterface
+	auto array = AllocatorInterface
 	{
 		.allocateMemory = AllocateGlobalHeapArray,
 		.resizeMemory = ResizeGlobalHeapArray,
 		.freeMemory = FreeGlobalHeapArray,
 	};
-	globalHeapAllocatorData = NewHeapAllocator(GLOBAL_HEAP_BLOCK_SIZE, GLOBAL_HEAP_INITIAL_BLOCK_COUNT, globalHeapBlockAllocator, globalHeapArrayAllocator);
+	globalHeapAllocatorData = NewHeapAllocator(GLOBAL_HEAP_BLOCK_SIZE, GLOBAL_HEAP_INITIAL_BLOCK_COUNT, block, array);
 	globalHeapAllocator = NewHeapAllocatorInterface(&globalHeapAllocatorData);
 	baseContextAllocator = globalHeapAllocator;
 }
@@ -78,7 +85,7 @@ void PopContextAllocator()
 {
 	if (contextAllocatorStack.count == 0)
 	{
-		LogPrint(ERROR_LOG, "Tried to pop empty context stack.\n");
+		LogPrint(LogLevelError, "Memory", "Tried to pop empty context stack.\n");
 		return;
 	}
 	ResizeArray(&contextAllocatorStack, contextAllocatorStack.count - 1);
@@ -102,141 +109,225 @@ void *AllocateMemory(s64 size)
 	return contextAllocator.allocateMemory(contextAllocator.data, size);
 }
 
-void *AllocateAlignedMemory(s64 size, s64 alignment)
+void *AllocateAlignedMemory(s64 size, s64 align)
 {
 	if (!isContextAllocatorSet)
 	{
 		contextAllocator = baseContextAllocator;
 		isContextAllocatorSet = true;
 	}
-	return contextAllocator.allocateAlignedMemory(contextAllocator.data, size, alignment);
+	return contextAllocator.allocateAlignedMemory(contextAllocator.data, size, align);
 }
 
-void *ResizeMemory(void *memory, s64 size)
+void *ResizeMemory(void *mem, s64 size)
 {
 	if (!isContextAllocatorSet)
 	{
 		contextAllocator = baseContextAllocator;
 		isContextAllocatorSet = true;
 	}
-	return contextAllocator.resizeMemory(contextAllocator.data, memory, size);
+	return contextAllocator.resizeMemory(contextAllocator.data, mem, size);
 }
 
-void FreeMemory(void *memory)
+void FreeMemory(void *mem)
 {
 	if (!isContextAllocatorSet)
 	{
 		contextAllocator = baseContextAllocator;
 		isContextAllocatorSet = true;
 	}
-	contextAllocator.freeMemory(contextAllocator.data, memory);
+	contextAllocator.freeMemory(contextAllocator.data, mem);
 }
 
-IntegerPointer AlignAddress(IntegerPointer address, s64 alignment)
+IntegerPointer AlignAddress(IntegerPointer addr, s64 align)
 {
 	// Code from Game Engine Architecture (2018).
-	Assert(alignment > 0);
-	auto mask = alignment - 1;
-	Assert((alignment & mask) == 0); // Power of 2.
-	return (address + mask) & ~mask;
+	Assert(align > 0);
+	auto mask = align - 1;
+	Assert((align & mask) == 0); // Power of 2.
+	return (addr + mask) & ~mask;
 }
 
-void *AlignPointer(void *address, s64 alignment)
+void *AlignPointer(void *addr, s64 align)
 {
-	return (void *)AlignAddress((IntegerPointer)address, alignment);
+	return (void *)AlignAddress((IntegerPointer)addr, align);
 }
 
-void SetMemory(void *destination, s64 byteCount, s8 setTo)
+void SetMemory(void *mem, s64 n, s8 to)
 {
-	auto d = (s8 *)destination;
-	for (auto i = 0; i < byteCount; ++i)
+	auto m = (s8 *)mem;
+	for (auto i = 0; i < n; ++i)
 	{
-		d[i] = setTo;
+		m[i] = to;
 	}
 }
 
-void CopyMemory(const void *source, void *destination, s64 byteCount)
+void CopyMemory(const void *src, void *dst, s64 n)
 {
-	memcpy(destination, source, byteCount); // @TODO
+	memcpy(dst, src, n); // @TODO
 }
 
 // Only legal if source and destination are in the same array.
-void MoveMemory(void *source, void *destination, s64 byteCount)
+void MoveMemory(void *src, void *dst, s64 n)
 {
-	auto s = (char *)source;
-	auto d = (char *)destination;
-	if (s < d)
+	auto s = (s8 *)src;
+	auto d = (s8 *)dst;
+	if (src < dst)
 	{
-		for (s += byteCount, d += byteCount; byteCount; --byteCount)
+		for (s += n, d += n; n; --n)
 		{
 			*--d = *--s;
 		}
 	}
 	else
 	{
-		while (byteCount--)
+		while (n--)
 		{
 			*d++ = *s++;
 		}
 	}
 }
 
-AllocatorBlockList NewAllocatorBlockList(s64 blockSize, s64 blockCount, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc)
+StackAllocator NewStackAllocator(s64 size, AllocatorInterface a)
 {
-	auto bl = AllocatorBlockList
+	auto mem = (u8 *)a.allocateMemory(a.data, size);
+	return
+	{
+		.allocator = a,
+		.size = size,
+		.defaultAlignment = DefaultMemoryAlignment,
+		.memory = mem,
+		.top = mem,
+	};
+}
+
+StackAllocator NewStackAllocatorIn(s64 size, u8 *mem)
+{
+	return
+	{
+		.allocator =
+		{
+			.allocateMemory = [](void *, s64) -> void * { return NULL; },
+			.allocateAlignedMemory = [](void *, s64, s64) -> void * { return NULL; },
+			.resizeMemory = [](void *, void *, s64) -> void * { return NULL; },
+			.freeMemory = [](void *, void *){},
+			.clearAllocator = [](void *){},
+			.freeAllocator = [](void *){},
+		},
+		.size = size,
+		.defaultAlignment = DefaultMemoryAlignment,
+		.memory = mem,
+		.top = mem,
+	};
+}
+
+AllocatorInterface NewStackAllocatorInterface(StackAllocator *stack)
+{
+	return
+	{
+		.data = stack,
+		.allocateMemory = AllocateStackMemory,
+		.allocateAlignedMemory = AllocateAlignedStackMemory,
+		.resizeMemory = ResizeStackMemory,
+		.freeMemory = FreeStackMemory,
+		.clearAllocator = ClearStackAllocator,
+		.freeAllocator = FreeStackAllocator,
+	};
+}
+
+void *AllocateStackMemory(void *stack, s64 size)
+{
+	auto s = (StackAllocator *)stack;
+	return AllocateAlignedStackMemory(s, size, s->defaultAlignment);
+}
+
+void *AllocateAlignedStackMemory(void *stack, s64 size, s64 align)
+{
+	auto s = (StackAllocator *)stack;
+	auto r = (u8 *)AlignPointer(s->top, align);
+	if (r + size > s->memory + s->size)
+	{
+		Abort("Stack allocator overflow.");
+	}
+	s->top = r + size;
+	return r;
+}
+
+void *ResizeStackMemory(void *stack, void *mem, s64 size)
+{
+	return AllocateStackMemory(stack, size);
+}
+
+void FreeStackMemory(void *stack, void *mem)
+{
+}
+
+void ClearStackAllocator(void *stack)
+{
+	auto s = (StackAllocator *)stack;
+	s->top = s->memory;
+}
+
+void FreeStackAllocator(void *stack)
+{
+	auto s = (StackAllocator *)stack;
+	s->allocator.freeMemory(s->allocator.data, s->memory);
+}
+
+AllocatorBlocks NewAllocatorBlocks(s64 blockSize, s64 blockCount, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc)
+{
+	auto b = AllocatorBlocks
 	{
 		.blockSize = blockSize,
-		.blockAllocator = blockAlloc,
-		.usedBlocks = NewArrayWithCapacityIn<u8 *>(0, blockCount, arrayAlloc),
-		.unusedBlocks = NewArrayWithCapacityIn<u8 *>(0, blockCount, arrayAlloc),
+		.allocator = blockAlloc,
+		.used = NewArrayWithCapacityIn<u8 *>(0, blockCount, arrayAlloc),
+		.unused = NewArrayWithCapacityIn<u8 *>(0, blockCount, arrayAlloc),
 	};
 	for (auto i = 0; i < blockCount; i++)
 	{
-		AppendToArray(&bl.unusedBlocks, (u8 *)blockAlloc.allocateMemory(blockAlloc.data, blockSize));
+		AppendToArray(&b.unused, (u8 *)blockAlloc.allocateMemory(blockAlloc.data, blockSize));
 	}
-	return bl;
+	return b;
 }
 
-void AllocateBlockInList(AllocatorBlockList *bl)
+void AllocateBlock(AllocatorBlocks *b)
 {
-	Assert(bl->blockSize > 0);
-	if (bl->unusedBlocks.count > 0)
+	Assert(b->blockSize > 0);
+	if (b->unused.count > 0)
 	{
-		AppendToArray(&bl->usedBlocks, bl->unusedBlocks[bl->unusedBlocks.count - 1]);
-		ResizeArray(&bl->unusedBlocks, bl->unusedBlocks.count - 1);
+		AppendToArray(&b->used, b->unused[b->unused.count - 1]);
+		ResizeArray(&b->unused, b->unused.count - 1);
 	}
 	else
 	{
-		AppendToArray(&bl->usedBlocks, (u8 *)bl->blockAllocator.allocateMemory(bl->blockAllocator.data, bl->blockSize));
+		AppendToArray(&b->used, (u8 *)b->allocator.allocateMemory(b->allocator.data, b->blockSize));
 	}
-	bl->frontier = bl->usedBlocks[bl->usedBlocks.count - 1];
-	bl->endOfCurrentBlock = bl->frontier + bl->blockSize;
+	b->frontier = b->used[b->used.count - 1];
+	b->end = b->frontier + b->blockSize;
 };
 
-void ResetAllocatorBlockList(AllocatorBlockList *bl)
+void ResetAllocatorBlocks(AllocatorBlocks *b)
 {
-	Assert(bl->blockSize > 0);
-	if (bl->frontier)
+	Assert(b->blockSize > 0);
+	if (b->frontier)
 	{
-		AppendCopyToArray(&bl->unusedBlocks, bl->usedBlocks);
-		ResizeArray(&bl->usedBlocks, 0);
-		bl->frontier = NULL;
+		AppendCopyToArray(&b->unused, b->used);
+		ResizeArray(&b->used, 0);
+		b->frontier = NULL;
 	}
 }
 
-void FreeAllocatorBlockList(AllocatorBlockList *bl)
+void FreeAllocatorBlocks(AllocatorBlocks *b)
 {
 	// @TODO
 }
-
-#define DEFAULT_MEMORY_ALIGNMENT 16
 
 PoolAllocator NewPoolAllocator(s64 blockSize, s64 blockCount, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc)
 {
 	return
 	{
-		.blockList = NewAllocatorBlockList(blockSize, blockCount, blockAlloc, arrayAlloc),
-		.defaultAlignment = DEFAULT_MEMORY_ALIGNMENT,
+		.blocks = NewAllocatorBlocks(blockSize, blockCount, blockAlloc, arrayAlloc),
+		.defaultAlignment = DefaultMemoryAlignment,
 	};
 }
 
@@ -261,49 +352,49 @@ void *AllocatePoolMemory(void *pool, s64 size)
 	return AllocateAlignedPoolMemory(p, size, p->defaultAlignment);
 }
 
-void *AllocateAlignedPoolMemory(void *pool, s64 size, s64 alignment)
+void *AllocateAlignedPoolMemory(void *pool, s64 size, s64 align)
 {
 	auto p = (PoolAllocator *)pool;
-	Assert(alignment > 0);
-	Assert(size + (alignment - 1) <= p->blockList.blockSize);
-	if (!p->blockList.frontier || (u8 *)AlignPointer(p->blockList.frontier, alignment) + size > p->blockList.endOfCurrentBlock)
+	Assert(align > 0);
+	Assert(size + (align - 1) <= p->blocks.blockSize);
+	if (!p->blocks.frontier || (u8 *)AlignPointer(p->blocks.frontier, align) + size > p->blocks.end)
 	{
-		AllocateBlockInList(&p->blockList);
+		AllocateBlock(&p->blocks);
 	}
-	p->blockList.frontier = (u8 *)AlignPointer(p->blockList.frontier, alignment);
-	auto result = p->blockList.frontier;
-	p->blockList.frontier += size;
+	p->blocks.frontier = (u8 *)AlignPointer(p->blocks.frontier, align);
+	auto result = p->blocks.frontier;
+	p->blocks.frontier += size;
 	return result;
 }
 
-void *ResizePoolMemory(void *pool, void *memory, s64 size)
+void *ResizePoolMemory(void *pool, void *m, s64 size)
 {
 	return AllocatePoolMemory(pool, size);
 }
 
-void FreePoolMemory(void *pool, void *memory)
+void FreePoolMemory(void *pool, void *m)
 {
 }
 
 void ClearPoolAllocator(void *pool)
 {
 	auto p = (PoolAllocator *)pool;
-	ResetAllocatorBlockList(&p->blockList);
+	ResetAllocatorBlocks(&p->blocks);
 }
 
-void FreePoolAllocator(void *poolPointer)
+void FreePoolAllocator(void *pool)
 {
 	// @TODO
 }
 
-SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlignment, s64 slotCount, s64 slotsPerBlock, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc)
+SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlign, s64 slotCount, s64 slotsPerBlock, AllocatorInterface blockAlloc, AllocatorInterface arrayAlloc)
 {
 	auto blockCount = (slotCount + (slotsPerBlock - 1)) / slotsPerBlock; // Divide and round up.
 	return
 	{
-		.blockList = NewAllocatorBlockList(slotsPerBlock * slotSize, blockCount, blockAlloc, arrayAlloc),
+		.blocks = NewAllocatorBlocks(slotsPerBlock * slotSize, blockCount, blockAlloc, arrayAlloc),
 	 	.slotSize = slotSize,
-	 	.slotAlignment = slotAlignment,
+	 	.slotAlignment = slotAlign,
 	 	.freeSlots = NewArrayIn<void *>(0, arrayAlloc),
 	};
 }
@@ -332,39 +423,39 @@ void *AllocateSlotMemory(void *slots, s64 size)
 		ResizeArray(&s->freeSlots, s->freeSlots.count - 1);
 		return result;
 	}
-	if (!s->blockList.frontier || s->blockList.frontier + s->slotSize > s->blockList.endOfCurrentBlock)
+	if (!s->blocks.frontier || s->blocks.frontier + s->slotSize > s->blocks.end)
 	{
-		AllocateBlockInList(&s->blockList);
-		s->blockList.frontier = (u8 *)AlignPointer(s->blockList.frontier, s->slotAlignment);
+		AllocateBlock(&s->blocks);
+		s->blocks.frontier = (u8 *)AlignPointer(s->blocks.frontier, s->slotAlignment);
 	}
-	auto result = s->blockList.frontier;
-	s->blockList.frontier += size;
+	auto result = s->blocks.frontier;
+	s->blocks.frontier += size;
 	return result;
 }
 
-void *AllocateAlignedSlotMemory(void *slots, s64 size, s64 alignment)
+void *AllocateAlignedSlotMemory(void *slots, s64 size, s64 align)
 {
 	// Allocating aligned memory from a bucket allocator does not make sense.
 	// Just return a regular allocation.
 	return AllocateSlotMemory(slots, size);
 }
 
-void *ResizeSlotMemory(void *slots, void *memory, s64 size)
+void *ResizeSlotMemory(void *slots, void *m, s64 size)
 {
 	Abort("Attempted to resize a slot memory allocation.\n");
 	return NULL;
 }
 
-void FreeSlotMemory(void *slots, void *memory)
+void FreeSlotMemory(void *slots, void *m)
 {
 	auto s = (SlotAllocator *)slots;
-	AppendToArray(&s->freeSlots, memory);
+	AppendToArray(&s->freeSlots, m);
 }
 
 void ClearSlotAllocator(void *slots)
 {
 	auto s = (SlotAllocator *)slots;
-	ResetAllocatorBlockList(&s->blockList);
+	ResetAllocatorBlocks(&s->blocks);
 	ResizeArray(&s->freeSlots, 0);
 }
 
@@ -379,9 +470,9 @@ HeapAllocator NewHeapAllocator(s64 blockSize, s64 blockCount, AllocatorInterface
 {
 	return
 	{
-		.blockList = NewAllocatorBlockList(blockSize, blockCount, blockAlloc, arrayAlloc),
-		.defaultAlignment = DEFAULT_MEMORY_ALIGNMENT,
-		.freeAllocations = NewArrayIn<HeapAllocationHeader *>(0, arrayAlloc),
+		.blocks = NewAllocatorBlocks(blockSize, blockCount, blockAlloc, arrayAlloc),
+		.defaultAlignment = DefaultMemoryAlignment,
+		.free = NewArrayIn<HeapAllocationHeader *>(0, arrayAlloc),
 	};
 }
 
@@ -405,68 +496,62 @@ void *AllocateHeapMemory(void *heap, s64 size)
 	return AllocateAlignedHeapMemory(h, size, h->defaultAlignment);
 }
 
-void *AllocateAlignedHeapMemory(void *heap, s64 size, s64 alignment)
+void *AllocateAlignedHeapMemory(void *heap, s64 size, s64 align)
 {
 	auto h = (HeapAllocator *)heap;
-
-	auto maximumAllocationSize = size + sizeof(HeapAllocationHeader) + (alignof(HeapAllocationHeader) - 1) + alignment;
-	Assert(maximumAllocationSize <= h->blockList.blockSize);
-	if (!h->blockList.frontier || h->blockList.frontier + maximumAllocationSize > h->blockList.endOfCurrentBlock)
+	auto maxSize = size + sizeof(HeapAllocationHeader) + (alignof(HeapAllocationHeader) - 1) + align;
+	Assert(maxSize <= h->blocks.blockSize);
+	if (!h->blocks.frontier || h->blocks.frontier + maxSize > h->blocks.end)
 	{
-		AllocateBlockInList(&h->blockList);
+		AllocateBlock(&h->blocks);
 	}
-
-	auto header = (HeapAllocationHeader *)AlignPointer(h->blockList.frontier, alignof(HeapAllocationHeader));
+	auto header = (HeapAllocationHeader *)AlignPointer(h->blocks.frontier, alignof(HeapAllocationHeader));
 	auto data = (u8 *)header + sizeof(HeapAllocationHeader);
-	if ((IntegerPointer)data % alignment == 0)
+	if ((IntegerPointer)data % align == 0)
 	{
 		// Make room to store number of bytes between the end of the header and the start of the data.
 		// We need this when we go to free the pointer.
-		data += alignment;
+		data += align;
 	}
 	else
 	{
-		data = (u8 *)AlignPointer(data, alignment);
+		data = (u8 *)AlignPointer(data, align);
 	}
-
-	h->blockList.frontier = data + size;
-	Assert(h->blockList.frontier < h->blockList.endOfCurrentBlock);
-
+	h->blocks.frontier = data + size;
+	Assert(h->blocks.frontier < h->blocks.end);
 	header->size = size;
-	header->alignment = alignment;
-
+	header->alignment = align;
 	auto bytesBetweenEndOfHeaderAndStartOfData = data - ((u8 *)header + sizeof(HeapAllocationHeader));
 	Assert(bytesBetweenEndOfHeaderAndStartOfData < U8_MAX);
 	*(data - 1) = bytesBetweenEndOfHeaderAndStartOfData;
-
 	return data;
 }
 
-void *ResizeHeapMemory(void *heap, void *memory, s64 size)
+void *ResizeHeapMemory(void *heap, void *m, s64 size)
 {
 	// @TODO
-	FreeHeapMemory(heap, memory);
+	FreeHeapMemory(heap, m);
 	return AllocateHeapMemory(heap, size);
 }
 
-void FreeHeapMemory(void *heap, void *memory)
+void FreeHeapMemory(void *heap, void *m)
 {
 	auto h = (HeapAllocator *)heap;
-	auto bytesBetweenEndOfHeaderAndStartOfData = *((u8 *)memory - 1);
-	auto header = (HeapAllocationHeader *)((u8 *)memory - bytesBetweenEndOfHeaderAndStartOfData);
-	AppendToArray(&h->freeAllocations, header);
+	auto bytesBetweenEndOfHeaderAndStartOfData = *((u8 *)m - 1);
+	auto header = (HeapAllocationHeader *)((u8 *)m - bytesBetweenEndOfHeaderAndStartOfData);
+	AppendToArray(&h->free, header);
 }
 
 void ClearHeapAllocator(void *heap)
 {
 	auto h = (HeapAllocator *)heap;
-	ResetAllocatorBlockList(&h->blockList);
-	ResizeArray(&h->freeAllocations, 0);
+	ResetAllocatorBlocks(&h->blocks);
+	ResizeArray(&h->free, 0);
 }
 
 void FreeHeapAllocator(void *heap)
 {
 	auto h = (HeapAllocator *)heap;
 	// @TODO
-	ResizeArray(&h->freeAllocations, 0);
+	ResizeArray(&h->free, 0);
 }

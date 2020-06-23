@@ -18,8 +18,11 @@ typedef intptr_t IntegerPointer;
 #define U8_MAX UINT8_MAX
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX
+
 #define S32_MAX INT32_MAX
 #define S64_MAX INT64_MAX
+
+#define SignedIntMax intmax_t
 
 #define KilobytesToBytes(k) ((u32)k * 1024)
 #define MegabytesToBytes(m) (KilobytesToBytes(m) * 1024)

@@ -21,15 +21,16 @@
 //    __tsan_destroy_fiber()
 //    __tsan_set_fiber_name()
 
-auto fiberStackSize = 100 * GetCPUPageSize();
+auto fiberStackSize = 100 * CPUPageSize();
 auto fiberStackGuardPageCount = 1;
-volatile auto fiberCount = 0;
+volatile auto numFibers = 0;
 THREAD_LOCAL auto runningFiber = (Fiber *){};
 
 void InitializeFibers()
 {
 	LogPrint(
-		INFO_LOG,
+		LogLevelInfo,
+		"Fiber",
 		"Fiber info:\n"
 		"	stackSize: %d\n"
 		"	guardPageCount: %d\n",
@@ -61,25 +62,25 @@ void RunFiber(void *p)
 void CreateFiber(Fiber *f, FiberProcedure proc, void *param)
 {
 	getcontext(&f->context);
-	auto index = AtomicFetchAndAdd(&fiberCount, 1);
-	auto stack = (char *)AllocateAlignedMemory(GetCPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * GetCPUPageSize()));
-	if (mprotect(stack, (fiberStackGuardPageCount * GetCPUPageSize()), PROT_NONE) == -1)
+	auto index = AtomicFetchAndAdd(&numFibers, 1);
+	auto stack = (char *)AllocateAlignedMemory(CPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * CPUPageSize()));
+	if (mprotect(stack, (fiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("mprotect failed for fiber index %d: %k.", index, GetPlatformError());
 	}
-	f->context.uc_stack.ss_sp = stack + (fiberStackGuardPageCount * GetCPUPageSize());
+	f->context.uc_stack.ss_sp = stack + (fiberStackGuardPageCount * CPUPageSize());
 	f->context.uc_stack.ss_size = fiberStackSize;
 	f->context.uc_link = 0;
-	auto temporaryContext = ucontext_t{};
+	auto tempContext = ucontext_t{};
 	auto fci = FiberCreationInfo
 	{
 		.procedure = proc,
 		.parameter = param,
 		.jumpBuffer = &f->jumpBuffer,
-		.callingContext = &temporaryContext,
+		.callingContext = &tempContext,
 	};
 	makecontext(&f->context, (void(*)())RunFiber, 1, &fci);
-	swapcontext(&temporaryContext, &f->context);
+	swapcontext(&tempContext, &f->context);
 	#if defined(THREAD_SANITIZER_BUILD)
 		f->tsanFiber = __tsan_create_fiber(0);
 	#endif

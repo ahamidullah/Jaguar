@@ -1,8 +1,8 @@
 #include "../Process.h"
 
-void ExitProcess(ProcessExitCode exitCode)
+void ExitProcess(ProcessExitCode c)
 {
-	_exit((s32)exitCode);
+	_exit((s32)c);
 }
 
 void SignalDebugBreakpoint()
@@ -10,12 +10,12 @@ void SignalDebugBreakpoint()
 	raise(SIGTRAP);
 }
 
-s32 RunProcess(const String &command)
+s32 RunProcess(const String &cmd)
 {
-	return system(&command[0]);
+	return system(&cmd[0]);
 }
 
-String GetEnvironmentVariable(const String &name, bool *exists)
+String GetEnvironmentVariable(String name, bool *exists)
 {
 	auto result = getenv(&name[0]);
 	if (!result)

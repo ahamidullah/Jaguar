@@ -37,6 +37,7 @@
 	// Thread
 	#include <pthread.h>
 	#include <sys/syscall.h>
+	#include <sys/prctl.h>
 
 	// Semaphore
 	#include <semaphore.h>

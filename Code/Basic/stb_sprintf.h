@@ -518,7 +518,7 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          // get the string
          {
             auto str = va_arg(va, String);
-            s = &str[0];
+            s = (char *)&str[0];
       	 }
          goto ss;
 

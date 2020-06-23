@@ -1,140 +1,133 @@
 #include "../File.h"
 #include "../Log.h"
 
-File OpenFile(String path, OpenFileFlags f, bool *error)
+File OpenFile(String path, s64 flags, bool *err)
 {
-	auto file = File
+	auto f = File
 	{
 		.path = NewStringCopy(path),
 	};
-	file.handle = open(&path[0], f, 0666);
-	if (file.handle < 0)
+	f.handle = open(&path[0], flags, 0666);
+	if (f.handle < 0)
 	{
-		LogPrint(ERROR_LOG, "Failed to open file %k: %k.\n", path, GetPlatformError());
-		*error = true;
+		LogPrint(LogLevelError, "File", "Failed to open file %k: %k.\n", path, GetPlatformError());
+		*err = true;
 		return {};
 	}
-	*error = false;
-	return file;
+	return f;
 }
 
 bool CloseFile(File f)
 {
-	auto result = close(f.handle);
-	if (result == -1)
+	if (close(f.handle) == -1)
 	{
-		LogPrint(ERROR_LOG, "Failed to close file %k: %k.\n", f.path, GetPlatformError());
+		LogPrint(LogLevelError, "File", "Failed to close file %k: %k.\n", f.path, GetPlatformError());
 		return false;
 	}
 	return true;
 }
 
-String ReadFromFile(File f, s64 count, bool *error)
+void ReadFromFile(File f, s64 n, StringBuilder *sb, bool *err)
 {
-	auto totalBytesRead = 0;
-	auto currentBytesRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
-	auto fileString = NewString(count);
-	auto cursor = &fileString[0];
+	auto totRead = 0;
+	auto curRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
+	auto cursor = &sb[sb->length];
+	ResizeStringBuilder(sb, sb->length + n);
 	do
 	{
-		currentBytesRead = read(f.handle, cursor, count - totalBytesRead);
-		totalBytesRead += currentBytesRead;
-		cursor += currentBytesRead;
-	} while (totalBytesRead < count && currentBytesRead != 0 && currentBytesRead != -1);
-	if (currentBytesRead == -1)
+		curRead = read(f.handle, cursor, n - totRead);
+		totRead += curRead;
+		cursor += curRead;
+	} while (totRead < n && curRead != 0 && curRead != -1);
+	if (curRead == -1)
 	{
-		LogPrint(ERROR_LOG, "Failed to read file %k: %k.\n", f.path, GetPlatformError());
-		*error = true;
-		return "";
+		LogPrint(LogLevelError, "File", "Failed to read file %k: %k.\n", f.path, GetPlatformError());
+		*err = true;
+		return;
 	}
-	else if (totalBytesRead != count)
+	else if (totRead != n)
 	{
-		LogPrint(ERROR_LOG, "Failed to read file %k: could only read %lu bytes, but %lu bytes were requested.\n", f.path, totalBytesRead, count);
-		*error = true;
-		return "";
+		LogPrint(LogLevelError, "File", "Failed to read file %k: could only read %lu bytes, but %lu bytes were requested.\n", f.path, totRead, n);
+		*err = true;
+		return;
 	}
-	*error = false;
-	return fileString;
 }
 
-bool WriteToFile(File f, s64 count, void *buffer)
+bool WriteToFile(File f, s64 n, const void *buf)
 {
-	size_t totalBytesWritten = 0;
-	ssize_t currentBytesWritten = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
-	auto position = (char *)buffer;
+	size_t totWrit = 0;
+	ssize_t curWrit = 0; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
+	auto cursor = (u8 *)buf;
 	do
 	{
-		currentBytesWritten = write(f.handle, position, (count - totalBytesWritten));
-		totalBytesWritten += currentBytesWritten;
-		position += currentBytesWritten;
-	} while (totalBytesWritten < count && currentBytesWritten != 0);
-	if (totalBytesWritten != count)
+		curWrit = write(f.handle, cursor, (n - totWrit));
+		totWrit += curWrit;
+		cursor += curWrit;
+	} while (totWrit < n && curWrit != 0);
+	if (totWrit != n)
 	{
-		LogPrint(ERROR_LOG, "Failed to write file %k: %k.\n", f.path, GetPlatformError());
+		LogPrint(LogLevelError, "File", "Failed to write file %k: %k.\n", f.path, GetPlatformError());
 		return false;
 	}
 	return true;
 }
 
-FileOffset GetFileLength(File f, bool *error)
+// @TODO: Handle files larger than 2GB?
+FileOffset FileLength(File f, bool *err)
 {
-	struct stat stat; 
+	auto stat = (struct stat){};
 	if (fstat(f.handle, &stat) == -1)
 	{
-		// @TODO: Add file name to file handle.
-		LogPrint(ERROR_LOG, "Failed get length of file %k: %k.\n", GetPlatformError());
-		*error = true;
+		LogPrint(LogLevelError, "File", "Failed get length of file %k: %k.\n", f.path, GetPlatformError());
+		*err = true;
 		return {};
 	}
-	*error = false;
 	return FileOffset{stat.st_size};
 }
 
-FileOffset SeekInFile(File f, FileOffset o, FileSeekRelative r, bool *error)
+FileOffset SeekInFile(File f, FileOffset seek, FileSeekRelative rel, bool *err)
 {
-	auto result = lseek(f.handle, o, (s32)r);
-	if (result == (off_t)-1)
+	auto off = lseek(f.handle, seek, (s32)rel);
+	if (off == (off_t)-1)
 	{
-		LogPrint(ERROR_LOG, "Failed to seek file %k: %k.\n", f.path, GetPlatformError());
-		*error = true;
+		LogPrint(LogLevelError, "File", "Failed to seek file %k: %k.\n", f.path, GetPlatformError());
+		*err = true;
 		return {};
 	}
-	*error = false;
-	return result;
+	return off;
 }
 
-PlatformTime GetFileLastModifiedTime(File f, bool *error)
+PlatformTime FileLastModifiedTime(File f, bool *err)
 {
-	struct stat stat;
+	auto stat = (struct stat){};
 	if (fstat(f.handle, &stat) == -1)
 	{
-		LogPrint(ERROR_LOG, "Failed to get last modified time of file %k: %k.\n", GetPlatformError());
-		*error = true;
+		LogPrint(LogLevelError, "File", "Failed to get last modified time of file %k: %k.\n", f.path, GetPlatformError());
+		*err = true;
 		return {};
 	}
-	*error = false;
 	return PlatformTime{stat.st_mtim};
 }
 
-bool IterateDirectory(DirectoryIteration *context, String path)
+bool IterateDirectory(DirectoryIteration *itr, String path)
 {
-	if (!context->dir)
+	if (!itr->dir)
 	{
-		context->dir = opendir(&path[0]);
-		if (!context->dir)
+		itr->dir = opendir(&path[0]);
+		if (!itr->dir)
 		{
-			LogPrint(ERROR_LOG, "Failed to open directory %k: %k.\n", path, GetPlatformError());
+			LogPrint(LogLevelError, "File", "Failed to open directory %k: %k.\n", path, GetPlatformError());
 			return false;
 		}
 	}
-	while ((context->dirent = readdir(context->dir)))
+	while ((itr->dirent = readdir(itr->dir)))
 	{
-		if (CStringsEqual(context->dirent->d_name, ".") || CStringsEqual(context->dirent->d_name, ".."))
+		if (CStringsEqual(itr->dirent->d_name, ".") || CStringsEqual(itr->dirent->d_name, ".."))
 		{
 			continue;
 		}
-		context->filename = context->dirent->d_name;
-		context->isDirectory = (context->dirent->d_type == DT_DIR);
+		itr->filename = itr->dirent->d_name;
+		itr->isDir = (itr->dirent->d_type == DT_DIR);
 		return true;
 	}
 	return false;
@@ -157,7 +150,7 @@ bool CreateDirectoryIfItDoesNotExist(String path)
 	}
 	if (mkdir(&path[0], 0700) == -1)
 	{
-		LogPrint(ERROR_LOG, "Failed to create directory %k: %k.\n", path, GetPlatformError());
+		LogPrint(LogLevelError, "File", "Failed to create directory %k: %k.\n", path, GetPlatformError());
 		return false;
 	}
 	return true;
@@ -167,7 +160,7 @@ bool DeleteFile(String path)
 {
 	if (unlink(&path[0]) != 0)
 	{
-		LogPrint(ERROR_LOG, "Failed to delete file %k: %k.\n", path, GetPlatformError());
+		LogPrint(LogLevelError, "File", "Failed to delete file %k: %k.\n", path, GetPlatformError());
 		return false;
 	}
 	return true;

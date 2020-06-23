@@ -1,11 +1,11 @@
 #include "../CPU.h"
 
-s64 GetCPUProcessorCount()
+s64 CPUProcessorCount()
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
-s64 GetCPUPageSize()
+s64 CPUPageSize()
 {
 	static auto pageSize = sysconf(_SC_PAGESIZE);
 	return pageSize;

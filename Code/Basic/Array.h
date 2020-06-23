@@ -1,26 +1,83 @@
 #pragma once
 
 #include "AllocatorInterface.h"
-#include "Thread.h"
 #include "Assert.h"
 
 #include "Code/Common.h"
 
-extern THREAD_LOCAL AllocatorInterface contextAllocator;
-void CopyMemory(const void *source, void *destination, s64 byteCount);
-void MoveMemory(void *source, void *destination, s64 byteCount);
+AllocatorInterface ContextAllocator();
+void CopyMemory(const void *src, void *dst, s64 n);
+void MoveMemory(void *src, void *dst, s64 n);
+
+template <typename T>
+struct ArrayView
+{
+	T *elements;
+	s64 count;
+
+	T &operator[](s64 i);
+	const T &operator[](s64 i) const;
+};
+
+template <typename T>
+T &ArrayView<T>::operator[](s64 i)
+{
+	Assert(i >= 0 && i < count);
+	return elements[i];
+}
+
+template <typename T>
+const T &ArrayView<T>::operator[](s64 i) const
+{
+	Assert(i >= 0 && i < count);
+	return elements[i];
+}
+
+template <typename T>
+bool operator==(ArrayView<T> a, ArrayView<T> b)
+{
+	if (a.count != b.count)
+	{
+		return false;
+	}
+	for (auto i = 0; i < a.count; i++)
+	{
+		if (a[i] != b[i])
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+template <typename T>
+bool operator!=(ArrayView<T> a, ArrayView<T> b)
+{
+	return !(a == b);
+}
 
 template <typename T>
 struct Array
 {
-	s64 count;
-	s64 capacity;
 	AllocatorInterface allocator;
 	T *elements;
+	s64 count;
+	s64 capacity;
 
+	operator ArrayView<T>();
 	T &operator[](s64 i);
-	T &operator[](s64 i) const;
+	const T &operator[](s64 i) const;
 };
+
+template <typename T>
+Array<T>::operator ArrayView<T>()
+{
+	return ArrayView<T>
+	{
+		.elements = elements,
+		.count = count, 
+	};
+}
 
 template <typename T>
 T &Array<T>::operator[](s64 i)
@@ -30,14 +87,14 @@ T &Array<T>::operator[](s64 i)
 }
 
 template <typename T>
-T &Array<T>::operator[](s64 i) const
+const T &Array<T>::operator[](s64 i) const
 {
 	Assert(i >= 0 && i < count);
 	return elements[i];
 }
 
 template <typename T>
-bool operator==(const Array<T> &a, const Array<T> &b)
+bool operator==(Array<T> a, Array<T> b)
 {
 	if (a.count != b.count)
 	{
@@ -45,7 +102,7 @@ bool operator==(const Array<T> &a, const Array<T> &b)
 	}
 	for (auto i = 0; i < a.count; i++)
 	{
-		if (a.elements[i] != b.elements[i])
+		if (a[i] != b[i])
 		{
 			return false;
 		}
@@ -54,7 +111,7 @@ bool operator==(const Array<T> &a, const Array<T> &b)
 }
 
 template <typename T>
-bool operator!=(const Array<T> &a, const Array<T> &b)
+bool operator!=(Array<T> a, Array<T> b)
 {
 	return !(a == b);
 }
@@ -64,10 +121,10 @@ Array<T> NewArray(s64 count)
 {
 	return
 	{
+		.allocator = ContextAllocator(),
+		.elements = (T *)ContextAllocator().allocateMemory(ContextAllocator().data, count * sizeof(T)),
 		.count = count,
 		.capacity = count,
-		.allocator = contextAllocator,
-		.elements = (T *)contextAllocator.allocateMemory(contextAllocator.data, count * sizeof(T)),
 	};
 }
 
@@ -76,10 +133,10 @@ Array<T> NewArrayIn(s64 count, AllocatorInterface a)
 {
 	return
 	{
-		.count = count,
-		.capacity = count,
 		.allocator = a,
 		.elements = (T *)a.allocateMemory(a.data, count * sizeof(T)),
+		.count = count,
+		.capacity = count,
 	};
 }
 
@@ -88,10 +145,10 @@ Array<T> NewArrayWithCapacity(s64 count, s64 capacity)
 {
 	return
 	{
+		.allocator = ContextAllocator(),
+		.elements = (T *)ContextAllocator().allocateMemory(ContextAllocator().data, capacity * sizeof(T)),
 		.count = count,
 		.capacity = capacity,
-		.allocator = contextAllocator,
-		.elements = (T *)contextAllocator.allocateMemory(contextAllocator.data, capacity * sizeof(T)),
 	};
 }
 
@@ -100,63 +157,63 @@ Array<T> NewArrayWithCapacityIn(s64 count, s64 capacity, AllocatorInterface a)
 {
 	return
 	{
-		.count = count,
-		.capacity = capacity,
 		.allocator = a,
 		.elements = (T *)a.allocateMemory(a.data, capacity * sizeof(T)),
+		.count = count,
+		.capacity = capacity,
 	};
 }
 
 template <typename T>
-Array<T> NewArrayCopy(Array<T> s)
+Array<T> NewArrayCopy(Array<T> src)
 {
-	auto result = NewArray<T>(s.count);
-	CopyMemory(s.elements, result.elements, s.count * sizeof(T));
-	return result;
+	auto r = NewArray<T>(src.count);
+	CopyMemory(src.elements, r.elements, src.count * sizeof(T));
+	return r;
 }
 
 template <typename T>
-Array<T> NewArrayCopyIn(Array<T> s, AllocatorInterface a)
+Array<T> NewArrayCopyIn(Array<T> src, AllocatorInterface a)
 {
-	auto result = NewArrayIn<T>(s.count, a);
-	CopyMemory(s.elements, result.elements, s.count * sizeof(T));
-	return result;
+	auto r = NewArrayIn<T>(src.count, a);
+	CopyMemory(src.elements, r.elements, src.count * sizeof(T));
+	return r;
 }
 
 template <typename T>
-Array<T> NewArrayCopyRange(Array<T> s, s64 start, s64 end)
+Array<T> NewArrayCopyRange(Array<T> src, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto count = end - start;
-	auto result = NewArray<T>(count);
-	CopyMemory(&s.elements[start], result.elements, count * sizeof(T));
-	return result;
+	auto r = NewArray<T>(count);
+	CopyMemory(&src.elements[start], r.elements, count * sizeof(T));
+	return r;
 }
 
 template <typename T>
-Array<T> NewArrayCopyRangeIn(Array<T> s, s64 start, s64 end, AllocatorInterface a)
+Array<T> NewArrayCopyRangeIn(Array<T> src, s64 start, s64 end, AllocatorInterface a)
 {
 	Assert(end >= start);
 	auto count = end - start;
-	auto result = NewArray<T>(count);
-	CopyMemory(&s.elements[start], result.elements, count * sizeof(T));
-	return result;
+	auto r = NewArray<T>(count);
+	CopyMemory(&src.elements[start], r.elements, count * sizeof(T));
+	return r;
 }
 
 template <typename T>
-Array<T> NewArrayFromData(const T *s, s64 count)
+Array<T> NewArrayFromData(const T *src, s64 count)
 {
-	auto result = NewArray<T>(count);
-	CopyMemory(s, result.elements, count * sizeof(T));
-	return result;
+	auto r = NewArray<T>(count);
+	CopyMemory(src, r.elements, count * sizeof(T));
+	return r;
 }
 
 template <typename T>
-Array<T> NewArrayFromDataIn(const T *s, s64 count, AllocatorInterface a)
+Array<T> NewArrayFromDataIn(const T *src, s64 count, AllocatorInterface a)
 {
-	auto result = NewArrayIn<T>(count, a);
-	CopyMemory(s, result.elements, count * sizeof(T));
-	return result;
+	auto r = NewArrayIn<T>(count, a);
+	CopyMemory(src, r.elements, count * sizeof(T));
+	return r;
 }
 
 template <typename T>
@@ -164,7 +221,7 @@ void ReserveArray(Array<T> *a, s64 reserve)
 {
 	if (!a->elements)
 	{
-		a->allocator = contextAllocator;
+		a->allocator = ContextAllocator();
 		a->elements = (T *)a->allocator.allocateMemory(a->allocator.data, reserve * sizeof(T));
 		a->capacity = reserve;
 		return;
@@ -181,25 +238,25 @@ void ReserveArray(Array<T> *a, s64 reserve)
 }
 
 template <typename T>
-void ResizeArray(Array<T> *a, s64 newCount)
+void ResizeArray(Array<T> *a, s64 count)
 {
-	ReserveArray(a, newCount);
-	a->count = newCount;
+	ReserveArray(a, count);
+	a->count = count;
 }
 
 template <typename T>
-void DoAppendToArray(Array<T> *a, const T &e)
+void DoAppendToArray(Array<T> *a, T e)
 {
-	auto ei = a->count;
+	auto i = a->count;
 	ReserveArray(a, a->count + 1);
 	Assert(a->count <= a->capacity);
-	Assert(ei < a->capacity);
-	a->elements[ei] = e;
+	Assert(i < a->capacity);
+	a->elements[i] = e;
 	a->count += 1;
 }
 
 template <typename T>
-void AppendToArray(Array<T> *a, const T &e)
+void AppendToArray(Array<T> *a, T e)
 {
 	DoAppendToArray(a, e);
 }
@@ -213,39 +270,39 @@ void AppendToArray(Array<T> *a, u32 e)
 }
 
 template <typename T>
-void AppendDataToArray(Array<T> *d, const T *s, s64 count)
+void AppendDataToArray(Array<T> *dst, const T *src, s64 n)
 {
-	auto oldArrayCount = d->count;
-	auto newArrayCount = d->count + count;
-	ResizeArray(d, newArrayCount);
-	CopyMemory(s, d->elements + oldArrayCount, count * sizeof(T));
+	auto oldCount = dst->count;
+	auto newCount = dst->count + n;
+	ResizeArray(dst, newCount);
+	CopyMemory(src, dst->elements + oldCount, n * sizeof(T));
 }
 
 template <typename T>
-void AppendCopyToArray(Array<T> *d, Array<T> s)
+void AppendCopyToArray(Array<T> *dst, Array<T> src)
 {
-	AppendDataToArray(d, s.elements, s.count);
+	AppendDataToArray(dst, src.elements, src.count);
 }
 
 template <typename T>
-void AppendCopyRangeToArray(Array<T> *d, Array<T> s, s64 count)
+void AppendCopyRangeToArray(Array<T> *dst, Array<T> src, s64 n)
 {
-	AppendDataToArray(d, s.elements, count);
+	AppendDataToArray(dst, src.elements, n);
 }
 
 template <typename T>
-void RemoveFromArray(Array<T> *a, s64 i)
+void OrderedRemoveFromArray(Array<T> *a, s64 i)
 {
-	if (!a->elements)
-	{
-		return;
-	}
-	if (i == a->count - 1)
-	{
-		a->count -= 1;
-		return;
-	}
+	Assert(i < a->count);
 	MoveMemory(&a->elements[i], &a->elements[i + 1], sizeof(T));
+	a->count -= 1;
+}
+
+template <typename T>
+void UnorderedRemoveFromArray(Array<T> *a, s64 i)
+{
+	Assert(i < a->count);
+	a->elements[i] = a->elements[a->count - 1];
 	a->count -= 1;
 }
 
@@ -259,13 +316,13 @@ void FreeArray(Array<T> *a)
 }
 
 template <typename T>
-T *begin(const Array<T> &a)
+T *begin(Array<T> a)
 {
 	return &a.elements[0];
 }
 
 template <typename T>
-T *end(const Array<T> &a)
+T *end(Array<T> a)
 {
 	return &a.elements[a.count - 1] + 1;
 }
@@ -278,6 +335,87 @@ T *begin(Array<T> *a)
 
 template <typename T>
 T *end(Array<T> *a)
+{
+	return &a->elements[a->count - 1] + 1;
+}
+
+template <typename T, s64 N>
+struct StaticArray
+{
+	T elements[N];
+
+	operator ArrayView<T>();
+	T &operator[](s64 i);
+	const T &operator[](s64 i) const;
+};
+
+template <typename T, s64 N>
+StaticArray<T, N>::operator ArrayView<T>()
+{
+	return ArrayView<T>
+	{
+		.elements = elements,
+		.count = N,
+	};
+}
+
+template <typename T, s64 N>
+T &StaticArray<T, N>::operator[](s64 i)
+{
+	Assert(i >= 0 && i < N);
+	return elements[i];
+}
+
+template <typename T, s64 N>
+const T &StaticArray<T, N>::operator[](s64 i) const
+{
+	Assert(i >= 0 && i < N);
+	return elements[i];
+}
+
+template <typename T, s64 N>
+bool operator==(StaticArray<T, N> a, StaticArray<T, N> b)
+{
+	if (a.count != b.count)
+	{
+		return false;
+	}
+	for (auto i = 0; i < N; i++)
+	{
+		if (a[i] != b[i])
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+template <typename T, s64 N>
+bool operator!=(StaticArray<T, N> a, StaticArray<T, N> b)
+{
+	return !(a == b);
+}
+
+template <typename T, s64 N>
+T *begin(StaticArray<T, N> a)
+{
+	return &a.elements[0];
+}
+
+template <typename T, s64 N>
+T *end(StaticArray<T, N> a)
+{
+	return &a.elements[a.count - 1] + 1;
+}
+
+template <typename T, s64 N>
+T *begin(StaticArray<T, N> *a)
+{
+	return &a->elements[0];
+}
+
+template <typename T, s64 N>
+T *end(StaticArray<T, N> *a)
 {
 	return &a->elements[a->count - 1] + 1;
 }

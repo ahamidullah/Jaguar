@@ -1,25 +1,25 @@
 #include "../Semaphore.h"
 
-Semaphore CreateSemaphore(s64 initialValue)
+Semaphore CreateSemaphore(s64 val)
 {
-	sem_t semaphore;
-	sem_init(&semaphore, 0, initialValue);
-	return semaphore;
+	auto s = sem_t{};
+	sem_init(&s, 0, val);
+	return s;
 }
 
-void SignalSemaphore(Semaphore *semaphore)
+void SignalSemaphore(Semaphore *s)
 {
-	sem_post(semaphore);
+	sem_post(s);
 }
 
-void WaitOnSemaphore(Semaphore *semaphore)
+void WaitOnSemaphore(Semaphore *s)
 {
-	sem_wait(semaphore);
+	sem_wait(s);
 }
 
-s64 GetSemaphoreValue(Semaphore *semaphore)
+s64 GetSemaphoreValue(Semaphore *s)
 {
-	auto value = s32{};
-	sem_getvalue(semaphore, &value);
-	return value;
+	auto val = s32{};
+	sem_getvalue(s, &val);
+	return val;
 }

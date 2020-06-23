@@ -2,29 +2,29 @@
 #include "String.h"
 #include "Log.h"
 
-void DoAbortActual(String format, String fileName, String functionName, s64 lineNumber, va_list arguments)
+void DoAbortActual(String file, String func, s64 line, String fmt, va_list args)
 {
-	LogPrint(ERROR_LOG, "###########################################################################\n");
-	LogPrint(ERROR_LOG, "[PROGRAM ABORT]\n");
-	LogPrintVarArgs(ERROR_LOG, format, arguments);
-	LogPrint(ERROR_LOG, "\n");
+	LogPrint(LogLevelAbort, "Abort", "###########################################################################\n");
+	LogPrint(LogLevelAbort, "Abort", "[PROGRAM ABORT]\n");
+	LogPrintVarArgs(file, func, line, LogLevelAbort, "Abort", fmt, args);
+	LogPrint(LogLevelAbort, "Abort", "\n");
 	PrintStacktrace();
-	LogPrint(ERROR_LOG, "###########################################################################\n");
-	va_end(arguments);
+	LogPrint(LogLevelAbort, "Abort", "###########################################################################\n");
+	va_end(args);
 	SignalDebugBreakpoint();
 	ExitProcess(PROCESS_EXIT_FAILURE);
 }
 
-void AbortActual(String format, String fileName, String functionName, s64 lineNumber, ...)
+void AbortActual(String file, String func, s64 line, String fmt, ...)
 {
-	va_list arguments;
-	va_start(arguments, lineNumber);
-	DoAbortActual(format, fileName, functionName, lineNumber, arguments);
+	va_list args;
+	va_start(args, fmt);
+	DoAbortActual(file, func, line, fmt, args);
 }
 
-void AbortActual(const char *format, const char *fileName, const char *functionName, s64 lineNumber, ...)
+void AbortActual(const char *file, const char *func, s64 line, const char *fmt, ...)
 {
-	va_list arguments;
-	va_start(arguments, lineNumber);
-	DoAbortActual(format, fileName, functionName, lineNumber, arguments);
+	va_list args;
+	va_start(args, fmt);
+	DoAbortActual(file, func, line, fmt, args);
 }

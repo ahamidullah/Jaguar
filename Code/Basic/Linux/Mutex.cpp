@@ -2,17 +2,17 @@
 
 Mutex CreateMutex()
 {
-	auto mutex = Mutex{};
-	pthread_mutex_init(&mutex, NULL);
-	return mutex;
+	auto m = Mutex{};
+	pthread_mutex_init(&m, NULL);
+	return m;
 }
 
-void LockMutex(Mutex *mutex)
+void LockMutex(Mutex *m)
 {
-	pthread_mutex_lock(mutex);
+	pthread_mutex_lock(m);
 }
 
-void UnlockMutex(Mutex *mutex)
+void UnlockMutex(Mutex *m)
 {
-	pthread_mutex_unlock(mutex);
+	pthread_mutex_unlock(m);
 }

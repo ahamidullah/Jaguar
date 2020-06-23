@@ -11,5 +11,5 @@
 	#error Unsupported CPU type.
 #endif
 
-s64 GetCPUProcessorCount();
-s64 GetCPUPageSize();
+s64 CPUProcessorCount();
+s64 CPUPageSize();

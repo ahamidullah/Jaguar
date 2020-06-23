@@ -2,41 +2,34 @@
 #include "String.h"
 #include "Time.h"
 
-String ReadEntireFile(String path, bool *error)
+void ReadEntireFile(String path, StringBuilder *sb, bool *err)
 {
-	auto f = OpenFile(path, OPEN_FILE_READ_ONLY, error);
-	if (*error)
+	auto f = OpenFile(path, OpenFileReadOnly, err);
+	if (*err)
 	{
-		return "";
+		return;
 	}
 	Defer(CloseFile(f));
-	auto length = GetFileLength(f, error);
-	if (*error)
+	auto l = FileLength(f, err);
+	if (*err)
 	{
-		return "";
+		return;
 	}
-	auto result = ReadFromFile(f, length, error);
-	if (*error)
-	{
-		return "";
-	}
-	*error = false;
-	return result;
+	ReadFromFile(f, l, sb, err);
 }
 
-PlatformTime GetFilepathLastModifiedTime(String path, bool *error)
+PlatformTime GetFilepathLastModifiedTime(String path, bool *err)
 {
-	auto f = OpenFile(path, OPEN_FILE_READ_ONLY, error);
-	if (*error)
+	auto f = OpenFile(path, OpenFileReadOnly, err);
+	if (*err)
 	{
-		return PlatformTime{};
+		return {};
 	}
 	Defer(CloseFile(f));
-	auto result = GetFileLastModifiedTime(f, error);
-	if (*error)
+	auto t = FileLastModifiedTime(f, err);
+	if (*err)
 	{
-		return PlatformTime{};
+		return {};
 	}
-	*error = false;
-	return result;
+	return t;
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../PCH.h"
-
 #include "Common.h"
 
 struct PlatformWindow
@@ -19,14 +18,11 @@ struct WindowEvents
 
 struct InputButtons;
 struct Mouse;
-
 void InitializeWindows(bool multithreaded);
-
-PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen);
-WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m);
+PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen);
+WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m);
 void ToggleFullscreen(PlatformWindow *w);
 void CaptureCursor(PlatformWindow *w);
 void UncaptureCursor(PlatformWindow *w);
 void DestroyWindow(PlatformWindow *w);
-
 Display *X11Display();

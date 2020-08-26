@@ -1,5 +1,4 @@
 #include "../Input.h"
-
 #include "Basic/Assert.h"
 #include "Basic/Log.h"
 

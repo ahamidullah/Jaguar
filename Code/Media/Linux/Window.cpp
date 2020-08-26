@@ -1,6 +1,5 @@
 #include "../Window.h"
 #include "../Input.h"
-
 #include "Basic/Assert.h"
 #include "Basic/String.h"
 #include "Basic/Log.h"
@@ -32,7 +31,7 @@ Display *X11Display()
 	return x11Display;
 }
 
-PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
+PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 {
 	x11Display = XOpenDisplay(NULL);
 	if (!x11Display)
@@ -41,7 +40,6 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 	}
 	auto screen = XDefaultScreen(x11Display);
 	auto rootWin = XRootWindow(x11Display, screen);
-
 	// Initialize XInput2, which we require for raw input.
 	{
 		auto junk1 = s32{};
@@ -59,8 +57,7 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 			Abort("Window", "XInput version 2.0 or greater is required: version %d.%d is available.", majorVer, minorVer);
 		}
 
-		//auto mask = StaticArray<u8>{0, 0, 0};
-		auto mask = NewStaticArray<u8>(0, 0, 0);
+		auto mask = MakeStaticArray<u8>(0, 0, 0);
 		auto eventMask = XIEventMask
 		{
 			.deviceid = XIAllMasterDevices,
@@ -79,7 +76,6 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 			Abort("Window", "Failed to select XInput events.");
 		}
 	}
-
 	auto vis = XVisualInfo
 	{
 		.screen = screen,
@@ -87,7 +83,6 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 	auto numVis = 0;
 	auto visInfo = XGetVisualInfo(x11Display, VisualScreenMask, &vis, &numVis);
 	Assert(visInfo->c_class == TrueColor);
-
 	auto winAttrs = XSetWindowAttributes
 	{
 		.background_pixel = 0xFFFFFFFF,
@@ -107,8 +102,8 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 		rootWin,
 		0,
 		0,
-		width,
-		height,
+		w,
+		h,
 		0,
 		visInfo->depth,
 		InputOutput,
@@ -119,12 +114,10 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 	{
 		Abort("Window", "Failed to create a window.");
 	}
-
 	XFree(visInfo);
 	XStoreName(x11Display, win.x11Handle, "Jaguar");
 	XMapWindow(x11Display, win.x11Handle);
 	XFlush(x11Display);
-
 	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
 	if ((win.x11DeleteWindowAtom = XInternAtom(x11Display, "WM_DELETE_WINDOW", 1)))
 	{
@@ -132,9 +125,8 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 	}
 	else
 	{
-		LogPrint(LogLevelError, "Window", "Unable to register WM_DELETE_WINDOW atom.\n");
+		LogPrint(ErrorLog, "Window", "Unable to register WM_DELETE_WINDOW atom.\n");
 	}
-
 	// Get actual window dimensions without window borders.
 	{
 		auto winX = s32{}, winY = s32{};
@@ -146,20 +138,18 @@ PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 			Abort("Window", "Failed to get the screen's geometry.");
 		}
 	}
-
 	// Create a blank cursor for when we want to hide the cursor.
 	{
 		auto col = XColor{};
-		auto cursorPix = NewStaticArray<char>(0);
+		auto cursorPix = MakeStaticArray<char>(0);
 		auto pixmap = XCreateBitmapFromData(x11Display, win.x11Handle, cursorPix.elements, 1, 1);
 		win.x11BlankCursor = XCreatePixmapCursor(x11Display, pixmap, pixmap, &col, &col, 1, 1); 
 		XFreePixmap(x11Display, pixmap);
 	}
-
 	return win;
 }
 
-WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m)
+WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m)
 {
 	auto winEvents = WindowEvents{};
 	auto xEvent = XEvent{};
@@ -195,11 +185,11 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m
 		} break;
 		case XI_RawKeyPress:
 		{
-			PressButton(keys, rawXEvent->detail);
+			kb->Press(rawXEvent->detail);
 		} break;
 		case XI_RawKeyRelease:
 		{
-			ReleaseButton(keys, rawXEvent->detail);
+			kb->Release(rawXEvent->detail);
 		} break;
 		case XI_RawButtonPress:
 		{
@@ -208,7 +198,7 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m
 			{
 				break;
 			}
-			PressButton(&m->buttons, i);
+			m->buttons.Press(i);
 		} break;
 		case XI_RawButtonRelease:
 		{
@@ -217,7 +207,7 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m
 			{
 				break;
 			}
-			ReleaseButton(&m->buttons, i);
+			m->buttons.Release(i);
 		} break;
 		case XI_FocusIn:
 		{

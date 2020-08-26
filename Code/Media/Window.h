@@ -1,6 +1,6 @@
 #pragma once
 
-#if __linux__
+#ifdef __linux__
 	#include "Linux/Window.h"
 #else
 	#error Unsupported platform.

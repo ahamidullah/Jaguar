@@ -167,7 +167,7 @@ s64 PlatformTime::Nanosecond()
 	return this->ts.tv_nsec - (ms * 1000000);
 }
 
-PlatformTime CurrentTime()
+PlatformTime XCurrentTime()
 {
 	auto t = PlatformTime{};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t.ts);

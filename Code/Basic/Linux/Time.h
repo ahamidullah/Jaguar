@@ -48,5 +48,5 @@ struct PlatformTime
 	s64 Nanosecond();
 };
 
-PlatformTime CurrentTime();
+PlatformTime XCurrentTime();
 void Sleep(s64 msec);

@@ -34,7 +34,6 @@ enum MouseButton
 	MouseButtonLeft = 0,
 	MouseButtonMiddle,
 	MouseButtonRight,
-
 	MouseButtonCount
 };
 

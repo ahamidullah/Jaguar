@@ -10,69 +10,67 @@
 #include "Code/Basic/Process.h"
 #include "Code/Basic/Log.h"
 
-u32 windowWidth, windowHeight;
+s64 windowWidth, windowHeight;
 
-u32 GetWindowWidth()
+s64 WindowWidth()
 {
 	return windowWidth;
 }
 
-u32 GetWindowHeight()
+s64 WindowHeight()
 {
 	return windowHeight;
 }
 
 void InitializeGameLoop()
 {
-	CreateCamera("main", {10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
+	LoadAsset(AssetIDSponza);
 
-	auto e = CreateEntity();
+	NewCamera("main", {10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
+
+	auto e = NewEntity();
 	auto t = Transform{};
 	SetEntityTransform(e, t);
-	SetEntityModel(e, "Sponza", t);
+	SetEntityModel(e, AssetIDSponza);
 }
 
 void GameLoop(f32 deltaTime)
 {
-	auto camera = GetCamera("main");
-	if (!camera)
+	auto cam = Camera("main");
+	if (!cam)
 	{
+		LogPrint(LogLevelError, "Engine", "Couldn't get main camera.\n");
 		return;
 	}
-
-	if (GetMouseDeltaX() != 0 || GetMouseDeltaY() != 0)
+	if (MouseDeltaX() != 0 || MouseDeltaY() != 0)
 	{
-		auto deltaPitch = -GetMouseDeltaY() * GetMouseSensitivity();
-		auto deltaYaw = -GetMouseDeltaX() * GetMouseSensitivity();
-		auto angles = ToAngles(camera->transform.rotation);
-		auto pitchRotation = ToQuaternion(EulerAngles{.pitch = angles.pitch + deltaPitch});
-		auto yawRotation = ToQuaternion(EulerAngles{.yaw = angles.yaw + deltaYaw});
-		camera->transform.rotation = Normalize(yawRotation * pitchRotation);
+		auto dPitch = -MouseDeltaY() * MouseSensitivity();
+		auto dYaw = -MouseDeltaX() * MouseSensitivity();
+		TransformRotateEuler(&cam->transform.rotation dPitch, dYaw, 0.0f);
 	}
-
-	if (IsKeyDown(A_KEY))
+	if (IsKeyDown(AKey))
 	{
-		camera->transform.position -= camera->speed * CalculateRightVector(camera->transform.rotation);
+		cam->transform.position -= cam->speed * QuaternionRightVector(cam->transform.rotation);
 	}
-	else if (IsKeyDown(D_KEY))
+	else if (IsKeyDown(DKey))
 	{
-		camera->transform.position += camera->speed * CalculateRightVector(camera->transform.rotation);
+		cam->transform.position += cam->speed * QuaternionRightVector(cam->transform.rotation);
 	}
-	if (IsKeyDown(Q_KEY))
+	if (IsKeyDown(QKey))
 	{
-		camera->transform.position.z -= camera->speed;
+		cam->transform.position.z -= cam->speed;
 	}
-	else if (IsKeyDown(E_KEY))
+	else if (IsKeyDown(EKey))
 	{
-		camera->transform.position.z += camera->speed;
+		cam->transform.position.z += cam->speed;
 	}
-	if (IsKeyDown(W_KEY))
+	if (IsKeyDown(WKey))
 	{
-		camera->transform.position += camera->speed * CalculateForwardVector(camera->transform.rotation);
+		cam->transform.position += cam->speed * QuaternionForwardVector(cam->transform.rotation);
 	}
-	else if (IsKeyDown(S_KEY))
+	else if (IsKeyDown(SKey))
 	{
-		camera->transform.position -= camera->speed * CalculateForwardVector(camera->transform.rotation);
+		cam->transform.position -= cam->speed * QuaternionForwardVector(cam->transform.rotation);
 	}
 }
 
@@ -83,25 +81,14 @@ void Update()
 
 void RunGame(void *)
 {
-	windowWidth = GetRenderWidth();
-	windowHeight = GetRenderHeight();
-	auto window = CreateWindow(windowWidth, windowHeight, false);
-
-	LogPrint(INFO_LOG, "Window dimensions: %dx%d\n", windowWidth, windowHeight);
+	windowWidth = RenderWidth();
+	windowHeight = RenderHeight();
+	auto window = NewWindow(windowWidth, windowHeight, false);
+	LogPrint(LogLevelInfo, "Engine", "Window dimensions: %dx%d\n", windowWidth, windowHeight);
 
 	InitializeRenderer(&window);
-	{
-		JobDeclaration jobs[] = {
-			CreateJob(InitializeAssets, NULL),
-			//CreateJob(InitializeInput, NULL),
-			//CreateJob(InitializeRenderer, NULL),
-		};
-		JobCounter counter;
-		RunJobs(CArrayCount(jobs), jobs, NORMAL_PRIORITY_JOB, &counter);
-		WaitForJobCounter(&counter);
-	}
+	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO
-
 	InitializeGameLoop();
 
 	while (true)
@@ -117,13 +104,14 @@ void RunGame(void *)
 		Render();
 	}
 
-	ExitProcess(PROCESS_EXIT_SUCCESS);
+	ExitProcess(ProcessExitSuccess);
 }
 
 void LogBuildOptions()
 {
 	LogPrint(
-		INFO_LOG,
+		LogLevelInfo,
+		"Engine",
 		"Build options:\n"
 		"	Speed: "
 #if defined(DEBUG_BUILD)
@@ -156,6 +144,6 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 	InitializeMedia(true);
 	InitializeJobs(RunGame, NULL);
 
-	Abort("Invalid exit from ApplicationEntry.\n");
-	return PROCESS_EXIT_FAILURE;
+	Abort("Engine", "Invalid exit from ApplicationEntry.\n");
+	return ProcessExitFailure;
 }

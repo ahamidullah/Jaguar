@@ -4,14 +4,14 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <xmmintrin.h>
-#if defined(THREAD_SANITIZER_BUILD)
+#ifdef ThreadSanitizerBuild
 	#include <sanitizer/tsan_interface.h>
 #endif
 #include <string.h> // memcpy @TODO @DELETEME
 #include <stdlib.h> // realloc @TODO @DELETEME
 #include <new> // placement new @TODO @DELETEME
 
-#if defined(__linux__)
+#ifdef __linux__
 	// DLL
 	#include <dlfcn.h>
 
@@ -45,6 +45,7 @@
 	// Process
 	#include <unistd.h>
 	#include <signal.h>
+	#include <sys/ptrace.h>
 
 	// Time
 	#include <time.h>

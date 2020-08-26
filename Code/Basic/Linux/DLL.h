@@ -6,8 +6,9 @@ struct DLL
 {
 	void *handle;
 	String path;
+
+	bool Close();
+	void *Lookup(String sym, bool *err);
 };
 
 DLL OpenDLL(String path, bool *err);
-bool CloseDLL(DLL dll);
-void *LookupDLLSymbol(DLL dll, String sym, bool *err);

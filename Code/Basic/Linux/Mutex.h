@@ -2,8 +2,12 @@
 
 #include "../PCH.h"
 
-typedef pthread_mutex_t Mutex;
+struct Mutex
+{
+	pthread_mutex_t handle;
 
-Mutex CreateMutex();
-void LockMutex(Mutex *m);
-void UnlockMutex(Mutex *m);
+	void Lock();
+	void Unlock();
+};
+
+Mutex NewMutex();

@@ -4,12 +4,17 @@
 
 struct ModelAsset
 {
-	String name;
-	String meshAssetName;
-	AssetLoadStatus loadStatus;
+	MeshAsset *mesh;
+	SkeletonAsset *skeleton;
+
+	#if DEBUG_BUILD
+		String name;
+	#endif
 };
 
 struct ModelInstance
 {
 	String assetName;
+	MeshInstance mesh;
+	SkeletonInstance *skeleton;
 };

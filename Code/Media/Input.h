@@ -1,53 +1,54 @@
 #pragma once
 
-#if defined(__linux__)
+#if __linux__
 	#include "Linux/Input.h"
 #else
 	#error Unsupported platform.
 #endif
+#include "Basic/Array.h"
+#include "Common.h"
 
-#include "Code/Common.h"
-
-constexpr u32 SCANCODE_COUNT = 256;
+constexpr u32 ScancodeCount = 256;
 
 // @TODO: Make these regular Arrays?
 struct InputButtons
 {
-	bool *down;
-	bool *pressed;
-	bool *released;
+	Array<bool> down;
+	Array<bool> pressed;
+	Array<bool> released;
 };
 
 struct Mouse
 {
-	s32 wheel = 0;
-	s32 x = 0;
-	s32 y = 0;
-	s32 deltaX = 0;
-	s32 deltaY = 0;
-	f32 rawDeltaX = 0;
-	f32 rawDeltaY = 0;
-	f32 sensitivity = 0.005;
+	s32 wheel;
+	s32 x;
+	s32 y;
+	s32 deltaX;
+	s32 deltaY;
+	f32 rawDeltaX;
+	f32 rawDeltaY;
+	f32 sensitivity;
 	InputButtons buttons;
 };
 
 void InitializeInput();
 
-WindowEvents GetInput(PlatformWindow *window);
+WindowEvents GetInput(PlatformWindow *w);
 
-void PressButton(s64 buttonIndex, InputButtons *buttons);
-void ReleaseButton(s64 buttonIndex, InputButtons *buttons);
+void PressButton(InputButtons *b, s64 i);
+void ReleaseButton(InputButtons *b, s64 i);
 
-bool IsKeyDown(KeySymbol keySymbol);
-bool WasKeyPressed(KeySymbol keySymbol);
-bool WasKeyReleased(KeySymbol keySymbol);
+bool IsKeyDown(KeySymbol k);
+bool WasKeyPressed(KeySymbol k);
+bool WasKeyReleased(KeySymbol k);
 
-f32 GetMouseX();
-f32 GetMouseY();
+f32 MouseX();
+f32 MouseY();
+f32 MouseDeltaX();
+f32 MouseDeltaY();
 
-f32 GetMouseDeltaX();
-f32 GetMouseDeltaY();
-f32 GetMouseSensitivity();
-bool IsMouseButtonDown(MouseButton mouseButton);
-bool WasMouseButtonPressed(MouseButton mouseButton);
-bool WasMouseButtonReleased(MouseButton mouseButton);
+f32 MouseSensitivity();
+
+bool IsMouseButtonDown(MouseButton b);
+bool WasMouseButtonPressed(MouseButton b);
+bool WasMouseButtonReleased(MouseButton b);

@@ -2,9 +2,9 @@
 
 #include "Transform.h"
 
-#include "Code/Basic/String.h"
+#include "Basic/String.h"
 
-#include "Code/Common.h"
+#include "Common.h"
 
 struct Camera
 {
@@ -16,5 +16,5 @@ struct Camera
 	f32 speed;
 };
 
-void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov);
-Camera *GetCamera(const String &name);
+void NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov);
+Camera *Camera(String name);

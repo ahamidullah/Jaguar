@@ -2,11 +2,12 @@
 
 s64 CPUProcessorCount()
 {
-	return sysconf(_SC_NPROCESSORS_ONLN);
+	static auto pc = sysconf(_SC_NPROCESSORS_ONLN);
+	return pc;
 }
 
 s64 CPUPageSize()
 {
-	static auto pageSize = sysconf(_SC_PAGESIZE);
-	return pageSize;
+	static auto ps = sysconf(_SC_PAGESIZE);
+	return ps;
 }

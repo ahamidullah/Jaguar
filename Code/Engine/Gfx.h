@@ -1,35 +1,29 @@
 #pragma once
 
-struct GPUMemoryHeapInfo
-{
-    s64 usage;
-    s64 budget;
-};
-
 struct GfxSubmitInfo
 {
-	Array<GPUBackendCommandBuffer> commandBuffers;
-	Array<GfxPipelineStageFlags> waitStages;
-    Array<GfxSemaphore> waitSemaphores;
-    Array<GfxSemaphore> signalSemaphores;
+	ArrayView<GPUInternalCommandBuffer> commandBuffers;
+	ArrayView<GfxPipelineStageFlags> waitStages;
+    ArrayView<GfxSemaphore> waitSemaphores;
+    ArrayView<GfxSemaphore> signalSemaphores;
 };
 
-enum GfxCommandQueueType
+enum GPUCommandQueueType
 {
-	GFX_GRAPHICS_COMMAND_QUEUE,
-	GFX_COMPUTE_COMMAND_QUEUE,
-	GFX_TRANSFER_COMMAND_QUEUE,
+	GPU_GRAPHICS_COMMAND_QUEUE,
+	GPU_COMPUTE_COMMAND_QUEUE,
+	GPU_TRANSFER_COMMAND_QUEUE,
 
-	GFX_COMMAND_QUEUE_COUNT
+	GPU_COMMAND_QUEUE_COUNT
 };
 
-enum GfxMemoryType
+enum GPUMemoryType
 {
-	GFX_GPU_ONLY_MEMORY,
-	GFX_CPU_TO_GPU_MEMORY,
-	GFX_GPU_TO_CPU_MEMORY,
+	GPU_DEVICE_ONLY_MEMORY,
+	GPU_HOST_TO_DEVICE_MEMORY,
+	GPU_DEVICE_TO_HOST_MEMORY,
 
-	GFX_MEMORY_TYPE_COUNT,
+	GPU_MEMORY_TYPE_COUNT,
 };
 
 // @TODO: Rename me.

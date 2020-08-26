@@ -1,15 +1,12 @@
 #pragma once
 
-#include "Code/Common.h"
+#include "Common.h"
 
-s32 AtomicAdd(volatile s32 *operand, s32 addend);
-s64 AtomicAdd(volatile s64 *operand, s64 addend);
-
-s32 AtomicFetchAndAdd(volatile s32 *operand, s32 addend);
-s32 AtomicFetchAndAdd(volatile s64 *operand, s64 addend);
-
-s32 AtomicCompareAndSwap(volatile s32 *destination, s32 oldValue, s32 newValue);
-s64 AtomicCompareAndSwap(volatile s64 *destination, s64 oldValue, s64 newValue);
-void *AtomicCompareAndSwap(void *volatile *destination, void *oldValue, void *newValue);
-
-void *AtomicFetchAndSet(void *volatile *target, void *value);
+s32 AtomicAdd32(volatile s32 *op, s32 x);
+s64 AtomicAdd64(volatile s64 *op, s64 x);
+s32 AtomicFetchAndAdd32(volatile s32 *op, s32 x);
+s32 AtomicFetchAndAdd64(volatile s64 *op, s64 x);
+s32 AtomicCompareAndSwap32(volatile s32 *dst, s32 oldVal, s32 newVal);
+s64 AtomicCompareAndSwap64(volatile s64 *dst, s64 oldVal, s64 newVal);
+void *AtomicCompareAndSwapPointer(void *volatile *dst, void *oldVal, void *newVal);
+void *AtomicFetchAndSetPointer(void *volatile *dst, void *val);

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "Code/Basic/PCH.h"
-
-#if defined(__linux__)
+#include "Basic/PCH.h"
+#if __linux__
 	#include <X11/X.h>
 	#include <X11/Xlib.h>
 	#include <X11/keysym.h>

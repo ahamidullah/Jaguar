@@ -2,7 +2,7 @@
 
 #include "../PCH.h"
 
-#include "Code/Common.h"
+#include "Common.h"
 
 struct PlatformWindow
 {
@@ -14,7 +14,7 @@ struct PlatformWindow
 
 struct WindowEvents
 {
-	bool quit = false;
+	bool quit;
 };
 
 struct InputButtons;
@@ -22,11 +22,11 @@ struct Mouse;
 
 void InitializeWindows(bool multithreaded);
 
-Display *GetX11Display();
+PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen);
+WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m);
+void ToggleFullscreen(PlatformWindow *w);
+void CaptureCursor(PlatformWindow *w);
+void UncaptureCursor(PlatformWindow *w);
+void DestroyWindow(PlatformWindow *w);
 
-PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen);
-WindowEvents ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse);
-void ToggleFullscreen(PlatformWindow *window);
-void CaptureCursor(PlatformWindow *window);
-void UncaptureCursor(PlatformWindow *window);
-void DestroyWindow(PlatformWindow *window);
+Display *X11Display();

@@ -1,18 +1,16 @@
 #pragma once
 
 #include "../String.h"
-
-#include "Code/Common.h"
+#include "Common.h"
 
 enum ProcessExitCode
 {
-	PROCESS_EXIT_SUCCESS = 0,
-	PROCESS_EXIT_FAILURE = 1,
+	ProcessSuccess = 0,
+	ProcessFail = 1,
 };
 
-struct String;
-
-s32 RunProcess(const String &command);
-void ExitProcess(ProcessExitCode exitCode);
+s32 RunProcess(String cmd);
+void ExitProcess(ProcessExitCode c);
+bool IsDebuggerAttached();
 void SignalDebugBreakpoint();
-String GetEnvironmentVariable(const String &name, bool *exists);
+String EnvironmentVariable(String name, bool *exists);

@@ -1,7 +1,7 @@
 #pragma once
 
 #if defined(__linux__)
-	#include "Linux/SpinLock.h"
+	#include "Linux/Spinlock.h"
 #else
 	#error Unsupported platform.
 #endif

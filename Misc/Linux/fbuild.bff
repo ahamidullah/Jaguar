@@ -16,7 +16,7 @@ Settings
 	.Compiler = "/usr/bin/clang++"
 	.CompilerOptions =
 		"%1 -o %2"
-		+ " -I$ProjectDirectory$"
+		+ " -I$CodeDirectory$"
 		+ " -std=c++2a"
 		+ " -ffast-math"
 		+ " -fno-exceptions"
@@ -28,8 +28,8 @@ Settings
 		+ " -Wformat=2"
 		+ " -Winit-self"
 		+ " -Wredundant-decls"
-		+ " -Wshadow"
 		+ " -Wstrict-overflow=2"
+		+ " -Wswitch-enum"
 		+ " -Wundef"
 		+ " -Wno-unused"
 		+ " -Wno-unused-parameter"
@@ -122,7 +122,7 @@ Settings
 	.CompilerOptions =
 		" -O0"
 		+ " -g"
-		+ " -DDEBUG_BUILD"
+		+ " -DDebugBuild"
 ]
 
 .ClangOptimizedConfig =
@@ -130,7 +130,7 @@ Settings
 	.Speed = "Optimized"
 	.CompilerOptions =
 		" -Ofast"
-		+ " -DOPTIMIZED_BUILD"
+		+ " -DOptimizedBuild"
 ]
 
 .ClangSpeedConfigs =
@@ -146,13 +146,13 @@ Settings
 .ClangDevelopmentConfig =
 [
 	.Runtime = "Development"
-	.CompilerOptions = " -DDEVELOPMENT_BUILD"
+	.CompilerOptions = " -DDevelopmentBuild"
 ]
 
 .ClangReleaseConfig =
 [
 	.Runtime = "Release"
-	.CompilerOptions = " -DRELEASE_BUILD"
+	.CompilerOptions = " -DReleaseBuild"
 ]
 
 .ClangRuntimeConfigs =
@@ -170,7 +170,7 @@ Settings
 	.Extra = "AddressSanitizer"
 	.CompilerOptions =
 		" -fsanitize=address"
-		+ " -DADDRESS_SANITIZER_BUILD"
+		+ " -DAddressSanitizerBuild"
 	.LinkerOptions = " -fsanitize=address"
 	.PCHOptions = " -fsanitize=address"
 ]
@@ -181,7 +181,7 @@ Settings
 	.CompilerOptions =
 		" -fsanitize=thread"
 		+ " -mllvm -tsan-instrument-atomics=false"
-		+ " -DTHREAD_SANITIZER_BUILD"
+		+ " -DThreadSanitizerBuild"
 	.LinkerOptions = " -fsanitize=thread"
 	.PCHOptions = " -fsanitize=thread"
 ]

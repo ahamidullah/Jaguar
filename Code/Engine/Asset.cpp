@@ -4,10 +4,14 @@
 #include "Mesh.h"
 #include "Job.h"
 
-#include "Code/Basic/Log.h"
-#include "Code/Basic/Filesystem.h"
-#include "Code/Basic/HashTable.h"
-#include "Code/Basic/Hash.h"
+#include "Basic/Log.h"
+#include "Basic/Filesystem.h"
+#include "Basic/HashTable.h"
+#include "Basic/Hash.h"
+
+#define STBI_MALLOC AllocateMemory
+#define STBI_REALLOC ResizeMemory
+#define STBI_Free FreeMemory
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -21,52 +25,41 @@
 #include "tiny_gltf.h"
 #undef TINYGLTF_IMPLEMENTATION
 
-// @TODO
-#define ASSET_COUNT 100
-
-enum AssetType
-{
-	MODEL_ASSET,
-
-	ASSET_TYPE_COUNT
-};
-
 // Subassets can be referenced by assets (including other Subassets), but are not usable outside of the asset system.
 template <typename T>
-struct Subassets
+struct Subasset
 {
 	T data;
-	s64 referenceCount;
+	s64 refCount;
 }
 
-struct AssetReference
+struct AssetContainer
 {
+	Spinlock lock;
 	void *asset;
 	AssetType type;
+	bool resident;
 	bool loading;
-	bool scheduledForUnload;
+	s64 loadCount;
 	s64 lockCount;
-	String filepath;
+	#if DEBUG_BUILD
+		String name;
+	#endif
 };
 
-struct AssetGlobals
-{
-	SpinLock lock;
-	HashTable<String, AssetReference> lookup;
-	SlotAllocator assetAllocators[ASSET_TYPE_COUNT];
-	HeapAllocator heap;
-} assetGlobals;
+Spinlock assetSlotsLock;
+SlotAllocator assetSlots[AssetTypeCount];
+StaticArray<AssetContainer, AssetIDCount> assetContainers;
 
 void InitializeAssets(void *)
 {
-	assetGlobals.heapAllocator = CreateHeapAllocator(KilobytesToBytes(64), 2, systemMemoryAllocator, systemMemoryAllocator);
-	for (auto i = 0; i < ASSET_TYPE_COUNT; i++)
+	for (auto i = 0; i < AssetTypeCount; i++)
 	{
 		switch (i)
 		{
-		case MODEL_ASSET:
+		case ModelAsset:
 		{
-			assetGlobals.slotAllocators[i] = CreateSlotAllocator(KilobytesToBytes(64), 0, assetGlobals.heapAllocator, assetGlobals.heapAllocator);
+			assetSlots[i] = NewSlotAllocator(KilobytesToBytes(64), 0, GlobalHeapAllocator(), GlobalHeapAllocator());
 		} break;
 		default:
 		{
@@ -81,7 +74,7 @@ void InitializeAssets(void *)
 GPUCommandBuffer theBuffer;
 bool ready = false;
 
-GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer, AssetLoadStatus *loadStatus)
+GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer)
 {
 	auto vertexBuffer = CreateGPUBuffer(verticesByteSize, GFX_VERTEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	auto indexBuffer = CreateGPUBuffer(indicesByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
@@ -100,7 +93,7 @@ GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 ind
 	};
 }
 
-u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelHeight, AssetLoadStatus *loadStatus)
+u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelHeight)
 {
 	// @TODO: Load texture directly into staging memory.
 	void *stagingMemory;
@@ -116,29 +109,40 @@ u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelH
 	return 0;
 }
 
-void LoadModelAsset(String name, String filepath, Model *model)
+#if DEVELOPMENT_BUILD
+void LoadModel(ModelAsset *m, AssetID id)
 {
-	//auto modelFilepath = JoinFilepaths(String{"Data/Models"}, jobParameter->assetName, JoinStrings(jobParameter->assetName, ".bin"));
-
+	auto path = String{};
+	switch (id)
+	{
+	case AssetIDSponza:
+	{
+		path = "Data/Models/Sponza/Sponza.gltf";
+		m->name = "Sponza";
+	} break;
+	defualt:
+	{
+		Abort("Unknown asset id %d.\n", id);
+	} break;
+	}
 	auto gltfModel = tinygltf::Model{};
 	auto gltfLoader = tinygltf::TinyGLTF{};
-	auto gltfError = std::string{};
-	auto gltfWarning = std::string{};
-
-	auto gltfLoadResult = gltfLoader.LoadBinaryFromFile(&gltfModel, &gltfError, &gltfWarning, filepath.data.elements);
-	if (!gltfWarning.empty())
+	auto gltfErr = std::string{};
+	auto gltfWarn = std::string{};
+	auto gltfLoad = gltfLoader.LoadBinaryFromFile(&gltfModel, &gltfErr, &gltfWarn, &path[0]);
+	if (!gltfWarn.empty())
 	{
-		LogPrint(INFO_LOG, "GLTF warning: %s.\n", gltfWarning.c_str());
+		LogPrint(InfoLog, "Asset", "GLTF warning: %s.\n", gltfWarn.c_str());
 	}
-	if (!gltfError.empty())
+	if (!gltfErr.empty())
 	{
-		LogPrint(ERROR_LOG, "GLTF error: %s.\n", gltfError.c_str());
+		LogPrint(ErrorLog, "Asset", "GLTF error: %s.\n", gltfErr.c_str());
 	}
-	if (!gltfLoadResult)
+	if (!gltfLoad)
 	{
-		LogPrint(ERROR_LOG, "Failed to parse gltf asset file %k.\n", filepath);
+		LogPrint(ErrorLog, "Asset", "Failed to parse gltf asset file %k.\n", path);
 	}
-	Abort("");
+	Abort("", "");
 #if 0
 	auto jobParameter = (LoadModelJobParameter *)jobParameterPointer;
 
@@ -408,363 +412,176 @@ void LoadModelAsset(String name, String filepath, Model *model)
 
 	CopyMemory(vertex_buffer, stagingMemory, verticesSize);
 	CopyMemory(index_buffer, (char *)stagingMemory + verticesSize, indicesSize);
-	mesh->gpuGeometry = QueueIndexedGeometryUploadToGPU(verticesSize, indicesSize, stagingBuffer, &mesh->loadStatus);
+	mesh->gpuGeometry = QueueIndexedGeometryUploadToGPU(verticesSize, indicesSize, stagingBuffer);
 	//mesh->gpu_mesh = Upload_Indexed_Geometry_To_GPU(mesh->vertex_count, sizeof(Vertex), mesh->vertices, mesh->index_count, mesh->indices);
 
 #endif
 
 	mesh->loadStatus = ASSET_LOADED;
 }
+#endif
 
-struct LoadTextureJobParameter
+void LoadTexture(String path)
 {
-	String path;
-	AssetLoadStatus *loadStatus;
-	u32 *outputTextureID;
-};
-
-void LoadTexture(void *jobParameterPointer)
-{
-	LoadTextureJobParameter *jobParameter = (LoadTextureJobParameter *)jobParameterPointer;
-	s32 texturePixelWidth, texturePixelHeight, textureChannels;
-	u8 *pixels = stbi_load(&jobParameter->path[0], &texturePixelWidth, &texturePixelHeight, &textureChannels, STBI_rgb_alpha);
+	auto texW = s32{}, texH = s32{}, texChans = s32{};
+	auto pixels = stbi_load(&path[0], &texW, &texH, &texChans, STBI_rgb_alpha);
 	if (!pixels)
 	{
-		LogPrint(ERROR_LOG, "failed to load texture %s\n", &jobParameter->path[0]);
+		LogPrint(ErrorLog, "Asset", "Failed to load texture %k.\n", path);
 		return;
 	}
-	Defer(free(pixels));
-	*jobParameter->outputTextureID = QueueTextureUploadToGPU(pixels, texturePixelWidth, texturePixelHeight, jobParameter->loadStatus);
+	Defer(FreeMemory(pixels));
+	QueueTextureUploadToGPU(pixels, texW, texH);
 }
 
-
-void *LockAsset(String assetName)
+void *LockAsset(AssetID id)
 {
-	AcquireSpinLock(assetGlobals.lock);
-	Defer(ReleaseSpinLock(assetGlobals.lock));
-
-	auto assetReference = LookupInHashTable(&assetGlobals.lookup, assetName);
-	if (!assetReference)
+	auto c = &assets.containers[id];
+	AcquireSpinLock(c->lock);
+	Defer(ReleaseSpinLock(assets.lock));
+	if (!c->resident)
 	{
-		LogPrint(ERROR_LOG, "Tried to lock asset %k, but asset does not exist.\n", assetName);
+		LogPrint(ErrorLog, "Asset", "Tried to lock asset %k, but asset is not resident.\n", c->name);
 		return NULL;
 	}
-	if (assetReference->scheduledForUnload)
+	if (c->loadCount == 0)
 	{
-		LogPrint(ERROR_LOG, "Tried to lock asset %k, but asset is scheduled for unload.\n", assetName);
+		LogPrint(ErrorLog, "Asset", "Tried to lock asset %k, but asset is scheduled for unload.\n", c->name);
 		return NULL;
 	}
-	if (assetReference->loading)
+	if (c->loading)
 	{
 		return NULL;
 	}
-	Assert(!assetReference->scheduledForUnload && !assetReference->loading);
-	assetReference->lockCount += 1;
-	return assetReference->asset;
+	Assert(!c->loadCount > 0 && !c->loading);
+	c->lockCount += 1;
+	return c->asset;
 }
 
-void UnlockAsset(String assetName)
+void DoAssetUnload(AssetContainer *c)
 {
-	auto unloadAsset = (void *){};
-	auto unloadAssetType = AssetType{};
+	switch (c->type)
 	{
-		AcquireSpinLock(assetGlobals.lock);
+	case AssetTypeModel:
+	{
+		UnloadModelAsset((ModelAsset *)c->asset);
+	} break;
+	default: {
+		Abort("Unknown asset type %d.\n", c->type);
+	} break;
+	}
+	AcquireSpinLock(assets.allocatorLock);
+	FreeSlotMemory(assets.slots[c->type]);
+	ReleaseSpinLock(assets.allocatorLock);
+}
 
-		auto assetReference = LookupInHashTable(&assetGlobals.lookup, assetName);
-		if (!assetReference)
+void UnlockAsset(AssetID id)
+{
+	auto unload = false;
+	auto c = &assets.containers[id];
+	{
+		AcquireSpinLock(c->lock);
+		if (!c->resident)
 		{
-			LogPrint(ERROR_LOG, "Tried to unlock asset %k, but asset does not exist.\n", assetName);
+			LogPrint(ErrorLog, "Tried to unlock asset %k, but asset is not resident.\n", c->name);
 			return;
 		}
-		assetReference->lockCount -= 1;
-		if (assetReference->lockCount == 0 && assetReference->scheduledForUnload)
+		c->lockCount -= 1;
+		if (c->lockCount == 0 && c->loadCount == 0)
 		{
-			unloadAsset = assetReference->asset;
-			unloadAssetType = assetReference->assetType;
-			RemoveFromHashTable(&assetGlobals.lookup, assetName);
-			// Once we unlock the spinlock, this asset will be capable of loading again.
-			// This means we can have the same asset simultanously loading and unloading.
+			unload = true;
+			c->resident = false;
 		}
-
-		ReleaseSpinLock(assetGlobals.lock);
+		ReleaseSpinLock(assets.lock);
 	}
-	if (unloadAsset)
+	if (unload)
 	{
-		switch (unloadAssetType)
-		{
-		case MODEL_ASSET:
-		{
-			UnloadModelAsset((ModelAsset *)unloadAsset->data);
-		} break;
-		default: {
-			Abort("Unknown asset type %d.\n", unloadAssetType);
-		} break;
-		}
-		FreeSlotMemory(unloadAsset);
+		DoAssetUnload(c);
 	}
 }
 
-struct LoadAssetJobParameters
+void LoadAsset(void *jobParams)
 {
-	String assetName;
-	AssetType assetType;
-	String assetFilepath;
-};
-
-void LoadAsset(void *jobParameter)
-{
-	auto parameters = (LoadAssetJobParameters *)jobParameter;
-
-	AcquireSpinLock(assetGlobals.lock);
-
-	if (auto assetReference = LookupInHashTable(&assetGlobals.lookup, parameters->assetName); assetReference)
+	auto params = (LoadAssetJobParameters *)jobParams;
+	auto c = &assets.containers[params->id];
+	AcquireSpinLock(c->lock);
+	c->loadCount += 1;
+	// Check if the asset is already loaded.
+	if (c->resident)
 	{
 		// The asset is either already loaded or is in the process of loading.
-		if (parameters->assetType != assetReference->type || parameters->assetFilepath != assetReference->filepath)
+		if (params->type != c->type || params->path != c->path)
 		{
-			LogPrint(ERROR_LOG, "Tried to load asset %k:%d:%k, but a different asset with the same name %k:%d:%k is already loaded.\n", parameters->assetName, parameters->assetType, parameters->assetFilepath, assetReference->name, assetReference->type, assetReference->filepath);
+			LogPrint(ErrorLog, "Tried to load asset %d:%d:%k, but a different asset with the same id %d:%d:%k is already loaded.\n", params->id, params->type, params->path, c->id, c->type, c->path);
 		}
-		if (assetReference->scheduledForUnload)
+		if (c->scheduledForUnload)
 		{
-			assetReference->scheduledForUnload = false;
+			c->scheduledForUnload = false;
 		}
 		return;
 	}
-
+	c->resident = true;
+	c->loading = true;
 	// The asset is not loaded, so we need to actually load the asset from file.
-	InsertIntoHashTable(
-		&assetGlobals.lookup,
-		parameters->assetName,
-		AssetReference
-		{
-			.type = parameters->assetType,
-			.loading = true,
-			.filepath = parameters->assetFilepath,
-		});
-
-	ReleaseSpinLock(assetGlobals.lock);
-
+	// Insert a reference to the asset into the hash table so the asset system knows the asset is loaded/loading.
+	ReleaseSpinLock(c->lock);
+	// We released the spinlock while the asset is in the loading state, so no one can actually lock or use the asset yet.
+	// Now, we can do the slow load from disk without holding the asset lock.
 	auto asset = (void *){};
-	switch (parameters->assetType)
+	switch (params->type)
 	{
-	case MODEL_ASSET:
+	case AssetTypeModel:
 	{
-		asset = (ModelAsset *)AllocateSlotMemory(&assetGlobals.assetAllocators[parameters->assetType], sizeof(ModelAsset)),
-		LoadModelAsset(asset, parameters->assetName, parameters->assetFilepath);
+		AcquireSpinLock(assets.allocatorLock);
+		asset = (ModelAsset *)AllocateSlotMemory(&assets.slots[params->type], sizeof(ModelAsset)),
+		ReleaseSpinLock(assets.allocatorLock);
+		LoadModelAsset(asset, params->id);
+		#if DEBUG_BUILD
+			c->name = asset->name;
+		#endif
 	} break;
 	default:
 	{
-		Abort("Unknown asset type %d.\n", parameters->assetType);
+		Abort("Unknown asset type %d.\n", params->type);
 	} break;
 	}
-
-	AcquireSpinLock(assetGlobals.lock);
-
-	// Pointers aren't stable once we release the lock, so we have to lookup the asset again.
-	auto newAssetReference = LookupInHashTable(&assetGlobals.lookup, parameters->assetName);
-	newAssetReference->asset = asset;
-	newAssetReference->loading = false;
-
-	ReleaseSpinLock(assetGlobals.lock);
+	AcquireSpinLock(c->lock);
+	c->asset = asset;
+	c->loading = false;
+	ReleaseSpinLock(c->lock);
 }
 
-void UnloadAssetWhenFullyUnlocked(String assetName)
+void UnloadAsset(AssetID id)
 {
-	// @TODO
-	// Mark the asset for unload then actually do it when its lockCount hits zero.
-	// Be careful not to unload assets which are still loading.
-	// Should be fine if everyone locks the table correctly.
-	auto asset = LookupInHashTable(&assetGlobals.lookup, parameters->assetName);
-	if (!asset)
+	auto c = &assets.containers[id];
+	AcquireSpinLock(c->lock);
+	if (!c->resident)
 	{
-		LogPrint(ERROR_LOG, "Tried to unload asset %k, but asset does not exist.\n", assetName);
+		LogPrint(ErrorLog, "Tried to unload asset %k, but asset is not resident.\n", assets.holders[id].name);
 		return;
 	}
-	asset->scheduledForUnload = true;
+	c->loadCount -= 1;
+	auto unload = false;
+	if (c->lockCount == 0 && c->loadCount == 0)
+	{
+		unload = true;
+		c->resident = false;
+	}
+	ReleaseSpinLock(c->lock);
+	if (unload)
+	{
+		DoUnloadAsset(c);
+	}
 }
 
-
-
-
-
-
-void GetLockedAsset(void *jobParameters)
+String AssetIDToString(AssetID id)
 {
-	auto parameters = (GetLockedAssetJobParameters *)jobParameters;
-	return LoadLockedAssetActual();
-	AcquireSpinLock(assetGlobals.lock);
-	auto *asset = LoadAssetActual(parameters->assetType, parameters->assetName);
-	asset->lockCount += 1;
-	ReleaseSpinLock(assetGlobals.lock);
-
-#if 0
-	AcquireSpinLock(assetGlobals.lock);
-	auto needsToBeLoaded = false;
-	auto asset = LookupInHashTable(&assetGlobals.lookupTable, AssetLookupKey{parameters->assetType, parameters->assetName});
-	if (!asset)
+	switch (id)
 	{
-	#if 0
-		switch (parameters->assetType)
-		{
-		case MODEL_ASSET:
-		{
-			ResizeArray(&assetGlobals.models, assetGlobals.models.count + 1);
-			asset = &assetGlobals.models[assetGlobals.models.count - 1];
-		} break;
-		case MESH_ASSET:
-		{
-			ResizeArray(&assetGlobals.models, assetGlobals.meshes.count + 1);
-			asset = &assetGlobals.models[assetGlobals.meshes.count - 1];
-		} break;
-		case TEXTURE_ASSET:
-		{
-			// @TODO
-		} break;
-		default:
-		{
-			Abort("Unknown asset type %d.\n", parameters->assetType);
-		} break;
-		}
-		InsertIntoHashTable(&assetGlobals.lookupTable, parameters->assetName, asset);
-	#endif
-		needsToBeLoaded = true;
-	}
-	else
+	case AssetIDSponza:
 	{
-		asset->lockCount += 1;
+		return "AssetIDSponza";
+	} break;
 	}
-	ReleaseSpinLock(assetGlobals.lock);
-
-	if (needsToBeLoaded)
-	{
-		DoLoadAsset(parameters->assetName);
-		asset = LoadAsset();
-		switch (parameters->assetType)
-		{
-		case MODEL_ASSET:
-		{
-			LoadModelAsset();
-		} break;
-		case MESH_ASSET:
-		{
-			LoadMeshAsset();
-		} break;
-		case TEXTURE_ASSET:
-		{
-		} break;
-		default:
-		{
-			Abort("Unknown asset type %d.\n", parameters->assetType);
-		} break;
-		}
-	}
-#endif
+	return "NoAssetIDToStringRecord";
 }
-
-void UnlockAsset(String name)
-{
-	AcquireSpinLock(assetGlobals.lock);
-	Defer(ReleaseSpinLock(assetGlobals.lock));
-	auto asset = LookupInHashTable(&assetGlobals.catalog);
-	Assert(asset);
-	asset->lockCount -= 1;
-}
-
-template <typename T>
-void GetAsset(void *jobParameterPointer)
-{
-	auto Load() = [&name]()
-	{
-		// @TODO: Call load model asset. No outputMeshAssetAddress.
-		LoadModelJobParameter *jobParameter = (LoadModelJobParameter *)malloc(sizeof(LoadModelJobParameter)); // @TODO
-		jobParameter->assetName = name;
-		jobParameter->outputMeshAssetAddress = &addr;
-		JobDeclaration jobDeclaration = CreateJob(LoadModel, jobParameter);
-		JobCounter jobCounter;
-		RunJobs(1, &jobDeclaration, NORMAL_PRIORITY_JOB, &jobCounter);
-		WaitForJobCounter(&jobCounter); // @TODO: Get rid of this wait!
-	}
-
-	AcquireSpinLock(assetGlobals.catalogLock);
-	auto asset = LookupInHashTable(&assetGlobals.catalog, name);
-	if (asset && asset->loadStatus == ASSET_LOADED)
-	{
-		auto IsCorrectAssetLoaded = []()
-		{
-		}
-		AtomicCompareAndSwap(&modelAsset->loadStatus, ASSET_LOADED, ASSET_LOCKED_FOR_FRAME_DURATION);
-		if (modelAsset->loadStatus != ASSET_LOADED || modelAsset->name != name)
-		{
-			Load();
-			return NULL;
-		}
-		auto meshAsset = LookupInHashTable(&assetGlobals.catalog, modelAsset->meshAssetName);
-		return (ModelAsset *)modelAsset;
-	}
-	else
-	if (!modelAssetPointer)
-	{
-		Load();
-	}
-	return NULL;
-}
-
-bool done = false;
-GfxFence theFence;
-
-#if 0
-void FinalizeAssetUploadsToGPU()
-{
-	if (ready && !done && theBuffer)
-	{
-		theFence = GfxCreateFence(false);
-		GfxSubmitCommandBuffers(1, &theBuffer, GFX_GRAPHICS_COMMAND_QUEUE, theFence);
-		//VK_CHECK(vkQueueWaitIdle(vulkanGlobals.graphicsQueue)); // @TODO: Use a fence?
-		done = true;
-	}
-	if (done)
-	{
-		if (GfxWasFenceSignalled(theFence))
-		{
-			*assetGlobals.uploadCommandBuffers.writeBuffer->loadStatuses[0] = ASSET_LOADED;
-		}
-	}
-	return;
-
-	// Submit queued asset upload commands.
-	SwitchAssetUploadDoubleBuffer(&assetGlobals.uploadCommandBuffers);
-	if (assetGlobals.uploadCommandBuffers.readBufferElementCount > 0)
-	{
-		ConsolePrint("READING FROM: %x\n", assetGlobals.uploadCommandBuffers.readBuffer->commandBuffers);
-		ConsolePrint("c: %u\n", assetGlobals.uploadCommandBuffers.readBufferElementCount);
-		GfxSubmitCommandBuffers(assetGlobals.uploadCommandBuffers.readBufferElementCount, assetGlobals.uploadCommandBuffers.readBuffer->commandBuffers, GFX_GRAPHICS_COMMAND_QUEUE, assetGlobals.uploadFences[assetGlobals.uploadFenceCount]);
-		assetGlobals.pendingLoadStatusCounts[assetGlobals.uploadFenceCount] = assetGlobals.uploadCommandBuffers.readBufferElementCount;
-		CopyMemory(assetGlobals.uploadCommandBuffers.readBuffer->loadStatuses, &assetGlobals.pendingLoadStatuses[assetGlobals.uploadFenceCount], assetGlobals.uploadCommandBuffers.readBufferElementCount * sizeof(AssetLoadStatus *));
-		assetGlobals.uploadFenceCount += 1;
-		// @TODO: Render_API_Free_Command_Buffers(assetGlobals.gpu_upload_command_pool, assetGlobals.uploadCommandBuffers.readBufferElementCount, assetGlobals.uploadCommandBuffers.read_buffer->command_buffers);
-	}
-
-	// Check whether submitted asset upload commands have finished.
-	for (auto i = 0; i < assetGlobals.uploadFenceCount; i++)
-	{
-		if (!GfxWasFenceSignalled(assetGlobals.uploadFences[i]))
-		{
-			continue;
-		}
-		GfxResetFences(1, &assetGlobals.uploadFences[i]);
-		for (auto j = 0; j < assetGlobals.pendingLoadStatusCounts[i]; j++)
-		{
-			*assetGlobals.pendingLoadStatuses[i][j] = ASSET_LOADED;
-		}
-		// Remove the fence.
-		assetGlobals.uploadFenceCount -= 1;
-		if (i != assetGlobals.uploadFenceCount)
-		{
-			GfxFence temporary = assetGlobals.uploadFences[i];
-			assetGlobals.uploadFences[i] = assetGlobals.uploadFences[assetGlobals.uploadFenceCount];
-			assetGlobals.uploadFences[assetGlobals.uploadFenceCount] = temporary;
-			i -= 1;
-		}
-	}
-}
-#endif

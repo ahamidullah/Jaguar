@@ -1,2 +1,2 @@
 #!/bin/bash
-gvim -g -c "cd $PROJECT_DIRECTORY/Code" >& /dev/null
+xterm -e "cd $PROJECT_DIRECTORY/Code; nvim" >& /dev/null &

@@ -2,6 +2,8 @@
 
 set -e
 
+mkdir -p $ProjectDirectory/Build
+
 pushd . >& /dev/null
 cd $ProjectDirectory
 

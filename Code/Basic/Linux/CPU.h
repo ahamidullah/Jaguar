@@ -1,12 +1,11 @@
 #pragma once
 
 #include "../PCH.h"
-
-#include "Code/Common.h"
+#include "Common.h"
 
 #if __x86_64__
 	#define CPUHintSpinWaitLoop() _mm_pause()
-	#define CPU_CACHE_LINE_SIZE 64
+	#define CPUCacheLineSize 64
 #else
 	#error Unsupported CPU type.
 #endif

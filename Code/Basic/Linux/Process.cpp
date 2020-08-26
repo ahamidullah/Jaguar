@@ -1,8 +1,22 @@
 #include "../Process.h"
 
+s32 RunProcess(String cmd)
+{
+	return system(cmd.ToCString());
+}
+
 void ExitProcess(ProcessExitCode c)
 {
 	_exit((s32)c);
+}
+
+bool IsDebuggerAttached()
+{
+	if (ptrace(PTRACE_TRACEME, 0, 1, 0) == -1)
+	{
+		return true;
+	}
+	return false;
 }
 
 void SignalDebugBreakpoint()
@@ -10,14 +24,9 @@ void SignalDebugBreakpoint()
 	raise(SIGTRAP);
 }
 
-s32 RunProcess(const String &cmd)
+String EnvironmentVariable(String name, bool *exists)
 {
-	return system(&cmd[0]);
-}
-
-String GetEnvironmentVariable(String name, bool *exists)
-{
-	auto result = getenv(&name[0]);
+	auto result = getenv(name.ToCString());
 	if (!result)
 	{
 		*exists = false;

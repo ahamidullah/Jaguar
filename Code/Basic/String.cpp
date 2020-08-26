@@ -1,6 +1,5 @@
 #include "String.h"
 #include "Memory.h"
-
 #define STB_SPRINTF_IMPLEMENTATION
 #include "stb_sprintf.h"
 #undef STB_SPRINTF_IMPLEMENTATION
@@ -25,12 +24,12 @@ bool CStringsEqual(const char *a, const char *b)
 
 s64 CStringLength(const char *s)
 {
-	auto length = 0;
-	while (s[length])
+	auto len = 0;
+	while (s[len])
 	{
-		length++;
+		len++;
 	}
-	return length;
+	return len;
 }
 
 bool IsCharWhitespace(char c)
@@ -61,64 +60,107 @@ char LowercaseChar(char c)
 	return c;
 }
 
+#if 0
+StringView::StringView(const char *s, s64 len)
+{
+	this->buffer = NewArrayView<u8>((u8 *)s, len);
+}
+
+StringView::StringView(const char *s)
+{
+	auto len = CStringLength(s);
+	this->buffer = NewArrayView<u8>((u8 *)s, len);
+}
+
+String StringView::ToCopy(s64 start, s64 end)
+{
+	Assert(end >= start);
+	return
+	{
+		this->buffer.ToCopy(start, end),
+		false,
+	};
+}
+
+StringView StringView::ToView(s64 start, s64 end)
+{
+	return {this->buffer.ToView(start, end)};
+}
+
+StringView::StringView(ArrayView<u8> a)
+	: buffer{a}
+{
+}
+
+s64 StringView::Length()
+{
+	return this->buffer.count;
+}
+
+const char *StringView::ToCString()
+{
+	auto s = (u8 *)AllocateMemory(this->Length() + 1);
+	CopyArray(this->buffer, NewArrayView(s, this->Length()));
+	s[this->Length()] = '\0';
+	return (const char *)s;
+}
+#endif
+
+// @TODO: auto s = sb.String(); s = "1234"; ???
+// @TODO: auto s = String{"1234"}; s = sb.String();
 String::String()
 {
-	this->buffer = "";
-	this->length = 0;
-	this->literal = true;
+	this->literal = false;
 }
 
 String::String(char *s)
 {
-	this->buffer = s;
-	this->length = CStringLength(s);
+	auto len = CStringLength(s);
+	this->buffer = NewArray<u8>(len);
+	//CopyArray(NewArrayView((u8 *)s, len), this->buffer);
+	CopyArray(this->buffer, this->buffer);
 	this->literal = false;
-}
-
-String::String(char *s, s64 len)
-{
-	this->buffer = s;
-	this->length = len;
-	this->literal = false;
-}
-
-String::String(const char *s, s64 len)
-{
-	this->buffer = s;
-	this->length = len;
-	this->literal = true;
 }
 
 String::String(const char *s)
 {
-	this->buffer = s;
-	this->length = CStringLength(s);
+	auto len = CStringLength(s);
+	this->buffer = Array<u8>
+	{
+		.elements = (u8 *)s,
+		.count = len,
+	};
 	this->literal = true;
 }
 
-String::String(AllocatorInterface a, const char *b, s64 len, bool lit)
+String::String(Array<u8> buf, bool literal)
+	: buffer{buf},
+	literal{literal}
 {
-	this->allocator = a;
-	this->buffer = b;
-	this->length = len;
-	this->literal = lit;
 }
 
-const char &String::operator[](s64 i) const
+#if 0
+String::operator StringView()
 {
-	Assert(i >= 0 && i < length);
-	return buffer[i];
+	return {this->buffer};
+}
+#endif
+
+const u8 &String::operator[](s64 i)
+{
+	Assert(i >= 0 && i < this->Length());
+	return this->buffer[i];
 }
 
-bool operator==(String a, String b)
+bool String::operator==(String s)
 {
-	if (a.length != b.length)
+	if (s.Length() != this->Length())
 	{
 		return false;
 	}
-	for (auto i = 0; i < a.length; i++)
+	for (auto i = 0; i < s.Length(); i++)
 	{
-		if (a.buffer[i] != b.buffer[i])
+		if (s.buffer[i] != this->buffer[i])
 		{
 			return false;
 		}
@@ -126,98 +168,70 @@ bool operator==(String a, String b)
 	return true;
 }
 
-bool operator!=(String a, String b)
+bool String::operator!=(String s)
 {
-	return !(a == b);
+	return !(s == *this);
 }
 
-const char *begin(String s)
+const u8 *String::begin()
 {
-	return &s[0];
+	return &(*this)[0];
 }
 
-const char *end(String s)
+const u8 *String::end()
 {
-	return &s[s.length];
+	return &(*this)[this->Length()];
 }
 
-const char *begin(String *s)
+s64 String::Length()
 {
-	return &(*s)[0];
+	return this->buffer.count;
 }
 
-const char *end(String *s)
-{
-	return &(*s)[s->length];
-}
-
-String NewStringCopy(String src)
-{
-	auto buf = (char *)AllocateMemory(src.length + 1);
-	CopyMemory(src.buffer, buf, src.length);
-	buf[src.length] = '\0';
-	return
-	{
-		ContextAllocator(),
-		buf,
-		src.length,
-		false,
-	};
-}
-
-String NewStringCopyRange(String src, s64 start, s64 end)
+String String::ToCopy(s64 start, s64 end)
 {
 	Assert(end >= start);
-	auto len = end - start;
-	auto buf = (char *)AllocateMemory(len + 1);
-	CopyMemory(&src.buffer[start], buf, len);
-	buf[len] = '\0';
-	return
-	{
-		ContextAllocator(),
-		buf,
-		len,
-		false,
-	};
+	return {this->buffer.ToCopy(start, end), false};
 }
 
-s64 FindFirstCharInString(String s, char c)
+char *String::ToCString()
 {
-	for (auto i = 0; i < s.length; i++)
-	{
-		if (s[i] == c)
-		{
-			return i;
-		}
-	}
-	return -1;
+	auto s = (u8 *)AllocateMemory(this->Length() + 1);
+	CopyArray(this->buffer, NewArrayView(s, this->Length()));
+	s[this->Length()] = '\0';
+	return (char *)s;
 }
 
-s64 FindLastCharInString(String s, char c)
+#if 0
+StringView String::ToView(s64 start, s64 end)
 {
-	auto last = -1;
-	for (auto i = 0; i < s.length; i++)
-	{
-		if (s[i] == c)
-		{
-			last = i;
-		}
-	}
-	return last;
+	Assert(end >= start);
+	return {this->buffer.ToView(start, end)};
+}
+#endif
+
+s64 String::FindFirst(u8 c)
+{
+	return this->buffer.FindFirst(c);
 }
 
-Array<String> SplitString(String s, char seperator)
+s64 String::FindLast(u8 c)
+{
+	return this->buffer.FindLast(c);
+}
+
+Array<String> String::Split(char seperator)
 {
 	auto splits = Array<String>{};
 	auto curStart = 0;
 	auto curLen = 0;
-	for (auto i = 0; i < s.length; i++)
+	for (auto i = 0; i < this->Length(); i++)
 	{
-		if (s[i] == seperator)
+		if ((*this)[i] == seperator)
 		{
 			if (curLen > 0)
 			{
-				AppendToArray(&splits, NewStringCopyRange(s, curStart, i - 1));
+				splits.Append(this->ToCopy(curStart, i - 1));
 				curLen = 0;
 			}
 		}
@@ -232,9 +246,28 @@ Array<String> SplitString(String s, char seperator)
 	}
 	if (curLen > 0)
 	{
-		AppendToArray(&splits, NewStringCopyRange(s, curStart, s.length - 1));
+		splits.Append(this->ToCopy(curStart, this->Length() - 1));
 	}
 	return splits;
+}
+
+// @TODO: Where did I get this from? Is the Knuth hash better?
+u64 String::Hash()
+{
+    auto hash = u64{5381};
+    for (auto c : this->buffer)
+    {
+        hash = ((hash << 5) + hash) + c;
+	}
+    return hash;
+}
+
+void String::Free()
+{
+	if (!this->literal)
+	{
+		this->buffer.Free();
+	}
 }
 
 bool ParseInteger(String s, s64 *out)
@@ -251,280 +284,180 @@ bool ParseInteger(String s, s64 *out)
     return true;
 }
 
-// @TODO: Where did I get this from? Is the Knuth hash better?
-u64 HashString(String s)
+StringBuilder NewStringBuilderIn(Allocator *a, s64 len)
 {
-    auto hash = u64{5381};
-    for (auto c : s)
-    {
-        hash = ((hash << 5) + hash) + c;
-	}
-    return hash;
-}
-
-void FreeString(String *s)
-{
-	if (!s->literal)
+	auto sb = StringBuilder
 	{
-		s->allocator.freeMemory(s->allocator.data, (char *)s->buffer);
-	}
-}
-
-// This overload allows us to append a c-string to an Array of Strings without explicitly constructing a String.
-void AppendToArray(Array<String> *a, const char *s)
-{
-	AppendToArray<String>(a, String{s});
-}
-
-char &StringBuilder::operator[](s64 i)
-{
-	Assert(i >= 0 && i < buffer.count);
-	return buffer[i];
-}
-
-const char &StringBuilder::operator[](s64 i) const
-{
-	Assert(i >= 0 && i < buffer.count);
-	return buffer[i];
-}
-
-bool operator==(StringBuilder a, StringBuilder b)
-{
-	return a.buffer == b.buffer;
-}
-
-bool operator!=(StringBuilder a, StringBuilder b)
-{
-	return a.buffer != b.buffer;
-}
-
-char *begin(StringBuilder s)
-{
-	return &s[0];
-}
-
-char *end(StringBuilder s)
-{
-	return &s[s.length];
-}
-
-char *begin(StringBuilder *s)
-{
-	return &(*s)[0];
-}
-
-char *end(StringBuilder *s)
-{
-	return &(*s)[s->length];
+		.buffer = NewArrayIn<u8>(a, len)
+	};
+	return sb;
 }
 
 StringBuilder NewStringBuilder(s64 len)
 {
-	auto sb = StringBuilder{NewArray<char>(len + 1)};
-	sb[len] = '\0';
-	sb.length = len;
-	return sb;
+	return NewStringBuilderIn(ContextAllocator(), len);
 }
 
-StringBuilder NewStringBuilderIn(s64 len, AllocatorInterface a)
+StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 len, s64 cap)
 {
-	auto sb = StringBuilder{NewArrayIn<char>(len + 1, a)};
-	sb[len] = '\0';
-	sb.length = len;
+	auto sb = StringBuilder
+	{
+		.buffer = NewArrayWithCapacityIn<u8>(a, len, cap)
+	};
 	return sb;
 }
 
 StringBuilder NewStringBuilderWithCapacity(s64 len, s64 cap)
 {
-	auto sb = StringBuilder{NewArrayWithCapacity<char>(len + 1, cap + 1)};
-	sb[len] = '\0';
-	sb.length = len;
-	return sb;
-}
-
-StringBuilder NewStringBuilderWithCapacityIn(s64 len, s64 cap, AllocatorInterface a)
-{
-	auto sb = StringBuilder{NewArrayWithCapacityIn<char>(len + 1, cap + 1, a)};
-	sb[len] = '\0';
-	sb.length = len;
-	return sb;
+	return NewStringBuilderWithCapacityIn(ContextAllocator(), len, cap);
 }
 
 #if 0
-String NewStringCopy(String s)
+StringBuilder::operator StringView()
 {
-	auto r = NewString(s.length);
-	CopyMemory(&s[0], &r[0], s.length);
-	return r;
-}
-
-String NewStringCopyIn(String s, AllocatorInterface a)
-{
-	auto r = NewStringIn(s.length, a);
-	CopyMemory(&s[0], &r[0], s.length);
-	return r;
-}
-
-String NewStringCopyRange(String s, s64 start, s64 end)
-{
-	Assert(end >= start);
-	auto r = NewString(end - start + 1);
-	CopyMemory(&s[start], &r[0], result.length);
-	return r;
-}
-
-String NewStringCopyRangeIn(String s, s64 start, s64 end, AllocatorInterface a)
-{
-	Assert(end >= start);
-	auto r = NewStringIn(end - start + 1, a);
-	CopyMemory(&s[start], &r[0], r.length);
-	return r;
+	return {this->buffer};
 }
 #endif
 
-void FreeStringBuilder(StringBuilder *sb)
+u8 &StringBuilder::operator[](s64 i)
 {
-	FreeArray(&sb->buffer);
-	sb->length = 0;
+	Assert(i >= 0 && i < this->buffer.count);
+	return this->buffer[i];
 }
 
-String BuilderToString(StringBuilder sb)
+const u8 &StringBuilder::operator[](s64 i) const
 {
-	auto buf = (char *)AllocateMemory(sb.buffer.count);
-	CopyMemory(&sb.buffer[0], buf, sb.buffer.count);
+	Assert(i >= 0 && i < this->buffer.count);
+	return this->buffer[i];
+}
+
+bool StringBuilder::operator==(StringBuilder sb)
+{
+	return this->buffer == sb.buffer;
+}
+
+bool StringBuilder::operator!=(StringBuilder sb)
+{
+	return this->buffer != sb.buffer;
+}
+
+u8 *StringBuilder::begin()
+{
+	return &(*this)[0];
+}
+
+u8 *StringBuilder::end()
+{
+	return &(*this)[this->Length()];
+}
+
+s64 StringBuilder::Length()
+{
+	return this->buffer.count;
+}
+
+#if 0
+StringView StringBuilder::ToView(s64 start, s64 end)
+{
+	Assert(start >= end);
+	return {this->buffer.ToView(start, end)};
+}
+#endif
+
+String StringBuilder::StringIn(Allocator *a)
+{
+	auto buf = NewArrayIn<u8>(a, this->Length());
+	CopyArray(this->buffer, buf);
 	return
 	{
-		ContextAllocator(),
 		buf,
-		sb.length,
 		false,
 	};
 }
 
-String BuilderToStringIn(StringBuilder *sb, AllocatorInterface a)
+String StringBuilder::ToString()
 {
-	auto buf = (char *)a.allocateMemory(a.data, sb->buffer.count);
-	CopyMemory(&sb->buffer[0], buf, sb->buffer.count);
-	return
+	return this->StringIn(ContextAllocator());
+}
+
+void StringBuilder::Resize(s64 len)
+{
+	this->buffer.Resize(len);
+}
+
+void StringBuilder::Append(String s)
+{
+	auto i = this->Length();
+	this->Resize(this->Length() + s.Length());
+	CopyArray(s.buffer, this->buffer);
+}
+
+void StringBuilder::AppendAll(ArrayView<String> ss)
+{
+	auto len = 0;
+	for (auto s : ss)
 	{
-		a,
-		buf,
-		sb->length,
-		false,
-	};
+		len += s.Length();
+	}
+	this->Reserve(len);
+	for (auto s : ss)
+	{
+		this->Append(s);
+	}
 }
 
-void ResizeStringBuilder(StringBuilder *sb, s64 len)
+void StringBuilder::Reserve(s64 reserve)
 {
-	ResizeArray(&sb->buffer, len + 1);
-	sb->length = len;
-	(*sb)[len] = '\0';
+	this->buffer.Reserve(reserve);
 }
 
-void AppendToStringBuilder(StringBuilder *dst, String src)
-{
-	auto i = dst->length;
-	ResizeStringBuilder(dst, dst->length + src.length);
-	CopyMemory(&src[0], &(*dst)[i], src.length);
-}
-
-#if 0
-void StringBuilderAppendData(String *dst, const char *src)
-{
-	auto n = CStringLength(src);
-	auto i = dst->length;
-	ResizeString(dst, dst->length + n);
-	CopyMemory(src, &(*dst)[i], n);
-}
-#endif
-
-void AppendRangeToStringBuilder(StringBuilder *dst, String src, s64 start, s64 end)
-{
-	Assert(end >= start);
-	Assert(src.length >= end);
-	auto n = (end - start);
-	auto i = dst->length;
-	ResizeStringBuilder(dst, dst->length + n);
-	CopyMemory(&src[start], &(*dst)[i], n);
-}
-
-#if 0
-void AppendCharToString(String *d, char s)
-{
-	ResizeString(d, d->length + 1);
-	(*d)[d->length - 1] = s;
-}
-#endif
-
-void ReserveStringBuilder(StringBuilder *sb, s64 reserve)
-{
-	ReserveArray(&sb->buffer, reserve + 1);
-}
-
-void FormatString(StringBuilder *sb, String fmt, ...)
+void StringBuilder::Format(String fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	FormatStringVarArgs(sb, fmt, args);
+	this->FormatVarArgs(fmt, args);
 	va_end(args);
 }
 
-void FormatStringVarArgs(StringBuilder *sb, String fmt, va_list args)
+void StringBuilder::FormatVarArgs(String fmt, va_list args)
 {
-	#if 0
-	struct CallbackData
+	this->Resize(this->Length() + STB_SPRINTF_MIN);
+	auto Callback = [](char *, void *userData, s32 len) -> char *
 	{
-		StringBuilder *sb
-	} cb =
-	{
-		.sb = sb,
+		auto sb = (StringBuilder *)userData;
+		sb->buffer.Resize(sb->Length() + STB_SPRINTF_MIN);
+		return (char *)&sb->buffer[sb->Length()];
 	};
-	#endif
-	ResizeStringBuilder(sb, sb->length + STB_SPRINTF_MIN);
-	auto Callback = [](char *, void *userData, s32 len)
-	{
-		auto csb = (StringBuilder *)userData;
-		csb->length += len;
-		ResizeArray(&csb->buffer, csb->length + STB_SPRINTF_MIN);
-		return &csb->buffer[csb->length];
-	};
-	stbsp_vsprintfcb(Callback, sb, &sb->buffer[0], &fmt[0], args);
-	sb->buffer[sb->length] = '\0';
-	ResizeArray(&sb->buffer, sb->length + 1);
+	stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], fmt.ToCString(), args);
 }
 
-#if 0
-@TODO: WRONG?
-void TrimStringBuilder(StringBuilder *sb, s64 left, s64 right)
+void StringBuilder::FormatTime()
 {
-	Assert(right > left);
-	auto n = right - (left + 1);
-	MoveMemory(&sb->buffer[left + 1], &sb->buffer[0], length);
-	StringBuilderResize(sb, n);
+	this->Append("%d-%d-%d %d:%d:%d.%d  ");
+	// @TODO
 }
-#endif
 
-void UppercaseStringBuilder(StringBuilder *sb)
+void StringBuilder::Uppercase()
 {
-	for (auto i = 0; i < sb->length; i++)
+	for (auto i = 0; i < this->Length(); i++)
 	{
-		(*sb)[i] = UppercaseChar((*sb)[i]);
+		(*this)[i] = UppercaseChar((*this)[i]);
 	}
 }
 
-void LowercaseStringBuilder(StringBuilder *sb)
+void StringBuilder::Lowercase()
 {
-	for (auto i = 0; i < sb->length; i++)
+	for (auto i = 0; i < this->Length(); i++)
 	{
-		(*sb)[i] = LowercaseChar((*sb)[i]);
+		(*this)[i] = LowercaseChar((*this)[i]);
 	}
 }
 
-s64 FindFirstCharInStringBuilder(StringBuilder sb, char c)
+s64 StringBuilder::FindFirst(u8 c)
 {
-	for (auto i = 0; i < sb.length; i++)
+	for (auto i = 0; i < this->Length(); i++)
 	{
-		if (sb[i] == c)
+		if ((*this)[i] == c)
 		{
 			return i;
 		}
@@ -532,12 +465,12 @@ s64 FindFirstCharInStringBuilder(StringBuilder sb, char c)
 	return -1;
 }
 
-s64 FindLastCharInStringBuilder(StringBuilder sb, char c)
+s64 StringBuilder::FindLast(u8 c)
 {
 	auto last = -1;
-	for (auto i = 0; i < sb.length; i++)
+	for (auto i = 0; i < this->Length(); i++)
 	{
-		if (sb[i] == c)
+		if ((*this)[i] == c)
 		{
 			last = i;
 		}
@@ -545,3 +478,7 @@ s64 FindLastCharInStringBuilder(StringBuilder sb, char c)
 	return last;
 }
 
+void StringBuilder::Free()
+{
+	this->buffer.Free();
+}

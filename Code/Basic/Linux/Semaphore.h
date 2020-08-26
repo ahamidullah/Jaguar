@@ -1,12 +1,15 @@
 #pragma once
 
 #include "../PCH.h"
+#include "Common.h"
 
-#include "Code/Common.h"
+struct Semaphore
+{
+	sem_t handle;
 
-typedef sem_t Semaphore;
+	void Signal();
+	void Wait();
+	s64 Value();
+};
 
-Semaphore CreateSemaphore(s64 val);
-void SignalSemaphore(Semaphore *s);
-void WaitOnSemaphore(Semaphore *s);
-s64 GetSemaphoreValue(Semaphore *s);
+Semaphore NewSemaphore(s64 val);

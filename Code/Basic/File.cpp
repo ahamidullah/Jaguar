@@ -2,34 +2,32 @@
 #include "String.h"
 #include "Time.h"
 
-void ReadEntireFile(String path, StringBuilder *sb, bool *err)
+bool ReadEntireFileIn(StringBuilder *sb, String path)
 {
-	auto f = OpenFile(path, OpenFileReadOnly, err);
-	if (*err)
+	auto err = false;
+	auto f = OpenFile(path, OpenFileReadOnly, &err);
+	if (err)
 	{
-		return;
+		return false;
 	}
-	Defer(CloseFile(f));
-	auto l = FileLength(f, err);
-	if (*err)
+	Defer(f.Close());
+	auto flen = f.Length(&err);
+	if (err)
 	{
-		return;
+		return false;
 	}
-	ReadFromFile(f, l, sb, err);
+	auto i = sb->Length();
+	sb->Resize(sb->Length() + flen);
+	if (!f.Read(sb->ToView(i, sb->Length()).buffer))
+	{
+		return false;
+	}
+	return true;
 }
 
-PlatformTime GetFilepathLastModifiedTime(String path, bool *err)
+String ReadEntireFile(String path, bool *err)
 {
-	auto f = OpenFile(path, OpenFileReadOnly, err);
-	if (*err)
-	{
-		return {};
-	}
-	Defer(CloseFile(f));
-	auto t = FileLastModifiedTime(f, err);
-	if (*err)
-	{
-		return {};
-	}
-	return t;
+	auto sb = StringBuilder{};
+	*err = ReadEntireFileIn(&sb, path);
+	return NewStringFromBytes(sb.buffer);
 }

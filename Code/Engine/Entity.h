@@ -3,11 +3,9 @@
 #include "Asset.h"
 #include "Transform.h"
 
-#include "Code/Common.h"
-
-typedef u32 EntityID;
+#include "Common.h"
 
 void InitializeEntities();
-EntityID CreateEntity();
-void SetEntityTransform(EntityID entity_id, Transform transform);
-void SetEntityModel(EntityID entity_id, AssetID asset_id, Transform transform);
+u64 NewEntity();
+void SetEntityTransform(u64 id, Transform t);
+void SetEntityModel(u64 id, String name);

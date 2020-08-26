@@ -2,9 +2,9 @@
 
 #include "String.h"
 
-String FilepathDirectory(String path);
-String FilepathFilename(String path);
-String FilepathExtension(String path);
+void FilepathDirectory(StringBuilder *sb, String path);
+void FilepathFilename(StringBuilder *sb, String path);
+void FilepathExtension(StringBuilder *sb, String path);
 void SetFilepathExtension(StringBuilder *path, String ext);
 
 template <typename... StringPack>
@@ -16,20 +16,12 @@ String JoinFilepaths(StringPack... sp)
 		return "";
 	}
 	auto len = (sp.length + ...) + (count - 1);
-	auto buf = (char *)AllocateMemory(len + 1);
-	auto i = 0;
-	auto AddPathComponent = [&i](char *b, String c)
+	auto sb = NewStringBuilderWithCapacity(len);
+	auto AddPathComponent = [](StringBuilder *sb, String c)
 	{
-		CopyMemory(c.buffer, &b[i], c.length);
-		b[i + c.length] = '/';
-		i += c.length + 1;
+		sb->Append(c);
+		sb->Append("/");
 	};
-	(AddPathComponent(buf, sp), ...);
-	return
-	{
-		.allocator = ContextAllocator(),
-		.buffer = buf,
-		.length = len,
-		.literal = false,
-	};
+	(AddPathComponent(&sb, sp), ...);
+	return {sb.buffer, false};
 }

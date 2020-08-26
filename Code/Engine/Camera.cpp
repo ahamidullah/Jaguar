@@ -1,30 +1,11 @@
 #include "Camera.h"
 #include "Math.h"
 
-struct
-{
-	Array<Camera> cameras;
-} camerasContext;
+Array<Camera> cameras;
 
-#if 0
-void InitializeCameras(void *parameter) {//Camera *camera, V3 position, V3 forward, f32 speed, f32 field_of_view)
+void NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
 {
-	Camera *camera = (Camera *)parameter;
-	create_camera_basis(camera, (V3){1, 1, 1});
-	camera->speed = 0.4f;
-	camera->position = (V3){2, 2, 2};
-	camera->yaw = 0.0f;
-	camera->pitch = 0.0f;
-	camera->view_matrix = ViewMatrix(camera->position, camera->forward, camera->side, camera->up);
-	camera->field_of_view = DegreesToRadians(90.0f);
-	camera->focal_length = 0.01f;
-	camera->projection_matrix = InfinitePerspectiveProjection(camera->field_of_view, windowWidth / (f32)windowHeight); // @TODO
-}
-#endif
-
-void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov)
-{
-	Camera camera =
+	Camera c =
 	{
 		.name = name,
 		.pitch = 0.0f,
@@ -32,26 +13,26 @@ void CreateCamera(const String &name, V3 position, V3 lookAt, f32 speed, f32 fov
 		.roll = 0.0f,
 		.transform =
 		{
-			.position = position,
-			.rotation = CreateQuaternion(lookAt - position),
+			.position = pos,
+			.rotation = CreateQuaternion(lookAt - pos),
 		},
 		.fov = fov,
 		.focalLength = 0.01f,
 		.speed = speed,
 	};
-	ArrayAppend(&camerasContext.cameras, camera);
+	AppendToArray(&cameras, c);
 }
 
-Camera *GetCamera(const String &name)
+Camera *Camera(String name)
 {
-	Camera *result = NULL;
-	for (auto &camera : camerasContext.cameras)
+	Camera *c = NULL;
+	for (auto i = 0; i < cameras.count; i++)
 	{
-		if (camera.name == name)
+		if (cameras[i].name == name)
 		{
-			result = &camera;
+			c = &cameras[i];
 			break;
 		}
 	}
-	return result;
+	return c;
 }

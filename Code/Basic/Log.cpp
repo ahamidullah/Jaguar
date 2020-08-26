@@ -4,70 +4,80 @@
 #include "Memory.h"
 #include "Process.h"
 
-#if DEBUG_BUILD
-	const auto LogFileDir = String{"Data/Log/"};
+typedef void (*CrashHandler)(File crashLog);
 
-	auto globalLogFile = File{};
-	auto globalLogFileOpen = false;
-	auto logLevel = LogLevelInfo;
+#if DebugBuild
+	auto LogFileDir = String{"Data/Log/"};
+
+	auto logLock = Spinlock{};
+	auto logFile = File{};
+	auto logLevel = InfoLog;
 	auto logPool = PoolAllocator{};
 #endif
+auto crashHandlers = NewArrayIn<CrashHandler>(GlobalHeap(), 0);
+
+// @TODO
+// Log: Was initialized.
+//      Lock state.
+//      Log file(s) state.
+//      Crash handler state.
+//      Allocator state.
+void LogCrashHandler(File crashLog)
+{
+}
 
 void InitalizeLog()
 {
-	#if DEBUG_BUILD
-		// We want to call this before memory has been initialized, so we have to use a stack-based allocator.
-		auto buf = StaticArray<char, 512>{};
-		auto a = NewStackAllocatorIn(sizeof(buf), buf.elements);
-		auto sb = NewStringBuilderIn(0, NewStackAllocatorInterface(&a));
-
-		AppendToStringBuilder(&sb, LogFileDir);
-		FormatTimestamp(&sb, CurrentTime());
-		auto dir = BuilderToString(sb);
+	#ifdef DebugBuild
+		logPool = NewPoolAllocator(KilobytesToBytes(2), 1, GlobalHeap(), GlobalHeap());
+		PushContextAllocator(&logPool);
+		Defer(
+		{
+			PopContextAllocator();
+			logPool.Clear();
+		});
+		auto sb = StringBuilder{};
+		sb.Append(LogFileDir);
+		sb.FormatTime();
+		auto dir = sb.ToString();
 		if (!CreateDirectory(dir))
 		{
-			LogPrint(LogLevelError, "Log", "Failed to create log directory %k.\n", dir);
-			LogPrint(LogLevelInfo, "Log", "Initialized logging.\n");
+			LogPrint(ErrorLog, "Log", "Failed to create log directory %k.\n", dir);
+			LogPrint(InfoLog, "Log", "Initialized logging.\n");
 			return;
 		}
-
-		AppendToStringBuilder(&sb, "/");
-		AppendToStringBuilder(&sb, "Global.log");
-		auto path = BuilderToString(sb);
+		sb.Append("/");
+		sb.Append("Global.log");
+		auto logPath = sb.ToString();
 		auto err = false;
-		globalLogFile = OpenFile(path, OpenFileWriteOnly | OpenFileCreate, &err);
+		logFile = OpenFile(logPath, OpenFileWriteOnly | OpenFileCreate, &err);
 		if (err)
 		{
-			LogPrint(LogLevelError, "Log", "Failed to open global log file %k.\n", path);
-			LogPrint(LogLevelInfo, "Log", "Initialized logging.\n");
-			return;
+			LogPrint(ErrorLog, "Log", "Failed to open global log file %k.\n", logPath);
 		}
-
-		Assert(sb.buffer.count < sizeof(buf));
-		globalLogFileOpen = true;
-		LogPrint(LogLevelInfo, "Log", "Initialized logging.\n");
+		LogPrint(InfoLog, "Log", "Initialized logging.\n");
 	#endif
 }
 
 void ConsolePrintVarArgs(String fmt, va_list args)
 {
-	#if DEBUG_BUILD
-		PushContextAllocator(NewPoolAllocatorInterface(&logPool));
+	#ifdef DebugBuild
+		PushContextAllocator(&logPool);
 		Defer(
 		{
 			PopContextAllocator();
-			ClearPoolAllocator(&logPool);
+			logPool.Clear();
 		});
 		auto sb = StringBuilder{};
-		FormatStringVarArgs(&sb, fmt, args);
-		WriteToConsole(BuilderToString(sb));
+		sb.FormatVarArgs(fmt, args);
+		ConsolePrint(sb.ToString());
 	#endif
 }
 
 void ConsolePrint(String fmt, ...)
 {
-	#if DEBUG_BUILD
-		va_list args;
+	#ifdef DebugBuild
+		va_list args; // Clang complains if we use 'auto' style declartions with va_list for some reason...
 		va_start(args, fmt);
 		ConsolePrintVarArgs(fmt, args);
 		va_end(args);
@@ -76,7 +86,7 @@ void ConsolePrint(String fmt, ...)
 
 void ConsolePrint(const char *fmt, ...)
 {
-	#if DEBUG_BUILD
+	#ifdef DebugBuild
 		va_list args;
 		va_start(args, fmt);
 		ConsolePrintVarArgs(fmt, args);
@@ -88,62 +98,63 @@ String LogLevelToString(LogLevel l)
 {
 	switch (l)
 	{
-	case LogLevelVerbose:
+	case VerboseLog:
 	{
 		return "Verbose";
 	} break;
-	case LogLevelInfo:
+	case InfoLog:
 	{
 		return "Info";
 	} break;
-	case LogLevelError:
+	case ErrorLog:
 	{
 		return "Error";
 	} break;
-	case LogLevelAbort:
+	case FatalLog:
 	{
-		return "Abort";
+		return "Fatal";
 	} break;
 	default:
 	{
 		Abort("Unknown log level %d.", l);
 	} break;
 	}
+	return "Unknown";
 }
 
 void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String category, String fmt, va_list args)
 {
-	#if DEBUG_BUILD
-		PushContextAllocator(NewPoolAllocatorInterface(&logPool));
+	#ifdef DebugBuild
+		PushContextAllocator(&logPool);
 		Defer(
 		{
 			PopContextAllocator();
-			ClearPoolAllocator(&logPool);
+			logPool.Clear();
 		});
 		auto sb = StringBuilder{};
+		sb.FormatVarArgs(fmt, args);
+		auto msg = sb.ToString();
+		sb.Resize(0);
+		if (logLevel >= l)
 		{
-			FormatStringVarArgs(&sb, fmt, args);
-			WriteToConsole(BuilderToString(sb));
+			ConsolePrint("[%k] ", category);
+			ConsolePrint(msg);
 		}
-		ClearStringBuilder(&sb);
-		if (globalLogFileOpen)
+		if (logFile.IsOpen())
 		{
-			FormatString(&sb, "[%k]  ", LogLevelToString(l));
-			FormatTime(&sb, "%d-%d-%d %d:%d:%d.%d  ", CurrentTime());
-			FormatString(&sb, "%k:%d %k  |  ", file, line, func);
-			FormatStringVarArgs(&sb, fmt, args);
-			WriteToFile(globalLogFile, sb.length, sb.buffer.elements);
+			sb.Format("[%k] ", category);
+			sb.Format("%k ", LogLevelToString(l));
+			sb.FormatTime();
+			sb.Format("%k:%d %k  |  ", file, line, func);
+			logFile.Write(sb.buffer);
+			logFile.WriteString(msg);
 		}
 	#endif
 }
 
 void LogPrintActual(String file, String func, s64 line, LogLevel l, String category, String fmt, ...)
 {
-	#if DEBUG_BUILD
-		if (logLevel < l)
-		{
-			return;
-		}
+	#ifdef DebugBuild
 		va_list args;
 		va_start(args, fmt);
 		LogPrintVarArgs(file, func, line, l, category, fmt, args);
@@ -153,11 +164,7 @@ void LogPrintActual(String file, String func, s64 line, LogLevel l, String categ
 
 void LogPrintActual(const char *file, const char *func, s64 line, LogLevel l, String category, const char *fmt, ...)
 {
-	#if DEBUG_BUILD
-		if (logLevel < l)
-		{
-			return;
-		}
+	#ifdef DebugBuild
 		va_list args;
 		va_start(args, fmt);
 		LogPrintVarArgs(file, func, line, l, category, fmt, args);
@@ -165,9 +172,74 @@ void LogPrintActual(const char *file, const char *func, s64 line, LogLevel l, St
 	#endif
 }
 
-void SetLogLevel(LogLevel l)
+File NewCrashLogFile()
 {
-	#if DEBUG_BUILD
-		logLevel = l;
-	#endif
+	auto sb = StringBuilder{};
+	sb.Append(LogFileDir);
+	sb.Append("Crash/Crash");
+	sb.FormatTime();
+	sb.Append(".txt");
+	auto err = false;
+	auto path = sb.ToString();
+	auto f = OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
+	if (err)
+	{
+		LogPrint(ErrorLog, "Log", "Failed to open crash log file %k.\n", path);
+	}
+	return f;
+}
+
+void DoAbortActual(String file, String func, s64 line, String fmt, va_list args)
+{
+	LogPrint(FatalLog, "Global", "###########################################################################\n");
+	LogPrint(FatalLog, "Global", "[ABORT]\n");
+	LogPrintVarArgs(file, func, line, FatalLog, "Global", fmt, args);
+	LogPrint(FatalLog, "Global", "###########################################################################\n");
+	auto crashLog = NewCrashLogFile();
+	auto sb = StringBuilder{};
+	sb.FormatVarArgs(fmt, args);
+	crashLog.WriteString("###########################################################################\n");
+	crashLog.WriteString("[ABORT]\n");
+	crashLog.Write(sb.buffer);
+	crashLog.WriteString("\n");
+	crashLog.WriteString("###########################################################################\n");
+	for (auto ch : crashHandlers)
+	{
+		ch(crashLog);
+	}
+	if (IsDebuggerAttached())
+	{
+		SignalDebugBreakpoint();
+	}
+	auto st = Stacktrace();
+	ConsolePrint("Stack:\n");
+	for (auto s : st)
+	{
+		ConsolePrint("\t");
+		ConsolePrint(s);
+		ConsolePrint("\n");
+	}
+	crashLog.WriteString("Stack:\n");
+	for (auto s : st)
+	{
+		crashLog.WriteString("\t");
+		crashLog.WriteString(s);
+		crashLog.WriteString("\n");
+	}
+	crashLog.Close();
+	ExitProcess(ProcessFail);
+}
+
+void AbortActual(String file, String func, s64 line, String fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	DoAbortActual(file, func, line, fmt, args);
+}
+
+void AbortActual(const char *file, const char *func, s64 line, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	DoAbortActual(file, func, line, fmt, args);
 }

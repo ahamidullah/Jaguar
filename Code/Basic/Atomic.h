@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__linux__)
+#ifdef __linux__
 	#include "Linux/Atomic.h"
 #else
 	#error Unsupported platform.

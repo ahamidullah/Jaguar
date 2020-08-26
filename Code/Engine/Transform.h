@@ -8,5 +8,4 @@ struct Transform
 	Quaternion rotation;
 };
 
-void SetTransformRotation(Transform *transform, f32 pitch, f32 roll, f32 yaw);
-void SetTransformPosition(Transform *transform, f32 x, f32 y, f32 z);
+void TransformRotateEuler(Transform *t, f32 pitch, f32 yaw, f32 roll)

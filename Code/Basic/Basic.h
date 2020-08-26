@@ -1,5 +1,5 @@
 #pragma once
 
-#include "Code/Common.h"
+#include "Common.h"
 
 void InitializeBasic();

@@ -6,6 +6,5 @@
 void InitializeBasic()
 {
 	InitializeLog();
-	InitializeMemory();
 	InitializeFibers();
 }

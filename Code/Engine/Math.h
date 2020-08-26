@@ -1,10 +1,13 @@
 #pragma once
 
-#include "Code/Common.h"
+#include "Common.h"
+
+#define FloatEpsilon FLT_EPSILON
 
 struct V2
 {
 	f32 x, y;
+
 	f32 &operator[](int i);
 };
 
@@ -21,42 +24,39 @@ struct V2u
 struct V3
 {
 	f32 x, y, z;
-	f32 operator[](int i) const;
+
 	f32 &operator[](int i);
+	f32 operator[](int i) const;
 };
+
+constexpr auto WorldRightVector = V3{1.0f, 0.0f, 0.0f};
+constexpr auto WorldForwardVector = V3{0.0f, 1.0f, 0.0f};
+constexpr auto WorldUpVector = V3{0.0f, 0.0f, 1.0f};
 
 struct V4
 {
 	f32 x, y, z, w;
-	f32 operator[](int i) const;
+
 	f32 &operator[](int i);
+	f32 operator[](int i) const;
 };
 
 struct M3
 {
 	f32 m[3][3];
-	V3 &operator[](int i) const;
+
 	V3 &operator[](int i);
+	V3 &operator[](int i) const;
 };
 
 struct M4
 {
 	f32 m[4][4];
+
 	V4 &operator[](int i);
 };
 
-struct Quaternion
-{
-	f32 x, y, z, w;
-};
-
-struct EulerAngles
-{
-	f32 pitch, yaw, roll;
-};
-
-constexpr Quaternion IdentityQuaternion = {0.0f, 0.0f, 0.0f, 1.0f};
-constexpr M4 IdentityMatrix =
+constexpr auto IdentityMatrix = M4
 {
 	1.0f, 0.0f, 0.0f, 0.0f,
 	0.0f, 1.0f, 0.0f, 0.0f,
@@ -64,9 +64,23 @@ constexpr M4 IdentityMatrix =
 	0.0f, 0.0f, 0.0f, 1.0f,
 };
 
-constexpr V3 WorldRightVector = {1.0f, 0.0f, 0.0f};
-constexpr V3 WorldForwardVector = {0.0f, 1.0f, 0.0f};
-constexpr V3 WorldUpVector = {0.0f, 0.0f, 1.0f};
+struct Quaternion
+{
+	f32 x, y, z, w;
+};
+
+constexpr auto IdentityQuaternion = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+
+struct EulerAngles
+{
+	f32 pitch, yaw, roll;
+};
+
+struct Sphere
+{
+	V3 center;
+	f32 radius;
+};
 
 #define PI 3.14159265358979323846264338327950288
 constexpr f32 DEGREES_TO_RADIANS_MULTIPLIER = PI / 180.0;
@@ -81,8 +95,6 @@ constexpr f32 RadiansToDegrees(f32 radians)
 {
 	return radians * RADIANS_TO_DEGREES_MULTIPLIER;
 }
-
-#define FLOAT_EPSILON FLT_EPSILON
 
 #define PrintF32(f) PrintF32Actual(#f, (f))
 void PrintF32Actual(const char *name, f32 number);

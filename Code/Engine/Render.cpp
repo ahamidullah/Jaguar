@@ -1,18 +1,12 @@
-// @TODO: Need caching for:
-//        render passes
-//        pipelines
-//        framebuffers
-
 #include "Render.h"
 #include "ShaderGlobal.h"
-#include "GPU.h"
 #include "Mesh.h"
 #include "Camera.h"
 #include "Shader.h"
 
-#include "Code/Basic/HashTable.h"
-#include "Code/Basic/File.h"
-#include "Code/Basic/Process.h"
+#include "Basic/HashTable.h"
+#include "Basic/File.h"
+#include "Basic/Process.h"
 
 #define VERTEX_BUFFER_BIND_ID 0
 #define INITIAL_DESCRIPTOR_SET_BUFFER_SIZE MegabytesToBytes(1)
@@ -45,17 +39,17 @@ struct RenderContext
 	//GfxSemaphore drawCompleteSemaphores[GFX_MAX_FRAMES_IN_FLIGHT];
 } renderGlobals;
 
-s64 GetFrameIndex()
-{
-	return renderGlobals.frameIndex;
-}
+//s64 GetFrameIndex()
+//{
+	//return renderGlobals.frameIndex;
+//}
 
-s64 GetRenderWidth()
+s64 RenderWidth()
 {
 	return 1200;
 }
 
-s64 GetRenderHeight()
+s64 RenderHeight()
 {
 	return 1000;
 }
@@ -228,44 +222,21 @@ void ExecuteRenderGraph(RenderGraph *graph, s64 swapchainImageIndex)
 	}
 }
 
-void InitializeRenderer(void *jobParameterPointer)
+void InitializeRenderer(void *jobParam)
 {
-	GfxInitialize((OSWindow *)jobParameterPointer);
-
-	InitializeGPU();
-
-	renderGlobals.swapchain = GfxCreateSwapchain();
-	renderGlobals.swapchainImages = GfxGetSwapchainImages(renderGlobals.swapchain);
-	for (auto &img : renderGlobals.swapchainImages)
-	{
-		GfxSwizzleMapping swizzleMapping =
-		{
-			.r = GFX_SWIZZLE_MAPPING_IDENTITY,
-			.g = GFX_SWIZZLE_MAPPING_IDENTITY,
-			.b = GFX_SWIZZLE_MAPPING_IDENTITY,
-			.a = GFX_SWIZZLE_MAPPING_IDENTITY,
-		};
-		GfxImageSubresourceRange subresourceRange =
-		{
-			.aspectMask = GFX_IMAGE_ASPECT_COLOR,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		};
-		ArrayAppend(&renderGlobals.swapchainImageViews, GfxCreateImageView(img, GFX_IMAGE_VIEW_TYPE_2D, GfxGetSurfaceFormat(), swizzleMapping, subresourceRange));
-	}
+	InitializeGPU((OSWindow *)jobParam);
 
 	//auto shadowMapImage = CreateGPUImage(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, SHADOW_MAP_FORMAT, SHADOW_MAP_INITIAL_LAYOUT, SHADOW_MAP_IMAGE_USAGE_FLAGS, SHADOW_MAP_SAMPLE_COUNT_FLAGS);
 	//auto shadowMapImageView = GfxCreateImageView(shadowMapImage, SHADOW_MAP_FORMAT, SHADOW_MAP_IMAGE_USAGE_FLAGS);
 
 	{
-		const auto DEPTH_BUFFER_INITIAL_LAYOUT = GFX_IMAGE_LAYOUT_UNDEFINED;
-		const auto DEPTH_BUFFER_FORMAT = GFX_FORMAT_D32_SFLOAT_S8_UINT;
-		const auto DEPTH_BUFFER_IMAGE_USAGE_FLAGS = GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT;
-		const auto DEPTH_BUFFER_SAMPLE_COUNT_FLAGS = GFX_SAMPLE_COUNT_1;
+		auto depthImg = NewGPUImage();
+		//const auto DEPTH_BUFFER_INITIAL_LAYOUT = GFX_IMAGE_LAYOUT_UNDEFINED;
+		//const auto DEPTH_BUFFER_FORMAT = GFX_FORMAT_D32_SFLOAT_S8_UINT;
+		//const auto DEPTH_BUFFER_IMAGE_USAGE_FLAGS = GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT;
+		//const auto DEPTH_BUFFER_SAMPLE_COUNT_FLAGS = GFX_SAMPLE_COUNT_1;
 
-		auto depthBufferImage = CreateGPUImage(GetRenderWidth(), GetRenderHeight(), DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+		//auto depthBufferImage = CreateGPUImage(GetRenderWidth(), GetRenderHeight(), DEPTH_BUFFER_FORMAT, DEPTH_BUFFER_INITIAL_LAYOUT, DEPTH_BUFFER_IMAGE_USAGE_FLAGS, DEPTH_BUFFER_SAMPLE_COUNT_FLAGS, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 
 		auto swizzleMapping = GfxSwizzleMapping
 		{
@@ -439,12 +410,14 @@ Array<MeshInstance> GetMeshInstances();
 
 void Render()
 {
+	StartGPUFrame();
 	auto camera = GetCamera("main");
 	if (!camera)
 	{
 		LogPrint(ERROR_LOG, "Render: could not get main camera");
 		return;
 	}
+	GPURenderFrameFinish();
 
 	GfxWaitForFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex], true, U32_MAX);
 	GfxResetFences(1, &renderGlobals.frameFences[renderGlobals.frameIndex]);

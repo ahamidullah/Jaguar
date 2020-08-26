@@ -2,6 +2,5 @@
 
 #include "../String.h"
 
-void PrintStacktrace();
-String GetPlatformError();
+String PlatformError();
 void WriteToConsole(String s);

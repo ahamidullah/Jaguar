@@ -1,6 +1,7 @@
-constexpr auto VACANT_HASH_TABLE_KEY_SENTINEL = -1;
-constexpr auto DELETED_HASH_TABLE_KEY_SENTINEL = -2;
-constexpr auto DEFAULT_INITIAL_HASH_TABLE_LENGTH = 16;
+const auto HashTableVacantKeySentinel = u64{-1};
+const auto HashTableDeletedKeySentinel = u64{-2};
+const auto HashTableDefaultInitialLength = 16;
+const auto HashTableMaxLoadFactor = 0.75f;
 
 // @TODO: Initializer list.
 // @TODO: Handle zero type.
@@ -18,178 +19,190 @@ struct KeyValuePair
 template <typename K, typename V>
 struct HashTable
 {
+	Array<u64> hashes;
 	Array<KeyValuePair<K, V>> buckets;
-	HashProcedure hash;
-	s64 occupied;
+	HashProcedure hashProcedure;
+	s64 count;
 	f32 loadFactor;
+
+	void Insert(K k, V v);
+	V *Lookup(K k);
+	V *LookupPointer(K k);
+	void Remove(K k);
+	void Clear();
+	void ClearAndResize(s64 len);
+	void Resize();
 };
 
 template <typename K, typename V>
-void NewHashTable(s64 len, HashProcedure h)
+HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, HashProcedure hp)
 {
-	auto r = HashTable<K, V>
+	auto ht = HashTable<K, V>
 	{
-		.buckets = NewArray<KeyValuePair<K, V>>(len),
-		.hash = h,
+		.hashes = NewArrayIn<u64>(a, len),
+		.buckets = NewArrayIn<KeyValuePair<K, V>>(a, len),
+		.hashProcedure = hp,
 	};
-	for (auto &b : r.buckets)
+	SetMemory(&ht.buckets[0], len * sizeof(KeyValuePair<K, V>), 0);
+	for (auto &h : ht.hashes)
 	{
-		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
-		b.value = {};
+		h = HashTableVacantKeySentinel;
 	}
-	return r;
+	return ht;
 }
 
 template <typename K, typename V>
-void NewHashTableIn(s64 len, HashProcedure h, AllocatorInterface a)
+HashTable<K, V> NewHashTable(s64 len, HashProcedure hp)
 {
-	auto r = HashTable<K, V>
-	{
-		.buckets = NewArrayIn<KeyValuePair<K, V>>(len, a),
-		.hash = h,
-	};
-	for (auto &b : r.buckets)
-	{
-		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
-		b.value = {};
-	}
-	return r;
+	return NewHashTableIn(ContextAllocator(), len, hp);
 }
 
 template <typename K, typename V>
-void ClearHashTable(HashTable<K, V> *h)
+void HashTable<K, V>::Insert(HashTable<K, V> *h, K k, V v)
 {
-	h->occupied = 0;
-	for (auto &b : h->buckets)
+	// The user has to set the hash procedure, even if the HashTable is zero-initialized.
+	Assert(this->hashProcedure);
+	if (this->buckets.count > 0)
 	{
-		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
+		*this = NewHashTable(HashTableDefaultInitialLength, h->hashProcedure);
 	}
-}
-
-template <typename K, typename V>
-void ClearAndResizeHashTable(HashTable<K, V> *h, s64 len)
-{
-	h->occupied = 0;
-	ResizeArray(&h->buckets, len);
-	for (auto &b : h->buckets)
+	h->Reserve(h->count + 1);
+	// @TODO: Would a two-pass solution be faster? First pass figure which keys need to be inserted
+	// and their indices, then resize the table if necessary, then second pass does the insertions.
+	auto hash = h->hashProcedure(&k);
+	if (hash == HashTableVacantKeySentinel)
 	{
-		b.key = VACANT_HASH_TABLE_KEY_SENTINEL;
+		hash = 0;
 	}
-}
-
-template <typename K, typename V>
-void ResizeHashTable(HashTable<K, V> *h)
-{
-	// @TODO
-}
-
-template <typename K, typename V>
-void DoInsertIntoHashTable(HashTable<K, V> *h, K k, V v, bool overwrite)
-{
-	Assert(h->hash); // The user has to set the hash procedure, even if the HashTable is zero-initialized.
-	if (h->buckets.count > 0)
+	else if (hash == HashTableDeletedKeySentinel)
 	{
-		*h = NewHashTable(DEFAULT_INITIAL_HASH_TABLE_LENGTH, h->hash);
+		hash = 1;
 	}
-	auto keyHash = h->hash(&k);
-	if (keyHash == VACANT_HASH_TABLE_KEY_SENTINEL)
-	{
-		keyHash = 0;
-	}
-	else if (keyHash == DELETED_HASH_TABLE_KEY_SENTINEL)
-	{
-		keyHash = 1;
-	}
-	auto startIndex = keyHash % h->buckets.count;
+	auto startIndex = hash % h->buckets.count;
 	auto index = startIndex;
 	do
 	{
-		if (h->buckets[index].key == VACANT_HASH_TABLE_KEY_SENTINEL)
+		if (h->hashes[index] == HashTableVacantKeySentinel)
 		{
+			h->hashes[index] = hash;
 			h->buckets[index].key = k;
 			h->buckets[index].value = v;
-			return;
+			continue;
 		}
-		else if (h->buckets[index].key == k)
+		else if (h->hashes[index] == hash && h->buckets[index].key == k)
 		{
-			if (overwrite)
-			{
-				h->buckets[index].key = k;
-				h->buckets[index].value = v;
-			}
-			return;
+			continue;
 		}
 		index = (index + 1) % h->buckets.count;
-	} while(index != startIndex);
-	h->occupied += 1;
-	h->loadFactor = h->occupied / h->buckets.count;
-	if (h->loadFactor > 0.75f)
-	{
-		auto newBuckets = CreateArray<KeyValuePair<K, V>>(h->buckets.count * 2);
-		for (auto i = 0; i < h->buckets.count; i++)
-		{
-			auto ni = h->hash(h->keys[i]) % newBuckets.count;
-			newBuckets[ni].key = h->buckets[i].key;
-			newBuckets[ni].value = h->buckets[i].value;
-		}
-		FreeArray(&h->buckets);
-		h->buckets = newBuckets;
-	}
+	} while (index != startIndex);
+	// The table should have expanded before we ever run out of space.
+	Assert(index != startIndex);
+	h->count += 1;
+	h->loadFactor = (f32)h->count / (f32)h->buckets.count;
 }
 
 template <typename K, typename V>
-void InsertIntoHashTable(HashTable<K, V> *h, K k, V v)
-{
-	DoInsertIntoHashTable(h, k, v, false);
-}
-
-template <typename V>
-void InsertIntoHashTable(HashTable<String, V> *h, const String &k, const V &v)
-{
-	DoInsertIntoHashTable(h, k, v, false);
-}
-
-template <typename K, typename V>
-V *InsertIntoHashTableIfNonExistent(HashTable<K, V> *h, const K &k, const V &v)
-{
-	DoInsertIntoHashTable(h, k, v, true);
-}
-
-template <typename K, typename V>
-V *LookupInHashTable(HashTable<K, V> *h, const K &k)
+V *DoLookup(HashTable<K, V> *h, K k, V *notFound)
 {
 	if (h->buckets.count == 0)
 	{
-		return NULL;
+		return;
 	}
-	auto keyHash = h->hash(k);
-	if (keyHash == VACANT_HASH_TABLE_KEY_SENTINEL)
+	auto hash = h->hashProcedure(k);
+	if (hash == HashTableVacantKeySentinel)
 	{
-		keyHash = 0;
+		hash = 0;
 	}
-	else if (keyHash == DELETED_HASH_TABLE_KEY_SENTINEL)
+	else if (hash == HashTableDeletedKeySentinel)
 	{
-		keyHash = 1;
+		hash = 1;
 	}
-	auto index = keyHash % h->buckets.count;
-	auto lastIndex = index;
+	auto find = hash % h->buckets.count;
+	auto lastFind = find;
 	do
 	{
-		if (h->buckets[index].key == VACANT_HASH_TABLE_KEY_SENTINEL)
+		if (h->hashes[find] == HashTableVacantKeySentinel)
 		{
-			return NULL;
+			return notFound;
 		}
-		else if (h->buckets[index].key == k)
+		else if (h->hashes[find] == hash && h->buckets[find].key == k)
 		{
-			return &h->buckets[index].value;
+			return &h->buckets[find].value;
 		}
-		index = (index + 1) % h->buckets.count;
-	} while (index != lastIndex);
+		find = (find + 1) % h->buckets.count;
+	} while (find != lastFind);
 	return NULL;
 }
 
 template <typename K, typename V>
-void RemoveFromHashTable(HashTable<K, V> *h, const K &key)
+V HashTable<K, V>::Lookup(K k, V notFound)
+{
+	return *DoLookup(this, k, &notFound);
+}
+
+template <typename K, typename V>
+V *HashTable<K, V>::LookupPointer(K k)
+{
+	auto notFound = (V *){};
+	return DoLookup(this, k, &notFound);
+}
+
+template <typename K, typename V>
+void HashTable<K, V>::Remove(HashTable<K, V> *h, K k)
 {
 	// @TODO
+}
+
+template <typename K, typename V>
+void HashTable<K, V>::Clear()
+{
+	this->count = 0;
+	for (auto &hash : this->hashes)
+	{
+		hash = HashTableVacantKeySentinel;
+	}
+}
+
+template <typename K, typename V>
+void HashTable<K, V>::ClearAndResize(s64 len)
+{
+	this->count = 0;
+	this->buckets.Resize(len);
+	for (auto &hash : this->hashes)
+	{
+		hash = HashTableVacantKeySentinel;
+	}
+}
+
+template <typename K, typename V>
+void HashTable<K, V>::Reserve(s64 count)
+{
+	if (this->buckets.count > count)
+	{
+		return;
+	}
+	if (this->buckets.count == 0)
+	{
+		this->hashes.Resize(count * 2);
+		this->buckets.Resize(count * 2);
+		return;
+	}
+	if ((f32)(this->count + cap) / (f32)this->buckets.count > HashTableMaxLoadFactor)
+	{
+		auto newHashes = NewArray<u64>(this->hashes.allocator, (this->buckets.count + cap) * 2);
+		auto newBuckets = NewArray<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
+		for (auto i = 0; i < this->buckets.count; i++)
+		{
+			auto newHash = this->hashProcedure(this->buckets[i].key);
+			auto ni = newHash % newBuckets.count;
+			newHashes[ni] = newHash;
+			newBuckets[ni].key = this->buckets[i].key;
+			newBuckets[ni].value = this->buckets[i].value;
+		}
+		this->hashes.Free();
+		this->buckets.Free();
+		this->buckets = newBuckets;
+		this->hashes = newHashes;
+		this->loadFactor = (f32)this->count / (f32)this->buckets.count;
+	}
 }

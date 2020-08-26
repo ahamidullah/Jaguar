@@ -1,21 +1,18 @@
 #include "../Window.h"
 #include "../Input.h"
 
-#include "Code/Basic/Assert.h"
-#include "Code/Basic/String.h"
-#include "Code/Basic/Log.h"
+#include "Basic/Assert.h"
+#include "Basic/String.h"
+#include "Basic/Log.h"
 
-struct WindowsContext
-{
-	Display *x11Display;
-	s32 xinputOpcode;
-} windowsContext;
+Display *x11Display;
+s32 xinputOpcode;
 
-s32 X11ErrorHandler(Display *display, XErrorEvent *event)
+s32 X11ErrorHandler(Display *d, XErrorEvent *e)
 {
-	char buffer[256];
-	XGetErrorText(display, event->error_code, buffer, sizeof(buffer));
-	Abort("X11 error: %s.", buffer);
+	char buf[256];
+	XGetErrorText(d, e->error_code, buf, sizeof(buf));
+	Abort("Window", "X11 error: %s.", buf);
 	return 0;
 }
 
@@ -24,202 +21,203 @@ void InitializeWindows(bool multithreaded)
 	// Install a new error handler.
 	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
 	XSetErrorHandler(&X11ErrorHandler);
-
 	if (multithreaded)
 	{
 		XInitThreads();
 	}
 }
 
-Display *GetX11Display()
+Display *X11Display()
 {
-	return windowsContext.x11Display;
+	return x11Display;
 }
 
-PlatformWindow CreateWindow(s64 width, s64 height, bool startFullscreen)
+PlatformWindow NewWindow(s64 width, s64 height, bool fullscreen)
 {
-	windowsContext.x11Display = XOpenDisplay(NULL);
-	if (!windowsContext.x11Display)
+	x11Display = XOpenDisplay(NULL);
+	if (!x11Display)
 	{
-		Abort("Failed to create display.");
+		Abort("Window", "Failed to create display.");
 	}
-	auto screen = XDefaultScreen(windowsContext.x11Display);
-	auto rootWindow = XRootWindow(windowsContext.x11Display, screen);
+	auto screen = XDefaultScreen(x11Display);
+	auto rootWin = XRootWindow(x11Display, screen);
 
 	// Initialize XInput2, which we require for raw input.
 	{
-		auto firstEventReturn = s32{};
-		auto firstErrorReturn = s32{};
-		if (!XQueryExtension(windowsContext.x11Display, "XInputExtension", &windowsContext.xinputOpcode, &firstEventReturn, &firstErrorReturn))
+		auto junk1 = s32{};
+		auto junk2 = s32{};
+		if (!XQueryExtension(x11Display, "XInputExtension", &xinputOpcode, &junk1, &junk2))
 		{
-			Abort("The X server does not support the XInput extension.");
+			Abort("Window", "The X server does not support the XInput extension.");
 		}
 
 		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
-		auto majorVersion = 2, minorVersion = 0;
-		XIQueryVersion(windowsContext.x11Display, &majorVersion, &minorVersion);
-		if (majorVersion < 2)
+		auto majorVer = 2, minorVer = 0;
+		XIQueryVersion(x11Display, &majorVer, &minorVer);
+		if (majorVer < 2)
 		{
-			Abort("XInput version 2.0 or greater is required: version %d.%d is available.", majorVersion, minorVersion);
+			Abort("Window", "XInput version 2.0 or greater is required: version %d.%d is available.", majorVer, minorVer);
 		}
 
-		u8 mask[] = {0, 0, 0};
+		//auto mask = StaticArray<u8>{0, 0, 0};
+		auto mask = NewStaticArray<u8>(0, 0, 0);
 		auto eventMask = XIEventMask
 		{
 			.deviceid = XIAllMasterDevices,
-			.mask_len = sizeof(mask),
-			.mask = mask,
+			.mask_len = sizeof(mask.elements),
+			.mask = mask.elements,
 		};
-		XISetMask(mask, XI_RawMotion);
-		XISetMask(mask, XI_RawButtonPress);
-		XISetMask(mask, XI_RawButtonRelease);
-		XISetMask(mask, XI_RawKeyPress);
-		XISetMask(mask, XI_RawKeyRelease);
-		XISetMask(mask, XI_FocusOut);
-		XISetMask(mask, XI_FocusIn);
-		if (XISelectEvents(windowsContext.x11Display, rootWindow, &eventMask, 1) != Success)
+		XISetMask(mask.elements, XI_RawMotion);
+		XISetMask(mask.elements, XI_RawButtonPress);
+		XISetMask(mask.elements, XI_RawButtonRelease);
+		XISetMask(mask.elements, XI_RawKeyPress);
+		XISetMask(mask.elements, XI_RawKeyRelease);
+		XISetMask(mask.elements, XI_FocusOut);
+		XISetMask(mask.elements, XI_FocusIn);
+		if (XISelectEvents(x11Display, rootWin, &eventMask, 1) != Success)
 		{
-			Abort("Failed to select XInput events.");
+			Abort("Window", "Failed to select XInput events.");
 		}
 	}
 
-	auto visualInfoTemplate = XVisualInfo
+	auto vis = XVisualInfo
 	{
 		.screen = screen,
 	};
-	auto numberOfVisuals = 0;
-	auto visualInfo = XGetVisualInfo(windowsContext.x11Display, VisualScreenMask, &visualInfoTemplate, &numberOfVisuals);
-	Assert(visualInfo->c_class == TrueColor);
+	auto numVis = 0;
+	auto visInfo = XGetVisualInfo(x11Display, VisualScreenMask, &vis, &numVis);
+	Assert(visInfo->c_class == TrueColor);
 
-	auto windowAttributes = XSetWindowAttributes
+	auto winAttrs = XSetWindowAttributes
 	{
 		.background_pixel = 0xFFFFFFFF,
 		.border_pixmap = None,
 		.border_pixel = 0,
 		.event_mask = StructureNotifyMask,
-		.colormap = XCreateColormap(windowsContext.x11Display, rootWindow, visualInfo->visual, AllocNone),
+		.colormap = XCreateColormap(x11Display, rootWin, visInfo->visual, AllocNone),
 	};
-	auto windowAttributesMask =
+	auto winAttrMask =
 		CWBackPixel
 		| CWColormap
 		| CWBorderPixel
 		| CWEventMask;
-	auto result = PlatformWindow{};
-	result.x11Handle = XCreateWindow(
-		windowsContext.x11Display,
-		rootWindow,
+	auto win = PlatformWindow{};
+	win.x11Handle = XCreateWindow(
+		x11Display,
+		rootWin,
 		0,
 		0,
 		width,
 		height,
 		0,
-		visualInfo->depth,
+		visInfo->depth,
 		InputOutput,
-		visualInfo->visual,
-		windowAttributesMask,
-		&windowAttributes);
-	if (!result.x11Handle)
+		visInfo->visual,
+		winAttrMask,
+		&winAttrs);
+	if (!win.x11Handle)
 	{
-		Abort("Failed to create a window.");
+		Abort("Window", "Failed to create a window.");
 	}
 
-	XFree(visualInfo);
-	XStoreName(windowsContext.x11Display, result.x11Handle, "Jaguar");
-	XMapWindow(windowsContext.x11Display, result.x11Handle);
-	XFlush(windowsContext.x11Display);
+	XFree(visInfo);
+	XStoreName(x11Display, win.x11Handle, "Jaguar");
+	XMapWindow(x11Display, win.x11Handle);
+	XFlush(x11Display);
 
 	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
-	if ((result.x11DeleteWindowAtom = XInternAtom(windowsContext.x11Display, "WM_DELETE_WINDOW", 1)))
+	if ((win.x11DeleteWindowAtom = XInternAtom(x11Display, "WM_DELETE_WINDOW", 1)))
 	{
-		XSetWMProtocols(windowsContext.x11Display, result.x11Handle, &result.x11DeleteWindowAtom, 1);
+		XSetWMProtocols(x11Display, win.x11Handle, &win.x11DeleteWindowAtom, 1);
 	}
 	else
 	{
-		LogPrint(ERROR_LOG, "Unable to register WM_DELETE_WINDOW atom.\n");
+		LogPrint(LogLevelError, "Window", "Unable to register WM_DELETE_WINDOW atom.\n");
 	}
 
 	// Get actual window dimensions without window borders.
 	{
-		s32 windowX, windowY;
-		u32 windowWidth;
-		u32 borderWidth, depth;
-		if (!XGetGeometry(windowsContext.x11Display, result.x11Handle, &rootWindow, &windowX, &windowY, &windowWidth, &result.height, &borderWidth, &depth))
+		auto winX = s32{}, winY = s32{};
+		auto winW = u32{};
+		auto borderW = u32{};
+		auto depth = u32{};
+		if (!XGetGeometry(x11Display, win.x11Handle, &rootWin, &winX, &winY, &winW, &win.height, &borderW, &depth))
 		{
-			Abort("Failed to get the screen's geometry.");
+			Abort("Window", "Failed to get the screen's geometry.");
 		}
 	}
 
 	// Create a blank cursor for when we want to hide the cursor.
 	{
-		XColor xcolor;
-		char cursorPixels[1] = {};
-		auto pixmap = XCreateBitmapFromData(windowsContext.x11Display, result.x11Handle, cursorPixels, 1, 1);
-		result.x11BlankCursor = XCreatePixmapCursor(windowsContext.x11Display, pixmap, pixmap, &xcolor, &xcolor, 1, 1); 
-		XFreePixmap(windowsContext.x11Display, pixmap);
+		auto col = XColor{};
+		auto cursorPix = NewStaticArray<char>(0);
+		auto pixmap = XCreateBitmapFromData(x11Display, win.x11Handle, cursorPix.elements, 1, 1);
+		win.x11BlankCursor = XCreatePixmapCursor(x11Display, pixmap, pixmap, &col, &col, 1, 1); 
+		XFreePixmap(x11Display, pixmap);
 	}
 
-	return result;
+	return win;
 }
 
-WindowEvents ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard, Mouse *mouse)
+WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *keys, Mouse *m)
 {
-	auto windowEvents = WindowEvents{};
-	XEvent event;
-	XGenericEventCookie *cookie = &event.xcookie;
-	XIRawEvent *rawEvent;
-	XFlush(windowsContext.x11Display);
-	while (XPending(windowsContext.x11Display))
+	auto winEvents = WindowEvents{};
+	auto xEvent = XEvent{};
+	auto cookie = &xEvent.xcookie;
+	auto rawXEvent = (XIRawEvent *){};
+	XFlush(x11Display);
+	while (XPending(x11Display))
 	{
-		XNextEvent(windowsContext.x11Display, &event);
-		if (event.type == ClientMessage && (Atom)event.xclient.data.l[0] == window->x11DeleteWindowAtom)
+		XNextEvent(x11Display, &xEvent);
+		if (xEvent.type == ClientMessage && (Atom)xEvent.xclient.data.l[0] == w->x11DeleteWindowAtom)
 		{
-			windowEvents.quit = true;
+			winEvents.quit = true;
 			break;
 		}
-		if (event.type == ConfigureNotify)
+		if (xEvent.type == ConfigureNotify)
 		{
-			XConfigureEvent configureEvent = event.xconfigure;
+			//auto config = event.xconfigure;
 			// @TODO Window resize.
 			continue;
 		}
-		if (!XGetEventData(windowsContext.x11Display, cookie) || cookie->type != GenericEvent || cookie->extension != windowsContext.xinputOpcode)
+		if (!XGetEventData(x11Display, cookie) || cookie->type != GenericEvent || cookie->extension != xinputOpcode)
 		{
 			continue;
 		}
-		rawEvent = (XIRawEvent *)cookie->data;
-		switch(rawEvent->evtype)
+		rawXEvent = (XIRawEvent *)cookie->data;
+		switch(rawXEvent->evtype)
 		{
 		case XI_RawMotion:
 		{
 			// @TODO: Check XIMaskIsSet(re->valuators.mask, 0) for x and XIMaskIsSet(re->valuators.mask, 1) for y.
-			mouse->rawDeltaX += rawEvent->raw_values[0];
-			mouse->rawDeltaY -= rawEvent->raw_values[1];
+			m->rawDeltaX += rawXEvent->raw_values[0];
+			m->rawDeltaY -= rawXEvent->raw_values[1];
 		} break;
 		case XI_RawKeyPress:
 		{
-			PressButton(rawEvent->detail, keyboard);
+			PressButton(keys, rawXEvent->detail);
 		} break;
 		case XI_RawKeyRelease:
 		{
-			ReleaseButton(rawEvent->detail, keyboard);
+			ReleaseButton(keys, rawXEvent->detail);
 		} break;
 		case XI_RawButtonPress:
 		{
-			auto buttonIndex = (event.xbutton.button - 1);
-			if (buttonIndex > MOUSE_BUTTON_COUNT)
+			auto i = (xEvent.xbutton.button - 1);
+			if (i > MouseButtonCount)
 			{
 				break;
 			}
-			PressButton(buttonIndex, &mouse->buttons);
+			PressButton(&m->buttons, i);
 		} break;
 		case XI_RawButtonRelease:
 		{
-			auto buttonIndex = (event.xbutton.button - 1);
-			if (buttonIndex > MOUSE_BUTTON_COUNT)
+			auto i = (xEvent.xbutton.button - 1);
+			if (i > MouseButtonCount)
 			{
 				break;
 			}
-			ReleaseButton(buttonIndex, &mouse->buttons);
+			ReleaseButton(&m->buttons, i);
 		} break;
 		case XI_FocusIn:
 		{
@@ -229,25 +227,25 @@ WindowEvents ProcessWindowEvents(PlatformWindow *window, InputButtons *keyboard,
 		} break;
 		}
 	}
-	return windowEvents;
+	return winEvents;
 }
 
-void ToggleFullscreen(PlatformWindow *window)
+void ToggleFullscreen(PlatformWindow *w)
 {
-	XEvent event =
+	auto ev = XEvent
 	{
 		.xclient =
 		{
 			.type = ClientMessage,
-			.window = window->x11Handle,
-			.message_type = XInternAtom(windowsContext.x11Display, "_NET_WM_STATE", True),
+			.window = w->x11Handle,
+			.message_type = XInternAtom(x11Display, "_NET_WM_STATE", True),
 			.format = 32,
 			.data =
 			{
 				.l =
 				{
 					2,
-					(long int)XInternAtom(windowsContext.x11Display, "_NET_WM_STATE_FULLSCREEN", True),
+					(long int)XInternAtom(x11Display, "_NET_WM_STATE_FULLSCREEN", True),
 					0,
 					1,
 					0,
@@ -255,28 +253,23 @@ void ToggleFullscreen(PlatformWindow *window)
 			},
 		},
 	};
-	XSendEvent(windowsContext.x11Display, DefaultRootWindow(windowsContext.x11Display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+	XSendEvent(x11Display, DefaultRootWindow(x11Display), False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
 }
 
-void CaptureCursor(PlatformWindow *window)
+void CaptureCursor(PlatformWindow *w)
 {
-	XDefineCursor(windowsContext.x11Display, window->x11Handle, window->x11BlankCursor);
-	XGrabPointer(windowsContext.x11Display, window->x11Handle, True, 0, GrabModeAsync, GrabModeAsync, None, window->x11BlankCursor, CurrentTime);
+	XDefineCursor(x11Display, w->x11Handle, w->x11BlankCursor);
+	XGrabPointer(x11Display, w->x11Handle, True, 0, GrabModeAsync, GrabModeAsync, None, w->x11BlankCursor, CurrentTime);
 }
 
-void UncaptureCursor(PlatformWindow *window)
+void UncaptureCursor(PlatformWindow *w)
 {
-	XUndefineCursor(windowsContext.x11Display, window->x11Handle);
-	XUngrabPointer(windowsContext.x11Display, CurrentTime);
+	XUndefineCursor(x11Display, w->x11Handle);
+	XUngrabPointer(x11Display, CurrentTime);
 }
 
-void DestroyWindow(PlatformWindow *window)
+void DestroyWindow(PlatformWindow *w)
 {
-	XDestroyWindow(windowsContext.x11Display, window->x11Handle);
-	XCloseDisplay(windowsContext.x11Display);
-}
-
-Display *GetDisplay()
-{
-	return windowsContext.x11Display;
+	XDestroyWindow(x11Display, w->x11Handle);
+	XCloseDisplay(x11Display);
 }

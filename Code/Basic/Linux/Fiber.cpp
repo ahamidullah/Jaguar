@@ -18,23 +18,27 @@
 
 // @TODO:
 //    __tsan_get_current_fiber()
-//    __tsan_destroy_fiber()
 //    __tsan_set_fiber_name()
 
-auto fiberStackSize = 100 * CPUPageSize();
-auto fiberStackGuardPageCount = 1;
-volatile auto numFibers = 0;
-THREAD_LOCAL auto runningFiber = (Fiber *){};
+const auto FiberStackSize = 100 * CPUPageSize();
+const auto FiberStackGuardPageCount = 1;
+
+ThreadLocal auto runningFiber = (Fiber *){};
+
+Fiber *RunningFiber()
+{
+	return runningFiber;
+}
 
 void InitializeFibers()
 {
 	LogPrint(
-		LogLevelInfo,
+		InfoLog,
 		"Fiber",
-		"Fiber info:\n"
+		"Fiber:\n"
 		"	stackSize: %d\n"
 		"	guardPageCount: %d\n",
-		fiberStackSize, fiberStackGuardPageCount);
+		FiberStackSize, FiberStackGuardPageCount);
 }
 
 struct FiberCreationInfo
@@ -59,17 +63,20 @@ void RunFiber(void *p)
 	pthread_exit(NULL);
 }
 
-void CreateFiber(Fiber *f, FiberProcedure proc, void *param)
+Fiber *NewFiber(FiberProcedure proc, void *param)
 {
+	auto f = (Fiber *)GlobalHeap()->Allocate(sizeof(Fiber));
+	f->baseContextAllocator = GlobalHeap();
+	f->contextAllocatorStack.SetAllocator(GlobalHeap());
+	f->contextAllocator = GlobalHeap();
 	getcontext(&f->context);
-	auto index = AtomicFetchAndAdd(&numFibers, 1);
-	auto stack = (char *)AllocateAlignedMemory(CPUPageSize(), fiberStackSize + (2 * fiberStackGuardPageCount * CPUPageSize()));
-	if (mprotect(stack, (fiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
+	auto stack = (char *)GlobalHeap()->AllocateAligned(FiberStackSize + (FiberStackGuardPageCount * CPUPageSize()), CPUPageSize());
+	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
-		Abort("mprotect failed for fiber index %d: %k.", index, GetPlatformError());
+		Abort("Failed to mprotect fiber stack guard page: %k.", PlatformError());
 	}
-	f->context.uc_stack.ss_sp = stack + (fiberStackGuardPageCount * CPUPageSize());
-	f->context.uc_stack.ss_size = fiberStackSize;
+	f->context.uc_stack.ss_sp = stack + (FiberStackGuardPageCount * CPUPageSize());
+	f->context.uc_stack.ss_size = FiberStackSize;
 	f->context.uc_link = 0;
 	auto tempContext = ucontext_t{};
 	auto fci = FiberCreationInfo
@@ -81,28 +88,49 @@ void CreateFiber(Fiber *f, FiberProcedure proc, void *param)
 	};
 	makecontext(&f->context, (void(*)())RunFiber, 1, &fci);
 	swapcontext(&tempContext, &f->context);
-	#if defined(THREAD_SANITIZER_BUILD)
-		f->tsanFiber = __tsan_create_fiber(0);
+	#ifdef ThreadSanitizerBuild
+		f->tsan = __tsan_create_fiber(0);
 	#endif
+	return f;
 }
 
-void ConvertThreadToFiber(Fiber *f)
+Fiber *ConvertThreadToFiber()
 {
+	auto f = (Fiber *)GlobalHeap()->Allocate(sizeof(Fiber));
 	runningFiber = f;
-	#if defined(THREAD_SANITIZER_BUILD)
-		f->tsanFiber = __tsan_create_fiber(0);
+	#ifdef ThreadSanitizerBuild
+		f->tsan = __tsan_create_fiber(0);
 	#endif
+	return f;
 }
 
 // @TODO: Prevent two fibers from running at the same time.
-void SwitchToFiber(Fiber *f)
+void Fiber::Switch()
 {
 	if (!_setjmp(runningFiber->jumpBuffer))
 	{
-		#if defined(THREAD_SANITIZER_BUILD)
-			__tsan_switch_to_fiber(f->tsanFiber, 0);
+		#ifdef ThreadSanitizerBuild
+			__tsan_switch_to_fiber(this->tsan, 0);
 		#endif
-		runningFiber = f;
-		_longjmp(f->jumpBuffer, 1);
+		runningFiber = this;
+		_longjmp(this->jumpBuffer, 1);
 	}
+}
+
+void Fiber::Delete()
+{
+	if (this == runningFiber)
+	{
+		Abort("Attempted to delete running fiber.");
+	}
+	#ifdef ThreadSanitizerBuild
+		__tsan_destroy_fiber(this->tsan);
+	#endif
+	auto stack = (char *)this->context.uc_stack.ss_sp - (FiberStackGuardPageCount * CPUPageSize());
+	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_READ | PROT_WRITE) == -1)
+	{
+		Abort("Failed to undo mprotect while deleting fiber: %k.", PlatformError());
+	}
+	GlobalHeap()->Deallocate(stack);
+	GlobalHeap()->Deallocate(this);
 }

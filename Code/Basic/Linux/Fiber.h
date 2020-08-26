@@ -1,21 +1,26 @@
 #pragma once
 
+#include "../Array.h"
 #include "../PCH.h"
-
-#include "Code/Common.h"
+#include "Common.h"
 
 struct Fiber
 {
 	ucontext_t context;
 	jmp_buf jumpBuffer;
-	#if defined(THREAD_SANITIZER_BUILD)
-		void *tsanFiber;
+	Allocator *baseContextAllocator;
+	Array<Allocator *> contextAllocatorStack;
+	Allocator *contextAllocator;
+	#ifdef ThreadSanitizerBuild
+		void *tsan;
 	#endif
+
+	void Switch();
+	void Delete();
 };
 
-typedef void (*FiberProcedure)(void *);
-
 void InitializeFibers();
-void CreateFiber(Fiber *fiber, FiberProcedure procedure, void *parameter);
-void ConvertThreadToFiber(Fiber *fiber);
-void SwitchToFiber(Fiber *fiber);
+typedef void (*FiberProcedure)(void *);
+Fiber *NewFiber(FiberProcedure proc, void *param);
+Fiber *ConvertThreadToFiber();
+Fiber *RunningFiber();

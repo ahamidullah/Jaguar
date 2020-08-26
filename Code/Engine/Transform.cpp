@@ -1,15 +1,10 @@
 #include "Transform.h"
 
-void SetTransformRotation(Transform *transform, f32 pitch, f32 roll, f32 yaw)
+void TransformRotateEuler(Transform *t, f32 pitch, f32 yaw, f32 roll)
 {
-	transform->rotation.x = pitch;
-	transform->rotation.y = roll;
-	transform->rotation.z = yaw;
-}
-
-void SetTransformPosition(Transform *transform, f32 x, f32 y, f32 z)
-{
-	transform->position.x = x;
-	transform->position.y = y;
-	transform->position.z = z;
+	auto angles = QuaternionToEuler(t->rotation);
+	auto yawRot = EulerToQuaternion(EulerAngles{.yaw = angles.yaw + yaw});
+	auto pitchRot = EulerToQuaternion(EulerAngles{.pitch = angles.pitch + pitch});
+	auto rollRot = EulerToQuaternion(EulerAngles{.roll = angles.roll + roll});
+	t->rotation = Normalize(yawRot * pitchRot * rollRot);
 }

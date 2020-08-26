@@ -69,10 +69,10 @@ static AtomicRingBuffer<Job, MAX_JOBS_PER_QUEUE> jobQueues[JOB_PRIORITY_COUNT];
 static AtomicRingBuffer<JobFiber *, MAX_JOBS_PER_QUEUE> resumableJobQueues[JOB_PRIORITY_COUNT];
 static Semaphore jobsAvailableSemaphore;
 
-static THREAD_LOCAL Fiber workerThreadFiber;
-static THREAD_LOCAL JobCounter *waitingJobCounter;
+static ThreadLocal Fiber workerThreadFiber;
+static ThreadLocal JobCounter *waitingJobCounter;
 
-static THREAD_LOCAL u32 threadIndex;
+static ThreadLocal u32 threadIndex;
 
 u32 GetThreadIndex()
 {

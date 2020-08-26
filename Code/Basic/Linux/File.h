@@ -3,13 +3,27 @@
 #include "../String.h"
 #include "../Time.h"
 
+enum FileSeekRelative
+{
+	FileSeekStart = SEEK_SET,
+	FileSeekCurrent = SEEK_CUR,
+	FileSeekEnd = SEEK_END,
+};
+
 struct File
 {
 	s64 handle;
 	String path;
-};
 
-typedef off_t FileOffset;
+	bool Close();
+	bool IsOpen();
+	bool Write(ArrayView<u8> a);
+	bool WriteString(String s);
+	bool Read(ArrayView<u8> out);
+	s64 Length(bool *err);
+	s64 Seek(s64 seek, FileSeekRelative rel, bool *err);
+	PlatformTime LastModifiedTime(bool *err);
+};
 
 struct DirectoryIteration
 {
@@ -17,13 +31,8 @@ struct DirectoryIteration
 	struct dirent *dirent;
 	String filename;
 	bool isDir;
-};
 
-enum FileSeekRelative
-{
-	FileSeekStart = SEEK_SET,
-	FileSeekCurrent = SEEK_CUR,
-	FileSeekEnd = SEEK_END,
+	bool Iterate(String path);
 };
 
 enum OpenFileFlags
@@ -35,13 +44,6 @@ enum OpenFileFlags
 };
 
 File OpenFile(String path, s64 flags, bool *err);
-bool CloseFile(File f);
-void ReadFromFile(File f, s64 n, StringBuilder *sb, bool *err);
-bool WriteToFile(File f, s64 count, const void *buffer);
-FileOffset FileLength(File f, bool *err);
-FileOffset SeekInFile(File f, FileOffset seek, FileSeekRelative rel, bool *err);
-PlatformTime FileLastModifiedTime(File f, bool *err);
-bool IterateDirectory(DirectoryIteration *context, String path);
 bool FileExists(String path);
 bool CreateDirectory(String path);
 bool CreateDirectoryIfItDoesNotExist(String path);

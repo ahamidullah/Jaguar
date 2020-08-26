@@ -1,3 +1,3 @@
 #pragma once
 
-void InitializeMedia(bool multithreaded = false);
+void InitializeMedia(bool multithreaded);

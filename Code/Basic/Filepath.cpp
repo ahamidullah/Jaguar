@@ -4,50 +4,50 @@
 // FilepathDirectory returns all but the last component of the path.
 void FilepathDirectory(StringBuilder *sb, String path)
 {
-	auto slash = FindLastCharInString(path, '/');
+	auto slash = path.FindLast('/');
 	if (slash < 0)
 	{
 		return;
 	}
-	return AppendRangeToStringBuilder(sb, path, 0, slash);
+	return sb->Append(path.ToView(0, slash));
 }
 
 // FilepathFilename returns the last component of the path.
 void FilepathFilename(StringBuilder *sb, String path)
 {
-	auto slash = FindLastCharInString(path, '/');
+	auto slash = path.FindLast('/');
 	if (slash < 0)
 	{
-		AppendToStringBuilder(sb, path);
+		sb->Append(path);
 		return;
 	}
-	AppendRangeToStringBuilder(sb, path, slash + 1, path.length - (slash + 1));
+	sb->Append(path.ToView(slash + 1, path.Length() - (slash + 1)));
 }
 
 // FilepathExtension returns the file extension including the dot.
 void FilepathExtension(StringBuilder *sb, String path)
 {
-	auto dot = FindLastCharInString(path, '.');
+	auto dot = path.FindLast('.');
 	if (dot < 0)
 	{
 		return;
 	}
-	return AppendRangeToStringBuilder(sb, path, dot, path.length - dot);
+	return sb->Append(path.ToView(dot, path.Length() - dot));
 }
 
 // SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
 // If no dot character is found, a dot character and the supplied extension are appended to the path.
 void SetFilepathExtension(StringBuilder *path, String ext)
 {
-	auto dot = FindLastCharInStringBuilder(*path, '.');
+	auto dot = path->FindLast('.');
 	if (dot < 0)
 	{
-		AppendToStringBuilder(path, ".");
-		AppendToStringBuilder(path, ext);
+		path->Append(".");
+		path->Append(ext);
 		return;
 	}
-	ResizeStringBuilder(path, dot + ext.length);
-	CopyMemory(&ext[0], &(*path)[dot], ext.length);
+	path->Resize(dot + ext.Length());
+	CopyArray(ext.buffer, path->ToView(dot, path->Length()).buffer);
 }
 
 #if 0

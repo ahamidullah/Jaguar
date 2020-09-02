@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 #include "Asset.h"
 #include "Math.h"
 #include "Transform.h"
@@ -41,3 +43,5 @@ struct MeshInstance
 {
 	String assetName;
 };
+
+#endif

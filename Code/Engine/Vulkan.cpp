@@ -1,13 +1,12 @@
-#if defined(USING_VULKAN_API)
+#if 0
+#ifdef VuklanAPIBuild
 
 #include "Vulkan.h"
 #include "Render.h"
 #include "Math.h"
-
 #include "Basic/DLL.h"
 #include "Basic/Array.h"
 #include "Basic/Log.h"
-
 #include "Common.h"
 
 const auto VulkanMaxFramesInFlight = 2;
@@ -62,7 +61,6 @@ enum VulkanQueueType
 	VulkanGraphicsQueue,
 	VulkanTransferQueue,
 	VulkanComputeQueue,
-
 	VulkanQueueTypeCount
 };
 
@@ -71,7 +69,6 @@ enum VulkanBufferUsage
 	VulkanVertexBuffer,
 	VulkanIndexBuffer,
 	VulkanUniformBuffer,
-
 	VulkanBufferUsageCount
 };
 
@@ -101,7 +98,7 @@ struct VulkanMapData
 {
 	VkBuffer buffer;
 	VulkanMemoryAllocation memory;
-	#if DEBUG_BUILD
+	#ifdef DebugBuild
 		bool async;
 	#endif
 };
@@ -111,7 +108,6 @@ enum VulkanMemoryType
 	VulkanGPUOnlyMemory,
 	VulkanCPUToGPUMemory,
 	VulkanGPUToCPUMemory,
-
 	VulkanMemoryTypeCount
 };
 
@@ -180,7 +176,7 @@ auto vkAsyncTransferBuffers = Array<VkBuffer>{};
 auto vkAsyncTransferMemory = Array<VulkanMemoryAllocation>{};
 auto vkAsyncTransferSignals = Array<bool *>{};
 auto vkFrameIndex = u32{};
-auto vkFrameFences = StaticArray<VkFence, GFX_MAX_FRAMES_IN_FLIGHT>{};
+auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
 
 #define CheckVkResult(x)\
 	do {\
@@ -2344,6 +2340,13 @@ GPUCommandBuffer NewGPUAsyncComputeCommandBuffer()
 {
 }
 
+void QueueGPUCommandBuffer(GPUCommandBuffer cb, bool *signalOnCompletion)
+{
+	if (cb)
+	{
+	}
+}
+
 void QueueVulkanFrameCommandBuffer(GPUCommandBuffer cb)
 {
 	vkFrameQueueLocks[cb.queueType].Lock();
@@ -2462,7 +2465,7 @@ void *GPUBuffer::MapAsync()
 			.buffer = uploadBuf,
 			.memory = mem,
 			.size = dat->size,
-			#if DEBUG_BUILD
+			#ifdef DebugBuild
 				.async = true,
 			#endif
 		});
@@ -2491,7 +2494,7 @@ void GPUBuffer::FlushMapFrame(void **m)
 	Assert(!dat->async);
 	if (!dat)
 	{
-		LogPrint("GPU", "Failed to flush buffer map: buffer needs to call MapFrameSync before FlushMapFrame.\n");
+		LogError("GPU", "Failed to flush buffer map: buffer needs to call MapFrameSync before FlushMapFrame.\n");
 		return;
 	}
 	Defer(vkMapData.Remove(*m));
@@ -2970,4 +2973,5 @@ void Cleanup_Renderer() {
 
 #endif
 
+#endif
 #endif

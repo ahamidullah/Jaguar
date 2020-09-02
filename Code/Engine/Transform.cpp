@@ -1,10 +1,64 @@
 #include "Transform.h"
 
-void TransformRotateEuler(Transform *t, f32 pitch, f32 yaw, f32 roll)
+V3 Transform::Right()
 {
-	auto angles = QuaternionToEuler(t->rotation);
-	auto yawRot = EulerToQuaternion(EulerAngles{.yaw = angles.yaw + yaw});
-	auto pitchRot = EulerToQuaternion(EulerAngles{.pitch = angles.pitch + pitch});
-	auto rollRot = EulerToQuaternion(EulerAngles{.roll = angles.roll + roll});
-	t->rotation = Normalize(yawRot * pitchRot * rollRot);
+	return this->rotation.Right();
+}
+
+V3 Transform::Forward()
+{
+	return this->rotation.Forward();
+}
+
+V3 Transform::Up()
+{
+	return this->rotation.Up();
+}
+
+void Transform::RotateEulerLocal(EulerAngles ea)
+{
+	RotateTransformsEulerWorld(NewArrayView(&ea, 1), NewArrayView(this, 1));
+}
+
+void Transform::RotateEulerWorld(EulerAngles ea)
+{
+	// @TODO
+}
+
+void Transform::RotateAxisAngleLocal(AxisAngle aa)
+{
+	// @TODO
+}
+
+void Transform::RotateAxisAngleWorld(AxisAngle aa)
+{
+	// @TODO
+}
+
+void RotateTransformsEulerLocal(ArrayView<EulerAngles> eas, ArrayView<Transform> out)
+{
+	Assert(eas.count == out.count);
+	for (auto i = 0; i < out.count; i += 1)
+	{
+		auto angles = out[i].rotation.ToAngles();
+		auto yaw = EulerAngles{.yaw = angles.yaw + eas[i].yaw}.ToQuaternion();
+		auto pitch = EulerAngles{.pitch = angles.pitch + eas[i].pitch}.ToQuaternion();
+		auto roll = EulerAngles{.roll = angles.roll + eas[i].roll}.ToQuaternion();
+		out[i].rotation = (yaw * pitch * roll).Normal();
+	}
+}
+
+void RotateTransformsEulerWorld(ArrayView<EulerAngles> eas, ArrayView<Transform> out)
+{
+	// @TODO
+}
+
+void RotateTransformsAxisAngleLocal(ArrayView<AxisAngle> aas, ArrayView<Transform> out)
+{
+	// @TODO
+}
+
+void RotateTransformsAxisAngleWorld(ArrayView<AxisAngle> aas, ArrayView<Transform> out)
+{
+	// @TODO
 }

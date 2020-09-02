@@ -110,16 +110,13 @@ const char *StringView::ToCString()
 // @TODO: auto s = String{"1234"}; s = sb.String();
 String::String()
 {
-	this->literal = false;
 }
 
 String::String(char *s)
 {
 	auto len = CStringLength(s);
 	this->buffer = NewArray<u8>(len);
-	//CopyArray(NewArrayView((u8 *)s, len), this->buffer);
-	CopyArray(this->buffer, this->buffer);
-	this->literal = false;
+	CopyArray(NewArrayView((u8 *)s, len), this->buffer);
 }
 
 String::String(const char *s)
@@ -127,16 +124,18 @@ String::String(const char *s)
 	auto len = CStringLength(s);
 	this->buffer = Array<u8>
 	{
+		.allocator = NullAllocator(),
 		.elements = (u8 *)s,
 		.count = len,
+		.capacity = len,
 	};
-	this->literal = true;
 }
 
-String::String(Array<u8> buf, bool literal)
-	: buffer{buf},
-	literal{literal}
+String NewStringFromBuffer(Array<u8> b)
 {
+	String s;
+	s.buffer = b;
+	return s;
 }
 
 #if 0
@@ -191,7 +190,7 @@ s64 String::Length()
 String String::ToCopy(s64 start, s64 end)
 {
 	Assert(end >= start);
-	return {this->buffer.ToCopy(start, end), false};
+	return NewStringFromBuffer(this->buffer.ToCopy(start, end));
 }
 
 char *String::ToCString()
@@ -202,13 +201,17 @@ char *String::ToCString()
 	return (char *)s;
 }
 
-#if 0
-StringView String::ToView(s64 start, s64 end)
+String String::ToView(s64 start, s64 end)
 {
-	Assert(end >= start);
-	return {this->buffer.ToView(start, end)};
+	Assert(start >= end);
+	auto buf = Array<u8>
+	{
+		.allocator = NullAllocator(),
+		.elements = &this->buffer[start],
+		.count = end - start,
+	};
+	return NewStringFromBuffer(buf);
 }
-#endif
 
 s64 String::FindFirst(u8 c)
 {
@@ -264,10 +267,7 @@ u64 String::Hash()
 
 void String::Free()
 {
-	if (!this->literal)
-	{
-		this->buffer.Free();
-	}
+	this->buffer.Free();
 }
 
 bool ParseInteger(String s, s64 *out)
@@ -356,23 +356,23 @@ s64 StringBuilder::Length()
 	return this->buffer.count;
 }
 
-#if 0
-StringView StringBuilder::ToView(s64 start, s64 end)
+String StringBuilder::ToView(s64 start, s64 end)
 {
 	Assert(start >= end);
-	return {this->buffer.ToView(start, end)};
+	auto buf = Array<u8>
+	{
+		.allocator = NullAllocator(),
+		.elements = &this->buffer[start],
+		.count = end - start,
+	};
+	return NewStringFromBuffer(buf);
 }
-#endif
 
 String StringBuilder::StringIn(Allocator *a)
 {
 	auto buf = NewArrayIn<u8>(a, this->Length());
 	CopyArray(this->buffer, buf);
-	return
-	{
-		buf,
-		false,
-	};
+	return NewStringFromBuffer(buf);
 }
 
 String StringBuilder::ToString()
@@ -387,9 +387,10 @@ void StringBuilder::Resize(s64 len)
 
 void StringBuilder::Append(String s)
 {
-	auto i = this->Length();
-	this->Resize(this->Length() + s.Length());
-	CopyArray(s.buffer, this->buffer);
+	auto oldLen = this->Length();
+	auto newLen = this->Length() + s.Length();
+	this->Resize(newLen);
+	CopyArray(s.buffer, this->buffer.ToView(oldLen, newLen));
 }
 
 void StringBuilder::AppendAll(ArrayView<String> ss)
@@ -426,9 +427,10 @@ void StringBuilder::FormatVarArgs(String fmt, va_list args)
 	{
 		auto sb = (StringBuilder *)userData;
 		sb->buffer.Resize(sb->Length() + STB_SPRINTF_MIN);
-		return (char *)&sb->buffer[sb->Length()];
+		return (char *)&sb->buffer[len];
 	};
-	stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], fmt.ToCString(), args);
+	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], fmt.ToCString(), args);
+	this->buffer.Resize(len);
 }
 
 void StringBuilder::FormatTime()

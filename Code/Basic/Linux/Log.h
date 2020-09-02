@@ -2,5 +2,5 @@
 
 #include "../String.h"
 
+void ConsoleWrite(String s);
 String PlatformError();
-void WriteToConsole(String s);

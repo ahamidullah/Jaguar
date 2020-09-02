@@ -36,12 +36,12 @@ void SetCurrentThreadName(String n)
 {
 	if (n.Length() > MaxThreadNameLength)
 	{
-		LogPrint(ErrorLog, "Thread", "Failed to set name for thread %k: name is too long (max: %d).\n", n, MaxThreadNameLength);
+		LogError("Thread", "Failed to set name for thread %k: name is too long (max: %d).\n", n, MaxThreadNameLength);
 		return;
 	}
 	if (prctl(PR_SET_NAME, &n[0], 0, 0, 0) != 0)
 	{
-		LogPrint(ErrorLog, "Thread", "Failed to set name for thread %k: %k.\n", n, PlatformError());
+		LogError("Thread", "Failed to set name for thread %k: %k.\n", n, PlatformError());
 	}
 }
 
@@ -50,7 +50,7 @@ String CurrentThreadName()
 	auto buf = (char *)AllocateMemory(MaxThreadNameLength);
 	if (prctl(PR_GET_NAME, buf, 0, 0, 0) != 0)
 	{
-		LogPrint(ErrorLog, "Thread", "Failed to get thread name: %k.\n", PlatformError());
+		LogError("Thread", "Failed to get thread name: %k.\n", PlatformError());
 	}
 	return String{buf};
 }

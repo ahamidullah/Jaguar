@@ -1,7 +1,6 @@
-#include "../PCH.h"
 #include "../Memory.h"
 #include "../Log.h"
-#include "../Process.h"
+#include "../PCH.h"
 
 #define MAP_ANONYMOUS 0x20
 
@@ -19,30 +18,6 @@ void DeallocatePlatformMemory(void *mem, s64 size)
 {
 	if (munmap(mem, size) == -1)
 	{
-		LogPrint(ErrorLog, "Memory", "Failed to deallocate platform memory: %k.\n", PlatformError());
+		LogError("Memory", "Failed to deallocate platform memory: %k.\n", PlatformError());
 	}
-}
-
-Array<String> Stacktrace()
-{
-	const auto maxAddrs = 100;
-	auto addrs = StaticArray<void *, maxAddrs>{};
-	auto numAddrs = backtrace(&addrs[0], maxAddrs);
-	if (numAddrs == maxAddrs)
-	{
-		LogPrint(ErrorLog, "Memory", "Stack trace is probably truncated.\n");
-	}
-	auto trace = backtrace_symbols(&addrs[0], numAddrs);
-	if (!trace)
-	{
-		LogPrint(ErrorLog, "Memory", "Failed to get stack trace function names.\n");
-		return {};
-	}
-	auto st = NewArrayWithCapacity<String>(0, numAddrs);
-	for (auto i = 0; i < numAddrs; i++)
-	{
-		st.Append(trace[i]);
-	}
-	free(trace);
-	return st;
 }

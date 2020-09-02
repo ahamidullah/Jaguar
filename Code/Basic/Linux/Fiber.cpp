@@ -32,13 +32,8 @@ Fiber *RunningFiber()
 
 void InitializeFibers()
 {
-	LogPrint(
-		InfoLog,
-		"Fiber",
-		"Fiber:\n"
-		"	stackSize: %d\n"
-		"	guardPageCount: %d\n",
-		FiberStackSize, FiberStackGuardPageCount);
+	LogInfo("Fiber", "Stack size: %d", FiberStackSize);
+	LogInfo("Fiber", "Guard pages: %d", FiberStackGuardPageCount);
 }
 
 struct FiberCreationInfo

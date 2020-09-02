@@ -6,7 +6,7 @@
 
 typedef void (*CrashHandler)(File crashLog);
 
-#if DebugBuild
+#ifdef DebugBuild
 	auto LogFileDir = String{"Data/Log/"};
 
 	auto logLock = Spinlock{};
@@ -26,7 +26,7 @@ void LogCrashHandler(File crashLog)
 {
 }
 
-void InitalizeLog()
+void InitializeLog()
 {
 	#ifdef DebugBuild
 		logPool = NewPoolAllocator(KilobytesToBytes(2), 1, GlobalHeap(), GlobalHeap());
@@ -40,10 +40,11 @@ void InitalizeLog()
 		sb.Append(LogFileDir);
 		sb.FormatTime();
 		auto dir = sb.ToString();
+		return;
 		if (!CreateDirectory(dir))
 		{
-			LogPrint(ErrorLog, "Log", "Failed to create log directory %k.\n", dir);
-			LogPrint(InfoLog, "Log", "Initialized logging.\n");
+			LogError("Log", "Failed to create log directory %k.\n", dir);
+			LogInfo("Log", "Initialized logging.\n");
 			return;
 		}
 		sb.Append("/");
@@ -53,9 +54,9 @@ void InitalizeLog()
 		logFile = OpenFile(logPath, OpenFileWriteOnly | OpenFileCreate, &err);
 		if (err)
 		{
-			LogPrint(ErrorLog, "Log", "Failed to open global log file %k.\n", logPath);
+			LogError("Log", "Failed to open global log file %k.\n", logPath);
 		}
-		LogPrint(InfoLog, "Log", "Initialized logging.\n");
+		LogInfo("Log", "Initialized logging.\n");
 	#endif
 }
 
@@ -70,7 +71,7 @@ void ConsolePrintVarArgs(String fmt, va_list args)
 		});
 		auto sb = StringBuilder{};
 		sb.FormatVarArgs(fmt, args);
-		ConsolePrint(sb.ToString());
+		ConsoleWrite(sb.ToString());
 	#endif
 }
 
@@ -139,6 +140,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 		{
 			ConsolePrint("[%k] ", category);
 			ConsolePrint(msg);
+			ConsolePrint("\n");
 		}
 		if (logFile.IsOpen())
 		{
@@ -148,6 +150,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 			sb.Format("%k:%d %k  |  ", file, line, func);
 			logFile.Write(sb.buffer);
 			logFile.WriteString(msg);
+			logFile.WriteString("\n");
 		}
 	#endif
 }
@@ -184,17 +187,17 @@ File NewCrashLogFile()
 	auto f = OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 	if (err)
 	{
-		LogPrint(ErrorLog, "Log", "Failed to open crash log file %k.\n", path);
+		LogError("Log", "Failed to open crash log file %k.\n", path);
 	}
 	return f;
 }
 
 void DoAbortActual(String file, String func, s64 line, String fmt, va_list args)
 {
-	LogPrint(FatalLog, "Global", "###########################################################################\n");
-	LogPrint(FatalLog, "Global", "[ABORT]\n");
+	LogFatal("Global", "###########################################################################\n");
+	LogFatal("Global", "[ABORT]\n");
 	LogPrintVarArgs(file, func, line, FatalLog, "Global", fmt, args);
-	LogPrint(FatalLog, "Global", "###########################################################################\n");
+	LogFatal("Global", "###########################################################################\n");
 	auto crashLog = NewCrashLogFile();
 	auto sb = StringBuilder{};
 	sb.FormatVarArgs(fmt, args);
@@ -212,7 +215,7 @@ void DoAbortActual(String file, String func, s64 line, String fmt, va_list args)
 		SignalDebugBreakpoint();
 	}
 	auto st = Stacktrace();
-	ConsolePrint("Stack:\n");
+	ConsolePrint("Stack trace:\n");
 	for (auto s : st)
 	{
 		ConsolePrint("\t");

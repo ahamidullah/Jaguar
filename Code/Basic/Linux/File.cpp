@@ -10,7 +10,7 @@ File OpenFile(String path, s64 flags, bool *err)
 	};
 	if (f.handle < 0)
 	{
-		LogPrint(ErrorLog, "File", "Failed to open file %k: %k.\n", path, PlatformError());
+		LogError("File", "Failed to open file %k: %k.\n", path, PlatformError());
 		*err = true;
 		return {};
 	}
@@ -26,7 +26,7 @@ bool File::Close()
 {
 	if (close(this->handle) == -1)
 	{
-		LogPrint(ErrorLog, "File", "Failed to close file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed to close file %k: %k.\n", this->path, PlatformError());
 		return false;
 	}
 	this->handle = -1;
@@ -47,12 +47,12 @@ bool File::Read(ArrayView<u8> out)
 	} while (totRead < out.count && curRead != 0 && curRead != -1);
 	if (curRead == -1)
 	{
-		LogPrint(ErrorLog, "File", "Failed to read file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed to read file %k: %k.\n", this->path, PlatformError());
 		return false;
 	}
 	else if (totRead != out.count)
 	{
-		LogPrint(ErrorLog, "File", "Failed to read file %k: could only read %lu bytes, but %lu bytes were requested.\n", this->path, totRead, out.count);
+		LogError("File", "Failed to read file %k: could only read %lu bytes, but %lu bytes were requested.\n", this->path, totRead, out.count);
 		return false;
 	}
 	return true;
@@ -71,7 +71,7 @@ bool File::Write(ArrayView<u8> a)
 	} while (totWrit < a.count && curWrit != 0);
 	if (totWrit != a.count)
 	{
-		LogPrint(ErrorLog, "File", "Failed to write file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed to write file %k: %k.\n", this->path, PlatformError());
 		return false;
 	}
 	return true;
@@ -88,7 +88,7 @@ s64 File::Length(bool *err)
 	auto stat = (struct stat){};
 	if (fstat(this->handle, &stat) == -1)
 	{
-		LogPrint(ErrorLog, "File", "Failed get length of file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed get length of file %k: %k.\n", this->path, PlatformError());
 		*err = true;
 		return 0;
 	}
@@ -100,7 +100,7 @@ s64 File::Seek(s64 seek, FileSeekRelative rel, bool *err)
 	auto off = lseek(this->handle, seek, (s32)rel);
 	if (off == (off_t)-1)
 	{
-		LogPrint(ErrorLog, "File", "Failed to seek file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed to seek file %k: %k.\n", this->path, PlatformError());
 		*err = true;
 		return 0;
 	}
@@ -112,7 +112,7 @@ PlatformTime File::LastModifiedTime(bool *err)
 	auto stat = (struct stat){};
 	if (fstat(this->handle, &stat) == -1)
 	{
-		LogPrint(ErrorLog, "File", "Failed to get last modified time of file %k: %k.\n", this->path, PlatformError());
+		LogError("File", "Failed to get last modified time of file %k: %k.\n", this->path, PlatformError());
 		*err = true;
 		return {};
 	}
@@ -126,7 +126,7 @@ bool DirectoryIteration::Iterate(String path)
 		this->dir = opendir(path.ToCString());
 		if (!this->dir)
 		{
-			LogPrint(ErrorLog, "File", "Failed to open directory %k: %k.\n", path, PlatformError());
+			LogError("File", "Failed to open directory %k: %k.\n", path, PlatformError());
 			return false;
 		}
 	}
@@ -152,25 +152,30 @@ bool FileExists(String path)
 	return false;
 }
 
+bool CreateDirectory(String path)
+{
+	if (mkdir(path.ToCString(), 0700) == -1)
+	{
+		LogError("File", "Failed to create directory %k: %k.\n", path, PlatformError());
+		return false;
+	}
+	return true;
+}
+
 bool CreateDirectoryIfItDoesNotExist(String path)
 {
 	if (FileExists(path))
 	{
 		return true;
 	}
-	if (mkdir(path.ToCString(), 0700) == -1)
-	{
-		LogPrint(ErrorLog, "File", "Failed to create directory %k: %k.\n", path, PlatformError());
-		return false;
-	}
-	return true;
+	return CreateDirectory(path);
 }
 
 bool DeleteFile(String path)
 {
 	if (unlink(path.ToCString()) != 0)
 	{
-		LogPrint(ErrorLog, "File", "Failed to delete file %k: %k.\n", path, PlatformError());
+		LogError("File", "Failed to delete file %k: %k.\n", path, PlatformError());
 		return false;
 	}
 	return true;

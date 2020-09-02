@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 struct GfxSubmitInfo
 {
 	ArrayView<GPUInternalCommandBuffer> commandBuffers;
@@ -84,3 +86,5 @@ struct GfxPipelineDescription
 	GfxRenderPass render_pass;
 	bool enable_depth_bias;
 };
+
+#endif

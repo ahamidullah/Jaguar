@@ -1,23 +1,20 @@
 #pragma once
 
-#include "Basic/String.h"
-
 #include "Model.h"
 #include "Mesh.h"
+#include "Basic/String.h"
 
 enum AssetType
 {
-	AssetTypeModel,
-
+	ModelAssetType,
 	AssetTypeCount
 };
 
 enum AssetID
 {
-	AssetIDSponza,
-
+	SponzaAssetID,
 	AssetIDCount
-}
+};
 
 struct LoadAssetJobParameters
 {
@@ -26,7 +23,7 @@ struct LoadAssetJobParameters
 };
 
 void InitializeAssets(void *jobParameter);
-void LoadAsset(void *jobParams)
+void LoadAsset(AssetID id);
 void UnloadAsset(AssetID id);
 void *LockAsset(AssetID id);
 void UnlockAsset(AssetID id);

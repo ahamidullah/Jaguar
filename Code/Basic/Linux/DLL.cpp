@@ -10,7 +10,7 @@ DLL OpenDLL(String path, bool *err)
 	dll.handle = dlopen(path.ToCString(), RTLD_NOW | RTLD_LOCAL);
 	if (!dll.handle)
 	{
-		LogPrint(ErrorLog, "DLL", "Failed to open DLL %k: %s.\n", path, dlerror());
+		LogError("DLL", "Failed to open DLL %k: %s.\n", path, dlerror());
 		*err = true;
 		return {};
 	}
@@ -21,7 +21,7 @@ bool DLL::Close()
 {
 	if (dlclose(this->handle) < 0)
 	{
-		LogPrint(ErrorLog, "DLL", "Failed to close DLL %k: %s.\n", this->path, dlerror());
+		LogError("DLL", "Failed to close DLL %k: %s.\n", this->path, dlerror());
 		return false;
 	}
 	return true;
@@ -40,7 +40,7 @@ void *DLL::Lookup(String sym, bool *err)
 	auto s = dlsym(this->handle, sym.ToCString());
 	if (auto e = dlerror(); e)
 	{
-		LogPrint(ErrorLog, "DLL", "Failed to load DLL function %k from file %k: %s.\n", sym, this->path, e);
+		LogError("DLL", "Failed to load DLL function %k from file %k: %s.\n", sym, this->path, e);
 		*err = true;
 		return {};
 	}

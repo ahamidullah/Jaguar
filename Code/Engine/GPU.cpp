@@ -73,13 +73,13 @@ GPUMemoryRingAllocator NewGPUMemoryRingAllocator(GPUMemoryType t)
 
 void LogGPUInitialization()
 {
-	LogPrint(INFO_LOG, "GPU info:\n");
-	LogPrint(INFO_LOG, "	Heap indices:\n");
-	LogPrint(INFO_LOG, "		GPU only: %d\n", GPUMemoryHeapIndex(GFX_GPU_ONLY_MEMORY));
-	LogPrint(INFO_LOG, "		CPU-to-GPU: %d\n", GPUMemoryHeapIndex(GFX_CPU_TO_GPU_MEMORY));
-	LogPrint(INFO_LOG, "		GPU-to-CPU: %d\n", GPUMemoryHeapIndex(GFX_GPU_TO_CPU_MEMORY));
-	LogPrint(INFO_LOG, "	Memory budget:\n");
-	LogPrint(INFO_LOG, "	Buffer-image granularity: %d\n", GetGPUBufferImageGranularity());
+	LogInfo("GPU", "GPU info:\n");
+	LogInfo("GPU", "	Heap indices:\n");
+	LogInfo("GPU", "		GPU only: %d\n", GPUMemoryHeapIndex(GFX_GPU_ONLY_MEMORY));
+	LogInfo("GPU", "		CPU-to-GPU: %d\n", GPUMemoryHeapIndex(GFX_CPU_TO_GPU_MEMORY));
+	LogInfo("GPU", "		GPU-to-CPU: %d\n", GPUMemoryHeapIndex(GFX_GPU_TO_CPU_MEMORY));
+	LogInfo("GPU", "	Memory budget:\n");
+	LogInfo("GPU", "	Buffer-image granularity: %d\n", GetGPUBufferImageGranularity());
 	PrintGPUMemoryInfo();
 }
 

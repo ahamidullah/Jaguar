@@ -8,4 +8,4 @@
 void InitializeEntities();
 u64 NewEntity();
 void SetEntityTransform(u64 id, Transform t);
-void SetEntityModel(u64 id, String name);
+void SetEntityModel(u64 id, AssetID asset);

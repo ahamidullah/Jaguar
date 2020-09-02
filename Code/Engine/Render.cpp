@@ -1,3 +1,22 @@
+s64 RenderWidth()
+{
+	return 1200;
+}
+
+s64 RenderHeight()
+{
+	return 1000;
+}
+
+void InitializeRenderer(void *)
+{
+}
+
+void Render()
+{
+}
+
+#if 0
 #include "Render.h"
 #include "ShaderGlobal.h"
 #include "Mesh.h"
@@ -43,16 +62,6 @@ struct RenderContext
 //{
 	//return renderGlobals.frameIndex;
 //}
-
-s64 RenderWidth()
-{
-	return 1200;
-}
-
-s64 RenderHeight()
-{
-	return 1000;
-}
 
 void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
 {
@@ -414,7 +423,7 @@ void Render()
 	auto camera = GetCamera("main");
 	if (!camera)
 	{
-		LogPrint(ERROR_LOG, "Render: could not get main camera");
+		LogError("Render: could not get main camera");
 		return;
 	}
 	GPURenderFrameFinish();
@@ -707,3 +716,4 @@ void Frustum_Cull_Meshes(Camera *camera, BoundingSphere *mesh_bounding_spheres, 
 	}
 }
 */
+#endif

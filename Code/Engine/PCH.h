@@ -1,11 +1,9 @@
 #pragma once
 
-#include "Code/Media/PCH.h"
+#include "Media/PCH.h"
+#include "Basic/PCH.h"
 
-#include "Code/Basic/PCH.h"
-
-#if defined(USING_VULKAN_API)
-	// Vulkan
+#ifdef VulkanBuild
 	#define VK_NO_PROTOTYPES
 	#define VK_USE_PLATFORM_XLIB_KHR
 	#include "vulkan/vulkan.h"

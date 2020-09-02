@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 #include "Code/Common.h"
 
 constexpr auto JOB_FIBER_COUNT = 160;
@@ -26,10 +28,14 @@ struct JobDeclaration {
 	void *parameter;
 };
 
-void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter);
+void InitializeJobs(JobProcedure init, void *params);
 JobDeclaration CreateJob(JobProcedure procedure, void *parameter);
 void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority, JobCounter *counter);
 void WaitForJobCounter(JobCounter *counter);
 void ClearJobCounter(JobCounter *counter);
 s64 GetWorkerThreadCount();
 u32 GetThreadIndex();
+
+#endif
+typedef void (*JobProcedure)(void *);
+void InitializeJobs(JobProcedure init, void *params);

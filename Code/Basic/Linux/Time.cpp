@@ -183,6 +183,6 @@ void Sleep(s64 msec)
 	};
 	if (nanosleep(&ts, NULL))
 	{
-		LogPrint(ErrorLog, "Time", "nanosleep() ended early: %k.\n", PlatformError());
+		LogError("Time", "nanosleep() ended early: %k.\n", PlatformError());
 	}
 }

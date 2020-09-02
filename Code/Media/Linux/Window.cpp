@@ -125,7 +125,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 	}
 	else
 	{
-		LogPrint(ErrorLog, "Window", "Unable to register WM_DELETE_WINDOW atom.\n");
+		LogError("Window", "Unable to register WM_DELETE_WINDOW atom.\n");
 	}
 	// Get actual window dimensions without window borders.
 	{

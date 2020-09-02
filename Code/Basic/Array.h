@@ -105,13 +105,13 @@ bool ArrayView<T>::operator!=(ArrayView<T> a)
 template <typename T>
 T *ArrayView<T>::begin()
 {
-	return &(*this)[0];
+	return &this->elements[0];
 }
 
 template <typename T>
 T *ArrayView<T>::end()
 {
-	return &(*this)[this->count - 1] + 1;
+	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T>
@@ -129,7 +129,7 @@ ArrayView<T> ArrayView<T>::ToView(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
-	Assert(end < this->count);
+	Assert(end <= this->count);
 	return
 	{
 		.elements = &this->elements[start],
@@ -334,13 +334,13 @@ bool Array<T>::operator!=(Array<T> a)
 template <typename T>
 T *Array<T>::begin()
 {
-	return &(*this)[0];
+	return &this->elements[0];
 }
 
 template <typename T>
 T *Array<T>::end()
 {
-	return &(*this)[this->count - 1] + 1;
+	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T>
@@ -367,7 +367,7 @@ ArrayView<T> Array<T>::ToView(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
-	Assert(end < this->count);
+	Assert(end <= this->count);
 	return
 	{
 		.elements = &this->elements[start],
@@ -412,6 +412,10 @@ void Array<T>::Reserve(s64 n)
 	{
 		return;
 	}
+	if (this->capacity == 0)
+	{
+		this->capacity = 1;
+	}
 	while (this->capacity < n)
 	{
 		this->capacity = (this->capacity * 2);
@@ -430,11 +434,10 @@ template <typename T>
 void Array<T>::Append(T e)
 {
 	auto i = this->count;
-	this->Reserve(this->count + 1);
+	this->Resize(this->count + 1);
 	Assert(this->count <= this->capacity);
 	Assert(i < this->capacity);
 	(*this)[i] = e;
-	this->count += 1;
 }
 
 template <typename T>
@@ -585,13 +588,13 @@ bool StaticArray<T, N>::operator!=(StaticArray<T, N> a)
 template <typename T, s64 N>
 T *StaticArray<T, N>::begin()
 {
-	return &(*this)[0];
+	return &this->elements[0];
 }
 
 template <typename T, s64 N>
 T *StaticArray<T, N>::end()
 {
-	return &(*this)[this->count - 1] + 1;
+	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T, s64 N>
@@ -605,7 +608,7 @@ ArrayView<T> StaticArray<T, N>::ToView(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
-	Assert(end < this->count);
+	Assert(end <= this->count);
 	return
 	{
 		.elements = &this->elements[start],

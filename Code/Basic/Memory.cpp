@@ -5,8 +5,6 @@
 #include "Spinlock.h"
 #include "Fiber.h"
 
-// TODO: Change free to deallocate.
-
 const auto DefaultMemoryAlignment = 16;
 const auto GlobalHeapBlockSize = MegabytesToBytes(64);
 const auto GlobalHeapInitialBlockCount = 32;
@@ -34,7 +32,7 @@ void *GlobalHeapBlockAllocator::AllocateAligned(s64 size, s64 align)
 	return NULL;
 }
 
-void *GlobalHeapBlockAllocator::Resize(void *mem, s64 size)
+void *GlobalHeapBlockAllocator::Resize(void *mem, s64 newSize)
 {
 	Abort("Memory", "Unsupported call to Resize in GlobalHeapBlockAllocator.");
 	return NULL;
@@ -59,7 +57,7 @@ struct GlobalHeapArrayAllocator : Allocator
 {
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 size);
+	void *Resize(void *mem, s64 newSize);
 	void Deallocate(void *mem);
 	void Clear();
 	void Free();
@@ -83,15 +81,19 @@ void *GlobalHeapArrayAllocator::AllocateAligned(s64 size, s64 align)
 	return NULL;
 }
 
-void *GlobalHeapArrayAllocator::Resize(void *mem, s64 size)
+void *GlobalHeapArrayAllocator::Resize(void *mem, s64 newSize)
 {
-	this->Deallocate(mem);
-	return this->Allocate(size);
+	mem = (u8 *)mem - sizeof(s64);
+	auto size = *(s64 *)mem;
+	auto newMem = this->Allocate(newSize);
+	DeallocatePlatformMemory(mem, size);
+	return newMem;
 }
 
 void GlobalHeapArrayAllocator::Deallocate(void *mem)
 {
-	auto size = *(s64 *)((u8 *)mem - sizeof(s64));
+	mem = (u8 *)mem - sizeof(s64);
+	auto size = *(s64 *)mem;
 	DeallocatePlatformMemory(mem, size);
 }
 
@@ -128,11 +130,11 @@ void *GlobalHeapAllocator::AllocateAligned(s64 size, s64 align)
 	return this->heap.AllocateAligned(size, align);
 }
 
-void *GlobalHeapAllocator::Resize(void *mem, s64 size)
+void *GlobalHeapAllocator::Resize(void *mem, s64 newSize)
 {
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
-	return this->heap.Resize(mem, size);
+	return this->heap.Resize(mem, newSize);
 }
 
 void GlobalHeapAllocator::Deallocate(void *mem)
@@ -156,18 +158,19 @@ void GlobalHeapAllocator::Free()
 	this->heap.Free();
 }
 
-static auto globalHeapBlockAllocator = GlobalHeapBlockAllocator{};
-static auto globalHeapArrayAllocator = GlobalHeapArrayAllocator{};
-static auto globalHeapAllocator = NewGlobalHeapAllocator(NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &globalHeapBlockAllocator, &globalHeapArrayAllocator));
-
 GlobalHeapAllocator *GlobalHeap()
 {
-	return &globalHeapAllocator;
+	// @TODO: Avoid recursive deadlocks!
+	// @TODO: Test Assert works.
+	static auto blk = GlobalHeapBlockAllocator{};
+	static auto arr = GlobalHeapArrayAllocator{};
+	static auto alloc = NewGlobalHeapAllocator(NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blk, &arr));
+	return &alloc;
 }
 
-auto baseContextAllocator = (Allocator *)&globalHeapAllocator;
+auto baseContextAllocator = (Allocator *)GlobalHeap();
 ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
-ThreadLocal auto contextAllocator = (Allocator *)&globalHeapAllocator;
+ThreadLocal auto contextAllocator = (Allocator *)NULL;
 
 void PushContextAllocator(Allocator *a)
 {
@@ -202,7 +205,7 @@ void PopContextAllocator()
 	}
 	if (stk->count == 0)
 	{
-		LogPrint(ErrorLog, "Memory", "Tried to pop empty context allocator stack.\n");
+		LogError("Memory", "Tried to pop empty context allocator stack.\n");
 		return;
 	}
 	stk->Resize(stk->count - 1);
@@ -221,6 +224,10 @@ Allocator *ContextAllocator()
 	if (RunningFiber())
 	{
 		return RunningFiber()->contextAllocator;
+	}
+	if (!contextAllocator)
+	{
+		contextAllocator = GlobalHeap();
 	}
 	return contextAllocator;
 }
@@ -296,6 +303,12 @@ void MoveMemory(void *src, void *dst, s64 n)
 }
 #endif
 
+AllocationHeader *GetMemoryHeader(void *mem)
+{
+	auto bytesFromDataToHeader = *((u8 *)mem - 1);
+	return (AllocationHeader *)((u8 *)mem - bytesFromDataToHeader);
+}
+
 AllocatorBlocks NewAllocatorBlocks(s64 blockSize, s64 blockCount, Allocator *blockAlloc, Allocator *arrayAlloc)
 {
 	auto b = AllocatorBlocks
@@ -341,6 +354,30 @@ void *AllocatorBlocks::Allocate(s64 size, s64 align)
 	return p;
 }
 
+void *AllocatorBlocks::AllocateWithHeader(s64 size, s64 align)
+{
+	auto maxSize = size + sizeof(AllocationHeader) + (alignof(AllocationHeader) - 1) + align;
+	Assert(maxSize <= this->blockSize);
+	auto header = (AllocationHeader *)this->Allocate(size + sizeof(AllocationHeader) + align, alignof(AllocationHeader));
+	auto data = (u8 *)header + sizeof(AllocationHeader);
+	if ((IntegerPointer)data % align == 0)
+	{
+		// Make room to store number of bytes between the end of the header and the start of the data.
+		// We need this when we go to free the pointer.
+		data += align;
+	}
+	else
+	{
+		data = (u8 *)AlignPointer(data, align);
+	}
+	header->size = size;
+	header->alignment = align;
+	auto bytesFromDataToHeader = data - (u8 *)header;
+	Assert(bytesFromDataToHeader < U8Max);
+	*(data - 1) = bytesFromDataToHeader;
+	return data;
+}
+
 void AllocatorBlocks::Clear()
 {
 	if (this->frontier)
@@ -371,12 +408,15 @@ void *PoolAllocator::Allocate(s64 size)
 void *PoolAllocator::AllocateAligned(s64 size, s64 align)
 {
 	Assert(align > 0);
-	return this->blocks.Allocate(size, align);
+	return this->blocks.AllocateWithHeader(size, align);
 }
 
-void *PoolAllocator::Resize(void *mem, s64 size)
+void *PoolAllocator::Resize(void *mem, s64 newSize)
 {
-	return this->Allocate(size);
+	auto h = GetMemoryHeader(mem);
+	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
+	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
+	return newMem;
 }
 
 void PoolAllocator::Deallocate(void *mem)
@@ -423,7 +463,7 @@ void *SlotAllocator::AllocateAligned(s64 size, s64 align)
 	return this->Allocate(size);
 }
 
-void *SlotAllocator::Resize(void *mem, s64 size)
+void *SlotAllocator::Resize(void *mem, s64 newSize)
 {
 	Abort("Memory", "Attempted to resize a slot memory allocation.");
 	return NULL;
@@ -450,7 +490,7 @@ HeapAllocator NewHeapAllocator(s64 blockSize, s64 blockCount, Allocator *blockAl
 {
 	auto a = HeapAllocator{};
 	a.blocks = NewAllocatorBlocks(blockSize, blockCount, blockAlloc, arrayAlloc);
-	a.free = NewArrayIn<HeapAllocationHeader *>(arrayAlloc, 0);
+	a.free = NewArrayIn<AllocationHeader *>(arrayAlloc, 0);
 	return a;
 }
 
@@ -461,40 +501,22 @@ void *HeapAllocator::Allocate(s64 size)
 
 void *HeapAllocator::AllocateAligned(s64 size, s64 align)
 {
-	auto maxSize = size + sizeof(HeapAllocationHeader) + (alignof(HeapAllocationHeader) - 1) + align;
-	Assert(maxSize <= this->blocks.blockSize);
-	auto header = (HeapAllocationHeader *)this->blocks.Allocate(size + sizeof(HeapAllocationHeader) + align, alignof(HeapAllocationHeader));
-	auto data = (u8 *)header + sizeof(HeapAllocationHeader);
-	if ((IntegerPointer)data % align == 0)
-	{
-		// Make room to store number of bytes between the end of the header and the start of the data.
-		// We need this when we go to free the pointer.
-		data += align;
-	}
-	else
-	{
-		data = (u8 *)AlignPointer(data, align);
-	}
-	header->size = size;
-	header->alignment = align;
-	auto bytesBetweenEndOfHeaderAndStartOfData = data - ((u8 *)header + sizeof(HeapAllocationHeader));
-	Assert(bytesBetweenEndOfHeaderAndStartOfData < U8Max);
-	*(data - 1) = bytesBetweenEndOfHeaderAndStartOfData;
-	return data;
+	return this->blocks.AllocateWithHeader(size, align);
 }
 
-void *HeapAllocator::Resize(void *mem, s64 size)
+void *HeapAllocator::Resize(void *mem, s64 newSize)
 {
-	// @TODO
-	this->Deallocate(mem);
-	return this->Allocate(size);
+	auto h = GetMemoryHeader(mem);
+	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
+	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
+	this->free.Append(h);
+	return newMem;
 }
 
 void HeapAllocator::Deallocate(void *mem)
 {
-	auto bytesBetweenEndOfHeaderAndStartOfData = *((u8 *)mem - 1);
-	auto header = (HeapAllocationHeader *)((u8 *)mem - bytesBetweenEndOfHeaderAndStartOfData);
-	this->free.Append(header);
+	auto h = GetMemoryHeader(mem);
+	this->free.Append(h);
 }
 
 void HeapAllocator::Clear()
@@ -507,4 +529,37 @@ void HeapAllocator::Free()
 {
 	// @TODO
 	this->free.Resize(0);
+}
+
+void *NullAllocator::Allocate(s64 size)
+{
+	return NULL;
+}
+
+void *NullAllocator::AllocateAligned(s64 size, s64 align)
+{
+	return NULL;
+}
+
+void *NullAllocator::Resize(void *mem, s64 newSize)
+{
+	return NULL;
+}
+
+void NullAllocator::Deallocate(void *mem)
+{
+}
+
+void NullAllocator::Clear()
+{
+}
+
+void NullAllocator::Free()
+{
+}
+
+struct NullAllocator *NullAllocator()
+{
+	static auto a = (struct NullAllocator){};
+	return &a;
 }

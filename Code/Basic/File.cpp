@@ -29,5 +29,5 @@ String ReadEntireFile(String path, bool *err)
 {
 	auto sb = StringBuilder{};
 	*err = ReadEntireFileIn(&sb, path);
-	return NewStringFromBytes(sb.buffer);
+	return NewStringFromBuffer(sb.buffer);
 }

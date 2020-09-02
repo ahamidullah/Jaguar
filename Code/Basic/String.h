@@ -2,7 +2,6 @@
 
 #include "Array.h"
 #include "Common.h"
-#include "Time.h"
 
 bool CStringsEqual(const char *a, const char *b);
 s64 CStringLength(const char *s);
@@ -40,12 +39,11 @@ struct StringView
 struct String
 {
 	Array<u8> buffer;
-	bool literal;
 
 	String();
 	String(char *s);
 	String(const char *s);
-	String(Array<u8> buf, bool literal);
+	String(Array<u8> buf);
 	//operator StringView();
 	const u8 &operator[](s64 i);
 	bool operator==(String s);
@@ -64,7 +62,7 @@ struct String
 };
 
 String NewString(const char *s);
-String NewStringFromBytes(Array<u8> );
+String NewStringFromBuffer(Array<u8> b);
 String FormatString(String fmt, ...);
 bool ParseInteger(String s, s64 *out);
 
@@ -82,7 +80,6 @@ String JoinStringsIn(Allocator *a, StringPack... sp)
 	return
 	{
 		.buffer = sb.buffer,
-		.literal = false,
 	};
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 struct Shader
 {
 	String name;
@@ -9,3 +11,5 @@ struct Shader
 
 void LoadShaders();
 Shader *GetShader(const String &name);
+
+#endif

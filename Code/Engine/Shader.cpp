@@ -1,3 +1,4 @@
+#if 0
 #include "Shader.h"
 
 #include "Code/Basic/Parser.h"
@@ -12,7 +13,7 @@ String CompileShader(const String &filepath, bool *error)
 {
 	if (!FileExists(filepath))
 	{
-		LogPrint(ERROR_LOG, "Shader file %k does not exist.\n", filepath);
+		LogError("Shader file %k does not exist.\n", filepath);
 		*error = true;
 		return {};
 	}
@@ -30,7 +31,7 @@ String CompileShader(const String &filepath, bool *error)
 	auto processedFile = OpenFile(processedFilepath, OPEN_FILE_WRITE_ONLY | OPEN_FILE_CREATE, error);
 	if (*error)
 	{
-		LogPrint(ERROR_LOG, "Failed to open processed shader output file %k.\n", processedFilepath);
+		LogError("Failed to open processed shader output file %k.\n", processedFilepath);
 		*error = true;
 		return {};
 	}
@@ -39,7 +40,7 @@ String CompileShader(const String &filepath, bool *error)
 	auto parser = CreateParser(filepath, STANDARD_PARSER_DELIMITERS, error);
 	if (*error)
 	{
-		LogPrint(ERROR_LOG, "Failed to create parser for shader %k.\n", filepath);
+		LogError("Failed to create parser for shader %k.\n", filepath);
 		*error = true;
 		return {};
 	}
@@ -58,21 +59,21 @@ String CompileShader(const String &filepath, bool *error)
 		}
 		if (GetParserToken(&lineParser) != "\"")
 		{
-			LogPrint(ERROR_LOG, "Expected '\"' at %k:%ld:%ld.\n", filepath, parser.line, lineParser.column);
+			LogError("Expected '\"' at %k:%ld:%ld.\n", filepath, parser.line, lineParser.column);
 			*error = true;
 			return {};
 		}
 		auto includeFilepath = JoinFilepaths("Code/Shader", GetParserToken(&lineParser));
 		if (GetParserToken(&lineParser) != "\"")
 		{
-			LogPrint(ERROR_LOG, "Expected '\"' at %k:%ld:%ld.\n", filepath, parser.line, lineParser.column);
+			LogError("Expected '\"' at %k:%ld:%ld.\n", filepath, parser.line, lineParser.column);
 			*error = true;
 			return {};
 		}
 		auto includeFileContents = ReadEntireFile(includeFilepath, error);
 		if (*error)
 		{
-			LogPrint(ERROR_LOG, "Failed to read include file %k at %k:%ld%ld.\n", includeFilepath, filepath, parser.line, lineParser.column);
+			LogError("Failed to read include file %k at %k:%ld%ld.\n", includeFilepath, filepath, parser.line, lineParser.column);
 			*error = true;
 			return {};
 		}
@@ -83,14 +84,14 @@ String CompileShader(const String &filepath, bool *error)
 	auto command = FormatString("glslangValidator -V %k -o %k", processedFilepath, spirvFilepath);
 	if (RunProcess(command) != 0)
 	{
-		LogPrint(ERROR_LOG, "\nShader compilation command failed: %k.\n", command);
+		LogError("\nShader compilation command failed: %k.\n", command);
 		*error = true;
 		return {};
 	}
 	auto spirv = ReadEntireFile(spirvFilepath, error);
 	if (*error)
 	{
-		LogPrint(ERROR_LOG, "Failed to read spirv file %k.\n", spirvFilepath);
+		LogError("Failed to read spirv file %k.\n", spirvFilepath);
 		*error = true;
 		return {};
 	}
@@ -123,13 +124,13 @@ void LoadShaders()
 			continue;
 		}
 
-		LogPrint(INFO_LOG, "Loading shader %k.\n", filepath);
+		LogInfo("Loading shader %k.\n", filepath);
 
 		auto error = false;
 		auto spirv = CompileShader(filepath, &error);
 		if (error)
 		{
-			LogPrint(ERROR_LOG, "Failed to compile shader %k.\n", filepath);
+			LogError("Failed to compile shader %k.\n", filepath);
 			continue;
 		}
 		auto name = CreateString(iteration.filename);
@@ -158,3 +159,4 @@ Shader *GetShader(const String &name)
 	}
 	return shader;
 }
+#endif

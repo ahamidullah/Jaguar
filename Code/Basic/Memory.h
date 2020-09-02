@@ -21,11 +21,12 @@ struct AllocatorBlocks
 
 	void NewBlock();
 	void *Allocate(s64 size, s64 align);
+	void *AllocateWithHeader(s64 size, s64 align);
 	void Clear();
 	void Free();
 };
 
-struct HeapAllocationHeader
+struct AllocationHeader
 {
 	s64 size;
 	s64 alignment;
@@ -34,11 +35,11 @@ struct HeapAllocationHeader
 struct HeapAllocator : Allocator
 {
 	AllocatorBlocks blocks;
-	Array<HeapAllocationHeader *> free;
+	Array<AllocationHeader *> free;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 size);
+	void *Resize(void *mem, s64 newSize);
 	void Deallocate(void *mem);
 	void Clear();
 	void Free();
@@ -53,7 +54,7 @@ struct GlobalHeapAllocator : Allocator
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 size);
+	void *Resize(void *mem, s64 newSize);
 	void Deallocate(void *mem);
 	void Clear();
 	void Free();
@@ -67,7 +68,7 @@ struct PoolAllocator : Allocator
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 size);
+	void *Resize(void *mem, s64 newSize);
 	void Deallocate(void *mem);
 	void Clear();
 	void Free();
@@ -84,7 +85,7 @@ struct SlotAllocator : Allocator
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 size);
+	void *Resize(void *mem, s64 newSize);
 	void Deallocate(void *mem);
 	void Clear();
 	void Free();
@@ -92,9 +93,21 @@ struct SlotAllocator : Allocator
 
 SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlignment, s64 slotCount, s64 slotsPerBlock, Allocator *blockAlloc, Allocator *arrayAlloc);
 
+struct NullAllocator : Allocator
+{
+	void *Allocate(s64 size);
+	void *AllocateAligned(s64 size, s64 align);
+	void *Resize(void *mem, s64 newSize);
+	void Deallocate(void *mem);
+	void Clear();
+	void Free();
+};
+
+struct NullAllocator *NullAllocator();
+
 void *AllocateMemory(s64 size);
 void *AllocateAlignedMemory(s64 size, s64 align);
-void *ResizeMemory(void *mem, s64 size);
+void *ResizeMemory(void *mem, s64 newSize);
 void DeallocateMemory(void *mem);
 IntegerPointer AlignAddress(IntegerPointer addr, s64 align);
 void *AlignPointer(void *addr, s64 align);

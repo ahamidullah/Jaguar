@@ -81,7 +81,7 @@ Settings
 ]
 
 .VulkanCompilerOptions =
-	" -DUSING_VULKAN_API"
+	" -DVulkanBuild"
 	+ " -I$VulkanSDKDirectory$/include"
 
 .EngineConfig =
@@ -101,7 +101,6 @@ Settings
 		+ " -lm"
 		+ " -lfreetype"
 		+ " -lXi"
-		+ " -lassimp"
 		+ " -lpthread"
 ]
 

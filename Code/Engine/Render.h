@@ -1,11 +1,10 @@
 #pragma once
 
-#include "Code/Common.h"
+#include "Common.h"
 
-void InitializeRenderer(void *jobParameterPointer);
-s64 GetFrameIndex();
-s64 GetRenderWidth();
-s64 GetRenderHeight();
+void InitializeRenderer(void *params);
+s64 RenderWidth();
+s64 RenderHeight();
 void Render();
 
 #if 0

@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 // @TODO: Switch all enums to match Vulkan name.
 
 #if defined(USING_VULKAN_API)
@@ -338,8 +340,8 @@ struct GPUCommandBuffer
 	void CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h);
 };
 
-GPUCommandBuffer NewGPUCommandBuffer();
-void QueueGPUCommandBuffer(GPUCommandBuffer cb);
+GPUCommandBuffer NewGPUCommandBuffer(s64 size, );
+void QueueGPUCommandBuffer(GPUCommandBuffer cb, bool *signalOnCompletion);
 void SubmitGPUCommandBuffers();
 
 struct GPUBuffer
@@ -406,4 +408,5 @@ typedef struct Render_API_Context
 
 constexpr bool usingVulkanAPI = false;
 
+#endif
 #endif

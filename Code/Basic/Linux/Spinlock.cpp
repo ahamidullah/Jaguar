@@ -7,7 +7,7 @@ void Spinlock::Lock()
 {
 	for (;;)
 	{
-		if (AtomicCompareAndSwap64(&this->handle, 0, 1) == 1)
+		if (AtomicCompareAndSwap64(&this->handle, 0, 1) == 0)
 		{
 			return;
 		}

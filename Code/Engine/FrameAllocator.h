@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 enum FrameAllocatorTag
 {
 };
@@ -22,3 +24,5 @@ void *ResizeHeapMemory(void *heap, void *memory, s64 size);
 void FreeHeapMemory(void *heap, void *memory);
 void ClearHeapAllocator(void *heap);
 void FreeHeapAllocator(void *heap);
+
+#endif

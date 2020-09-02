@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../PCH.h"
-#include "../String.h"
 #include "Common.h"
 
 struct Date

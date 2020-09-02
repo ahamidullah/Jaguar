@@ -1,26 +1,32 @@
 #include "Asset.h"
+
+void InitializeAssets(void *)
+{
+}
+
+void LoadAsset(AssetID id)
+{
+}
+
+#if 0
+#include "Asset.h"
 #include "GPU.h"
 #include "PCH.h"
 #include "Mesh.h"
 #include "Job.h"
-
 #include "Basic/Log.h"
 #include "Basic/Filesystem.h"
 #include "Basic/HashTable.h"
 #include "Basic/Hash.h"
-
 #define STBI_MALLOC AllocateMemory
 #define STBI_REALLOC ResizeMemory
-#define STBI_Free FreeMemory
-
+#define STBI_Free DeallocateMemory
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
-
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
-
 #define TINYGLTF_IMPLEMENTATION
 #include "tiny_gltf.h"
 #undef TINYGLTF_IMPLEMENTATION
@@ -42,7 +48,7 @@ struct AssetContainer
 	bool loading;
 	s64 loadCount;
 	s64 lockCount;
-	#if DEBUG_BUILD
+	#if DebugBuild
 		String name;
 	#endif
 };
@@ -59,7 +65,7 @@ void InitializeAssets(void *)
 		{
 		case ModelAsset:
 		{
-			assetSlots[i] = NewSlotAllocator(KilobytesToBytes(64), 0, GlobalHeapAllocator(), GlobalHeapAllocator());
+			assetSlots[i] = NewSlotAllocator(KilobytesToBytes(64), 0, GlobalHeap(), GlobalHeap());
 		} break;
 		default:
 		{
@@ -74,31 +80,30 @@ void InitializeAssets(void *)
 GPUCommandBuffer theBuffer;
 bool ready = false;
 
-GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 verticesByteSize, s64 indicesByteSize, GfxBuffer vertexStagingBuffer)
+GPUIndexedGeometry QueueIndexedGeometryUploadToGPU(s64 vertByteSize, s64 idxByteSize, GfxBuffer staging)
 {
-	auto vertexBuffer = CreateGPUBuffer(verticesByteSize, GFX_VERTEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
-	auto indexBuffer = CreateGPUBuffer(indicesByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
-	//auto commandBuffer = CreateUploadCommandBuffer();
-	theBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT);
-	GfxRecordCopyBufferCommand(theBuffer, verticesByteSize, vertexStagingBuffer, vertexBuffer, 0, 0);
-	GfxRecordCopyBufferCommand(theBuffer, indicesByteSize, vertexStagingBuffer, indexBuffer, verticesByteSize, 0);
+	auto vb = NewGPUBuffer(vertByteSize, GPUVertexBuffer | GPUTransferDestinationBuffer, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+	auto ib = NewGPUBuffer(idxByteSize, GFX_INDEX_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
+	theBuffer = NewGPUTransferCommandBuffer(GPUPersistentResource);
+	theBuffer.CopyBuffer(vertByteSize, staging, vb, 0, 0);
+	theBuffer.CopyBuffer(idxByteSize, staging, ib, vertByteSize, 0);
 	QueueGPUCommandBuffer(theBuffer, NULL);
 	ready = true;
 	//auto fence = GfxCreateFence(false);
 	//GfxSubmitCommandBuffers(1, &theBuffer, GFX_GRAPHICS_COMMAND_QUEUE, fence);
 	return
 	{
-		.vertexBuffer = vertexBuffer,
-		.indexBuffer = indexBuffer,
+		.vertexBuffer = vb,
+		.indexBuffer = ib,
 	};
 }
 
-u32 QueueTextureUploadToGPU(u8 *pixels, s64 texturePixelWidth, s64 texturePixelHeight)
+u32 QueueTextureUploadToGPU(u8 *pixels, s64 w, s64 h)
 {
 	// @TODO: Load texture directly into staging memory.
-	void *stagingMemory;
-	auto textureByteSize = sizeof(u32) * texturePixelWidth * texturePixelHeight;
-	auto stagingBuffer = CreateGPUBuffer(textureByteSize, GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
+	auto staging = (void *){};
+	auto nBytes = sizeof(u32) * w * h;
+	auto stagingBuf = NewGPUBuffer(nBytes, GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT, &stagingMemory);
 	CopyMemory(pixels, stagingMemory, textureByteSize);
 	auto image = CreateGPUImage(texturePixelWidth, texturePixelHeight, GFX_FORMAT_R8G8B8A8_UNORM, GFX_IMAGE_LAYOUT_UNDEFINED, GFX_IMAGE_USAGE_TRANSFER_DST | GFX_IMAGE_USAGE_SAMPLED, GFX_SAMPLE_COUNT_1, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);
 	auto commandBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_PERSISTENT);
@@ -132,15 +137,15 @@ void LoadModel(ModelAsset *m, AssetID id)
 	auto gltfLoad = gltfLoader.LoadBinaryFromFile(&gltfModel, &gltfErr, &gltfWarn, &path[0]);
 	if (!gltfWarn.empty())
 	{
-		LogPrint(InfoLog, "Asset", "GLTF warning: %s.\n", gltfWarn.c_str());
+		LogInfo("Asset", "GLTF warning: %s.\n", gltfWarn.c_str());
 	}
 	if (!gltfErr.empty())
 	{
-		LogPrint(ErrorLog, "Asset", "GLTF error: %s.\n", gltfErr.c_str());
+		LogError("Asset", "GLTF error: %s.\n", gltfErr.c_str());
 	}
 	if (!gltfLoad)
 	{
-		LogPrint(ErrorLog, "Asset", "Failed to parse gltf asset file %k.\n", path);
+		LogError("Asset", "Failed to parse gltf asset file %k.\n", path);
 	}
 	Abort("", "");
 #if 0
@@ -427,7 +432,7 @@ void LoadTexture(String path)
 	auto pixels = stbi_load(&path[0], &texW, &texH, &texChans, STBI_rgb_alpha);
 	if (!pixels)
 	{
-		LogPrint(ErrorLog, "Asset", "Failed to load texture %k.\n", path);
+		LogError("Asset", "Failed to load texture %k.\n", path);
 		return;
 	}
 	Defer(FreeMemory(pixels));
@@ -441,12 +446,12 @@ void *LockAsset(AssetID id)
 	Defer(ReleaseSpinLock(assets.lock));
 	if (!c->resident)
 	{
-		LogPrint(ErrorLog, "Asset", "Tried to lock asset %k, but asset is not resident.\n", c->name);
+		LogError("Asset", "Tried to lock asset %k, but asset is not resident.\n", c->name);
 		return NULL;
 	}
 	if (c->loadCount == 0)
 	{
-		LogPrint(ErrorLog, "Asset", "Tried to lock asset %k, but asset is scheduled for unload.\n", c->name);
+		LogError("Asset", "Tried to lock asset %k, but asset is scheduled for unload.\n", c->name);
 		return NULL;
 	}
 	if (c->loading)
@@ -483,7 +488,7 @@ void UnlockAsset(AssetID id)
 		AcquireSpinLock(c->lock);
 		if (!c->resident)
 		{
-			LogPrint(ErrorLog, "Tried to unlock asset %k, but asset is not resident.\n", c->name);
+			LogError("Tried to unlock asset %k, but asset is not resident.\n", c->name);
 			return;
 		}
 		c->lockCount -= 1;
@@ -512,7 +517,7 @@ void LoadAsset(void *jobParams)
 		// The asset is either already loaded or is in the process of loading.
 		if (params->type != c->type || params->path != c->path)
 		{
-			LogPrint(ErrorLog, "Tried to load asset %d:%d:%k, but a different asset with the same id %d:%d:%k is already loaded.\n", params->id, params->type, params->path, c->id, c->type, c->path);
+			LogError("Tried to load asset %d:%d:%k, but a different asset with the same id %d:%d:%k is already loaded.\n", params->id, params->type, params->path, c->id, c->type, c->path);
 		}
 		if (c->scheduledForUnload)
 		{
@@ -557,7 +562,7 @@ void UnloadAsset(AssetID id)
 	AcquireSpinLock(c->lock);
 	if (!c->resident)
 	{
-		LogPrint(ErrorLog, "Tried to unload asset %k, but asset is not resident.\n", assets.holders[id].name);
+		LogError("Tried to unload asset %k, but asset is not resident.\n", assets.holders[id].name);
 		return;
 	}
 	c->loadCount -= 1;
@@ -585,3 +590,4 @@ String AssetIDToString(AssetID id)
 	}
 	return "NoAssetIDToStringRecord";
 }
+#endif

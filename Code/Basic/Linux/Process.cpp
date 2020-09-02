@@ -1,4 +1,5 @@
 #include "../Process.h"
+#include "../PCH.h"
 
 s32 RunProcess(String cmd)
 {
@@ -34,4 +35,28 @@ String EnvironmentVariable(String name, bool *exists)
 	}
 	*exists = true;
 	return result;
+}
+
+Array<String> Stacktrace()
+{
+	const auto maxAddrs = 100;
+	auto addrs = StaticArray<void *, maxAddrs>{};
+	auto numAddrs = backtrace(&addrs[0], maxAddrs);
+	if (numAddrs == maxAddrs)
+	{
+		LogError("Memory", "Stack trace is probably truncated.\n");
+	}
+	auto trace = backtrace_symbols(&addrs[0], numAddrs);
+	if (!trace)
+	{
+		LogError("Memory", "Failed to get stack trace function names.\n");
+		return {};
+	}
+	auto st = NewArrayWithCapacity<String>(0, numAddrs);
+	for (auto i = 0; i < numAddrs; i++)
+	{
+		st.Append(trace[i]);
+	}
+	free(trace);
+	return st;
 }

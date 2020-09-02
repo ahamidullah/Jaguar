@@ -1,3 +1,4 @@
+#if 0
 // One thread per core.
 // Each thread is locked to a CPU core.
 // Fiber pool -- max fiber count (160?).
@@ -215,8 +216,11 @@ void WaitForJobCounter(JobCounter *counter)
 	SwitchToFiber(&workerThreadFiber);
 }
 
-void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
+#endif
+
+void InitializeJobs(JobProcedure init, void *param)
 {
+#if 0
 	for (auto i = 0; i < JOB_FIBER_COUNT; i++)
 	{
 		JobFiber *newFiber = AllocateStructMemory(JobFiber);
@@ -244,9 +248,11 @@ void InitializeJobs(JobProcedure initialJobProcedure, void *initialJobParameter)
 	JobDeclaration initialJob = CreateJob(initialJobProcedure, initialJobParameter);
 	RunJobs(1, &initialJob, HIGH_PRIORITY_JOB, NULL);
 	WorkerThreadProcedure(&workerThreads[workerThreadCount - 1].parameter);
+#endif
 }
 
 s64 GetWorkerThreadCount()
 {
-	return ArrayLength(workerThreads);
+	return 4;
+	//return ArrayLength(workerThreads);
 }

@@ -4,7 +4,7 @@
 
 struct Spinlock
 {
-	s64 handle;
+	volatile s64 handle;
 
 	void Lock();
 	void Unlock();

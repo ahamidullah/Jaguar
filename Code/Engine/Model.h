@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 #include "Mesh.h"
 
 struct ModelAsset
@@ -18,3 +20,5 @@ struct ModelInstance
 	MeshInstance mesh;
 	SkeletonInstance *skeleton;
 };
+
+#endif

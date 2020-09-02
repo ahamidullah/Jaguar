@@ -1,4 +1,24 @@
 #include "Entity.h"
+
+void SetEntityTransform(u64 id, Transform t)
+{
+}
+
+void SetEntityModel(u64 id, AssetID asset)
+{
+}
+
+void InitializeEntities()
+{
+}
+
+u64 NewEntity()
+{
+	return 0;
+}
+
+#if 0
+#include "Entity.h"
 #include "Mesh.h"
 #include "Job.h"
 
@@ -281,7 +301,7 @@ void SetEntityModels(ArrayView<u64> ids, ArrayView<AssetID> models)
 
 void SetEntityModel(u64 id, AssetID model)
 {
-	LogPrint(LogLevelVerbose, "Entity", "Entity %lu: setting model %k(%d).\n", id, AssetIDToString(model), model);
+	LogVerbose("Entity", "Entity %lu: setting model %k(%d).\n", id, AssetIDToString(model), model);
 	auto s = AssetStatus{};
 	auto m = LockAsset(model, &s);
 	if (s == AssetStatusLoaded)
@@ -291,7 +311,7 @@ void SetEntityModel(u64 id, AssetID model)
 	}
 	else if (s == AssetStatusLoading)
 	{
-		LogPrint(LogLevelVerbose, "Entity", "Entity %lu: waiting for model %k(%d) to finish loading.\n", id, AssetIDToString(model), model);
+		LogVerbose("Entity", "Entity %lu: waiting for model %k(%d) to finish loading.\n", id, AssetIDToString(model), model);
 		struct SetEntityModelJobParameter
 		{
 			void *modelID;
@@ -315,7 +335,7 @@ void SetEntityModel(u64 id, AssetID model)
 	}
 	else if (s == AssetStatusNotResident)
 	{
-		LogPrint(LogLevelError, "Entity", "Entity %lu: failed to set model: %k(%d) is not resident.\n", id, AssetIDToString(model), model);
+		LogError("Entity", "Entity %lu: failed to set model: %k(%d) is not resident.\n", id, AssetIDToString(model), model);
 		return;
 	}
 }
@@ -339,3 +359,4 @@ Array<MeshInstance> MeshInstances()
 {
 	return entities.meshes.components;
 }
+#endif

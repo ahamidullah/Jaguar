@@ -5,10 +5,15 @@
 
 struct PlatformWindow
 {
+	xcb_window_t xcbHandle;
+	xcb_intern_atom_reply_t *xcbDeleteWindowAtom;
+
+#if 0
 	Window x11Handle;
 	Atom x11DeleteWindowAtom;
 	Cursor x11BlankCursor;
 	u32 height;
+#endif
 };
 
 struct WindowEvents
@@ -25,4 +30,4 @@ void ToggleFullscreen(PlatformWindow *w);
 void CaptureCursor(PlatformWindow *w);
 void UncaptureCursor(PlatformWindow *w);
 void DestroyWindow(PlatformWindow *w);
-Display *X11Display();
+xcb_connection_t *XCBConnection();

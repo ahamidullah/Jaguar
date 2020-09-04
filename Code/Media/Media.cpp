@@ -1,3 +1,4 @@
+#include "Platform.h"
 #include "Input.h"
 #include "Window.h"
 #include "Basic/Basic.h"
@@ -11,7 +12,7 @@ void InitializeMedia(bool multithreaded)
 	{
 		Abort("Basic library was not initialized.");
 	}
+	InitializePlatform();
 	InitializeInput();
-	InitializeWindows(multithreaded);
 	isMediaInitialized = true;
 }

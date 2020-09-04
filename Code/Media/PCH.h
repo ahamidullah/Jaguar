@@ -8,6 +8,9 @@
 	#include <X11/Xutil.h>
 	#include <X11/Xatom.h>
 	#include <X11/extensions/XInput2.h>
+	#include <xcb/xcb.h>
+	#include <xcb/xinput.h>
+	#include <xcb/xcb_keysyms.h>
 #else
 	#error Unsupported platform.
 #endif

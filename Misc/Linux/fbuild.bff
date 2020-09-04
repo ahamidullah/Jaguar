@@ -96,11 +96,12 @@ Settings
 		"Media"
 	}
 	.LinkerOptions +
-		" -lX11"
+		" -lxcb"
+		+ " -lxcb-keysyms"
+		+ " -lxcb-xinput"
 		+ " -ldl"
 		+ " -lm"
 		+ " -lfreetype"
-		+ " -lXi"
 		+ " -lpthread"
 ]
 

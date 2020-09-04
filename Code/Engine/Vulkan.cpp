@@ -1721,21 +1721,21 @@ void GfxDrawIndexedVertices(GPUCommandBuffer commandBuffer, s64 indexCount, s64 
 }
 
 #if defined(__linux__)
-	const char *GetRequiredVulkanSurfaceInstanceExtension()
-	{
-		return "VK_KHR_xlib_surface";
-	}
+const char *GetRequiredVulkanSurfaceInstanceExtension()
+{
+	return "VK_KHR_xcb_surface";
+}
 
-	VkResult CreateVulkanSurface(PlatformWindow *window, VkInstance instance, VkSurfaceKHR *surface)
+VkResult CreateVulkanSurface(PlatformWindow *w, VkInstance inst, VkSurfaceKHR *s)
+{
+	auto ci = VkXcbSurfaceCreateInfoKHR
 	{
-		auto surfaceCreateInfo = VkXlibSurfaceCreateInfoKHR
-		{
-			.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-			.dpy = GetX11Display(),
-			.window = window->x11Handle,
-		};
-		return vkCreateXlibSurfaceKHR(instance, &surfaceCreateInfo, NULL, surface);
-	}
+		.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+		.dpy = XCBConnection(),
+		.window = window->xcbHandle,
+	};
+	return vkCreateXcbSurfaceKHR(inst, &ci, NULL, s);
+}
 #endif
 
 void InitializeGPU(PlatformWindow *win)

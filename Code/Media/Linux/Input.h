@@ -37,5 +37,6 @@ enum MouseButton
 	MouseButtonCount
 };
 
+void InitializePlatformInput();
 s32 KeySymbolToScancode(KeySymbol k);
 void QueryMousePosition(PlatformWindow *w, s32 *x, s32 *y);

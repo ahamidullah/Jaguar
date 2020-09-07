@@ -12,7 +12,7 @@ void InitializePlatformInput()
     xcbKeySymbols = xcb_key_symbols_alloc(XCBConnection());
     if (!xcbKeySymbols)
     {
-    	Abort("Failed xcb_key_symbols_alloc().");
+    	Abort("Input", "Failed xcb_key_symbols_alloc().");
     }
 }
 
@@ -21,7 +21,7 @@ s32 KeySymbolToScancode(KeySymbol k)
 	auto kc = xcb_key_symbols_get_keycode(xcbKeySymbols, k);
 	if (!kc)
 	{
-		Abort("Failed xcb_key_symbols_get_keycode for KeySymbol %d.", k);
+		Abort("Input", "Failed xcb_key_symbols_get_keycode for KeySymbol %d.", k);
 	}
 	return *kc;
 }

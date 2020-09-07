@@ -110,6 +110,7 @@ const char *StringView::ToCString()
 // @TODO: auto s = String{"1234"}; s = sb.String();
 String::String()
 {
+	this->buffer = Array<u8>{};
 }
 
 String::String(char *s)
@@ -203,7 +204,7 @@ char *String::ToCString()
 
 String String::ToView(s64 start, s64 end)
 {
-	Assert(start >= end);
+	Assert(start <= end);
 	auto buf = Array<u8>
 	{
 		.allocator = NullAllocator(),
@@ -358,7 +359,7 @@ s64 StringBuilder::Length()
 
 String StringBuilder::ToView(s64 start, s64 end)
 {
-	Assert(start >= end);
+	Assert(start <= end);
 	auto buf = Array<u8>
 	{
 		.allocator = NullAllocator(),
@@ -429,7 +430,9 @@ void StringBuilder::FormatVarArgs(String fmt, va_list args)
 		sb->buffer.Resize(sb->Length() + STB_SPRINTF_MIN);
 		return (char *)&sb->buffer[len];
 	};
-	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], fmt.ToCString(), args);
+	auto cfmt = fmt.ToCString();
+	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], cfmt, args);
+	cfmt.Free();
 	this->buffer.Resize(len);
 }
 

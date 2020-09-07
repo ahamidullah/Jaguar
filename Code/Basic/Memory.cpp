@@ -5,6 +5,48 @@
 #include "Spinlock.h"
 #include "Fiber.h"
 
+StackAllocator *BackupGlobalAllocator()
+{
+	static auto mem = StaticArray<u8, KilobytesToBytes(32)>{};
+	static auto a = NewStackAllocator(mem);
+	return &a;
+}
+
+Allocator **ContextAllocatorPointer()
+{
+	static ThreadLocal auto contextAllocator = (Allocator *){};
+	if (!contextAllocator)
+	{
+		contextAllocator = BackupGlobalAllocator();
+	}
+	return &contextAllocator;
+}
+
+Allocator *ContextAllocator()
+{
+	if (RunningFiber())
+	{
+		return RunningFiber()->contextAllocator;
+	}
+	return *ContextAllocatorPointer();
+}
+
+void SetContextAllocator(Allocator *a)
+{
+	if (RunningFiber())
+	{
+		RunningFiber()->contextAllocator = a;
+		return;
+	}
+	*ContextAllocatorPointer() = a;
+}
+
+Array<Allocator *> *ContextAllocatorStack()
+{
+	static ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
+	return &contextAllocatorStack;
+}
+
 const auto DefaultMemoryAlignment = 16;
 const auto GlobalHeapBlockSize = MegabytesToBytes(64);
 const auto GlobalHeapInitialBlockCount = 32;
@@ -107,13 +149,6 @@ void GlobalHeapArrayAllocator::Free()
 	Abort("Memory", "Unsupported call to Free in GlobalHeapArrayAllocator.");
 }
 
-void *GlobalHeapAllocator::Allocate(s64 size)
-{
-	this->lock.Lock();
-	Defer(this->lock.Unlock());
-	return this->heap.Allocate(size);
-}
-
 GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 {
 	// This constructor function exists because C++ sucks and does not let you use brace initialization if the struct has a virtual method.
@@ -121,6 +156,13 @@ GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 	auto a = GlobalHeapAllocator{};
 	a.heap = h;
 	return a;
+}
+
+void *GlobalHeapAllocator::Allocate(s64 size)
+{
+	this->lock.Lock();
+	Defer(this->lock.Unlock());
+	return this->heap.Allocate(size);
 }
 
 void *GlobalHeapAllocator::AllocateAligned(s64 size, s64 align)
@@ -158,50 +200,84 @@ void GlobalHeapAllocator::Free()
 	this->heap.Free();
 }
 
-GlobalHeapAllocator *GlobalHeap()
+bool *GlobalHeapInitPointer()
 {
-	// @TODO: Avoid recursive deadlocks!
-	// @TODO: Test Assert works.
+	static auto init = false;
+	return &init;
+}
+
+bool IsGlobalHeapInitialized()
+{
+	return *GlobalHeapInitPointer();
+}
+
+Allocator *GlobalHeap()
+{
 	static auto blk = GlobalHeapBlockAllocator{};
 	static auto arr = GlobalHeapArrayAllocator{};
-	static auto alloc = NewGlobalHeapAllocator(NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blk, &arr));
+	static auto alloc = GlobalHeapAllocator{};
+	static auto initializing = false;
+	if (!initializing && !IsGlobalHeapInitialized())
+	{
+		// Try to initialize the global heap.
+		Assert(ThreadCount() == 1);
+		initializing = true;
+		alloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blk, &arr);
+		Abort("Memory", "WHOOPS.");
+		*GlobalHeapInitPointer() = true;
+		Assert(ContextAllocatorStack()->count == 0);
+		// We no longer need to use the backup global allocator!
+		SetContextAllocator(&alloc);
+	}
+	else if (initializing && !IsGlobalHeapInitialized())
+	{
+		// Well, we tried to initialize the global heap, but failed, somehow.
+		// Fallback to the backup, fixed-size buffer allocator.
+		Assert(ThreadCount() == 1);
+		return BackupGlobalAllocator();
+	}
 	return &alloc;
 }
 
-auto baseContextAllocator = (Allocator *)GlobalHeap();
-ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
-ThreadLocal auto contextAllocator = (Allocator *)NULL;
+void InitializeMemory()
+{
+	GlobalHeap(); // Ensure that the global heap is initialized...
+}
 
 void PushContextAllocator(Allocator *a)
 {
+	if (!IsGlobalHeapInitialized())
+	{
+		SetContextAllocator(a); // @TODO: What should we do here. Small, fixed size backup context allocator stack?
+		return;
+	}
 	if (RunningFiber())
 	{
 		RunningFiber()->contextAllocatorStack.Append(a);
 		RunningFiber()->contextAllocator = a;
+		return;
 	}
-	else
-	{
-		contextAllocatorStack.Append(a);
-		contextAllocator = a;
-	}
+	ContextAllocatorStack()->Append(a);
+	SetContextAllocator(a);
 }
 
 void PopContextAllocator()
 {
+	if (!IsGlobalHeapInitialized())
+	{
+		return; // @TODO
+	}
 	auto stk = (Array<Allocator *> *){};
 	auto ctx = (Allocator **){};
-	auto base = (Allocator *){};
 	if (RunningFiber())
 	{
-		base = RunningFiber()->baseContextAllocator;
 		stk = &RunningFiber()->contextAllocatorStack;
 		ctx = &RunningFiber()->contextAllocator;
 	}
 	else
 	{
-		base = baseContextAllocator;
-		stk = &contextAllocatorStack;
-		ctx = &contextAllocator;
+		stk = ContextAllocatorStack();
+		ctx = ContextAllocatorPointer();
 	}
 	if (stk->count == 0)
 	{
@@ -211,25 +287,12 @@ void PopContextAllocator()
 	stk->Resize(stk->count - 1);
 	if (stk->count == 0)
 	{
-		*ctx = base;
+		*ctx = GlobalHeap();
 	}
 	else
 	{
 		*ctx = (*stk)[stk->count - 1];
 	}
-}
-
-Allocator *ContextAllocator()
-{
-	if (RunningFiber())
-	{
-		return RunningFiber()->contextAllocator;
-	}
-	if (!contextAllocator)
-	{
-		contextAllocator = GlobalHeap();
-	}
-	return contextAllocator;
 }
 
 void *AllocateMemory(s64 size)
@@ -265,43 +328,6 @@ void *AlignPointer(void *addr, s64 align)
 {
 	return (void *)AlignAddress((IntegerPointer)addr, align);
 }
-
-#if 0
-void SetMemory(void *mem, s64 n, s8 to)
-{
-	auto m = (s8 *)mem;
-	for (auto i = 0; i < n; ++i)
-	{
-		m[i] = to;
-	}
-}
-
-void CopyMemory(const void *src, void *dst, s64 n)
-{
-	memcpy(dst, src, n); // @TODO
-}
-
-// Only legal if source and destination are in the same array.
-void MoveMemory(void *src, void *dst, s64 n)
-{
-	auto s = (s8 *)src;
-	auto d = (s8 *)dst;
-	if (src < dst)
-	{
-		for (s += n, d += n; n; --n)
-		{
-			*--d = *--s;
-		}
-	}
-	else
-	{
-		while (n--)
-		{
-			*d++ = *s++;
-		}
-	}
-}
-#endif
 
 AllocationHeader *GetMemoryHeader(void *mem)
 {
@@ -562,4 +588,80 @@ struct NullAllocator *NullAllocator()
 {
 	static auto a = (struct NullAllocator){};
 	return &a;
+}
+
+void *StackAllocator::Allocate(s64 size)
+{
+	return this->AllocateAligned(size, DefaultMemoryAlignment);
+}
+
+void *StackAllocator::AllocateWithHeader(s64 size, s64 align)
+{
+	this->head = (u8 *)AlignPointer(this->head, alignof(AllocationHeader));
+	auto h = (AllocationHeader *)this->head;
+	h->size = size;
+	h->alignment = align;
+	this->head += sizeof(AllocationHeader);
+	auto oldHead = this->head;
+	this->head = (u8 *)AlignPointer(this->head, align);
+	if (this->head == oldHead)
+	{
+		this->head += align;
+	}
+	*(this->head - 1) = (IntegerPointer)(this->head - (u8 *)h);
+	auto r = this->head;
+	this->head += size;
+	if (this->head - this->buffer > this->size)
+	{
+		ConsoleWrite("Ran out of stack allocator space...\n");
+		SignalDebugBreakpoint();
+		ExitProcess(ProcessFail);
+	}
+	return r;
+}
+
+void *StackAllocator::AllocateAligned(s64 size, s64 align)
+{
+	return this->AllocateWithHeader(size, align);
+}
+
+void *StackAllocator::Resize(void *mem, s64 newSize)
+{
+	auto h = GetMemoryHeader(mem);
+	if (((u8 *)mem) + h->size == this->head)
+	{
+		h->size = newSize;
+		this->head = ((u8 *)mem) + newSize;
+		return mem;
+	}
+	auto newMem = this->AllocateWithHeader(newSize, h->alignment);
+	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
+	return newMem;
+}
+
+void StackAllocator::Deallocate(void *mem)
+{
+	auto h = GetMemoryHeader(mem);
+	if (((u8 *)mem) + h->size == this->head)
+	{
+		this->head = (u8 *)h;
+	}
+}
+
+void StackAllocator::Clear()
+{
+	this->head = this->buffer;
+}
+
+void StackAllocator::Free()
+{
+}
+
+StackAllocator NewStackAllocator(ArrayView<u8> mem)
+{
+	auto a = StackAllocator{};
+	a.buffer = mem.elements;
+	a.head = mem.elements;
+	a.size = mem.count;
+	return a;
 }

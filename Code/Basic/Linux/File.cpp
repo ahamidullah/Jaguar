@@ -10,7 +10,7 @@ File OpenFile(String path, s64 flags, bool *err)
 	};
 	if (f.handle < 0)
 	{
-		LogError("File", "Failed to open file %k: %k.\n", path, PlatformError());
+		LogError("File", "Failed to open file %k: %k.", path, PlatformError());
 		*err = true;
 		return {};
 	}

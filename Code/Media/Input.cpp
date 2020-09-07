@@ -88,7 +88,6 @@ void InitializeInput()
 {
 	input.mouse.buttons = NewInputButtons(MouseButtonCount);
 	input.keyboard = NewInputButtons(ScancodeCount);
-	InitializePlatformInput();
 }
 
 bool IsKeyDown(KeySymbol k)

@@ -9,7 +9,7 @@
 #endif
 #include <string.h> // memcpy @TODO @DELETEME
 #include <stdlib.h> // realloc @TODO @DELETEME
-#include <new> // placement new @TODO @DELETEME
+#include <alloca.h>
 
 #ifdef __linux__
 	// DLL

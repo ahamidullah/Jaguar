@@ -10,6 +10,8 @@
 #include "Array.h"
 #include "Spinlock.h"
 
+void InitializeMemory();
+
 struct AllocatorBlocks
 {
 	s64 blockSize;
@@ -60,7 +62,8 @@ struct GlobalHeapAllocator : Allocator
 	void Free();
 };
 
-GlobalHeapAllocator *GlobalHeap();
+Allocator *GlobalHeap();
+bool IsGlobalHeapInitialized();
 
 struct PoolAllocator : Allocator
 {
@@ -105,15 +108,30 @@ struct NullAllocator : Allocator
 
 struct NullAllocator *NullAllocator();
 
+struct StackAllocator : Allocator
+{
+	u8 *buffer;
+	u8 *head;
+	s64 size;
+
+	void *Allocate(s64 size);
+	void *AllocateWithHeader(s64 size, s64 align);
+	void *AllocateAligned(s64 size, s64 align);
+	void *Resize(void *mem, s64 newSize);
+	void Deallocate(void *mem);
+	void Clear();
+	void Free();
+};
+
+StackAllocator NewStackAllocator(ArrayView<u8> mem);
+
 void *AllocateMemory(s64 size);
 void *AllocateAlignedMemory(s64 size, s64 align);
 void *ResizeMemory(void *mem, s64 newSize);
 void DeallocateMemory(void *mem);
 IntegerPointer AlignAddress(IntegerPointer addr, s64 align);
 void *AlignPointer(void *addr, s64 align);
-//void SetMemory(void *dst, s64 n, s8 to);
-//void CopyMemory(const void *src, void *dst, s64 n);
-//void MoveMemory(void *src, void *dst, s64 n);
 void PushContextAllocator(Allocator *a);
 void PopContextAllocator();
 Allocator *ContextAllocator();
+void SetContextAllocator(Allocator *a);

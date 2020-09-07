@@ -48,7 +48,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		if (!reply->present)
 		{
 			// Xinput is not supported.
-			Abort("The X server does not support the XInput extension.");
+			Abort("Window", "The X server does not support the XInput extension.");
 		}
 		free(reply);
 		struct
@@ -96,7 +96,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
     	win.xcbDeleteWindowAtom = xcb_intern_atom_reply(conn, cookie2, &err);
     	if (err)
     	{
-    		Abort("Failed to register XCB window delete atom: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    		Abort("Window", "Failed to register XCB window delete atom: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
     	}
     	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win.xcbHandle, reply->atom, 4, 32, 1, &win.xcbDeleteWindowAtom->atom);
     	free(reply);
@@ -108,7 +108,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 	x11Display = XOpenDisplay(NULL);
 	if (!x11Display)
 	{
-		Abort("Failed to create display.");
+		Abort("Window", "Failed to create display.");
 	}
 	auto screen = XDefaultScreen(x11Display);
 	auto rootWin = XRootWindow(x11Display, screen);
@@ -118,7 +118,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		auto junk2 = s32{};
 		if (!XQueryExtension(x11Display, "XInputExtension", &xinputOpcode, &junk1, &junk2))
 		{
-			Abort("The X server does not support the XInput extension.");
+			Abort("Window", "The X server does not support the XInput extension.");
 		}
 
 		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
@@ -126,7 +126,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		XIQueryVersion(x11Display, &majorVer, &minorVer);
 		if (majorVer < 2)
 		{
-			Abort("XInput version 2.0 or greater is required: version %d.%d is available.", majorVer, minorVer);
+			Abort("Window", "XInput version 2.0 or greater is required: version %d.%d is available.", majorVer, minorVer);
 		}
 
 		auto mask = MakeStaticArray<u8>(0, 0, 0);
@@ -145,7 +145,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		XISetMask(mask.elements, XI_FocusIn);
 		if (XISelectEvents(x11Display, rootWin, &eventMask, 1) != Success)
 		{
-			Abort("Failed to select XInput events.");
+			Abort("Window", "Failed to select XInput events.");
 		}
 	}
 	auto vis = XVisualInfo
@@ -184,7 +184,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		&winAttrs);
 	if (!win.x11Handle)
 	{
-		Abort("Failed to create a window.");
+		Abort("Window", "Failed to create a window.");
 	}
 	XFree(visInfo);
 	XStoreName(x11Display, win.x11Handle, "Jaguar");
@@ -207,7 +207,7 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		auto depth = u32{};
 		if (!XGetGeometry(x11Display, win.x11Handle, &rootWin, &winX, &winY, &winW, &win.height, &borderW, &depth))
 		{
-			Abort("Failed to get the screen's geometry.");
+			Abort("Window", "Failed to get the screen's geometry.");
 		}
 	}
 	// Create a blank cursor for when we want to hide the cursor.

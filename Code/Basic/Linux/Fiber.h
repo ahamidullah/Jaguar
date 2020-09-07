@@ -8,7 +8,6 @@ struct Fiber
 {
 	ucontext_t context;
 	jmp_buf jumpBuffer;
-	Allocator *baseContextAllocator;
 	Array<Allocator *> contextAllocatorStack;
 	Allocator *contextAllocator;
 	#ifdef ThreadSanitizerBuild

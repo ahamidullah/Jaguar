@@ -585,7 +585,7 @@ M4 InfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspectRati
 			0.0f,          0.0f,                         1.0f,    0.0f,
 		};
 	#else
-		Abort("Unknown render API.");
+		Abort("Math", "Unknown render API.");
 		return {};
 	#endif
 }

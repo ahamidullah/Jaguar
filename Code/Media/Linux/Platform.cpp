@@ -12,6 +12,6 @@ void InitializePlatform()
     xcbConnection = xcb_connect(NULL, NULL);
     if (auto rc = xcb_connection_has_error(xcbConnection); rc > 0)
     {
-    	Abort("Failed to open XCB connection: error code %d", rc);
+    	Abort("MediaPlatform", "Failed to open XCB connection: error code %d", rc);
     }
 }

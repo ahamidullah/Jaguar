@@ -4,6 +4,8 @@
 #include "../String.h"
 #include "../Memory.h"
 
+volatile auto threadCount = s64{1};
+
 Thread NewThread(ThreadProcedure proc, void *param)
 {
 	auto attrs = pthread_attr_t{};
@@ -16,7 +18,13 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_create(): %k.", PlatformError());
 	}
+	AtomicAdd64(&threadCount, 1);
 	return t;
+}
+
+s64 ThreadCount()
+{
+	return threadCount;
 }
 
 void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)

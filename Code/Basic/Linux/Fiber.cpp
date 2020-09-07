@@ -61,14 +61,13 @@ void RunFiber(void *p)
 Fiber *NewFiber(FiberProcedure proc, void *param)
 {
 	auto f = (Fiber *)GlobalHeap()->Allocate(sizeof(Fiber));
-	f->baseContextAllocator = GlobalHeap();
 	f->contextAllocatorStack.SetAllocator(GlobalHeap());
 	f->contextAllocator = GlobalHeap();
 	getcontext(&f->context);
 	auto stack = (char *)GlobalHeap()->AllocateAligned(FiberStackSize + (FiberStackGuardPageCount * CPUPageSize()), CPUPageSize());
 	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
-		Abort("Failed to mprotect fiber stack guard page: %k.", PlatformError());
+		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
 	}
 	f->context.uc_stack.ss_sp = stack + (FiberStackGuardPageCount * CPUPageSize());
 	f->context.uc_stack.ss_size = FiberStackSize;
@@ -116,7 +115,7 @@ void Fiber::Delete()
 {
 	if (this == runningFiber)
 	{
-		Abort("Attempted to delete running fiber.");
+		Abort("Fiber", "Attempted to delete running fiber.");
 	}
 	#ifdef ThreadSanitizerBuild
 		__tsan_destroy_fiber(this->tsan);
@@ -124,7 +123,7 @@ void Fiber::Delete()
 	auto stack = (char *)this->context.uc_stack.ss_sp - (FiberStackGuardPageCount * CPUPageSize());
 	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_READ | PROT_WRITE) == -1)
 	{
-		Abort("Failed to undo mprotect while deleting fiber: %k.", PlatformError());
+		Abort("Fiber", "Failed to undo mprotect while deleting fiber: %k.", PlatformError());
 	}
 	GlobalHeap()->Deallocate(stack);
 	GlobalHeap()->Deallocate(this);

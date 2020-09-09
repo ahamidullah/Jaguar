@@ -23,18 +23,27 @@
 const auto FiberStackSize = 100 * CPUPageSize();
 const auto FiberStackGuardPageCount = 1;
 
-ThreadLocal auto runningFiber = (Fiber *){};
+Fiber **RunningFiberPointer()
+{
+	static ThreadLocal auto rf = (Fiber *){};
+	return &rf;
+}
 
 Fiber *RunningFiber()
 {
-	return runningFiber;
+	return *RunningFiberPointer();
 }
 
-void InitializeFibers()
+void SetRunningFiber(Fiber *f)
 {
-	LogInfo("Fiber", "Stack size: %d", FiberStackSize);
-	LogInfo("Fiber", "Guard pages: %d", FiberStackGuardPageCount);
+	*RunningFiberPointer() = f;
 }
+
+//void InitializeFibers()
+//{
+//	LogInfo("Fiber", "Stack size: %d", FiberStackSize);
+//	LogInfo("Fiber", "Guard pages: %d", FiberStackGuardPageCount);
+//}
 
 struct FiberCreationInfo
 {
@@ -91,7 +100,7 @@ Fiber *NewFiber(FiberProcedure proc, void *param)
 Fiber *ConvertThreadToFiber()
 {
 	auto f = (Fiber *)GlobalHeap()->Allocate(sizeof(Fiber));
-	runningFiber = f;
+	SetRunningFiber(f);
 	#ifdef ThreadSanitizerBuild
 		f->tsan = __tsan_create_fiber(0);
 	#endif
@@ -101,19 +110,19 @@ Fiber *ConvertThreadToFiber()
 // @TODO: Prevent two fibers from running at the same time.
 void Fiber::Switch()
 {
-	if (!_setjmp(runningFiber->jumpBuffer))
+	if (!_setjmp(RunningFiber()->jumpBuffer))
 	{
 		#ifdef ThreadSanitizerBuild
 			__tsan_switch_to_fiber(this->tsan, 0);
 		#endif
-		runningFiber = this;
+		SetRunningFiber(this);
 		_longjmp(this->jumpBuffer, 1);
 	}
 }
 
 void Fiber::Delete()
 {
-	if (this == runningFiber)
+	if (this == RunningFiber())
 	{
 		Abort("Fiber", "Attempted to delete running fiber.");
 	}

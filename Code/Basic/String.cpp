@@ -130,6 +130,7 @@ String::String(const char *s)
 		.count = len,
 		.capacity = len,
 	};
+	this->literal = true;
 }
 
 String NewStringFromBuffer(Array<u8> b)
@@ -196,6 +197,10 @@ String String::ToCopy(s64 start, s64 end)
 
 char *String::ToCString()
 {
+	if (this->literal)
+	{
+		return (char *)this->buffer.elements;
+	}
 	auto s = (u8 *)AllocateMemory(this->Length() + 1);
 	CopyArray(this->buffer, NewArrayView(s, this->Length()));
 	s[this->Length()] = '\0';
@@ -432,7 +437,7 @@ void StringBuilder::FormatVarArgs(String fmt, va_list args)
 	};
 	auto cfmt = fmt.ToCString();
 	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], cfmt, args);
-	cfmt.Free();
+	DeallocateMemory(cfmt);
 	this->buffer.Resize(len);
 }
 

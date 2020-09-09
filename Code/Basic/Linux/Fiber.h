@@ -18,7 +18,6 @@ struct Fiber
 	void Delete();
 };
 
-void InitializeFibers();
 typedef void (*FiberProcedure)(void *);
 Fiber *NewFiber(FiberProcedure proc, void *param);
 Fiber *ConvertThreadToFiber();

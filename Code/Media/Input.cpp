@@ -27,13 +27,6 @@ struct Mouse
 	InputButtons buttons;
 };
 
-struct Input
-{
-	Mouse mouse;
-	InputButtons keyboard;
-	WindowEvents windowEvents;
-} input;
-
 InputButtons NewInputButtons(s64 size)
 {
 	auto b = InputButtons
@@ -84,10 +77,25 @@ bool InputButtons::WasReleased(s64 i)
 	return this->released[i];
 }
 
-void InitializeInput()
+struct InputState
 {
-	input.mouse.buttons = NewInputButtons(MouseButtonCount);
-	input.keyboard = NewInputButtons(ScancodeCount);
+	Mouse mouse;
+	InputButtons keyboard;
+};
+
+InputState NewInputState()
+{
+	return
+	{
+		.mouse.buttons = NewInputButtons(MouseButtonCount),
+		.keyboard = NewInputButtons(ScancodeCount),
+	};
+}
+
+InputState *Input()
+{
+	static auto i = NewInputState();
+	return &i;
 }
 
 bool IsKeyDown(KeySymbol k)
@@ -97,7 +105,7 @@ bool IsKeyDown(KeySymbol k)
 	{
 		return false;
 	}
-	return input.keyboard.IsDown(c);
+	return Input()->keyboard.IsDown(c);
 }
 
 bool WasKeyPressed(KeySymbol k)
@@ -107,7 +115,7 @@ bool WasKeyPressed(KeySymbol k)
 	{
 		return false;
 	}
-	return input.keyboard.WasPressed(c);
+	return Input()->keyboard.WasPressed(c);
 }
 
 bool WasKeyReleased(KeySymbol k)
@@ -117,7 +125,7 @@ bool WasKeyReleased(KeySymbol k)
 	{
 		return false;
 	}
-	return input.keyboard.WasReleased(c);
+	return Input()->keyboard.WasReleased(c);
 }
 
 bool IsMouseButtonDown(MouseButton b)
@@ -126,7 +134,7 @@ bool IsMouseButtonDown(MouseButton b)
 	{
 		return false;
 	}
-	return input.keyboard.IsDown(b);
+	return Input()->keyboard.IsDown(b);
 }
 
 bool WasMouseButtonPressed(MouseButton b)
@@ -135,7 +143,7 @@ bool WasMouseButtonPressed(MouseButton b)
 	{
 		return false;
 	}
-	return input.keyboard.WasPressed(b);
+	return Input()->keyboard.WasPressed(b);
 }
 
 bool WasMouseButtonReleased(MouseButton b)
@@ -144,66 +152,61 @@ bool WasMouseButtonReleased(MouseButton b)
 	{
 		return false;
 	}
-	return input.keyboard.WasReleased(b);
+	return Input()->keyboard.WasReleased(b);
 }
 
 f32 MouseX()
 {
-	return input.mouse.x;
+	return Input()->mouse.x;
 }
 
 f32 MouseY()
 {
-	return input.mouse.y;
+	return Input()->mouse.y;
 }
 
 f32 MouseDeltaX()
 {
-	return input.mouse.rawDeltaX;
+	return Input()->mouse.rawDeltaX;
 }
 
 f32 MouseDeltaY()
 {
-	return input.mouse.rawDeltaY;
+	return Input()->mouse.rawDeltaY;
 }
 
 f32 MouseSensitivity()
 {
-	return input.mouse.sensitivity;
+	return Input()->mouse.sensitivity;
 }
 
-bool QuitWindowEvent()
-{
-	return input.windowEvents.quit;
-}
-
-WindowEvents GetInput(PlatformWindow *w)
+WindowEvents ProcessInput(PlatformWindow *w)
 {
 	// Clear per-frame input.
-	for (auto &p : input.mouse.buttons.pressed)
+	for (auto &p : Input()->mouse.buttons.pressed)
 	{
 		p = false;
 	}
-	for (auto &r : input.mouse.buttons.released)
+	for (auto &r : Input()->mouse.buttons.released)
 	{
 		r = false;
 	}
-	for (auto &p : input.keyboard.pressed)
+	for (auto &p : Input()->keyboard.pressed)
 	{
 		p = false;
 	}
-	for (auto &r : input.keyboard.released)
+	for (auto &r : Input()->keyboard.released)
 	{
 		r = false;
 	}
-	input.mouse.rawDeltaX = 0;
-	input.mouse.rawDeltaY = 0;
-	auto wev = ProcessWindowEvents(w, &input.keyboard, &input.mouse);
+	Input()->mouse.rawDeltaX = 0;
+	Input()->mouse.rawDeltaY = 0;
+	auto wev = ProcessWindowEvents(w, &Input()->keyboard, &Input()->mouse);
 	// Update mouse position.
-	auto oldX = input.mouse.x;
-	auto oldY = input.mouse.y;
-	QueryMousePosition(w, &input.mouse.x, &input.mouse.y);
-	input.mouse.deltaX = input.mouse.x - oldX;
-	input.mouse.deltaY = input.mouse.y - oldY;
+	auto oldX = Input()->mouse.x;
+	auto oldY = Input()->mouse.y;
+	QueryMousePosition(w, &Input()->mouse.x, &Input()->mouse.y);
+	Input()->mouse.deltaX = Input()->mouse.x - oldX;
+	Input()->mouse.deltaY = Input()->mouse.y - oldY;
 	return wev;
 }

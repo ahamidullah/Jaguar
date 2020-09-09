@@ -1,6 +1,6 @@
 #include "../Window.h"
-#include "../Platform.h"
 #include "../Input.h"
+#include "XCBConnection.h"
 #include "Basic/Assert.h"
 #include "Basic/String.h"
 #include "Basic/Log.h"

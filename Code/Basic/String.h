@@ -39,6 +39,7 @@ struct StringView
 struct String
 {
 	Array<u8> buffer;
+	bool literal;
 
 	String();
 	String(char *s);

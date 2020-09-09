@@ -71,9 +71,11 @@ void LogCrashHandler(File crashLog)
 {
 }
 
+#if 0
 void InitializeLog()
 {
 	#ifdef DebugBuild
+		/*
 		Assert(IsGlobalHeapInitialized());
 		auto sb = StringBuilder{};
 		Defer(sb.Free());
@@ -82,7 +84,6 @@ void InitializeLog()
 		auto dir = sb.ToString();
 		Defer(dir.Free());
 		return; // @TODO
-		/*
 		if (!CreateDirectory(dir))
 		{
 			LogError("Log", "Failed to create log directory %k.\n", dir);
@@ -102,6 +103,7 @@ void InitializeLog()
 		*/
 	#endif
 }
+#endif
 
 void ConsolePrintVarArgs(String fmt, va_list args)
 {
@@ -159,41 +161,37 @@ String LogLevelToString(LogLevel l)
 	return "Unknown";
 }
 
-void DoLogPrint(String file, String func, s64 line, LogLevel l, String category, String msg)
-{
-	// We need to be a bit careful about not allocating memory, because this might be called using
-	// the fixed-size backup allocator.
-	if (l >= CurrentLogLevel())
-	{
-		ConsoleWrite("[");
-		ConsoleWrite(category);
-		ConsoleWrite("] ");
-		ConsoleWrite(msg);
-		ConsoleWrite("\n");
-	}
-	if (LogFile()->IsOpen())
-	{
-		LogFile()->WriteString("[");
-		LogFile()->WriteString(category);
-		LogFile()->WriteString("] ");
-		LogFile()->WriteString(LogLevelToString(l));
-		//sb.FormatTime();
-		auto sb = StringBuilder{};
-		Defer(sb.Free());
-		sb.Format("%k:%d %k  |  ", file, line, func);
-		LogFile()->WriteString(sb.ToView(0, sb.Length()));
-		LogFile()->WriteString(msg);
-		LogFile()->WriteString("\n");
-	}
-}
-
 void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String category, String fmt, va_list args)
 {
 	#ifdef DebugBuild
-		auto sb = StringBuilder{};
-		Defer(sb.Free());
-		sb.FormatVarArgs(fmt, args);
-		DoLogPrint(file, func, line, l, category, sb.ToView(0, sb.Length()));
+		auto msgSB = StringBuilder{};
+		Defer(msgSB.Free());
+		msgSB.FormatVarArgs(fmt, args);
+		auto msg = msgSB.ToView(0, msgSB.Length());
+		// We need to be a bit careful about not allocating memory, because this might be called using
+		// the fixed-size backup allocator.
+		if (l >= CurrentLogLevel())
+		{
+			ConsoleWrite("[");
+			ConsoleWrite(category);
+			ConsoleWrite("] ");
+			ConsoleWrite(msg);
+			ConsoleWrite("\n");
+		}
+		if (LogFile()->IsOpen())
+		{
+			LogFile()->WriteString("[");
+			LogFile()->WriteString(category);
+			LogFile()->WriteString("] ");
+			LogFile()->WriteString(LogLevelToString(l));
+			//sb.FormatTime();
+			auto infoSB = StringBuilder{};
+			Defer(infoSB.Free());
+			infoSB.Format("%k:%d %k  |  ", file, line, func);
+			LogFile()->WriteString(infoSB.ToView(0, infoSB.Length()));
+			LogFile()->WriteString(msg);
+			LogFile()->WriteString("\n");
+		}
 	#endif
 }
 
@@ -226,12 +224,7 @@ File NewCrashLogFile()
 	sb.Append(".txt");
 	auto err = false;
 	auto path = sb.ToString();
-	auto f = OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
-	if (err)
-	{
-		LogError("Log", "Failed to open crash log file %k.", path);
-	}
-	return f;
+	return OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 }
 
 // @TODO: Test a really long abort message during global heap initialization (should just truncate the error message when we run out of stack space).
@@ -243,21 +236,22 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 		return;
 	}
 	aborting = true;
-	if (!IsGlobalHeapInitialized())
-	{
-		ConsoleWrite("Abort called while global heap is uninitialized...\n");
-		ExitProcess(ProcessFail);
-	}
-	auto msg = StringBuilder{};
-	msg.FormatVarArgs(fmt, args);
+	// We have to be a bit careful about logging, as this function can get called during global heap
+	// initialization, in which case will be using a fixed-size stack allocator. So we should try
+	// not to overflow the stack allocator.
+	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, ContextAllocator(), ContextAllocator());
+	SetContextAllocator(&pool);
 	LogFatal(category, "###########################################################################");
 	LogFatal(category, "[ABORT]");
-	DoLogPrint(file, func, line, FatalLog, category, msg.ToView(0, msg.Length()));
+	LogPrintVarArgs(file, func, line, FatalLog, category, fmt, args);
 	LogFatal(category, "###########################################################################");
+	pool.Clear();
 	auto st = Stacktrace();
 	auto crashLog = NewCrashLogFile();
 	if (crashLog.IsOpen())
 	{
+		auto msg = StringBuilder{};
+		msg.FormatVarArgs(fmt, args);
 		crashLog.WriteString("###########################################################################\n");
 		crashLog.WriteString("[ABORT]\n");
 		crashLog.WriteString(msg.ToView(0, msg.Length()));
@@ -279,6 +273,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	{
 		SignalDebugBreakpoint();
 	}
+	pool.Clear();
 	LogFatal(category, "Stack trace:");
 	for (auto i = 0; i < st.count; i++)
 	{

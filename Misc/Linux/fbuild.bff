@@ -39,6 +39,7 @@ Settings
 		+ " -Wno-sign-compare"
 		+ " -Wno-missing-field-initializers"
 		+ " -Wno-missing-braces"
+		+ " -Wno-c99-designator"
 	.Linker = "/usr/bin/clang++"
 	.LinkerOptions = "%1 -o %2"
 	.PCHOptions =

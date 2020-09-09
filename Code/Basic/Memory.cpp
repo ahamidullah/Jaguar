@@ -220,10 +220,10 @@ Allocator *GlobalHeap()
 	if (!initializing && !IsGlobalHeapInitialized())
 	{
 		// Try to initialize the global heap.
+		// @TODO: Couldn't this work multithreaded by using the lock? Have to handle recursive case...
 		Assert(ThreadCount() == 1);
 		initializing = true;
 		alloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blk, &arr);
-		Abort("Memory", "WHOOPS.");
 		*GlobalHeapInitPointer() = true;
 		Assert(ContextAllocatorStack()->count == 0);
 		// We no longer need to use the backup global allocator!

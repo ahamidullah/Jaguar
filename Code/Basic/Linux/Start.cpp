@@ -1,4 +1,4 @@
-#include "../Basic.h"
+#include "Common.h"
 
 s32 ApplicationEntry(s32 argc, char *argv[]);
 

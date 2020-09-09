@@ -1,24 +1,25 @@
 #include "../Input.h"
-#include "../Platform.h"
+#include "XCBConnection.h"
 #include "Basic/Assert.h"
 #include "Basic/Log.h"
 
-xcb_connection_t *XCBConnection();
-
-auto xcbKeySymbols = (xcb_key_symbols_t *){};
-
-void InitializePlatformInput()
+xcb_key_symbols_t *XCBKeySymbols()
 {
-    xcbKeySymbols = xcb_key_symbols_alloc(XCBConnection());
-    if (!xcbKeySymbols)
+    static auto syms = (xcb_key_symbols_t *){};
+    if (!syms)
     {
-    	Abort("Input", "Failed xcb_key_symbols_alloc().");
+    	syms = xcb_key_symbols_alloc(XCBConnection());
+    	if (!syms)
+    	{
+    		Abort("Input", "Failed xcb_key_symbols_alloc().");
+    	}
     }
+    return syms;
 }
 
 s32 KeySymbolToScancode(KeySymbol k)
 {
-	auto kc = xcb_key_symbols_get_keycode(xcbKeySymbols, k);
+	auto kc = xcb_key_symbols_get_keycode(XCBKeySymbols(), k);
 	if (!kc)
 	{
 		Abort("Input", "Failed xcb_key_symbols_get_keycode for KeySymbol %d.", k);
@@ -28,7 +29,7 @@ s32 KeySymbolToScancode(KeySymbol k)
 
 void ShutdownPlatformInput()
 {
-    xcb_key_symbols_free(xcbKeySymbols);
+    xcb_key_symbols_free(XCBKeySymbols());
 }
 
 void QueryMousePosition(PlatformWindow *w, s32 *x, s32 *y)

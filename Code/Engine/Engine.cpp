@@ -3,9 +3,7 @@
 #include "Entity.h"
 #include "Job.h"
 #include "Camera.h"
-#include "Media/Media.h"
 #include "Media/Input.h"
-#include "Basic/Basic.h"
 #include "Basic/Process.h"
 #include "Basic/Log.h"
 
@@ -76,16 +74,16 @@ void RunGame(void *)
 {
 	windowWidth = RenderWidth();
 	windowHeight = RenderHeight();
-	auto window = NewWindow(windowWidth, windowHeight, false);
+	auto win = NewWindow(windowWidth, windowHeight, false);
 	LogInfo("Engine", "Window dimensions: %dx%d", windowWidth, windowHeight);
-	InitializeRenderer(&window);
+	InitializeRenderer(&win);
 	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO
 	InitializeGameLoop();
 	while (true)
 	{
-		auto windowEvents = GetInput(&window);
-		if (windowEvents.quit)
+		auto winEvents = ProcessInput(&win);
+		if (winEvents.quit)
 		{
 			break;
 		}
@@ -120,8 +118,6 @@ void LogBuildOptions()
 
 s32 ApplicationEntry(s32 argc, char *argv[])
 {
-	InitializeBasic();
-	InitializeMedia(true);
 	LogBuildOptions();
 	//InitializeJobs(RunGame, NULL);
 	RunGame(NULL);

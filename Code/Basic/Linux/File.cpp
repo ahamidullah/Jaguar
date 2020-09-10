@@ -6,7 +6,7 @@ File OpenFile(String path, s64 flags, bool *err)
 	auto f = File
 	{
 		.handle = open(path.ToCString(), flags, 0666),
-		.path = path.ToCopy(0, path.Length()),
+		.path = path.Copy(0, path.Length()),
 	};
 	if (f.handle < 0)
 	{

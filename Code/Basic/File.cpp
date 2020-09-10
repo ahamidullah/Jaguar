@@ -18,7 +18,7 @@ bool ReadEntireFileIn(StringBuilder *sb, String path)
 	}
 	auto i = sb->Length();
 	sb->Resize(sb->Length() + flen);
-	if (!f.Read(sb->ToView(i, sb->Length()).buffer))
+	if (!f.Read(sb->View(i, sb->Length()).buffer))
 	{
 		return false;
 	}

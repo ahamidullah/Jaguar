@@ -9,7 +9,7 @@ void FilepathDirectory(StringBuilder *sb, String path)
 	{
 		return;
 	}
-	return sb->Append(path.ToView(0, slash));
+	return sb->Append(path.View(0, slash));
 }
 
 // FilepathFilename returns the last component of the path.
@@ -21,7 +21,7 @@ void FilepathFilename(StringBuilder *sb, String path)
 		sb->Append(path);
 		return;
 	}
-	sb->Append(path.ToView(slash + 1, path.Length() - (slash + 1)));
+	sb->Append(path.View(slash + 1, path.Length() - (slash + 1)));
 }
 
 // FilepathExtension returns the file extension including the dot.
@@ -32,7 +32,7 @@ void FilepathExtension(StringBuilder *sb, String path)
 	{
 		return;
 	}
-	return sb->Append(path.ToView(dot, path.Length() - dot));
+	return sb->Append(path.View(dot, path.Length() - dot));
 }
 
 // SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
@@ -47,7 +47,7 @@ void SetFilepathExtension(StringBuilder *path, String ext)
 		return;
 	}
 	path->Resize(dot + ext.Length());
-	CopyArray(ext.buffer, path->ToView(dot, path->Length()).buffer);
+	CopyArray(ext.buffer, path->View(dot, path->Length()).buffer);
 }
 
 #if 0

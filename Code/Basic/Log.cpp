@@ -68,7 +68,7 @@ void InitializeLog()
 		Defer(sb.Free());
 		sb.Append(LogFileDirectory());
 		sb.FormatTime();
-		auto dir = sb.ToString();
+		auto dir = sb.String();
 		Defer(dir.Free());
 		return; // @TODO
 		if (!CreateDirectory(dir))
@@ -79,7 +79,7 @@ void InitializeLog()
 		}
 		sb.Append("/");
 		sb.Append("Global.log");
-		auto logPath = sb.ToString();
+		auto logPath = sb.String();
 		auto err = false;
 		logFile = OpenFile(logPath, OpenFileWriteOnly | OpenFileCreate, &err);
 		if (err)
@@ -97,7 +97,7 @@ void ConsolePrintVarArgs(String fmt, va_list args)
 	auto sb = StringBuilder{};
 	Defer(sb.Free());
 	sb.FormatVarArgs(fmt, args);
-	ConsoleWrite(sb.ToView(0, sb.Length()));
+	ConsoleWrite(sb.View(0, sb.Length()));
 }
 
 void ConsolePrint(String fmt, ...)
@@ -154,7 +154,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 		auto msgSB = StringBuilder{};
 		Defer(msgSB.Free());
 		msgSB.FormatVarArgs(fmt, args);
-		auto msg = msgSB.ToView(0, msgSB.Length());
+		auto msg = msgSB.View(0, msgSB.Length());
 		// We need to be a bit careful about not allocating memory, because this might be called using
 		// the fixed-size backup allocator.
 		if (l >= CurrentLogLevel())
@@ -175,7 +175,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 			auto infoSB = StringBuilder{};
 			Defer(infoSB.Free());
 			infoSB.Format("%k:%d %k  |  ", file, line, func);
-			LogFile()->WriteString(infoSB.ToView(0, infoSB.Length()));
+			LogFile()->WriteString(infoSB.View(0, infoSB.Length()));
 			LogFile()->WriteString(msg);
 			LogFile()->WriteString("\n");
 		}
@@ -210,7 +210,7 @@ File NewCrashLogFile()
 	sb.FormatTime();
 	sb.Append(".txt");
 	auto err = false;
-	auto path = sb.ToString();
+	auto path = sb.String();
 	return OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 }
 

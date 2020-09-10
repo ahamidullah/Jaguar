@@ -48,9 +48,9 @@ struct ArrayView
 	bool operator!=(ArrayView<T> a);
 	T *begin();
 	T *end();
-	ArrayView<u8> ToBytes();
-	ArrayView<T> ToView(s64 start, s64 end);
-	Array<T> ToCopy(s64 start, s64 end);
+	ArrayView<u8> Bytes();
+	ArrayView<T> View(s64 start, s64 end);
+	Array<T> Copy(s64 start, s64 end);
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -115,7 +115,7 @@ T *ArrayView<T>::end()
 }
 
 template <typename T>
-ArrayView<u8> ArrayView<T>::ToBytes()
+ArrayView<u8> ArrayView<T>::Bytes()
 {
 	return
 	{
@@ -125,7 +125,7 @@ ArrayView<u8> ArrayView<T>::ToBytes()
 }
 
 template <typename T>
-ArrayView<T> ArrayView<T>::ToView(s64 start, s64 end)
+ArrayView<T> ArrayView<T>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -138,11 +138,11 @@ ArrayView<T> ArrayView<T>::ToView(s64 start, s64 end)
 }
 
 template <typename T>
-Array<T> ArrayView<T>::ToCopy(s64 start, s64 end)
+Array<T> ArrayView<T>::Copy(s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto a = NewArray<T>(end - start);
-	CopyArray(this->ToView(start, end), a);
+	CopyArray(this->View(start, end), a);
 	return a;
 }
 
@@ -227,9 +227,9 @@ struct Array
 	void UnorderedRemove(s64 index);
 	typedef bool (*SiftProcedure)(T t);
 	ArrayView<T> Sift(SiftProcedure s);
-	Array<T> ToCopy(s64 start, s64 end);
-	ArrayView<T> ToView(s64 start, s64 end);
-	ArrayView<u8> ToBytes();
+	Array<T> Copy(s64 start, s64 end);
+	ArrayView<T> View(s64 start, s64 end);
+	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -344,16 +344,16 @@ T *Array<T>::end()
 }
 
 template <typename T>
-Array<T> Array<T>::ToCopy(s64 start, s64 end)
+Array<T> Array<T>::Copy(s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto a = NewArray<T>(end - start);
-	CopyArray(this->ToView(start, end), a);
+	CopyArray(this->View(start, end), a);
 	return a;
 }
 
 template <typename T>
-ArrayView<u8> Array<T>::ToBytes()
+ArrayView<u8> Array<T>::Bytes()
 {
 	return
 	{
@@ -363,7 +363,7 @@ ArrayView<u8> Array<T>::ToBytes()
 }
 
 template <typename T>
-ArrayView<T> Array<T>::ToView(s64 start, s64 end)
+ArrayView<T> Array<T>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -378,14 +378,14 @@ ArrayView<T> Array<T>::ToView(s64 start, s64 end)
 template <typename T>
 s64 Array<T>::FindFirst(T e)
 {
-	auto v = this->ToView(0, this->count);
+	auto v = this->View(0, this->count);
 	return ArrayFindFirst<T>(&v, e);
 }
 
 template <typename T>
 s64 Array<T>::FindLast(T e)
 {
-	auto v = this->ToView(0, this->count);
+	auto v = this->View(0, this->count);
 	return ArrayFindLast<T>(&v, e);
 }
 
@@ -446,14 +446,14 @@ void Array<T>::AppendAll(ArrayView<T> a)
 	auto oldCount = this->count;
 	auto newCount = this->count + a.count;
 	this->Resize(newCount);
-	CopyArray(a, this->ToView(oldCount, newCount));
+	CopyArray(a, this->View(oldCount, newCount));
 }
 
 template <typename T>
 void Array<T>::OrderedRemove(s64 i)
 {
 	Assert(i > 0 && i < this->count);
-	CopyArray(this->ToView(i + 1, this->count), this->ToView(i, this->count - 1));
+	CopyArray(this->View(i + 1, this->count), this->View(i, this->count - 1));
 	this->count -= 1;
 }
 
@@ -518,8 +518,8 @@ struct StaticArray
 	T *begin();
 	T *end();
 	s64 Count();
-	ArrayView<T> ToView(s64 start, s64 end);
-	ArrayView<u8> ToBytes();
+	ArrayView<T> View(s64 start, s64 end);
+	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -604,7 +604,7 @@ s64 StaticArray<T, N>::Count()
 }
 
 template <typename T, s64 N>
-ArrayView<T> StaticArray<T, N>::ToView(s64 start, s64 end)
+ArrayView<T> StaticArray<T, N>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -617,7 +617,7 @@ ArrayView<T> StaticArray<T, N>::ToView(s64 start, s64 end)
 }
 
 template <typename T, s64 N>
-ArrayView<u8> StaticArray<T, N>::ToBytes()
+ArrayView<u8> StaticArray<T, N>::Bytes()
 {
 	return
 	{
@@ -629,14 +629,14 @@ ArrayView<u8> StaticArray<T, N>::ToBytes()
 template <typename T, s64 N>
 s64 StaticArray<T, N>::FindFirst(T e)
 {
-	auto v = this->ToView(0, N);
+	auto v = this->View(0, N);
 	return ArrayFindFirst(&v, e);
 }
 
 template <typename T, s64 N>
 s64 StaticArray<T, N>::FindLast(T e)
 {
-	auto v = this->ToView(0, N);
+	auto v = this->View(0, N);
 	return ArrayFindLast<T>(&v, e);
 }
 

@@ -519,13 +519,14 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          {
             auto str = va_arg(va, String);
             s = (char *)&str[0];
+            n = str.Length();
+            sn = s + n;
       	 }
-         goto ss;
+         goto ld;
 
       case 's':
          // get the string
          s = va_arg(va, char *);
-         ss:
          if (s == 0)
             s = (char *)"null";
          // get the length

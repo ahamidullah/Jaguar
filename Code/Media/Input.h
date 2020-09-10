@@ -10,6 +10,7 @@
 
 const auto ScancodeCount = u32{256};
 
+void InitializeInput();
 f32 MouseX();
 f32 MouseY();
 f32 MouseDeltaX();

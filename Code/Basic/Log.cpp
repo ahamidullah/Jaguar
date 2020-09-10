@@ -4,6 +4,7 @@
 #include "Memory.h"
 #include "Process.h"
 #include "Thread.h"
+#include "Atomic.h"
 
 // We want to allow global variable initialization to use these function, so we have to be a bit
 // careful about how we do things.
@@ -47,20 +48,6 @@ File *LogFile()
 	}
 	return &f;
 }
-
-#if 0
-Allocator *LogAllocator()
-{
-	static ThreadLocal auto logBackupMemory = NewStaticArray<u8, KilobytesToBytes(8)>{};
-	static ThreadLocal auto logStackAlloc = NewStackAllocator(logBackupMemory, logBackupMemory.Count());
-	static ThreadLocal auto logPoolAlloc = NewPoolAllocator(KilobytesToBytes(2), 1, GlobalHeap(), GlobalHeap());
-	if (GlobalHeap()->initialized)
-	{
-		return &logStackAlloc;
-	}
-	return logPoolAlloc;
-}
-#endif
 
 // @TODO
 // Log: Was initialized.
@@ -230,15 +217,15 @@ File NewCrashLogFile()
 // @TODO: Test a really long abort message during global heap initialization (should just truncate the error message when we run out of stack space).
 void DoAbortActual(String file, String func, s64 line, String category, String fmt, va_list args)
 {
-	static auto aborting = false;
-	if (aborting)
+	static auto aborting = s64{0};
+	if (AtomicCompareAndSwap64(&aborting, 0, 1) != 0)
 	{
 		return;
 	}
-	aborting = true;
 	// We have to be a bit careful about logging, as this function can get called during global heap
 	// initialization, in which case will be using a fixed-size stack allocator. So we should try
 	// not to overflow the stack allocator.
+	auto st = Stacktrace();
 	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, ContextAllocator(), ContextAllocator());
 	SetContextAllocator(&pool);
 	LogFatal(category, "###########################################################################");
@@ -246,7 +233,6 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	LogPrintVarArgs(file, func, line, FatalLog, category, fmt, args);
 	LogFatal(category, "###########################################################################");
 	pool.Clear();
-	auto st = Stacktrace();
 	auto crashLog = NewCrashLogFile();
 	if (crashLog.IsOpen())
 	{
@@ -254,7 +240,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 		msg.FormatVarArgs(fmt, args);
 		crashLog.WriteString("###########################################################################\n");
 		crashLog.WriteString("[ABORT]\n");
-		crashLog.WriteString(msg.ToView(0, msg.Length()));
+		crashLog.Write(msg.buffer);
 		crashLog.WriteString("\n");
 		crashLog.WriteString("###########################################################################\n");
 		for (auto ch : crashHandlers)
@@ -269,11 +255,11 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 			crashLog.WriteString("\n");
 		}
 	}
+	pool.Clear();
 	if (IsDebuggerAttached())
 	{
 		SignalDebugBreakpoint();
 	}
-	pool.Clear();
 	LogFatal(category, "Stack trace:");
 	for (auto i = 0; i < st.count; i++)
 	{

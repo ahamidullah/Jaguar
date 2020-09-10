@@ -1,5 +1,5 @@
-const auto HashTableVacantKeySentinel = u64{-1};
-const auto HashTableDeletedKeySentinel = u64{-2};
+const auto HashTableVacantHashSentinel = (u64)-1;
+const auto HashTableDeletedHashSentinel = (u64)-2;
 const auto HashTableDefaultInitialLength = 16;
 const auto HashTableMaxLoadFactor = 0.75f;
 
@@ -26,11 +26,12 @@ struct HashTable
 	f32 loadFactor;
 
 	void Insert(K k, V v);
-	V *Lookup(K k);
+	V Lookup(K k, V notFound);
 	V *LookupPointer(K k);
 	void Remove(K k);
 	void Clear();
 	void ClearAndResize(s64 len);
+	void Reserve(s64 count);
 	void Resize();
 };
 
@@ -43,10 +44,9 @@ HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, HashProcedure hp)
 		.buckets = NewArrayIn<KeyValuePair<K, V>>(a, len),
 		.hashProcedure = hp,
 	};
-	SetMemory(&ht.buckets[0], len * sizeof(KeyValuePair<K, V>), 0);
 	for (auto &h : ht.hashes)
 	{
-		h = HashTableVacantKeySentinel;
+		h = HashTableVacantHashSentinel;
 	}
 	return ht;
 }
@@ -54,51 +54,48 @@ HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, HashProcedure hp)
 template <typename K, typename V>
 HashTable<K, V> NewHashTable(s64 len, HashProcedure hp)
 {
-	return NewHashTableIn(ContextAllocator(), len, hp);
+	return NewHashTableIn<K, V>(ContextAllocator(), len, hp);
 }
 
 template <typename K, typename V>
-void HashTable<K, V>::Insert(HashTable<K, V> *h, K k, V v)
+void HashTable<K, V>::Insert(K k, V v)
 {
 	// The user has to set the hash procedure, even if the HashTable is zero-initialized.
 	Assert(this->hashProcedure);
-	if (this->buckets.count > 0)
-	{
-		*this = NewHashTable(HashTableDefaultInitialLength, h->hashProcedure);
-	}
-	h->Reserve(h->count + 1);
+	this->Reserve(this->count + 1);
 	// @TODO: Would a two-pass solution be faster? First pass figure which keys need to be inserted
 	// and their indices, then resize the table if necessary, then second pass does the insertions.
-	auto hash = h->hashProcedure(&k);
-	if (hash == HashTableVacantKeySentinel)
+	auto hash = this->hashProcedure(&k);
+	if (hash == HashTableVacantHashSentinel)
 	{
 		hash = 0;
 	}
-	else if (hash == HashTableDeletedKeySentinel)
+	else if (hash == HashTableDeletedHashSentinel)
 	{
 		hash = 1;
 	}
-	auto startIndex = hash % h->buckets.count;
+	auto startIndex = hash % this->buckets.count;
 	auto index = startIndex;
 	do
 	{
-		if (h->hashes[index] == HashTableVacantKeySentinel)
+		if (this->hashes[index] == HashTableVacantHashSentinel)
 		{
-			h->hashes[index] = hash;
-			h->buckets[index].key = k;
-			h->buckets[index].value = v;
-			continue;
+			this->hashes[index] = hash;
+			this->buckets[index].key = k;
+			this->buckets[index].value = v;
+			break;
 		}
-		else if (h->hashes[index] == hash && h->buckets[index].key == k)
+		else if (this->hashes[index] == hash && this->buckets[index].key == k)
 		{
-			continue;
+			break;
 		}
-		index = (index + 1) % h->buckets.count;
+		index = (index + 1) % this->buckets.count;
+		// The table should have expanded before we ever run out of space. Thus, we should never
+		// wrap around to the start index.
+		Assert(index != startIndex);
 	} while (index != startIndex);
-	// The table should have expanded before we ever run out of space.
-	Assert(index != startIndex);
-	h->count += 1;
-	h->loadFactor = (f32)h->count / (f32)h->buckets.count;
+	this->count += 1;
+	this->loadFactor = (f32)this->count / (f32)this->buckets.count;
 }
 
 template <typename K, typename V>
@@ -106,14 +103,14 @@ V *DoLookup(HashTable<K, V> *h, K k, V *notFound)
 {
 	if (h->buckets.count == 0)
 	{
-		return;
+		return notFound;
 	}
-	auto hash = h->hashProcedure(k);
-	if (hash == HashTableVacantKeySentinel)
+	auto hash = h->hashProcedure(&k);
+	if (hash == HashTableVacantHashSentinel)
 	{
 		hash = 0;
 	}
-	else if (hash == HashTableDeletedKeySentinel)
+	else if (hash == HashTableDeletedHashSentinel)
 	{
 		hash = 1;
 	}
@@ -121,7 +118,7 @@ V *DoLookup(HashTable<K, V> *h, K k, V *notFound)
 	auto lastFind = find;
 	do
 	{
-		if (h->hashes[find] == HashTableVacantKeySentinel)
+		if (h->hashes[find] == HashTableVacantHashSentinel)
 		{
 			return notFound;
 		}
@@ -148,7 +145,7 @@ V *HashTable<K, V>::LookupPointer(K k)
 }
 
 template <typename K, typename V>
-void HashTable<K, V>::Remove(HashTable<K, V> *h, K k)
+void HashTable<K, V>::Remove(K k)
 {
 	// @TODO
 }
@@ -159,7 +156,7 @@ void HashTable<K, V>::Clear()
 	this->count = 0;
 	for (auto &hash : this->hashes)
 	{
-		hash = HashTableVacantKeySentinel;
+		hash = HashTableVacantHashSentinel;
 	}
 }
 
@@ -170,30 +167,38 @@ void HashTable<K, V>::ClearAndResize(s64 len)
 	this->buckets.Resize(len);
 	for (auto &hash : this->hashes)
 	{
-		hash = HashTableVacantKeySentinel;
+		hash = HashTableVacantHashSentinel;
 	}
 }
 
 template <typename K, typename V>
-void HashTable<K, V>::Reserve(s64 count)
+void HashTable<K, V>::Reserve(s64 reserve)
 {
-	if (this->buckets.count > count)
+	if (this->buckets.count > reserve)
 	{
 		return;
 	}
 	if (this->buckets.count == 0)
 	{
-		this->hashes.Resize(count * 2);
-		this->buckets.Resize(count * 2);
+		this->hashes.Resize(reserve * 2);
+		for (auto &h : this->hashes)
+		{
+			h = HashTableVacantHashSentinel;
+		}
+		this->buckets.Resize(reserve * 2);
 		return;
 	}
-	if ((f32)(this->count + cap) / (f32)this->buckets.count > HashTableMaxLoadFactor)
+	if ((f32)(this->count + reserve) / (f32)this->buckets.count > HashTableMaxLoadFactor)
 	{
-		auto newHashes = NewArray<u64>(this->hashes.allocator, (this->buckets.count + cap) * 2);
-		auto newBuckets = NewArray<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
+		auto newHashes = NewArrayIn<u64>(this->hashes.allocator, (this->buckets.count + reserve) * 2);
+		for (auto &h : newHashes)
+		{
+			h = HashTableVacantHashSentinel;
+		}
+		auto newBuckets = NewArrayIn<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
 		for (auto i = 0; i < this->buckets.count; i++)
 		{
-			auto newHash = this->hashProcedure(this->buckets[i].key);
+			auto newHash = this->hashProcedure(&this->buckets[i].key);
 			auto ni = newHash % newBuckets.count;
 			newHashes[ni] = newHash;
 			newBuckets[ni].key = this->buckets[i].key;
@@ -205,4 +210,13 @@ void HashTable<K, V>::Reserve(s64 count)
 		this->hashes = newHashes;
 		this->loadFactor = (f32)this->count / (f32)this->buckets.count;
 	}
+}
+
+u64 HashU32(void *u)
+{
+	auto x = *(u32 *)u;
+	x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x;
 }

@@ -13,32 +13,26 @@
 // Per-thread memory heap. 2mb?
 
 #include "Job.h"
-#include "AtomicLinkedList.h"
-#include "AtomicRingBuffer.h"
-
-#include "Code/Basic/Fiber.h"
-#include "Code/Basic/Thread.h"
-#include "Code/Basic/Semaphore.h"
-#include "Code/Basic/Atomic.h"
-#include "Code/Basic/Array.h"
-#include "Code/Basic/CPU.h"
+#include "Basic/Fiber.h"
+#include "Basic/Thread.h"
+#include "Basic/Semaphore.h"
+#include "Basic/Atomic.h"
+#include "Basic/Array.h"
+#include "Basic/CPU.h"
 
 // @TODO: Have multiple jobs wait on a job counter.
 // @TODO: If the parent job does not wait on the counter, and the counter gets deallocated, then the job may access the freed counter memory.
 // @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
 
-constexpr auto MAX_JOBS_PER_QUEUE = 100;
-
-#define JOB_FIBER_POINTER_SENTINEL ((JobFiber *)0xDEADBEEF)
+constexpr auto MaxJobsPerQueue = 100;
 
 struct Job
 {
 	JobProcedure procedure;
 	void *parameter;
-	MemoryAllocator contextAllocator; // The memory allocator at the top of the context allocator stack when this job was run.
 	JobPriority priority;
-	JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
-	bool finished;
+	//JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
+	//bool finished;
 };
 
 struct JobFiberParameter
@@ -50,7 +44,7 @@ struct JobFiber
 {
 	Fiber platformFiber;
 	JobFiberParameter parameter;
-	struct JobFiber *next;
+	JobFiber *next;
 };
 
 struct WorkerThreadParameter

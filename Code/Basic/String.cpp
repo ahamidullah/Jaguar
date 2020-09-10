@@ -111,6 +111,7 @@ const char *StringView::ToCString()
 String::String()
 {
 	this->buffer = Array<u8>{};
+	this->literal = true;
 }
 
 String::String(char *s)
@@ -118,6 +119,7 @@ String::String(char *s)
 	auto len = CStringLength(s);
 	this->buffer = NewArray<u8>(len);
 	CopyArray(NewArrayView((u8 *)s, len), this->buffer);
+	this->literal = false;
 }
 
 String::String(const char *s)
@@ -137,6 +139,7 @@ String NewStringFromBuffer(Array<u8> b)
 {
 	String s;
 	s.buffer = b;
+	s.literal = false;
 	return s;
 }
 

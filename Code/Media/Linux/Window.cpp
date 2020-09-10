@@ -5,35 +5,6 @@
 #include "Basic/String.h"
 #include "Basic/Log.h"
 
-#if 0
-Display *x11Display;
-s32 xinputOpcode;
-
-s32 X11ErrorHandler(Display *d, XErrorEvent *e)
-{
-	char buf[256];
-	XGetErrorText(d, e->error_code, buf, sizeof(buf));
-	Abort("X11 error: %s.", buf);
-	return 0;
-}
-
-void InitializeWindows(bool multithreaded)
-{
-	// Install a new error handler.
-	// Note this error handler is global.  All display connections in all threads of a process use the same error handler.
-	XSetErrorHandler(&X11ErrorHandler);
-	if (multithreaded)
-	{
-		XInitThreads();
-	}
-}
-
-Display *X11Display()
-{
-	return x11Display;
-}
-#endif
-
 PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 {
     auto conn = XCBConnection();
@@ -89,17 +60,21 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 			XCB_WINDOW_CLASS_INPUT_OUTPUT,
 			screen->root_visual,
 			valMask, &valList[0]);
-    	auto cookie = xcb_intern_atom(conn, 1, 12, "WM_PROTOCOLS");
-    	auto reply = xcb_intern_atom_reply(conn, cookie, 0);
-    	auto cookie2 = xcb_intern_atom(conn, 0, 16, "WM_DELETE_WINDOW");
     	auto err = (xcb_generic_error_t *){};
+    	auto cookie = xcb_intern_atom(conn, 1, 12, "WM_PROTOCOLS");
+    	auto wmProtocolsReply = xcb_intern_atom_reply(conn, cookie, &err);
+    	if (err)
+    	{
+    		Abort("Window", "Failed xcb_intern_atom WM_PROTOCOLS: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    	}
+    	auto cookie2 = xcb_intern_atom(conn, 0, 16, "WM_DELETE_WINDOW");
     	win.xcbDeleteWindowAtom = xcb_intern_atom_reply(conn, cookie2, &err);
     	if (err)
     	{
-    		Abort("Window", "Failed to register XCB window delete atom: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    		Abort("Window", "Failed xcb_intern_atom WM_DELETE_WINDOW: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
     	}
-    	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win.xcbHandle, reply->atom, 4, 32, 1, &win.xcbDeleteWindowAtom->atom);
-    	free(reply);
+    	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win.xcbHandle, wmProtocolsReply->atom, 4, 32, 1, &win.xcbDeleteWindowAtom->atom);
+    	free(wmProtocolsReply);
     	xcb_map_window(conn, win.xcbHandle);
     }
     xcb_flush(conn);
@@ -276,75 +251,6 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m)
 		free(ev);
 	}
 	return winEvents;
-#if 0
-	auto winEvents = WindowEvents{};
-	auto xEvent = XEvent{};
-	auto cookie = &xEvent.xcookie;
-	auto rawXEvent = (XIRawEvent *){};
-	XFlush(x11Display);
-	while (XPending(x11Display))
-	{
-		XNextEvent(x11Display, &xEvent);
-		if (xEvent.type == ClientMessage && (Atom)xEvent.xclient.data.l[0] == w->x11DeleteWindowAtom)
-		{
-			winEvents.quit = true;
-			break;
-		}
-		if (xEvent.type == ConfigureNotify)
-		{
-			//auto config = event.xconfigure;
-			// @TODO Window resize.
-			continue;
-		}
-		if (!XGetEventData(x11Display, cookie) || cookie->type != GenericEvent || cookie->extension != xinputOpcode)
-		{
-			continue;
-		}
-		rawXEvent = (XIRawEvent *)cookie->data;
-		switch(rawXEvent->evtype)
-		{
-		case XI_RawMotion:
-		{
-			// @TODO: Check XIMaskIsSet(re->valuators.mask, 0) for x and XIMaskIsSet(re->valuators.mask, 1) for y.
-			m->rawDeltaX += rawXEvent->raw_values[0];
-			m->rawDeltaY -= rawXEvent->raw_values[1];
-		} break;
-		case XI_RawKeyPress:
-		{
-			kb->Press(rawXEvent->detail);
-		} break;
-		case XI_RawKeyRelease:
-		{
-			kb->Release(rawXEvent->detail);
-		} break;
-		case XI_RawButtonPress:
-		{
-			auto i = (xEvent.xbutton.button - 1);
-			if (i > MouseButtonCount)
-			{
-				break;
-			}
-			m->buttons.Press(i);
-		} break;
-		case XI_RawButtonRelease:
-		{
-			auto i = (xEvent.xbutton.button - 1);
-			if (i > MouseButtonCount)
-			{
-				break;
-			}
-			m->buttons.Release(i);
-		} break;
-		case XI_FocusIn:
-		{
-		} break;
-		case XI_FocusOut:
-		{
-		} break;
-		}
-	}
-	return winEvents;
-#endif
 }
 
 void ToggleFullscreen(PlatformWindow *w)

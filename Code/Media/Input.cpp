@@ -155,12 +155,12 @@ bool WasMouseButtonReleased(MouseButton b)
 	return input.keyboard.WasReleased(b);
 }
 
-f32 MouseX()
+s32 MouseX()
 {
 	return input.mouse.x;
 }
 
-f32 MouseY()
+s32 MouseY()
 {
 	return input.mouse.y;
 }
@@ -180,7 +180,7 @@ f32 MouseSensitivity()
 	return input.mouse.sensitivity;
 }
 
-WindowEvents ProcessInput(PlatformWindow *w)
+WindowEvents ProcessInput(Window *w)
 {
 	// Clear per-frame input.
 	for (auto &p : input.mouse.buttons.pressed)

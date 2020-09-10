@@ -225,6 +225,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	// We have to be a bit careful about logging, as this function can get called during global heap
 	// initialization, in which case will be using a fixed-size stack allocator. So we should try
 	// not to overflow the stack allocator.
+	// This is pretty ugly and I kind of hate it.
 	auto st = Stacktrace();
 	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, ContextAllocator(), ContextAllocator());
 	SetContextAllocator(&pool);

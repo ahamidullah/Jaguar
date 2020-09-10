@@ -22,7 +22,7 @@ struct File
 	bool Read(ArrayView<u8> out);
 	s64 Length(bool *err);
 	s64 Seek(s64 seek, FileSeekRelative rel, bool *err);
-	PlatformTime LastModifiedTime(bool *err);
+	Time LastModifiedTime(bool *err);
 };
 
 struct DirectoryIteration

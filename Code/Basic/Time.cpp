@@ -3,7 +3,7 @@
 
 void PrintTimerActual(Timer *t)
 {
-	auto end = XCurrentTime();
+	auto end = CurrentTime();
 	auto delta = t->start - end;
 	t->runningSum += delta.Millisecond();
 	ConsolePrint("%s: %gms, avg %gms\n", t->name, delta.Millisecond(), t->runningSum / t->iteration);

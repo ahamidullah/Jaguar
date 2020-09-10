@@ -227,7 +227,7 @@ typedef VkCommandPool GPUInternalCommandPool;
 typedef VkDeviceMemory GPUInternalMemory;
 typedef VkMemoryRequirements GPUInternalMemoryRequirements;
 
-void InitializeGPUInternal(PlatformWindow *window);
+void InitializeGPUInternal(Window *window);
 GPUInternalCommandBuffer NewGPUInternalCommandBuffer(GPUInternalCommandPool cp);
 void SubmitGPUInternalCommandBuffers(GPUInternalCommandQueue cq, GPUSubmitInfo si, GPUFence f);
 void FreeGPUInternalCommandBuffers(GPUInternalCommandPool cp, s64 n, GPUInternalCommandBuffer *cbs);

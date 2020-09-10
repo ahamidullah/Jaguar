@@ -29,13 +29,13 @@ struct Duration
 	s64 Nanosecond();
 };
 
-struct PlatformTime
+struct Time
 {
 	timespec ts;
 
-	bool operator>(PlatformTime t);
-	bool operator<(PlatformTime t);
-	Duration operator-(PlatformTime t);
+	bool operator>(Time t);
+	bool operator<(Time t);
+	Duration operator-(Time t);
 	Date Date();
 	s64 Year();
 	s64 Month();
@@ -47,5 +47,5 @@ struct PlatformTime
 	s64 Nanosecond();
 };
 
-PlatformTime XCurrentTime();
+Time CurrentTime();
 void Sleep(s64 msec);

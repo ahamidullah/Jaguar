@@ -1726,7 +1726,7 @@ const char *GetRequiredVulkanSurfaceInstanceExtension()
 	return "VK_KHR_xcb_surface";
 }
 
-VkResult CreateVulkanSurface(PlatformWindow *w, VkInstance inst, VkSurfaceKHR *s)
+VkResult CreateVulkanSurface(Window *w, VkInstance inst, VkSurfaceKHR *s)
 {
 	auto ci = VkXcbSurfaceCreateInfoKHR
 	{
@@ -1738,7 +1738,7 @@ VkResult CreateVulkanSurface(PlatformWindow *w, VkInstance inst, VkSurfaceKHR *s
 }
 #endif
 
-void InitializeGPU(PlatformWindow *win)
+void InitializeGPU(Window *win)
 {
 	PushContextAllocator(FrameAllocator("GPU"));
 	Defer(PopContextAllocator());

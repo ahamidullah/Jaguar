@@ -107,7 +107,7 @@ s64 File::Seek(s64 seek, FileSeekRelative rel, bool *err)
 	return off;
 }
 
-PlatformTime File::LastModifiedTime(bool *err)
+Time File::LastModifiedTime(bool *err)
 {
 	auto stat = (struct stat){};
 	if (fstat(this->handle, &stat) == -1)
@@ -116,7 +116,7 @@ PlatformTime File::LastModifiedTime(bool *err)
 		*err = true;
 		return {};
 	}
-	return PlatformTime{stat.st_mtim};
+	return Time{stat.st_mtim};
 }
 
 bool DirectoryIteration::Iterate(String path)

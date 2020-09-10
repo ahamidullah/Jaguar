@@ -50,7 +50,7 @@ s64 Duration::Nanosecond()
 	return this->nanoseconds;
 }
 
-bool PlatformTime::operator>(PlatformTime t)
+bool Time::operator>(Time t)
 {
 	if (this->ts.tv_sec > t.ts.tv_sec)
 	{
@@ -71,7 +71,7 @@ bool PlatformTime::operator>(PlatformTime t)
 	return false;
 }
 
-bool PlatformTime::operator<(PlatformTime t)
+bool Time::operator<(Time t)
 {
 	if (this->ts.tv_sec < t.ts.tv_sec)
 	{
@@ -92,7 +92,7 @@ bool PlatformTime::operator<(PlatformTime t)
 	return false;
 }
 
-Duration PlatformTime::operator-(PlatformTime t)
+Duration Time::operator-(Time t)
 {
 	return
 	{
@@ -100,7 +100,7 @@ Duration PlatformTime::operator-(PlatformTime t)
 	};
 }
 
-Date PlatformTime::Date()
+Date Time::Date()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	auto ms = this->ts.tv_nsec / 1000000;
@@ -118,58 +118,58 @@ Date PlatformTime::Date()
 	};
 }
 
-s64 PlatformTime::Year()
+s64 Time::Year()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_year;
 }
 
-s64 PlatformTime::Month()
+s64 Time::Month()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_mon;
 }
 
-s64 PlatformTime::Day()
+s64 Time::Day()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_mday;
 }
 
-s64 PlatformTime::Hour()
+s64 Time::Hour()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_hour;
 }
 
-s64 PlatformTime::Minute()
+s64 Time::Minute()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_min;
 }
 
-s64 PlatformTime::Second()
+s64 Time::Second()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return tm->tm_sec;
 }
 
-s64 PlatformTime::Millisecond()
+s64 Time::Millisecond()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	return this->ts.tv_nsec / 1000000;
 }
 
-s64 PlatformTime::Nanosecond()
+s64 Time::Nanosecond()
 {
 	auto tm = localtime(&this->ts.tv_sec);
 	auto ms = this->ts.tv_nsec / 1000000;
 	return this->ts.tv_nsec - (ms * 1000000);
 }
 
-PlatformTime XCurrentTime()
+Time CurrentTime()
 {
-	auto t = PlatformTime{};
+	auto t = Time{};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t.ts);
 	return t;
 }

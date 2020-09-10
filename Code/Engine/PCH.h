@@ -5,7 +5,7 @@
 
 #ifdef VulkanBuild
 	#define VK_NO_PROTOTYPES
-	#define VK_USE_PLATFORM_XLIB_KHR
+	#define VK_USE_PLATFORM_XCB_KHR
 	#include "vulkan/vulkan.h"
 #endif
 

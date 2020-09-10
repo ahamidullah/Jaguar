@@ -5,7 +5,7 @@
 #include "Basic/String.h"
 #include "Basic/Log.h"
 
-PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
+Window NewWindow(s64 w, s64 h, bool fullscreen)
 {
     auto conn = XCBConnection();
     auto setup = xcb_get_setup(conn);
@@ -40,7 +40,10 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
 		xcb_input_xi_select_events(conn, screen->root, 1, &mask.head);
 	}
 	// Create window.
-    auto win = PlatformWindow{};
+    auto win = Window
+    {
+    	.height = h,
+    };
 	{
     	auto valMask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
     	auto valList = StaticArray<u32, 2>
@@ -79,125 +82,9 @@ PlatformWindow NewWindow(s64 w, s64 h, bool fullscreen)
     }
     xcb_flush(conn);
 	return win;
-#if 0
-	x11Display = XOpenDisplay(NULL);
-	if (!x11Display)
-	{
-		Abort("Window", "Failed to create display.");
-	}
-	auto screen = XDefaultScreen(x11Display);
-	auto rootWin = XRootWindow(x11Display, screen);
-	// Initialize XInput2, which we require for raw input.
-	{
-		auto junk1 = s32{};
-		auto junk2 = s32{};
-		if (!XQueryExtension(x11Display, "XInputExtension", &xinputOpcode, &junk1, &junk2))
-		{
-			Abort("Window", "The X server does not support the XInput extension.");
-		}
-
-		// We are supposed to pass in the minimum version we require to XIQueryVersion, and it passes back what version is available.
-		auto majorVer = 2, minorVer = 0;
-		XIQueryVersion(x11Display, &majorVer, &minorVer);
-		if (majorVer < 2)
-		{
-			Abort("Window", "XInput version 2.0 or greater is required: version %d.%d is available.", majorVer, minorVer);
-		}
-
-		auto mask = MakeStaticArray<u8>(0, 0, 0);
-		auto eventMask = XIEventMask
-		{
-			.deviceid = XIAllMasterDevices,
-			.mask_len = sizeof(mask.elements),
-			.mask = mask.elements,
-		};
-		XISetMask(mask.elements, XI_RawMotion);
-		XISetMask(mask.elements, XI_RawButtonPress);
-		XISetMask(mask.elements, XI_RawButtonRelease);
-		XISetMask(mask.elements, XI_RawKeyPress);
-		XISetMask(mask.elements, XI_RawKeyRelease);
-		XISetMask(mask.elements, XI_FocusOut);
-		XISetMask(mask.elements, XI_FocusIn);
-		if (XISelectEvents(x11Display, rootWin, &eventMask, 1) != Success)
-		{
-			Abort("Window", "Failed to select XInput events.");
-		}
-	}
-	auto vis = XVisualInfo
-	{
-		.screen = screen,
-	};
-	auto numVis = 0;
-	auto visInfo = XGetVisualInfo(x11Display, VisualScreenMask, &vis, &numVis);
-	Assert(visInfo->c_class == TrueColor);
-	auto winAttrs = XSetWindowAttributes
-	{
-		.background_pixel = 0xFFFFFFFF,
-		.border_pixmap = None,
-		.border_pixel = 0,
-		.event_mask = StructureNotifyMask,
-		.colormap = XCreateColormap(x11Display, rootWin, visInfo->visual, AllocNone),
-	};
-	auto winAttrMask =
-		CWBackPixel
-		| CWColormap
-		| CWBorderPixel
-		| CWEventMask;
-	auto win = PlatformWindow{};
-	win.x11Handle = XCreateWindow(
-		x11Display,
-		rootWin,
-		0,
-		0,
-		w,
-		h,
-		0,
-		visInfo->depth,
-		InputOutput,
-		visInfo->visual,
-		winAttrMask,
-		&winAttrs);
-	if (!win.x11Handle)
-	{
-		Abort("Window", "Failed to create a window.");
-	}
-	XFree(visInfo);
-	XStoreName(x11Display, win.x11Handle, "Jaguar");
-	XMapWindow(x11Display, win.x11Handle);
-	XFlush(x11Display);
-	// Set up the "delete window atom" which signals to the application when the window is closed through the window manager UI.
-	if ((win.x11DeleteWindowAtom = XInternAtom(x11Display, "WM_DELETE_WINDOW", 1)))
-	{
-		XSetWMProtocols(x11Display, win.x11Handle, &win.x11DeleteWindowAtom, 1);
-	}
-	else
-	{
-		LogError("Window", "Unable to register WM_DELETE_WINDOW atom.\n");
-	}
-	// Get actual window dimensions without window borders.
-	{
-		auto winX = s32{}, winY = s32{};
-		auto winW = u32{};
-		auto borderW = u32{};
-		auto depth = u32{};
-		if (!XGetGeometry(x11Display, win.x11Handle, &rootWin, &winX, &winY, &winW, &win.height, &borderW, &depth))
-		{
-			Abort("Window", "Failed to get the screen's geometry.");
-		}
-	}
-	// Create a blank cursor for when we want to hide the cursor.
-	{
-		auto col = XColor{};
-		auto cursorPix = MakeStaticArray<char>(0);
-		auto pixmap = XCreateBitmapFromData(x11Display, win.x11Handle, cursorPix.elements, 1, 1);
-		win.x11BlankCursor = XCreatePixmapCursor(x11Display, pixmap, pixmap, &col, &col, 1, 1); 
-		XFreePixmap(x11Display, pixmap);
-	}
-	return win;
-#endif
 }
 
-WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m)
+WindowEvents ProcessWindowEvents(Window *w, InputButtons *kb, Mouse *m)
 {
 	auto winEvents = WindowEvents{};
 	auto ev = (xcb_generic_event_t *){};
@@ -238,6 +125,10 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m)
 			{
 				// @TODO
 			} break;
+			case XCB_MAPPING_NOTIFY:
+			{
+				RefreshKeyboardMapping((xcb_mapping_notify_event_t *)ev);
+			} break;
 			case XCB_CLIENT_MESSAGE:
 			{
 				if (((xcb_client_message_event_t *)ev)->data.data32[0] == w->xcbDeleteWindowAtom->atom)
@@ -253,7 +144,7 @@ WindowEvents ProcessWindowEvents(PlatformWindow *w, InputButtons *kb, Mouse *m)
 	return winEvents;
 }
 
-void ToggleFullscreen(PlatformWindow *w)
+void ToggleFullscreen(Window *w)
 {
 #if 0
 	auto ev = XEvent
@@ -281,7 +172,7 @@ void ToggleFullscreen(PlatformWindow *w)
 #endif
 }
 
-void CaptureCursor(PlatformWindow *w)
+void CaptureCursor(Window *w)
 {
 #if 0
 	XDefineCursor(x11Display, w->x11Handle, w->x11BlankCursor);
@@ -289,7 +180,7 @@ void CaptureCursor(PlatformWindow *w)
 #endif
 }
 
-void UncaptureCursor(PlatformWindow *w)
+void UncaptureCursor(Window *w)
 {
 #if 0
 	XUndefineCursor(x11Display, w->x11Handle);
@@ -297,7 +188,7 @@ void UncaptureCursor(PlatformWindow *w)
 #endif
 }
 
-void DestroyWindow(PlatformWindow *w)
+void DestroyWindow(Window *w)
 {
     xcb_destroy_window(XCBConnection(), w->xcbHandle);
     xcb_disconnect(XCBConnection());

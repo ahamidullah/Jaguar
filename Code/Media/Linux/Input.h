@@ -40,4 +40,4 @@ enum MouseButton
 void InitializePlatformInput();
 u32 KeySymbolToScancode(KeySymbol k);
 KeySymbol ScancodeToKeySymbol(u32 scancode);
-void QueryMousePosition(PlatformWindow *w, s32 *x, s32 *y);
+void QueryMousePosition(Window *w, s32 *x, s32 *y);

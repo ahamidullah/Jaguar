@@ -4,7 +4,22 @@
 #include "../String.h"
 #include "../Memory.h"
 
-volatile auto threadCount = s64{1};
+ThreadLocal auto threadIndex = 0;
+auto threadCount = s64{1};
+
+struct ThreadProcedureWrapperParameters
+{
+	s64 threadIndex;
+	ThreadProcedure procedure;
+	void *param;
+};
+
+void *ThreadProcedureWrapper(void *param)
+{
+	auto p = (ThreadProcedureWrapperParameters *)param;
+	threadIndex = p->threadIndex;
+	return p->procedure(p->param);
+}
 
 Thread NewThread(ThreadProcedure proc, void *param)
 {
@@ -13,18 +28,17 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
+	auto i = AtomicAdd64(&threadCount, 1);
+	auto wrapperParam = (ThreadProcedureWrapperParameters *)GlobalHeap()->Allocate(sizeof(ThreadProcedureWrapperParameters));
+	wrapperParam->threadIndex = i;
+	wrapperParam->procedure = proc;
+	wrapperParam->param = param;
 	auto t = Thread{};
-	if (pthread_create(&t, &attrs, proc, param))
+	if (pthread_create(&t, &attrs, ThreadProcedureWrapper, wrapperParam))
 	{
 		Abort("Thread", "Failed on pthread_create(): %k.", PlatformError());
 	}
-	AtomicAdd64(&threadCount, 1);
 	return t;
-}
-
-s64 ThreadCount()
-{
-	return threadCount;
 }
 
 void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
@@ -71,4 +85,14 @@ Thread CurrentThread()
 s64 CurrentThreadID()
 {
 	return syscall(__NR_gettid);
+}
+
+s64 CurrentThreadIndex()
+{
+	return threadIndex;
+}
+
+s64 ThreadCount()
+{
+	return threadCount;
 }

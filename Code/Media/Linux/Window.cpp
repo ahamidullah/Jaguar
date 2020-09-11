@@ -5,7 +5,7 @@
 #include "Basic/String.h"
 #include "Basic/Log.h"
 
-Window NewWindow(s64 w, s64 h, bool fullscreen)
+Window NewWindow(s64 w, s64 h)
 {
     auto conn = XCBConnection();
     auto setup = xcb_get_setup(conn);
@@ -42,20 +42,21 @@ Window NewWindow(s64 w, s64 h, bool fullscreen)
 	// Create window.
     auto win = Window
     {
+    	.xcbScreen = screen,
     	.height = h,
     };
 	{
     	auto valMask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
     	auto valList = StaticArray<u32, 2>
     	{
-    		screen->black_pixel,
+    		screen->white_pixel,
     		XCB_EVENT_MASK_STRUCTURE_NOTIFY,
     	};
-    	win.xcbHandle = xcb_generate_id(conn);
+    	win.xcbWindow = xcb_generate_id(conn);
     	xcb_create_window(
     		conn,
 			XCB_COPY_FROM_PARENT,
-			win.xcbHandle,
+			win.xcbWindow,
 			screen->root,
 			0, 0, // x y
 			w, h,
@@ -64,133 +65,165 @@ Window NewWindow(s64 w, s64 h, bool fullscreen)
 			screen->root_visual,
 			valMask, &valList[0]);
     	auto err = (xcb_generic_error_t *){};
-    	auto cookie = xcb_intern_atom(conn, 1, 12, "WM_PROTOCOLS");
-    	auto wmProtocolsReply = xcb_intern_atom_reply(conn, cookie, &err);
+    	auto wmProtocolsCookie = xcb_intern_atom(conn, true, 12, "WM_PROTOCOLS");
+    	auto wmProtocolsReply = xcb_intern_atom_reply(conn, wmProtocolsCookie, &err);
     	if (err)
     	{
-    		Abort("Window", "Failed xcb_intern_atom WM_PROTOCOLS: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    		Abort("Window", "Failed xcb_intern_atom WM_PROTOCOLS: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
     	}
-    	auto cookie2 = xcb_intern_atom(conn, 0, 16, "WM_DELETE_WINDOW");
-    	win.xcbDeleteWindowAtom = xcb_intern_atom_reply(conn, cookie2, &err);
+    	auto wmDeleteCookie = xcb_intern_atom(conn, false, 16, "WM_DELETE_WINDOW");
+    	win.xcbDeleteWindowAtom = xcb_intern_atom_reply(conn, wmDeleteCookie, &err);
     	if (err)
     	{
-    		Abort("Window", "Failed xcb_intern_atom WM_DELETE_WINDOW: error_code %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    		Abort("Window", "Failed xcb_intern_atom WM_DELETE_WINDOW: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
     	}
-    	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win.xcbHandle, wmProtocolsReply->atom, 4, 32, 1, &win.xcbDeleteWindowAtom->atom);
+    	xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win.xcbWindow, wmProtocolsReply->atom, 4, 32, 1, &win.xcbDeleteWindowAtom->atom);
     	free(wmProtocolsReply);
-    	xcb_map_window(conn, win.xcbHandle);
+    	xcb_map_window(conn, win.xcbWindow);
     }
     xcb_flush(conn);
 	return win;
 }
 
-WindowEvents ProcessWindowEvents(Window *w, InputButtons *kb, Mouse *m)
+void Window::SetName(String n)
 {
-	auto winEvents = WindowEvents{};
-	auto ev = (xcb_generic_event_t *){};
-	while ((ev = xcb_poll_for_event(XCBConnection())))
-	{
-		if (ev->response_type == 0)
-		{
-			auto err = (xcb_generic_error_t *)ev;
-			LogError("Window", "XCB error event: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.\n", err->error_code, err->major_code, err->minor_code, err->sequence);
-			free(ev);
-			continue;
-		}
-		if ((ev->response_type & ~80) == XCB_GE_GENERIC) // XInput event.
-		{
-		    switch (((xcb_ge_event_t *)ev)->event_type)
-		    {
-         	case XCB_INPUT_RAW_MOTION:
-      		{
-      		} break;
-         	case XCB_INPUT_RAW_KEY_PRESS:
-      		{
-      			auto k = (xcb_input_raw_key_press_event_t *)ev;
-				kb->Press(k->detail);
-      		} break;
-         	case XCB_INPUT_RAW_KEY_RELEASE:
-      		{
-      			auto k = (xcb_input_raw_key_release_event_t *)ev;
-				kb->Release(k->detail);
-      		} break;
-     		}
-		}
-		else
-		{
-			auto evCode = ev->response_type & 0x7f;
-			switch (evCode)
-			{
-			case XCB_CONFIGURE_NOTIFY:
-			{
-				// @TODO
-			} break;
-			case XCB_MAPPING_NOTIFY:
-			{
-				RefreshKeyboardMapping((xcb_mapping_notify_event_t *)ev);
-			} break;
-			case XCB_CLIENT_MESSAGE:
-			{
-				if (((xcb_client_message_event_t *)ev)->data.data32[0] == w->xcbDeleteWindowAtom->atom)
-				{
-					winEvents.quit = true;
-					break;
-				}
-			} break;
-			}
-		}
-		free(ev);
-	}
-	return winEvents;
 }
 
-void ToggleFullscreen(Window *w)
+void Window::SetIcon()
 {
-#if 0
-	auto ev = XEvent
+}
+
+void Window::Fullscreen()
+{
+	if (!this->isFullscreen)
 	{
-		.xclient =
+		this->ToggleFullscreen();
+	}
+}
+ 
+void Window::Unfullscreen()
+{
+	if (this->isFullscreen)
+	{
+		this->ToggleFullscreen();
+	}
+}
+
+void Window::ToggleFullscreen()
+{
+	auto err = (xcb_generic_error_t *){};
+    auto wmStateCookie = xcb_intern_atom(XCBConnection(), true, 13, "_NET_WM_STATE");
+    auto wmStateReply = xcb_intern_atom_reply(XCBConnection(), wmStateCookie, &err); 
+    if (err)
+    {
+    	LogError("Window", "Failed xcb_intern_atom _NET_WM_STATE: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    	return;
+    }
+    auto wmFullscreenCookie = xcb_intern_atom(XCBConnection(), true, 24, "_NET_WM_STATE_FULLSCREEN");
+    auto wmFullscreenReply = xcb_intern_atom_reply(XCBConnection(), wmFullscreenCookie, &err);
+    if (err)
+    {
+    	LogError("Window", "Failed xcb_intern_atom _NET_WM_STATE_FULLSCREEN: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    	return;
+    }
+	xcb_change_property(
+		XCBConnection(),
+		XCB_PROP_MODE_REPLACE,
+		this->xcbWindow,
+		wmStateReply->atom,
+		XCB_ATOM_ATOM,
+		32,
+		1,
+		&wmFullscreenReply->atom);
+	auto ev = xcb_client_message_event_t
+	{
+	 	.response_type = XCB_CLIENT_MESSAGE,
+		.format = 32,
+		.window = this->xcbWindow,
+		.type = wmStateReply->atom,
+		.data.data32 =
 		{
-			.type = ClientMessage,
-			.window = w->x11Handle,
-			.message_type = XInternAtom(x11Display, "_NET_WM_STATE", True),
-			.format = 32,
-			.data =
-			{
-				.l =
-				{
-					2,
-					(long int)XInternAtom(x11Display, "_NET_WM_STATE_FULLSCREEN", True),
-					0,
-					1,
-					0,
-				},
-			},
+			2,
+			wmFullscreenReply->atom,
+			0,
+			1,
+			0,
 		},
 	};
-	XSendEvent(x11Display, DefaultRootWindow(x11Display), False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
-#endif
+	xcb_send_event(XCBConnection(), false, this->xcbWindow, XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_STRUCTURE_NOTIFY, (const char *)&ev);
+	free(wmStateReply);
+	free(wmFullscreenReply);
+	this->isFullscreen = !this->isFullscreen;
 }
 
-void CaptureCursor(Window *w)
+bool Window::IsFullscreen()
 {
-#if 0
-	XDefineCursor(x11Display, w->x11Handle, w->x11BlankCursor);
-	XGrabPointer(x11Display, w->x11Handle, True, 0, GrabModeAsync, GrabModeAsync, None, w->x11BlankCursor, CurrentTime);
-#endif
+	return this->isFullscreen;
 }
 
-void UncaptureCursor(Window *w)
+void Window::HideCursor()
 {
-#if 0
-	XUndefineCursor(x11Display, w->x11Handle);
-	XUngrabPointer(x11Display, CurrentTime);
-#endif
+	auto bits = u8{0x00};
+	auto pixmap = xcb_create_pixmap_from_bitmap_data(
+		XCBConnection(),
+		this->xcbWindow,
+		&bits,
+		1, 1,
+		1,
+		0,
+		0,
+		NULL);
+	auto cursor = (xcb_cursor_t)xcb_generate_id(XCBConnection());
+    xcb_create_cursor(
+		XCBConnection(),
+		cursor,
+		pixmap,
+		pixmap,
+		65535, 65535, 65535,
+		0, 0, 0,
+		0, 0);
+	xcb_free_pixmap(XCBConnection(), pixmap);
+	auto grabCookie = xcb_grab_pointer(
+		XCBConnection(),
+		false,                  // get all pointer events specified by the following mask
+		this->xcbScreen->root,  // grab the root window
+		XCB_NONE,               // which events to let through
+		XCB_GRAB_MODE_ASYNC,    // pointer events should continue as normal
+		XCB_GRAB_MODE_ASYNC,    // keyboard mode
+		XCB_NONE,               // confine_to = in which window should the cursor stay
+		cursor,
+		XCB_CURRENT_TIME);
+	auto err = (xcb_generic_error_t *){};
+	auto grabReply = xcb_grab_pointer_reply(XCBConnection(), grabCookie, &err);
+	if (err)
+	{
+    	LogError("Window", "Failed xcb_grab_pointer: error_code: %hu, major_code: %hu, minor_code: %hu, sequence: %hu.", err->error_code, err->major_code, err->minor_code, err->sequence);
+    	return;
+	}
+	this->isCursorHidden = true;
 }
 
-void DestroyWindow(Window *w)
+void Window::UnhideCursor()
 {
-    xcb_destroy_window(XCBConnection(), w->xcbHandle);
+	xcb_ungrab_pointer(XCBConnection(), XCB_CURRENT_TIME);
+	this->isCursorHidden = false;
+}
+
+void Window::ToggleHideCursor()
+{
+	if (this->isCursorHidden)
+	{
+		this->UnhideCursor();
+	}
+	else
+	{
+		this->HideCursor();
+	}
+}
+
+void Window::Destroy()
+{
+    xcb_destroy_window(XCBConnection(), this->xcbWindow);
     xcb_disconnect(XCBConnection());
-    free(w->xcbDeleteWindowAtom);
+    free(this->xcbDeleteWindowAtom);
 }

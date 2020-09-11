@@ -22,7 +22,7 @@ struct StringView
 	StringView(const char *s);
 	StringView(ArrayView<u8> a);
 	s64 Length();
-	const char *ToCString();
+	const char *CString();
 	String ToCopy(s64 start, s64 end);
 	StringView ToView(s64 start, s64 end);
 	s64 FindFirst(u8 c);
@@ -53,7 +53,7 @@ struct String
 	const u8 *end();
 	s64 Length();
 	String Copy(s64 start, s64 end);
-	char *ToCString();
+	char *CString();
 	String View(s64 start, s64 end);
 	void Free();
 	s64 FindFirst(u8 c);

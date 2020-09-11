@@ -74,7 +74,7 @@ void RunGame(void *)
 {
 	windowWidth = RenderWidth();
 	windowHeight = RenderHeight();
-	auto win = NewWindow(windowWidth, windowHeight, false);
+	auto win = NewWindow(windowWidth, windowHeight);
 	LogInfo("Engine", "Window dimensions: %dx%d", windowWidth, windowHeight);
 	InitializeRenderer(&win);
 	InitializeAssets(NULL);
@@ -120,7 +120,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 {
 	LogBuildOptions();
 	InitializeInput();
-	InitializeJobs(RunGame, NULL);
+	//InitializeJobs(RunGame, NULL);
 	RunGame(NULL);
 	Abort("Engine", "Invalid exit from ApplicationEntry.");
 	return ProcessFail;

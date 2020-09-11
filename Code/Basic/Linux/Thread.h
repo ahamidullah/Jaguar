@@ -16,4 +16,5 @@ void SetThreadName(Thread t, String n);
 String ThreadName(Thread t);
 Thread CurrentThread();
 s64 CurrentThreadID();
+s64 CurrentThreadIndex();
 s64 ThreadCount();

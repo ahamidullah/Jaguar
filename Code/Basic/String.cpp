@@ -97,7 +97,7 @@ s64 StringView::Length()
 	return this->buffer.count;
 }
 
-const char *StringView::ToCString()
+const char *StringView::CString()
 {
 	auto s = (u8 *)AllocateMemory(this->Length() + 1);
 	CopyArray(this->buffer, NewArrayView(s, this->Length()));
@@ -198,7 +198,7 @@ String String::Copy(s64 start, s64 end)
 	return NewStringFromBuffer(this->buffer.Copy(start, end));
 }
 
-char *String::ToCString()
+char *String::CString()
 {
 	if (this->literal)
 	{
@@ -438,7 +438,7 @@ void StringBuilder::FormatVarArgs(struct String fmt, va_list args)
 		sb->buffer.Resize(sb->Length() + STB_SPRINTF_MIN);
 		return (char *)&sb->buffer[len];
 	};
-	auto cfmt = fmt.ToCString();
+	auto cfmt = fmt.CString();
 	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], cfmt, args);
 	DeallocateMemory(cfmt);
 	this->buffer.Resize(len);

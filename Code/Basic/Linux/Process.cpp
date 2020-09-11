@@ -3,7 +3,7 @@
 
 s32 RunProcess(String cmd)
 {
-	return system(cmd.ToCString());
+	return system(cmd.CString());
 }
 
 void ExitProcess(ProcessExitCode c)
@@ -27,7 +27,7 @@ void SignalDebugBreakpoint()
 
 String EnvironmentVariable(String name, bool *exists)
 {
-	auto result = getenv(name.ToCString());
+	auto result = getenv(name.CString());
 	if (!result)
 	{
 		*exists = false;

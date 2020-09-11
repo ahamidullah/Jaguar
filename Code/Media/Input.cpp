@@ -1,4 +1,5 @@
 #include "Input.h"
+#include "Event.h"
 #include "Basic/Memory.h"
 
 struct InputButtons
@@ -180,7 +181,7 @@ f32 MouseSensitivity()
 	return input.mouse.sensitivity;
 }
 
-WindowEvents ProcessInput(Window *w)
+PlatformEvents ProcessInput(Window *w)
 {
 	// Clear per-frame input.
 	for (auto &p : input.mouse.buttons.pressed)
@@ -201,7 +202,7 @@ WindowEvents ProcessInput(Window *w)
 	}
 	input.mouse.rawDeltaX = 0;
 	input.mouse.rawDeltaY = 0;
-	auto wev = ProcessWindowEvents(w, &input.keyboard, &input.mouse);
+	auto wev = ProcessPlatformEvents(w, &input.keyboard, &input.mouse);
 	// Update mouse position.
 	auto oldX = input.mouse.x;
 	auto oldY = input.mouse.y;

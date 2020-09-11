@@ -5,7 +5,7 @@ File OpenFile(String path, s64 flags, bool *err)
 {
 	auto f = File
 	{
-		.handle = open(path.ToCString(), flags, 0666),
+		.handle = open(path.CString(), flags, 0666),
 		.path = path.Copy(0, path.Length()),
 	};
 	if (f.handle < 0)
@@ -123,7 +123,7 @@ bool DirectoryIteration::Iterate(String path)
 {
 	if (!this->dir)
 	{
-		this->dir = opendir(path.ToCString());
+		this->dir = opendir(path.CString());
 		if (!this->dir)
 		{
 			LogError("File", "Failed to open directory %k: %k.\n", path, PlatformError());
@@ -145,7 +145,7 @@ bool DirectoryIteration::Iterate(String path)
 
 bool FileExists(String path)
 {
-	if (access(path.ToCString(), F_OK) != -1)
+	if (access(path.CString(), F_OK) != -1)
 	{
 		return true;
 	}
@@ -154,7 +154,7 @@ bool FileExists(String path)
 
 bool CreateDirectory(String path)
 {
-	if (mkdir(path.ToCString(), 0700) == -1)
+	if (mkdir(path.CString(), 0700) == -1)
 	{
 		LogError("File", "Failed to create directory %k: %k.\n", path, PlatformError());
 		return false;
@@ -173,7 +173,7 @@ bool CreateDirectoryIfItDoesNotExist(String path)
 
 bool DeleteFile(String path)
 {
-	if (unlink(path.ToCString()) != 0)
+	if (unlink(path.CString()) != 0)
 	{
 		LogError("File", "Failed to delete file %k: %k.\n", path, PlatformError());
 		return false;

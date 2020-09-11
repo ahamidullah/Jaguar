@@ -38,6 +38,8 @@ enum MouseButton
 };
 
 void InitializePlatformInput();
+void RefreshKeyboardMapping(xcb_mapping_notify_event_t *ev);
+
 u32 KeySymbolToScancode(KeySymbol k);
 KeySymbol ScancodeToKeySymbol(u32 scancode);
 void QueryMousePosition(Window *w, s32 *x, s32 *y);

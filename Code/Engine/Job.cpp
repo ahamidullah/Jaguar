@@ -1,4 +1,3 @@
-#if 0
 // One thread per core.
 // Each thread is locked to a CPU core.
 // Fiber pool -- max fiber count (160?).
@@ -13,39 +12,18 @@
 // Per-thread memory heap. 2mb?
 
 #include "Job.h"
-#include "Basic/Fiber.h"
 #include "Basic/Thread.h"
 #include "Basic/Semaphore.h"
 #include "Basic/Atomic.h"
 #include "Basic/Array.h"
 #include "Basic/CPU.h"
+#include "Basic/Spinlock.h"
 
 // @TODO: Have multiple jobs wait on a job counter.
 // @TODO: If the parent job does not wait on the counter, and the counter gets deallocated, then the job may access the freed counter memory.
 // @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
 
 constexpr auto MaxJobsPerQueue = 100;
-
-struct Job
-{
-	JobProcedure procedure;
-	void *parameter;
-	JobPriority priority;
-	//JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
-	//bool finished;
-};
-
-struct JobFiberParameter
-{
-	Job scheduledJob; // @TODO: Running job?
-};
-
-struct JobFiber
-{
-	Fiber platformFiber;
-	JobFiberParameter parameter;
-	JobFiber *next;
-};
 
 struct WorkerThreadParameter
 {
@@ -54,26 +32,20 @@ struct WorkerThreadParameter
 
 struct WorkerThread
 {
-	ThreadHandle platformThread;
+	Thread platformThread;
 	WorkerThreadParameter parameter;
 };
 
-static Array<WorkerThread> workerThreads;
-static AtomicLinkedList<JobFiber> idleJobFiberList;
-static AtomicRingBuffer<Job, MAX_JOBS_PER_QUEUE> jobQueues[JOB_PRIORITY_COUNT];
-static AtomicRingBuffer<JobFiber *, MAX_JOBS_PER_QUEUE> resumableJobQueues[JOB_PRIORITY_COUNT];
-static Semaphore jobsAvailableSemaphore;
+auto jobLock = Spinlock{};
+auto workerThreads = Array<WorkerThread>{};
+auto idleJobFibers = StaticArray<JobFiber, JobFiberCount>{};
+auto jobQueues = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
+auto resumableJobQueues = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
 
-static ThreadLocal Fiber workerThreadFiber;
-static ThreadLocal JobCounter *waitingJobCounter;
+//ThreadLocal Fiber workerThreadFiber;
+//ThreadLocal JobCounter *waitingJobCounter;
 
-static ThreadLocal u32 threadIndex;
-
-u32 GetThreadIndex()
-{
-	return threadIndex;
-}
-
+#if 0
 void *WorkerThreadProcedure(void *parameter)
 {
 	ConvertThreadToFiber(&workerThreadFiber);

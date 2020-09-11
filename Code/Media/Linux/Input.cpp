@@ -44,7 +44,7 @@ KeySymbol ScancodeToKeySymbol(u32 scancode)
 void QueryMousePosition(Window *w, s32 *x, s32 *y)
 {
     auto err = (xcb_generic_error_t *){};
-	auto cookie = xcb_query_pointer(XCBConnection(), w->xcbHandle);
+	auto cookie = xcb_query_pointer(XCBConnection(), w->xcbWindow);
 	auto reply = xcb_query_pointer_reply(XCBConnection(), cookie, &err);
 	if (err)
 	{

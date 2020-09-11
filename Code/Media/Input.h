@@ -5,6 +5,7 @@
 #else
 	#error Unsupported platform.
 #endif
+#include "Event.h"
 #include "Basic/Array.h"
 #include "Common.h"
 
@@ -19,7 +20,8 @@ f32 MouseSensitivity();
 bool IsMouseButtonDown(MouseButton b);
 bool WasMouseButtonPressed(MouseButton b);
 bool WasMouseButtonReleased(MouseButton b);
-WindowEvents ProcessInput(Window *w);
+struct PlatformEvents;
+PlatformEvents ProcessInput(Window *w);
 bool IsKeyDown(KeySymbol k);
 bool WasKeyPressed(KeySymbol k);
 bool WasKeyReleased(KeySymbol k);

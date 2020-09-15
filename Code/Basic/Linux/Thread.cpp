@@ -4,6 +4,73 @@
 #include "../String.h"
 #include "../Memory.h"
 
+Mutex NewMutex()
+{
+	auto m = Mutex{};
+	pthread_mutex_init(&m.handle, NULL);
+	return m;
+}
+
+void Mutex::Lock()
+{
+	pthread_mutex_lock(&this->handle);
+}
+
+void Mutex::Unlock()
+{
+	pthread_mutex_unlock(&this->handle);
+}
+
+Semaphore NewSemaphore(s64 val)
+{
+	auto s = Semaphore{};
+	sem_init(&s.handle, 0, val);
+	return s;
+}
+
+void Semaphore::Signal()
+{
+	sem_post(&this->handle);
+}
+
+void Semaphore::Wait()
+{
+	sem_wait(&this->handle);
+}
+
+s64 Semaphore::Value()
+{
+	auto val = s32{};
+	sem_getvalue(&this->handle, &val);
+	return val;
+}
+
+void Spinlock::Lock()
+{
+	while (true)
+	{
+		if (AtomicCompareAndSwap64(&this->handle, 0, 1) == 0)
+		{
+			return;
+		}
+		while (this->handle != 0)
+		{
+			CPUHintSpinWaitLoop();
+		}
+	}
+}
+
+void Spinlock::Unlock()
+{
+	Assert(this->handle == 1);
+	this->handle = 0;
+}
+
+bool Spinlock::IsLocked()
+{
+	return this->handle == 1;
+}
+
 ThreadLocal auto threadIndex = 0;
 auto threadCount = s64{1};
 
@@ -29,7 +96,7 @@ Thread NewThread(ThreadProcedure proc, void *param)
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
 	auto i = AtomicAdd64(&threadCount, 1);
-	auto wrapperParam = (ThreadProcedureWrapperParameters *)GlobalHeap()->Allocate(sizeof(ThreadProcedureWrapperParameters));
+	auto wrapperParam = (ThreadProcedureWrapperParameters *)GlobalAllocator()->Allocate(sizeof(ThreadProcedureWrapperParameters));
 	wrapperParam->threadIndex = i;
 	wrapperParam->procedure = proc;
 	wrapperParam->param = param;

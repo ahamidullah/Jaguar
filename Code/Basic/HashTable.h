@@ -196,7 +196,7 @@ void HashTable<K, V>::Reserve(s64 reserve)
 			h = HashTableVacantHashSentinel;
 		}
 		auto newBuckets = NewArrayIn<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
-		for (auto i = 0; i < this->buckets.count; i++)
+		for (auto i = 0; i < this->buckets.count; i += 1)
 		{
 			auto newHash = this->hashProcedure(&this->buckets[i].key);
 			auto ni = newHash % newBuckets.count;

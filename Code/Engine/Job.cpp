@@ -4,30 +4,21 @@
 // Priority job queues (low/normal/high).
 // Each worker thread switches to a fiber, grabs a job, and starts working.
 // Special I/O thread for blocking functions.
-// All job synchronization is done through atomic counters (WaitForCounter).
 // Thread local storage? Fiber local storage? Fiber-safe thread local storage?
 // Adaptive mutexes?
-// Feed-forward, game logic and rendering done simultaneously.
-// Per-frame state. Delta time, frame number, skinning matrices, etc.
 // Per-thread memory heap. 2mb?
 
 #include "Job.h"
 #include "Basic/Thread.h"
-#include "Basic/Semaphore.h"
 #include "Basic/Atomic.h"
 #include "Basic/Array.h"
 #include "Basic/CPU.h"
-#include "Basic/Spinlock.h"
-
-// @TODO: Have multiple jobs wait on a job counter.
-// @TODO: If the parent job does not wait on the counter, and the counter gets deallocated, then the job may access the freed counter memory.
-// @TODO: Should we post to the job semaphore when we schedule a resumable job? I can't think of a situation where it would actually help but it seems like we should...
-
-constexpr auto MaxJobsPerQueue = 100;
+#include "Basic/Memory.h"
+#include "Basic/Stack.h"
+#include "Basic/Pool.h"
 
 struct WorkerThreadParameter
 {
-	u32 threadIndex;
 };
 
 struct WorkerThread
@@ -36,14 +27,175 @@ struct WorkerThread
 	WorkerThreadParameter parameter;
 };
 
-auto jobLock = Spinlock{};
-auto workerThreads = Array<WorkerThread>{};
-auto idleJobFibers = StaticArray<JobFiber, JobFiberCount>{};
-auto jobQueues = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
-auto resumableJobQueues = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
+void *WorkerThreadProcedure(void *);
+void JobFiberProcedure(void *);
 
-//ThreadLocal Fiber workerThreadFiber;
-//ThreadLocal JobCounter *waitingJobCounter;
+// @TODO: Arena allocator.
+// @TODO: Fixed vs static?
+// @TODO: More granular locking?
+auto jobLock = Spinlock{};
+auto workerThreads = []() -> Array<WorkerThread>
+{
+	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), CPUProcessorCount());
+	for (auto &t : wts)
+	{
+		t.platformThread = NewThread(WorkerThreadProcedure, &t.parameter);
+	}
+	wts[wts.count - 1].platformThread = CurrentThread();
+	for (auto i = 0; i < wts.count; i++)
+	{
+		SetThreadProcessorAffinity(wts[i].platformThread, i);
+	}
+	return wts;
+}();
+auto idleJobFibers = []() -> FixedPool<JobFiber, JobFiberCount>
+{
+	auto p = NewFixedPool<JobFiber, JobFiberCount>();
+	for (auto &f : p)
+	{
+		f.platformFiber = NewFiber(JobFiberProcedure, &f.parameter);
+	}
+	return p;
+}();
+auto jobQueues = MakeStaticArrayInit<Stack<Job>, JobPriorityCount>(NewStackIn<Job>(GlobalAllocator(), 64));
+auto waitingJobFiberQueue = NewStackIn<JobFiber *>(GlobalAllocator(), 64);
+auto resumableJobFiberQueues = MakeStaticArrayInit<Array<JobFiber *>, JobPriorityCount>(Array<JobFiber *>{.allocator = GlobalAllocator()});
+auto jobCounters = NewSlotAllocator(sizeof(JobCounter), alignof(JobCounter), JobFiberCount, JobFiberCount, GlobalAllocator(), GlobalAllocator());
+ThreadLocal auto runningJobFiber = (JobFiber *){};
+ThreadLocal auto workerThreadFiber = Fiber{};
+
+void JobFiberProcedure(void *param)
+{
+	auto p = (JobFiberParameter *)param;
+	while (true)
+	{
+		p->runningJob.procedure(p->runningJob.parameter);
+		p->runningJob.finished = true;
+		workerThreadFiber.Switch();
+	}
+}
+
+void *WorkerThreadProcedure(void *)
+{
+	ConvertThreadToFiber(&workerThreadFiber);
+	while (true)
+	{
+		auto runFiber = (JobFiber *){};
+		jobLock.Lock();
+		Defer(jobLock.Unlock());
+		for (auto i = (s64)HighPriorityJob; i >= 0; i -= 1)
+		{
+			auto empty = false;
+			if (resumableJobFiberQueues[i].count > 0)
+			{
+				runFiber = resumableJobFiberQueues[i].PopBack();
+				break;
+			}
+			else if (jobQueues[i].Count() > 0)
+			{
+				if (idleJobFibers.Available() == 0)
+				{
+					break;
+				}
+				runFiber = idleJobFibers.Get();
+				runFiber->parameter.runningJob = jobQueues[i].Pop();
+				break;
+			}
+		}
+		if (!runFiber)
+		{
+			continue;
+		}
+		runningJobFiber = runFiber;
+		runFiber->platformFiber.Switch();
+		auto runJob = &runFiber->parameter.runningJob;
+		if (runJob->finished)
+		{
+			idleJobFibers.Release(runFiber);
+			if (!runJob->waitingCounter)
+			{
+				continue;
+			}
+			runJob->waitingCounter->unfinishedJobCount -= 1;
+			if (runJob->waitingCounter->unfinishedJobCount == 0)
+			{
+				for (auto &f : runJob->waitingCounter->waitingFibers)
+				{
+					resumableJobFiberQueues[f->parameter.runningJob.priority].Append(f);
+				}
+			}
+		}
+	}
+}
+
+void InitializeJobs(JobProcedure initProc, void *initParam)
+{
+	auto j = NewJobDeclaration(initProc, initParam);
+	RunJobs(NewArrayView(&j, 1), HighPriorityJob, NULL);
+	WorkerThreadProcedure(&workerThreads[workerThreads.count - 1].parameter);
+}
+
+JobDeclaration NewJobDeclaration(JobProcedure proc, void *param)
+{
+	return
+	{
+		.procedure = proc,
+		.parameter = param,
+	};
+}
+
+void RunJobs(ArrayView<JobDeclaration> jds, JobPriority p, JobCounter **c)
+{
+	jobLock.Lock();
+	Defer(jobLock.Unlock());
+	auto counter = (JobCounter *){};
+	if (c)
+	{
+		*c = (JobCounter *)jobCounters.Allocate(sizeof(JobCounter));
+		(*c)->jobCount = jds.count;
+		(*c)->unfinishedJobCount = jds.count;
+		Assert((*c)->waitingFibers.capacity == 0 && (*c)->waitingFibers.count == 0);
+		counter = *c;
+	}
+	for (auto &jd : jds)
+	{
+		jobQueues[p].Push(
+		{
+			.priority = p,
+			.procedure = jd.procedure,
+			.parameter = jd.parameter,
+			.waitingCounter = counter,
+		});
+	}
+}
+
+void JobCounter::Wait()
+{
+	// @TODO: Have a per-counter lock?
+	jobLock.Lock();
+	if (this->unfinishedJobCount == 0)
+	{
+		return;
+	}
+	this->waitingFibers.Append(runningJobFiber);
+	jobLock.Unlock();
+	workerThreadFiber.Switch();
+}
+
+void JobCounter::Reset()
+{
+	jobLock.Lock();
+	Defer(jobLock.Unlock());
+	this->unfinishedJobCount = this->jobCount;
+	this->waitingFibers.Resize(0);
+}
+
+void JobCounter::Free()
+{
+	jobLock.Lock();
+	Defer(jobLock.Unlock());
+	jobCounters.Deallocate(this);
+}
 
 #if 0
 void *WorkerThreadProcedure(void *parameter)
@@ -183,39 +335,6 @@ void WaitForJobCounter(JobCounter *counter)
 }
 
 #endif
-
-void InitializeJobs(JobProcedure init, void *param)
-{
-#if 0
-	for (auto i = 0; i < JOB_FIBER_COUNT; i++)
-	{
-		JobFiber *newFiber = AllocateStructMemory(JobFiber);
-		CreateFiber(&newFiber->platformFiber, JobFiberProcedure, &newFiber->parameter);
-		newFiber->next = idleJobFiberList.head;
-		idleJobFiberList.head = newFiber;
-	}
-	jobsAvailableSemaphore = CreateSemaphore(0);
-
-	auto workerThreadCount = GetCPUProcessorCount();
-	workerThreads = CreateArray<WorkerThread>(workerThreadCount);
-	for (auto i = 0; i < workerThreadCount - 1; i++)
-	{
-		workerThreads[i].parameter.threadIndex = i;
-		workerThreads[i].platformThread = CreateThread(WorkerThreadProcedure, &workerThreads[i].parameter);
-	}
-	workerThreads[workerThreadCount - 1].parameter.threadIndex = workerThreadCount - 1;
-	workerThreads[workerThreadCount - 1].platformThread = GetCurrentThread();
-
-	for (auto i = 0; i < workerThreadCount; i++)
-	{
-		SetThreadProcessorAffinity(workerThreads[i].platformThread, i);
-	}
-
-	JobDeclaration initialJob = CreateJob(initialJobProcedure, initialJobParameter);
-	RunJobs(1, &initialJob, HIGH_PRIORITY_JOB, NULL);
-	WorkerThreadProcedure(&workerThreads[workerThreadCount - 1].parameter);
-#endif
-}
 
 s64 GetWorkerThreadCount()
 {

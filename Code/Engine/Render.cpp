@@ -66,7 +66,7 @@ struct RenderContext
 void CreateDescriptorSetGroup(s64 setIndex, s64 bindingInfoCount, DescriptorSetBindingInfo *bindingInfos)
 {
 	renderGlobals.descriptorSetLayouts[setIndex] = GfxCreateDescriptorSetLayout(bindingInfoCount, bindingInfos);
-	for (auto i = 0; i < renderGlobals.swapchainImages.count; i++)
+	for (auto i = 0; i < renderGlobals.swapchainImages.count; i += 1)
 	{
 		GfxCreateDescriptorSets(renderGlobals.descriptorPool, renderGlobals.descriptorSetLayouts[setIndex], 1, &renderGlobals.descriptorSets[i][setIndex]);
 		renderGlobals.descriptorSetBuffers[i][setIndex] = CreateGPUBuffer(INITIAL_DESCRIPTOR_SET_BUFFER_SIZE, GFX_UNIFORM_BUFFER | GFX_TRANSFER_DESTINATION_BUFFER, GFX_GPU_ONLY_MEMORY, GPU_RESOURCE_LIFETIME_PERSISTENT);

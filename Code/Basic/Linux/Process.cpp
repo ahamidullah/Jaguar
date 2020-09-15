@@ -54,7 +54,7 @@ Array<String> Stacktrace()
 			return {};
 		}
 		auto st = NewArrayWithCapacity<String>(0, numAddrs);
-		for (auto i = 0; i < numAddrs; i++)
+		for (auto i = 0; i < numAddrs; i += 1)
 		{
 			st.Append(trace[i]);
 		}

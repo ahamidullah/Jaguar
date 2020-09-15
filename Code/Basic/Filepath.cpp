@@ -67,7 +67,7 @@ StringBuilder JoinFilepaths(String a, String b)
 String CleanFilepath(const String &filepath)
 {
 	auto components = SplitString(filepath, '/');
-	for (auto i = 0; i < ArrayLength(components); i++)
+	for (auto i = 0; i < ArrayLength(components); i += 1)
 	{
 		if (components[i] == ".")
 		{
@@ -87,7 +87,7 @@ String CleanFilepath(const String &filepath)
 	{
 		StringAppend(&result, "/");
 	}
-	for (auto i = 0; i < ArrayLength(components); i++)
+	for (auto i = 0; i < ArrayLength(components); i += 1)
 	{
 		StringAppend(&result, components[i]);
 		if (i != ArrayLength(components) - 1)

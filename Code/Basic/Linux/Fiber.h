@@ -19,6 +19,6 @@ struct Fiber
 };
 
 typedef void (*FiberProcedure)(void *);
-Fiber *NewFiber(FiberProcedure proc, void *param);
-Fiber *ConvertThreadToFiber();
+Fiber NewFiber(FiberProcedure proc, void *param);
+void ConvertThreadToFiber(Fiber *f);
 Fiber *RunningFiber();

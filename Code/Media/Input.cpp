@@ -32,9 +32,9 @@ InputButtons NewInputButtons(s64 size)
 {
 	auto b = InputButtons
 	{
-		.down = NewArrayIn<bool>(GlobalHeap(), size),
-		.pressed = NewArrayIn<bool>(GlobalHeap(), size),
-		.released = NewArrayIn<bool>(GlobalHeap(), size),
+		.down = NewArrayIn<bool>(GlobalAllocator(), size),
+		.pressed = NewArrayIn<bool>(GlobalAllocator(), size),
+		.released = NewArrayIn<bool>(GlobalAllocator(), size),
 	};
 	for (auto &p : b.pressed)
 	{

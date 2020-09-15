@@ -8,7 +8,6 @@
 #include "Allocator.h"
 #include "Thread.h"
 #include "Array.h"
-#include "Spinlock.h"
 
 void InitializeMemory();
 
@@ -32,6 +31,7 @@ struct AllocationHeader
 {
 	s64 size;
 	s64 alignment;
+	void *startOfAllocation;
 };
 
 struct HeapAllocator : Allocator
@@ -62,8 +62,7 @@ struct GlobalHeapAllocator : Allocator
 	void Free();
 };
 
-Allocator *GlobalHeap();
-bool IsGlobalHeapInitialized();
+Allocator *GlobalAllocator();
 
 struct PoolAllocator : Allocator
 {

@@ -2,14 +2,61 @@
 #include "CPU.h"
 #include "Log.h"
 #include "Process.h"
-#include "Spinlock.h"
 #include "Fiber.h"
 
-StackAllocator *BackupGlobalAllocator()
+IntegerPointer AlignAddress(IntegerPointer addr, s64 align)
 {
-	static auto mem = StaticArray<u8, KilobytesToBytes(32)>{};
-	static auto a = NewStackAllocator(mem);
-	return &a;
+	// Code from Game Engine Architecture (2018).
+	Assert(align > 0);
+	auto mask = align - 1;
+	Assert((align & mask) == 0); // Power of 2.
+	return (addr + mask) & ~mask;
+}
+
+void *AlignPointer(void *addr, s64 align)
+{
+	return (void *)AlignAddress((IntegerPointer)addr, align);
+}
+
+u8 *SetAllocationHeaderAndData(void *mem, s64 size, s64 align)
+{
+	auto header = (u8 *)AlignPointer(mem, alignof(AllocationHeader));
+	auto data = header + sizeof(AllocationHeader);
+	if ((IntegerPointer)data % align == 0)
+	{
+		// Make room to store number of bytes between the end of the header and the start of the data.
+		// We need this when we go to free the pointer.
+		data += align;
+	}
+	else
+	{
+		data = (u8 *)AlignPointer(data, align);
+	}
+	// Right now we store the number of bytes from the start of the data to the start of the header,
+	// but we could store from the start of data to the end of the header. That would save us if the
+	// size of the AllocationHeader ever got too big...
+	auto bytesFromDataToHeader = data - header;
+	if (bytesFromDataToHeader > U8Max)
+	{
+		// Move the header up.
+		header = (u8 *)AlignPointer(data - sizeof(AllocationHeader) - alignof(AllocationHeader), alignof(AllocationHeader));
+		Assert(header >= mem);
+		Assert(header < data);
+		bytesFromDataToHeader = data - header;
+		Assert(bytesFromDataToHeader < U8Max);
+		Assert(bytesFromDataToHeader >= sizeof(AllocationHeader));
+	}
+	((AllocationHeader *)header)->size = size;
+	((AllocationHeader *)header)->alignment = align;
+	((AllocationHeader *)header)->startOfAllocation = mem;
+	*(data - 1) = bytesFromDataToHeader;
+	return data;
+}
+
+AllocationHeader *GetAllocationHeader(void *mem)
+{
+	auto bytesFromDataToHeader = *((u8 *)mem - 1);
+	return (AllocationHeader *)((u8 *)mem - bytesFromDataToHeader);
 }
 
 Allocator **ContextAllocatorPointer()
@@ -17,18 +64,9 @@ Allocator **ContextAllocatorPointer()
 	static ThreadLocal auto contextAllocator = (Allocator *){};
 	if (!contextAllocator)
 	{
-		contextAllocator = BackupGlobalAllocator();
+		contextAllocator = GlobalAllocator();
 	}
 	return &contextAllocator;
-}
-
-Allocator *ContextAllocator()
-{
-	if (RunningFiber())
-	{
-		return RunningFiber()->contextAllocator;
-	}
-	return *ContextAllocatorPointer();
 }
 
 void SetContextAllocator(Allocator *a)
@@ -39,6 +77,15 @@ void SetContextAllocator(Allocator *a)
 		return;
 	}
 	*ContextAllocatorPointer() = a;
+}
+
+Allocator *ContextAllocator()
+{
+	if (RunningFiber())
+	{
+		return RunningFiber()->contextAllocator;
+	}
+	return *ContextAllocatorPointer();
 }
 
 Array<Allocator *> *ContextAllocatorStack()
@@ -149,6 +196,8 @@ void GlobalHeapArrayAllocator::Free()
 	Abort("Memory", "Unsupported call to Free in GlobalHeapArrayAllocator.");
 }
 
+ThreadLocal auto globalHeapLockThreadID = -1;
+
 GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 {
 	// This constructor function exists because C++ sucks and does not let you use brace initialization if the struct has a virtual method.
@@ -161,96 +210,119 @@ GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 void *GlobalHeapAllocator::Allocate(s64 size)
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	return this->heap.Allocate(size);
 }
 
 void *GlobalHeapAllocator::AllocateAligned(s64 size, s64 align)
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	return this->heap.AllocateAligned(size, align);
 }
 
 void *GlobalHeapAllocator::Resize(void *mem, s64 newSize)
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	return this->heap.Resize(mem, newSize);
 }
 
 void GlobalHeapAllocator::Deallocate(void *mem)
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	this->heap.Deallocate(mem);
 }
 
 void GlobalHeapAllocator::Clear()
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	this->heap.Clear();
 }
 
 void GlobalHeapAllocator::Free()
 {
 	this->lock.Lock();
-	Defer(this->lock.Unlock());
+	globalHeapLockThreadID = CurrentThreadID();
+	Defer(
+	{
+		globalHeapLockThreadID = -1;
+		this->lock.Unlock();
+	});
 	this->heap.Free();
 }
 
-bool *GlobalHeapInitPointer()
-{
-	static auto init = false;
-	return &init;
-}
+// cases:
+// two calls to GlobalAllocator
+// calls to ContextAllocator and GlobalAllocator, order
+// multithreaded - two calls to GlobalAllocator
+// multithreaded - calls to ContextAllocator and GlobalAllocator, order
+// recursive cases
+// failure cases
 
-bool IsGlobalHeapInitialized()
+Allocator *GlobalAllocator()
 {
-	return *GlobalHeapInitPointer();
-}
-
-Allocator *GlobalHeap()
-{
-	static auto blk = GlobalHeapBlockAllocator{};
-	static auto arr = GlobalHeapArrayAllocator{};
-	static auto alloc = GlobalHeapAllocator{};
-	static auto initializing = false;
-	if (!initializing && !IsGlobalHeapInitialized())
+	static auto heapBlockAlloc = GlobalHeapBlockAllocator{};
+	static auto heapArrayAlloc = GlobalHeapArrayAllocator{};
+	static auto heapAlloc = GlobalHeapAllocator{};
+	static auto backupAlloc = NewStackAllocator(StaticArray<u8, MegabytesToBytes(2)>{});
+	static auto heapInit = false;
+	if (heapAlloc.lock.IsLocked() && globalHeapLockThreadID == CurrentThreadID())
 	{
-		// Try to initialize the global heap.
-		// @TODO: Couldn't this work multithreaded by using the lock? Have to handle recursive case...
-		Assert(ThreadCount() == 1);
-		initializing = true;
-		alloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blk, &arr);
-		*GlobalHeapInitPointer() = true;
-		Assert(ContextAllocatorStack()->count == 0);
-		// We no longer need to use the backup global allocator!
-		SetContextAllocator(&alloc);
+		return &backupAlloc;
 	}
-	else if (initializing && !IsGlobalHeapInitialized())
+	if (!heapInit)
 	{
-		// Well, we tried to initialize the global heap, but failed, somehow.
-		// Fallback to the backup, fixed-size buffer allocator.
-		Assert(ThreadCount() == 1);
-		return BackupGlobalAllocator();
+		heapAlloc.lock.Lock();
+		globalHeapLockThreadID = CurrentThreadID();
+		Defer(
+		{
+			globalHeapLockThreadID = -1;
+			heapAlloc.lock.Unlock();
+		});
+		if (!heapInit)
+		{
+			heapAlloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &heapBlockAlloc, &heapArrayAlloc);
+			heapInit = true;
+		}
 	}
-	return &alloc;
+	return &heapAlloc;
 }
 
 void InitializeMemory()
 {
-	GlobalHeap(); // Ensure that the global heap is initialized...
+	GlobalAllocator(); // Ensure that the global heap is initialized...
 }
 
 void PushContextAllocator(Allocator *a)
 {
-	if (!IsGlobalHeapInitialized())
-	{
-		SetContextAllocator(a); // @TODO: What should we do here. Small, fixed size backup context allocator stack?
-		return;
-	}
 	if (RunningFiber())
 	{
 		RunningFiber()->contextAllocatorStack.Append(a);
@@ -263,10 +335,6 @@ void PushContextAllocator(Allocator *a)
 
 void PopContextAllocator()
 {
-	if (!IsGlobalHeapInitialized())
-	{
-		return; // @TODO
-	}
 	auto stk = (Array<Allocator *> *){};
 	auto ctx = (Allocator **){};
 	if (RunningFiber())
@@ -287,7 +355,7 @@ void PopContextAllocator()
 	stk->Resize(stk->count - 1);
 	if (stk->count == 0)
 	{
-		*ctx = GlobalHeap();
+		*ctx = GlobalAllocator();
 	}
 	else
 	{
@@ -315,26 +383,6 @@ void DeallocateMemory(void *mem)
 	ContextAllocator()->Deallocate(mem);
 }
 
-IntegerPointer AlignAddress(IntegerPointer addr, s64 align)
-{
-	// Code from Game Engine Architecture (2018).
-	Assert(align > 0);
-	auto mask = align - 1;
-	Assert((align & mask) == 0); // Power of 2.
-	return (addr + mask) & ~mask;
-}
-
-void *AlignPointer(void *addr, s64 align)
-{
-	return (void *)AlignAddress((IntegerPointer)addr, align);
-}
-
-AllocationHeader *GetMemoryHeader(void *mem)
-{
-	auto bytesFromDataToHeader = *((u8 *)mem - 1);
-	return (AllocationHeader *)((u8 *)mem - bytesFromDataToHeader);
-}
-
 AllocatorBlocks NewAllocatorBlocks(s64 blockSize, s64 blockCount, Allocator *blockAlloc, Allocator *arrayAlloc)
 {
 	auto b = AllocatorBlocks
@@ -344,7 +392,7 @@ AllocatorBlocks NewAllocatorBlocks(s64 blockSize, s64 blockCount, Allocator *blo
 		.used = NewArrayWithCapacityIn<u8 *>(arrayAlloc, 0, blockCount),
 		.unused = NewArrayWithCapacityIn<u8 *>(arrayAlloc, 0, blockCount),
 	};
-	for (auto i = 0; i < blockCount; i++)
+	for (auto i = 0; i < blockCount; i += 1)
 	{
 		b.unused.Append((u8 *)blockAlloc->Allocate(blockSize));
 	}
@@ -384,24 +432,8 @@ void *AllocatorBlocks::AllocateWithHeader(s64 size, s64 align)
 {
 	auto maxSize = size + sizeof(AllocationHeader) + (alignof(AllocationHeader) - 1) + align;
 	Assert(maxSize <= this->blockSize);
-	auto header = (AllocationHeader *)this->Allocate(size + sizeof(AllocationHeader) + align, alignof(AllocationHeader));
-	auto data = (u8 *)header + sizeof(AllocationHeader);
-	if ((IntegerPointer)data % align == 0)
-	{
-		// Make room to store number of bytes between the end of the header and the start of the data.
-		// We need this when we go to free the pointer.
-		data += align;
-	}
-	else
-	{
-		data = (u8 *)AlignPointer(data, align);
-	}
-	header->size = size;
-	header->alignment = align;
-	auto bytesFromDataToHeader = data - (u8 *)header;
-	Assert(bytesFromDataToHeader < U8Max);
-	*(data - 1) = bytesFromDataToHeader;
-	return data;
+	auto mem = this->Allocate(size + sizeof(AllocationHeader) + align, alignof(AllocationHeader));
+	return SetAllocationHeaderAndData(mem, size, align);
 }
 
 void AllocatorBlocks::Clear()
@@ -439,7 +471,7 @@ void *PoolAllocator::AllocateAligned(s64 size, s64 align)
 
 void *PoolAllocator::Resize(void *mem, s64 newSize)
 {
-	auto h = GetMemoryHeader(mem);
+	auto h = GetAllocationHeader(mem);
 	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
 	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
 	return newMem;
@@ -532,7 +564,7 @@ void *HeapAllocator::AllocateAligned(s64 size, s64 align)
 
 void *HeapAllocator::Resize(void *mem, s64 newSize)
 {
-	auto h = GetMemoryHeader(mem);
+	auto h = GetAllocationHeader(mem);
 	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
 	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
 	this->free.Append(h);
@@ -541,7 +573,7 @@ void *HeapAllocator::Resize(void *mem, s64 newSize)
 
 void HeapAllocator::Deallocate(void *mem)
 {
-	auto h = GetMemoryHeader(mem);
+	auto h = GetAllocationHeader(mem);
 	this->free.Append(h);
 }
 
@@ -627,7 +659,7 @@ void *StackAllocator::AllocateAligned(s64 size, s64 align)
 
 void *StackAllocator::Resize(void *mem, s64 newSize)
 {
-	auto h = GetMemoryHeader(mem);
+	auto h = GetAllocationHeader(mem);
 	if (((u8 *)mem) + h->size == this->head)
 	{
 		h->size = newSize;
@@ -641,7 +673,7 @@ void *StackAllocator::Resize(void *mem, s64 newSize)
 
 void StackAllocator::Deallocate(void *mem)
 {
-	auto h = GetMemoryHeader(mem);
+	auto h = GetAllocationHeader(mem);
 	if (((u8 *)mem) + h->size == this->head)
 	{
 		this->head = (u8 *)h;

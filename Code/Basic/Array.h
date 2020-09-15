@@ -12,7 +12,7 @@ template <typename T> struct ArrayView;
 template <typename T>
 s64 ArrayFindFirst(ArrayView<T> *a, T e)
 {
-	for (auto i = 0; i < a->count; i++)
+	for (auto i = 0; i < a->count; i += 1)
 	{
 		if ((*a)[i] == e)
 		{
@@ -26,7 +26,7 @@ template <typename T>
 s64 ArrayFindLast(ArrayView<T> *a, T e)
 {
 	auto last = -1;
-	for (auto i = 0; i < a->count; i++)
+	for (auto i = 0; i < a->count; i += 1)
 	{
 		if ((*a)[i] == e)
 		{
@@ -86,7 +86,7 @@ bool ArrayView<T>::operator==(ArrayView<T> a)
 	{
 		return false;
 	}
-	for (auto i = 0; i < this->count; i++)
+	for (auto i = 0; i < this->count; i += 1)
 	{
 		if ((*this)[i] != a[i])
 		{
@@ -166,7 +166,7 @@ template <typename T>
 void CopyArray(Array<T> src, ArrayView<T> dst)
 {
 	Assert(src.count == dst.count);
-	for (auto i = 0; i < src.count; i++)
+	for (auto i = 0; i < src.count; i += 1)
 	{
 		dst[i] = src[i];
 	}
@@ -176,7 +176,7 @@ template <typename T>
 void CopyArray(Array<T> src, Array<T> dst)
 {
 	Assert(src.count == dst.count);
-	for (auto i = 0; i < src.count; i++)
+	for (auto i = 0; i < src.count; i += 1)
 	{
 		dst[i] = src[i];
 	}
@@ -186,7 +186,7 @@ template <typename T>
 void CopyArray(ArrayView<T> src, Array<T> dst)
 {
 	Assert(src.count == dst.count);
-	for (auto i = 0; i < src.count; i++)
+	for (auto i = 0; i < src.count; i += 1)
 	{
 		dst[i] = src[i];
 	}
@@ -196,7 +196,7 @@ template <typename T>
 void CopyArray(ArrayView<T> src, ArrayView<T> dst)
 {
 	Assert(src.count == dst.count);
-	for (auto i = 0; i < src.count; i++)
+	for (auto i = 0; i < src.count; i += 1)
 	{
 		dst[i] = src[i];
 	}
@@ -232,6 +232,8 @@ struct Array
 	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
+	T PopBack();
+	T PopFront();
 };
 
 template <typename T, typename... Ts>
@@ -315,7 +317,7 @@ bool Array<T>::operator==(Array<T> a)
 	{
 		return false;
 	}
-	for (auto i = 0; i < this->count; i++)
+	for (auto i = 0; i < this->count; i += 1)
 	{
 		if ((*this)[i] != a[i])
 		{
@@ -505,6 +507,29 @@ void Array<T>::Free()
 	this->elements = NULL;
 }
 
+template <typename T>
+T Array<T>::PopBack()
+{
+	Assert(this->count > 0);
+	this->Resize(this->count - 1);
+	return this->elements[this->count];
+}
+
+template <typename T>
+T Array<T>::PopFront()
+{
+	Assert(this->count > 0);
+	if (this->count == 1)
+	{
+		this->Resize(0);
+		return this->elements[0];
+	}
+	auto r = this->elements[0];
+	CopyArray(this->View(1, this->count), this->View(0, this->count - 1));
+	this->Resize(this->count - 1);
+	return r;
+}
+
 template <typename T, s64 N>
 struct StaticArray
 {
@@ -525,16 +550,22 @@ struct StaticArray
 };
 
 template <typename T, typename... Ts>
-StaticArray<T, sizeof...(Ts)> MakeStaticArray(Ts... ts)
+auto MakeStaticArray(Ts... ts) -> StaticArray<T, sizeof...(ts)>
 {
-	auto a = StaticArray<T, sizeof...(ts)>{};
-	auto i = 0;
-	auto Add = [&a, &i](T e)
+	auto a = StaticArray<T, sizeof...(ts)>
 	{
-		a.elements[i] = e;
-		i += 1;
+		ts...,
 	};
-	(Add(ts), ...);
+}
+
+template <typename T, s64 N>
+StaticArray<T, N> MakeStaticArrayInit(T init)
+{
+	auto a = StaticArray<T, N>{};
+	for (auto i = 0; i < N; i++)
+	{
+		a[i] = init;
+	}
 	return a;
 }
 
@@ -569,7 +600,7 @@ bool StaticArray<T, N>::operator==(StaticArray<T, N> a)
 	{
 		return false;
 	}
-	for (auto i = 0; i < N; i++)
+	for (auto i = 0; i < N; i += 1)
 	{
 		if ((*this)[i] != a[i])
 		{
@@ -594,7 +625,7 @@ T *StaticArray<T, N>::begin()
 template <typename T, s64 N>
 T *StaticArray<T, N>::end()
 {
-	return &this->elements[this->count - 1] + 1;
+	return &this->elements[N - 1] + 1;
 }
 
 template <typename T, s64 N>

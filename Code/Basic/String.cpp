@@ -12,8 +12,8 @@ bool CStringsEqual(const char *a, const char *b)
 		{
 			return false;
 		}
-		a++;
-		b++;
+		a += 1;
+		b += 1;
 	}
 	if (*a || *b)
 	{
@@ -27,7 +27,7 @@ s64 CStringLength(const char *s)
 	auto len = 0;
 	while (s[len])
 	{
-		len++;
+		len += 1;
 	}
 	return len;
 }
@@ -162,7 +162,7 @@ bool String::operator==(String s)
 	{
 		return false;
 	}
-	for (auto i = 0; i < s.Length(); i++)
+	for (auto i = 0; i < s.Length(); i += 1)
 	{
 		if (s.buffer[i] != this->buffer[i])
 		{
@@ -237,7 +237,7 @@ Array<String> String::Split(char seperator)
 	auto splits = Array<String>{};
 	auto curStart = 0;
 	auto curLen = 0;
-	for (auto i = 0; i < this->Length(); i++)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
 		if ((*this)[i] == seperator)
 		{
@@ -452,7 +452,7 @@ void StringBuilder::FormatTime()
 
 void StringBuilder::Uppercase()
 {
-	for (auto i = 0; i < this->Length(); i++)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
 		(*this)[i] = UppercaseChar((*this)[i]);
 	}
@@ -460,7 +460,7 @@ void StringBuilder::Uppercase()
 
 void StringBuilder::Lowercase()
 {
-	for (auto i = 0; i < this->Length(); i++)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
 		(*this)[i] = LowercaseChar((*this)[i]);
 	}
@@ -468,7 +468,7 @@ void StringBuilder::Lowercase()
 
 s64 StringBuilder::FindFirst(u8 c)
 {
-	for (auto i = 0; i < this->Length(); i++)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
 		if ((*this)[i] == c)
 		{
@@ -481,7 +481,7 @@ s64 StringBuilder::FindFirst(u8 c)
 s64 StringBuilder::FindLast(u8 c)
 {
 	auto last = -1;
-	for (auto i = 0; i < this->Length(); i++)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
 		if ((*this)[i] == c)
 		{

@@ -120,8 +120,7 @@ s32 ApplicationEntry(s32 argc, char *argv[])
 {
 	LogBuildOptions();
 	InitializeInput();
-	//InitializeJobs(RunGame, NULL);
-	RunGame(NULL);
+	InitializeJobs(RunGame, NULL);
 	Abort("Engine", "Invalid exit from ApplicationEntry.");
 	return ProcessFail;
 }

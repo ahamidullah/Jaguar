@@ -14,7 +14,7 @@
 
 typedef void (*CrashHandler)(File crashLog);
 
-auto crashHandlers = NewArrayIn<CrashHandler>(GlobalHeap(), 0);
+auto crashHandlers = NewArrayIn<CrashHandler>(GlobalAllocator(), 0);
 
 String LogFileDirectory()
 {
@@ -262,7 +262,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 		SignalDebugBreakpoint();
 	}
 	LogFatal(category, "Stack trace:");
-	for (auto i = 0; i < st.count; i++)
+	for (auto i = 0; i < st.count; i += 1)
 	{
 		LogFatal(category, "\t%d: %k", i, st[i]);
 	}

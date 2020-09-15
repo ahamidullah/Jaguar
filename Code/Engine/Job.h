@@ -13,34 +13,39 @@ enum JobPriority
 	JobPriorityCount
 };
 
+struct JobCounter;
+
 typedef void (*JobProcedure)(void *);
 
 struct Job
 {
+	JobPriority priority;
 	JobProcedure procedure;
 	void *parameter;
-	JobPriority priority;
-	//JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
-	//bool finished;
+	bool finished;
+	JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
 };
 
 struct JobFiberParameter
 {
-	Job scheduledJob; // @TODO: Running job?
+	Job runningJob;
 };
 
 struct JobFiber
 {
 	Fiber platformFiber;
 	JobFiberParameter parameter;
-	JobFiber *next;
 };
 
 struct JobCounter
 {
-	//volatile s64 unfinishedJobCount;
-	//JobFiber *waitingJobFiber;
-	// Array<JobFiber *> waitingFibers;
+	s64 jobCount;
+	s64 unfinishedJobCount;
+	Array<JobFiber *> waitingFibers;
+
+	void Wait();
+	void Reset();
+	void Free();
 };
 
 struct JobDeclaration
@@ -49,10 +54,7 @@ struct JobDeclaration
 	void *parameter;
 };
 
-void InitializeJobs(JobProcedure init, void *params);
-//JobDeclaration CreateJob(JobProcedure procedure, void *parameter);
-//void RunJobs(u32 JobCount, JobDeclaration *JobDeclarations, JobPriority priority, JobCounter *counter);
-//void WaitForJobCounter(JobCounter *counter);
-//void ClearJobCounter(JobCounter *counter);
-s64 GetWorkerThreadCount();
-//u32 GetThreadIndex();
+void InitializeJobs(JobProcedure init, void *param);
+JobDeclaration NewJobDeclaration(JobProcedure proc, void *param);
+void RunJobs(ArrayView<JobDeclaration> d, JobPriority p, JobCounter **c);
+s64 WorkerThreadCount();

@@ -12,7 +12,7 @@
 void PrintM4Actual(String name, M4 m)
 {
 	ConsolePrint("%k:\n", name);
-	for (auto i = 0; i < 4; i++)
+	for (auto i = 0; i < 4; i += 1)
 	{
 		ConsolePrint("\t%f %f %f %f\n", m[i][0], m[i][1], m[i][2], m[i][3]);
 	}
@@ -441,9 +441,9 @@ V4 &M4::operator[](int i)
 M4 operator*(M4 a, M4 b)
 {
 	auto result = M4{};
-	for (auto i = 0; i < 4; i++)
+	for (auto i = 0; i < 4; i += 1)
 	{
-		for (auto j = 0; j < 4; j++)
+		for (auto j = 0; j < 4; j += 1)
 		{
 			result[i][j] = a[i][0] * b[0][j]
 			             + a[i][1] * b[1][j]
@@ -516,7 +516,7 @@ M4 inverse(M4 m) {
 
 void M4::SetScale(V3 s)
 {
-	for (auto i = 0; i < 4; i++)
+	for (auto i = 0; i < 4; i += 1)
 	{
 		(*this)[i][0] *= s.x;
 		(*this)[i][1] *= s.y;

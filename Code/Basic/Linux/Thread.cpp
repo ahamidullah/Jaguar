@@ -121,7 +121,7 @@ void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
 
 const auto MaxThreadNameLength = 15;
 
-void SetCurrentThreadName(String n)
+void SetThreadName(String n)
 {
 	if (n.Length() > MaxThreadNameLength)
 	{
@@ -134,7 +134,7 @@ void SetCurrentThreadName(String n)
 	}
 }
 
-String CurrentThreadName()
+String ThreadName()
 {
 	auto buf = (char *)AllocateMemory(MaxThreadNameLength);
 	if (prctl(PR_GET_NAME, buf, 0, 0, 0) != 0)
@@ -149,12 +149,12 @@ Thread CurrentThread()
 	return pthread_self();
 }
 
-s64 CurrentThreadID()
+s64 ThreadID()
 {
 	return syscall(__NR_gettid);
 }
 
-s64 CurrentThreadIndex()
+s64 ThreadIndex()
 {
 	return threadIndex;
 }

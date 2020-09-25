@@ -49,21 +49,6 @@ struct HeapAllocator : Allocator
 
 HeapAllocator NewHeapAllocator(s64 blockSize, s64 blockCount, Allocator *blockAlloc, Allocator *arrayAlloc);
 
-struct GlobalHeapAllocator : Allocator
-{
-	Spinlock lock;
-	HeapAllocator heap;
-
-	void *Allocate(s64 size);
-	void *AllocateAligned(s64 size, s64 align);
-	void *Resize(void *mem, s64 newSize);
-	void Deallocate(void *mem);
-	void Clear();
-	void Free();
-};
-
-Allocator *GlobalAllocator();
-
 struct PoolAllocator : Allocator
 {
 	AllocatorBlocks blocks;
@@ -123,6 +108,24 @@ struct StackAllocator : Allocator
 };
 
 StackAllocator NewStackAllocator(ArrayView<u8> mem);
+
+struct GlobalHeapAllocator : Allocator
+{
+	Spinlock lock;
+	s64 lockThreadID;
+	HeapAllocator heap;
+	StackAllocator backup;
+	StaticArray<u8, MegabytesToBytes(8)> backupBuffer;
+
+	void *Allocate(s64 size);
+	void *AllocateAligned(s64 size, s64 align);
+	void *Resize(void *mem, s64 newSize);
+	void Deallocate(void *mem);
+	void Clear();
+	void Free();
+};
+
+GlobalHeapAllocator *GlobalAllocator();
 
 void *AllocateMemory(s64 size);
 void *AllocateAlignedMemory(s64 size, s64 align);

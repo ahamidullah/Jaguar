@@ -239,7 +239,7 @@ struct Array
 template <typename T, typename... Ts>
 Array<T> MakeArrayIn(Allocator *a, Ts... ts)
 {
-	auto r = NewArrayWithCapacityIn<T>(a, sizeof...(ts));
+	auto r = NewArrayWithCapacityIn<T>(a, sizeof...(ts), 0);
 	(r.Append(ts), ...);
 	return r;
 }
@@ -247,7 +247,7 @@ Array<T> MakeArrayIn(Allocator *a, Ts... ts)
 template <typename T, typename... Ts>
 Array<T> MakeArray(Ts... ts)
 {
-	return MakeArrayIn(ContextAllocator(), ts...);
+	return MakeArrayIn<T>(ContextAllocator(), ts...);
 }
 
 template <typename T>
@@ -556,6 +556,7 @@ auto MakeStaticArray(Ts... ts) -> StaticArray<T, sizeof...(ts)>
 	{
 		ts...,
 	};
+	return a;
 }
 
 template <typename T, s64 N>

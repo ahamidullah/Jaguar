@@ -336,7 +336,7 @@ void WaitForJobCounter(JobCounter *counter)
 
 #endif
 
-s64 GetWorkerThreadCount()
+s64 WorkerThreadCount()
 {
 	return 4;
 	//return ArrayLength(workerThreads);

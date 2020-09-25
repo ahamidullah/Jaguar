@@ -44,6 +44,6 @@ void SetThreadProcessorAffinity(Thread t, s64 cpuIndex);
 void SetThreadName(Thread t, String n);
 String ThreadName(Thread t);
 Thread CurrentThread();
-s64 CurrentThreadID();
-s64 CurrentThreadIndex();
+s64 ThreadID();
+s64 ThreadIndex();
 s64 ThreadCount();

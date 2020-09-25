@@ -209,11 +209,15 @@ GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 
 void *GlobalHeapAllocator::Allocate(s64 size)
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		return this->backup.Allocate(size);
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	return this->heap.Allocate(size);
@@ -221,11 +225,15 @@ void *GlobalHeapAllocator::Allocate(s64 size)
 
 void *GlobalHeapAllocator::AllocateAligned(s64 size, s64 align)
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		return this->backup.AllocateAligned(size, align);
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	return this->heap.AllocateAligned(size, align);
@@ -233,11 +241,15 @@ void *GlobalHeapAllocator::AllocateAligned(s64 size, s64 align)
 
 void *GlobalHeapAllocator::Resize(void *mem, s64 newSize)
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		return this->backup.Resize(mem, newSize);
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	return this->heap.Resize(mem, newSize);
@@ -245,11 +257,15 @@ void *GlobalHeapAllocator::Resize(void *mem, s64 newSize)
 
 void GlobalHeapAllocator::Deallocate(void *mem)
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		this->backup.Deallocate(mem);
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	this->heap.Deallocate(mem);
@@ -257,11 +273,15 @@ void GlobalHeapAllocator::Deallocate(void *mem)
 
 void GlobalHeapAllocator::Clear()
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		return;
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	this->heap.Clear();
@@ -269,11 +289,15 @@ void GlobalHeapAllocator::Clear()
 
 void GlobalHeapAllocator::Free()
 {
+	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
+	{
+		return;
+	}
 	this->lock.Lock();
-	globalHeapLockThreadID = CurrentThreadID();
+	this->lockThreadID = ThreadID();
 	Defer(
 	{
-		globalHeapLockThreadID = -1;
+		this->lockThreadID = -1;
 		this->lock.Unlock();
 	});
 	this->heap.Free();
@@ -287,33 +311,29 @@ void GlobalHeapAllocator::Free()
 // recursive cases
 // failure cases
 
-Allocator *GlobalAllocator()
+GlobalHeapAllocator *GlobalAllocator()
 {
-	static auto heapBlockAlloc = GlobalHeapBlockAllocator{};
-	static auto heapArrayAlloc = GlobalHeapArrayAllocator{};
-	static auto heapAlloc = GlobalHeapAllocator{};
-	static auto backupAlloc = NewStackAllocator(StaticArray<u8, MegabytesToBytes(2)>{});
-	static auto heapInit = false;
-	if (heapAlloc.lock.IsLocked() && globalHeapLockThreadID == CurrentThreadID())
+	static auto blockAlloc = GlobalHeapBlockAllocator{};
+	static auto arrayAlloc = GlobalHeapArrayAllocator{};
+	static auto alloc = GlobalHeapAllocator{};
+	static auto init = false;
+	if (!init)
 	{
-		return &backupAlloc;
-	}
-	if (!heapInit)
-	{
-		heapAlloc.lock.Lock();
-		globalHeapLockThreadID = CurrentThreadID();
+		alloc.lock.Lock();
+		alloc.lockThreadID = ThreadID();
 		Defer(
 		{
-			globalHeapLockThreadID = -1;
-			heapAlloc.lock.Unlock();
+			alloc.lockThreadID = -1;
+			alloc.lock.Unlock();
 		});
-		if (!heapInit)
+		if (!init)
 		{
-			heapAlloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &heapBlockAlloc, &heapArrayAlloc);
-			heapInit = true;
+			alloc.backup = NewStackAllocator(alloc.backupBuffer);
+			alloc.heap = NewHeapAllocator(GlobalHeapBlockSize, GlobalHeapInitialBlockCount, &blockAlloc, &arrayAlloc);
+			init = true;
 		}
 	}
-	return &heapAlloc;
+	return &alloc;
 }
 
 void InitializeMemory()

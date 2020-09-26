@@ -409,8 +409,8 @@ AllocatorBlocks NewAllocatorBlocks(s64 blockSize, s64 blockCount, Allocator *blo
 	{
 		.blockSize = blockSize,
 		.allocator = blockAlloc,
-		.used = NewArrayWithCapacityIn<u8 *>(arrayAlloc, 0, blockCount),
-		.unused = NewArrayWithCapacityIn<u8 *>(arrayAlloc, 0, blockCount),
+		.used = NewArrayWithCapacityIn<u8 *>(arrayAlloc, blockCount),
+		.unused = NewArrayWithCapacityIn<u8 *>(arrayAlloc, blockCount),
 	};
 	for (auto i = 0; i < blockCount; i += 1)
 	{

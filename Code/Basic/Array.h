@@ -239,7 +239,7 @@ struct Array
 template <typename T, typename... Ts>
 Array<T> MakeArrayIn(Allocator *a, Ts... ts)
 {
-	auto r = NewArrayWithCapacityIn<T>(a, sizeof...(ts), 0);
+	auto r = NewArrayWithCapacityIn<T>(a, sizeof...(ts));
 	(r.Append(ts), ...);
 	return r;
 }
@@ -269,21 +269,20 @@ Array<T> NewArray(s64 count)
 }
 
 template <typename T>
-Array<T> NewArrayWithCapacityIn(Allocator *a, s64 count, s64 capacity)
+Array<T> NewArrayWithCapacityIn(Allocator *a, s64 capacity)
 {
 	return
 	{
 		.allocator = a,
 		.elements = (T *)a->Allocate(capacity * sizeof(T)),
-		.count = count,
 		.capacity = capacity,
 	};
 }
 
 template <typename T>
-Array<T> NewArrayWithCapacity(s64 count, s64 capacity)
+Array<T> NewArrayWithCapacity(s64 capacity)
 {
-	return NewArrayWithCapacityIn<T>(ContextAllocator(), count, capacity);
+	return NewArrayWithCapacityIn<T>(ContextAllocator(), capacity);
 }
 
 template <typename T>

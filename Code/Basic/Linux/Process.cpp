@@ -53,7 +53,7 @@ Array<String> Stacktrace()
 			LogError("Memory", "Failed to get stack trace function names.\n");
 			return {};
 		}
-		auto st = NewArrayWithCapacity<String>(0, numAddrs);
+		auto st = NewArrayWithCapacity<String>(numAddrs);
 		for (auto i = 0; i < numAddrs; i += 1)
 		{
 			st.Append(trace[i]);

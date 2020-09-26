@@ -18,7 +18,7 @@ Stack<T> NewStackIn(Allocator *a, s64 cap)
 {
 	return
 	{
-		.elements = NewArrayWithCapacityIn<T>(a, 0, cap),
+		.elements = NewArrayWithCapacityIn<T>(a, cap),
 	};
 }
 

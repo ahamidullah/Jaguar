@@ -58,6 +58,8 @@ typedef VkFlags GPUPipelineStageFlags;
 typedef VkPipelineStageFlagBits GPUPipelineStage;
 #define GPU_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
 
+void InitializeGPU(Window *win);
+
 struct VulkanMemoryAllocation
 {
 	VkDeviceMemory vkMemory;

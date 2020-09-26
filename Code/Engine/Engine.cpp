@@ -76,6 +76,7 @@ void RunGame(void *)
 	windowHeight = RenderHeight();
 	auto win = NewWindow(windowWidth, windowHeight);
 	LogInfo("Engine", "Window dimensions: %dx%d", windowWidth, windowHeight);
+	InitializeGPU(&win);
 	InitializeRenderer(&win);
 	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO

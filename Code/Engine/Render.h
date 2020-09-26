@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Vulkan.h"
 #include "Common.h"
 
 void InitializeRenderer(void *params);

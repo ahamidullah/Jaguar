@@ -195,7 +195,7 @@ auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
 #define VkCheck(x)\
 	do {\
 		VkResult _r = (x);\
-		if (_r != VK_SUCCESS) Abort("Vulkan", "VkCheck failed on '%s': %k\n", #x, VkResultToString(_r));\
+		if (_r != VK_SUCCESS) Abort("Vulkan", "VkCheck failed on '%s': %k", #x, VkResultToString(_r));\
 	} while (0)
 
 String VkResultToString(VkResult r)
@@ -343,9 +343,9 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDeb
 	}
 	if (sevStr == "Error")
 	{
-		Abort("Vulkan: %k: %k: %s", sevStr, typeStr, data->pMessage);
+		//Abort("Vulkan", "%k: %k: %s", sevStr, typeStr, data->pMessage);
 	}
-	LogPrint(log, "Vulkan", "Vulkan: %k: %k: %s\n", sevStr, typeStr, data->pMessage);
+	LogPrint(log, "Vulkan", "%k: %k: %s", sevStr, typeStr, data->pMessage);
     return 0;
 }
 
@@ -415,6 +415,8 @@ VulkanMemoryAllocation *VulkanMemoryFrameAllocator::Allocate(s64 size, s64 align
 
 void VulkanMemoryFrameAllocator::Free(s64 frameIndex)
 {
+	this->lock.Lock();
+	Defer(this->lock.Unlock());
 	this->start = (this->start + this->frameSizes[frameIndex]) % this->capacity;
 	this->size -= this->frameSizes[frameIndex];
 	this->frameSizes[frameIndex] = 0;
@@ -507,13 +509,13 @@ Array<GPUMemoryHeapInfo> GPUMemoryHeapInfos()
 
 void PrintGPUMemoryHeapInfo()
 {
-	LogInfo("Vulkan", "GPU memory info:\n");
+	LogInfo("Vulkan", "GPU memory info:");
 	auto hi = GPUMemoryHeapInfos();
 	for (auto i = 0; i < hi.count; i++)
 	{
 		LogInfo(
 			"Vulkan",
-			"	Heap: %d, Usage: %fmb, Total: %fmb\n",
+			"	Heap: %d, Usage: %fmb, Total: %fmb",
 			i,
 			BytesToMegabytes(hi[i].usage),
 			BytesToMegabytes(hi[i].budget));
@@ -588,7 +590,7 @@ void InitializeGPU(Window *win)
 		{
 			Abort("Vulkan", "Vulkan version 1.1.0 or greater required: version %d.%d.%d is installed", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 		}
-		LogInfo("Vulkan", "Using Vulkan version %d.%d.%d\n", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+		LogInfo("Vulkan", "Using Vulkan version %d.%d.%d", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 	}
 	auto dbgInfo = VkDebugUtilsMessengerCreateInfoEXT
 	{
@@ -609,19 +611,19 @@ void InitializeGPU(Window *win)
 		vkEnumerateInstanceLayerProperties(&numInstLayers, NULL);
 		auto instLayers = NewArray<VkLayerProperties>(numInstLayers);
 		vkEnumerateInstanceLayerProperties(&numInstLayers, &instLayers[0]);
-		LogInfo("Vulkan", "Vulkan layers:\n");
+		LogInfo("Vulkan", "Vulkan layers:");
 		for (auto il : instLayers)
 		{
-			LogInfo("Vulkan", "\t%s\n", il.layerName);
+			LogInfo("Vulkan", "\t%s", il.layerName);
 		}
 		auto numInstExts = u32{0};
 		VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &numInstExts, NULL));
 		auto instExts = NewArray<VkExtensionProperties>(numInstExts);
 		VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &numInstExts, instExts.elements));
-		LogInfo("Vulkan", "Available Vulkan instance extensions:\n");
+		LogInfo("Vulkan", "Available Vulkan instance extensions:");
 		for (auto ie : instExts)
 		{
-			LogInfo("Vulkan", "\t%s\n", ie.extensionName);
+			LogInfo("Vulkan", "\t%s", ie.extensionName);
 		}
 		auto ai = VkApplicationInfo
 		{
@@ -671,10 +673,17 @@ void InitializeGPU(Window *win)
 		{
 			Abort("Vulkan", "Could not find any physical devices.");
 		}
+		LogVerbose("Vulkan", "Available physical device count: %d.", numPhysDevs);
 		auto physDevs = NewArray<VkPhysicalDevice>(numPhysDevs);
 		VkCheck(vkEnumeratePhysicalDevices(vkInstance, &numPhysDevs, &physDevs[0]));
 		for (auto pd : physDevs)
 		{
+			if (DebugBuild)
+			{
+				auto dp = VkPhysicalDeviceProperties{};
+				vkGetPhysicalDeviceProperties(pd, &dp);
+				LogVerbose("Vulkan", "Considering physical device %s...", dp.deviceName);
+			}
 			auto df = VkPhysicalDeviceFeatures{};
 			vkGetPhysicalDeviceFeatures(pd, &df);
 			if (!df.samplerAnisotropy || !df.shaderSampledImageArrayDynamicIndexing)
@@ -686,12 +695,14 @@ void InitializeGPU(Window *win)
 			auto devExts = NewArray<VkExtensionProperties>(numDevExts);
 			VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &numDevExts, devExts.elements));
 			auto foundExt = false;
+			auto missingDevExt = (const char *){};
 			for (auto rde : reqDevExts)
 			{
+				missingDevExt = rde;
 				auto found = false;
 				for (auto de : devExts)
 				{
-					if (de.extensionName == rde)
+					if (CStringsEqual(de.extensionName, rde))
 					{
 						foundExt = true;
 						goto outer;
@@ -701,6 +712,7 @@ void InitializeGPU(Window *win)
 			outer:
 			if (!foundExt)
 			{
+				LogVerbose("Vulkan", "Skipping physical device: missing device extension %s.", missingDevExt);
 				continue;
 			}
 			// Make sure the swap chain is compatible with our window surface.
@@ -802,17 +814,17 @@ void InitializeGPU(Window *win)
 				vkSurfaceFormat = surfFmt;
 				vkPresentMode = presentMode;
 				foundSuitablePhysDev = true;
-				LogInfo("Vulkan", "Vulkan device extensions:\n");
+				LogInfo("Vulkan", "Vulkan device extensions:");
 				for (auto de : devExts)
 				{
-					LogInfo("Vulkan", "\t%s\n", de.extensionName);
+					LogInfo("Vulkan", "\t%s", de.extensionName);
 				}
 				break;
 			}
 		}
 		if (!foundSuitablePhysDev)
 		{
-			Abort("Vulkan", "Could not find suitable physical device.\n");
+			Abort("Vulkan", "Could not find suitable physical device.");
 		}
 	}
 	// Physical device info.
@@ -846,6 +858,7 @@ void InitializeGPU(Window *win)
 		}
 		auto devProps = VkPhysicalDeviceProperties{};
 		vkGetPhysicalDeviceProperties(vkPhysicalDevice, &devProps);
+		LogInfo("Vulkan", "Selected device %s.", devProps.deviceName);
 		vkBufferImageGranularity = devProps.limits.bufferImageGranularity;
 		auto memProps = VkPhysicalDeviceMemoryProperties{};
 		vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProps);

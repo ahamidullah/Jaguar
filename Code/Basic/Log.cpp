@@ -23,7 +23,7 @@ String LogFileDirectory()
 
 LogLevel *LogLevelPointer()
 {
-	static auto logLevel = InfoLog;
+	static auto logLevel = VerboseLog;
 	return &logLevel;
 }
 

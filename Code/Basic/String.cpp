@@ -307,18 +307,18 @@ StringBuilder NewStringBuilder(s64 len)
 	return NewStringBuilderIn(ContextAllocator(), len);
 }
 
-StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 len, s64 cap)
+StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 cap)
 {
 	auto sb = StringBuilder
 	{
-		.buffer = NewArrayWithCapacityIn<u8>(a, len, cap)
+		.buffer = NewArrayWithCapacityIn<u8>(a, cap)
 	};
 	return sb;
 }
 
-StringBuilder NewStringBuilderWithCapacity(s64 len, s64 cap)
+StringBuilder NewStringBuilderWithCapacity(s64 cap)
 {
-	return NewStringBuilderWithCapacityIn(ContextAllocator(), len, cap);
+	return NewStringBuilderWithCapacityIn(ContextAllocator(), cap);
 }
 
 #if 0

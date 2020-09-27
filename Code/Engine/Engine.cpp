@@ -24,7 +24,7 @@ auto cam = (Camera *){};
 void InitializeGameLoop()
 {
 	LoadAsset(SponzaAssetID);
-	cam = NewCamera({10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
+	cam = NewCamera("Main", {10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
 	auto e = NewEntity();
 	auto t = Transform{};
 	SetEntityTransform(e, t);
@@ -76,7 +76,6 @@ void RunGame(void *)
 	windowHeight = RenderHeight();
 	auto win = NewWindow(windowWidth, windowHeight);
 	LogInfo("Engine", "Window dimensions: %dx%d", windowWidth, windowHeight);
-	InitializeGPU(&win);
 	InitializeRenderer(&win);
 	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO

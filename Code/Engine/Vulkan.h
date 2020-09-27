@@ -7,58 +7,46 @@
 #include "Basic/String.h"
 
 typedef VkFormat GPUFormat;
-#define GPU_FORMAT_R32G32B32_SFLOAT VK_FORMAT_R32G32B32_SFLOAT
-#define GPU_FORMAT_R32_UINT VK_FORMAT_R32_UINT
-#define GPU_FORMAT_D32_SFLOAT_S8_UINT VK_FORMAT_D32_SFLOAT_S8_UINT
-#define GPU_FORMAT_R8G8B8A8_UNORM VK_FORMAT_R8G8B8A8_UNORM
-#define GPU_FORMAT_D16_UNORM VK_FORMAT_D16_UNORM
-#define GPU_FORMAT_UNDEFINED VK_FORMAT_UNDEFINED
+#define GPUFormatD32SfloatS8Uint VK_FORMAT_D32_SFLOAT_S8_UINT
 
 typedef VkImageLayout GPUImageLayout;
-#define GPU_IMAGE_LAYOUT_UNDEFINED VK_IMAGE_LAYOUT_UNDEFINED
-#define GPU_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_GENERAL
-#define GPU_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-#define GPU_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-#define GPU_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-#define GPU_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-#define GPU_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-#define GPU_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-#define GPU_IMAGE_LAYOUT_PREINITIALIZED VK_IMAGE_LAYOUT_PREINITIALIZED
-#define GPU_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
-#define GPU_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL
-#define GPU_IMAGE_LAYOUT_PRESENT_SRC VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-#define GPU_IMAGE_LAYOUT_SHARED_PRESENT VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR
-#define GPU_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV
-#define GPU_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT
+#define GPUImageLayoutUndefined VK_IMAGE_LAYOUT_UNDEFINED
+
+typedef VkImageAspectFlags GPUImageAspectFlags;
+#define GPUImageAspectColor VK_IMAGE_ASPECT_COLOR_BIT
+#define GPUImageAspectDepth VK_IMAGE_ASPECT_DEPTH_BIT
+
+typedef VkImageViewType GPUImageViewType;
+#define GPUImageViewType2D VK_IMAGE_VIEW_TYPE_2D
 
 typedef VkFlags GPUImageUsageFlags;
 typedef VkImageUsageFlagBits GPUImageUsage;
-#define GPU_IMAGE_USAGE_TRANSFER_SRC VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-#define GPU_IMAGE_USAGE_TRANSFER_DST VK_IMAGE_USAGE_TRANSFER_DST_BIT
-#define GPU_IMAGE_USAGE_SAMPLED VK_IMAGE_USAGE_SAMPLED_BIT
-#define GPU_IMAGE_USAGE_STORAGE VK_IMAGE_USAGE_STORAGE_BIT
-#define GPU_IMAGE_USAGE_COLOR_ATTACHMENT VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-#define GPU_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-#define GPU_IMAGE_USAGE_TRANSIENT_ATTACHMENT VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT
-#define GPU_IMAGE_USAGE_INPUT_ATTACHMENT VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-#define GPU_IMAGE_USAGE_SHADING_RATE_IMAGE_NV VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV
-#define GPU_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_EXT VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT
+#define GPUImageUsageDepthStencilAttachment VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+
+typedef VkComponentSwizzle GPUSwizzle;
+#define GPUSwizzleMappingIdentity VK_COMPONENT_SWIZZLE_IDENTITY
 
 typedef VkFlags GPUSampleCountFlags;
 typedef VkSampleCountFlagBits GPUSampleCount;
-#define GPU_SAMPLE_COUNT_1 VK_SAMPLE_COUNT_1_BIT
-#define GPU_SAMPLE_COUNT_2 VK_SAMPLE_COUNT_2_BIT
-#define GPU_SAMPLE_COUNT_4 VK_SAMPLE_COUNT_4_BIT
-#define GPU_SAMPLE_COUNT_8 VK_SAMPLE_COUNT_8_BIT
-#define GPU_SAMPLE_COUNT_16 VK_SAMPLE_COUNT_16_BIT
-#define GPU_SAMPLE_COUNT_32 VK_SAMPLE_COUNT_32_BIT
-#define GPU_SAMPLE_COUNT_64 VK_SAMPLE_COUNT_64_BIT
+#define GPUSampleCount1 VK_SAMPLE_COUNT_1_BIT
 
 typedef VkFlags GPUPipelineStageFlags;
 typedef VkPipelineStageFlagBits GPUPipelineStage;
 #define GPU_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
 
 void InitializeGPU(Window *win);
+
+void StartGPUFrame();
+void FinishGPUFrame();
+
+struct GPUMemoryHeapInfo
+{
+	u64 usage;
+	u64 budget;
+};
+
+GPUMemoryHeapInfo GPUMemoryUsage();
+void LogGPUMemoryInfo();
 
 struct VulkanMemoryAllocation
 {
@@ -92,11 +80,7 @@ struct GPUSemaphore
 	void Free();
 };
 
-struct GPUMemoryHeapInfo
-{
-	s64 usage;
-	s64 budget;
-};
+GPUSemaphore NewGPUSemaphore();
 
 struct GPUShader
 {
@@ -128,36 +112,60 @@ enum GPUQueueType
 	GPUQueueTypeCount
 };
 
-enum GPUBufferType
-{
-	GPUVertexBuffer,
-	GPUIndexBuffer,
-	GPUUniformBuffer,
-	GPUTransferBuffer,
-	GPUBufferTypeCount
-};
-
 struct GPUBuffer
 {
-	GPUBufferType type;
 	VulkanMemoryAllocation *memory;
 	VkBuffer vkBuffer;
 
 	void Free();
 };
 
-GPUBuffer NewGPUBuffer(GPUBufferType t, s64 size);
+GPUBuffer NewGPUVertexBuffer(s64 size);
+GPUBuffer NewGPUIndexBuffer(s64 size);
+GPUBuffer NewGPUUniformBuffer(s64 size);
+
+struct GPUBufferView
+{
+	VkBufferView vkBufferView;
+
+	void Free();
+};
+
+GPUBufferView NewGPUBufferView(GPUBuffer src, GPUFormat fmt, s64 offset, s64 range);
 
 struct GPUImage
 {
 	VkImage vkImage;
-	VulkanMemoryAllocation vkMemory;
-	void *map;
+	VulkanMemoryAllocation *memory;
 
 	void Free();
 };
 
 GPUImage NewGPUImage(s64 w, s64 h, GPUFormat f, GPUImageLayout il, GPUImageUsageFlags uf, GPUSampleCount sc);
+
+struct GPUSwizzleMapping
+{
+	GPUSwizzle r;
+	GPUSwizzle g;
+	GPUSwizzle b;
+	GPUSwizzle a;
+};
+
+struct GPUImageSubresourceRange
+{
+	GPUImageAspectFlags aspectMask;
+	u32 baseMipLevel;
+	u32 levelCount;
+	u32 baseArrayLayer;
+	u32 layerCount;
+};
+
+struct GPUImageView
+{
+	VkImageView vkImageView;
+};
+
+GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr);
 
 struct GPUCommandBuffer
 {
@@ -190,6 +198,8 @@ struct GPUAsyncCommandBuffer : GPUCommandBuffer
 
 GPUFence SubmitFrameGPUCommandBuffers(GPUQueueType t, ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
 GPUFence SubmitAsyncGPUCommandBuffers();
+
+s64 GPUSwapchainImageCount();
 
 struct GPUFrameStagingBuffer
 {

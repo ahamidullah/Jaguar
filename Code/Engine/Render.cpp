@@ -1,3 +1,5 @@
+#include "Render.h"
+
 s64 RenderWidth()
 {
 	return 1200;
@@ -8,12 +10,52 @@ s64 RenderHeight()
 	return 1000;
 }
 
-void InitializeRenderer(void *)
+const auto DepthBufferFormat = GPUFormatD32SfloatS8Uint;
+const auto DepthBufferInitialLayout = GPUImageLayoutUndefined;
+const auto DepthBufferImageUsage = GPUImageUsageDepthStencilAttachment;
+const auto DepthBufferSampleCount = GPUSampleCount1;
+
+auto renderDepthImage = GPUImage{};
+auto renderDepthImageView = GPUImageView{};
+auto renderFramebuffers = Array<GPUFramebuffer>{};
+
+void InitializeRenderer(void *jobParam)
 {
+	// @TODO: Use an allocator.
+	InitializeGPU((Window *)jobParam);
+	LogGPUMemoryInfo();
+	renderDepthImage = NewGPUImage(RenderWidth(), RenderHeight(), DepthBufferFormat, DepthBufferInitialLayout, DepthBufferImageUsage, DepthBufferSampleCount);
+	{
+		auto sm = GPUSwizzleMapping
+		{
+			.r = GPUSwizzleMappingIdentity,
+			.g = GPUSwizzleMappingIdentity,
+			.b = GPUSwizzleMappingIdentity,
+			.a = GPUSwizzleMappingIdentity,
+		};
+		auto isr = GPUImageSubresourceRange
+		{
+			.aspectMask = GPUImageAspectDepth,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		};
+		renderDepthImageView = NewGPUImageView(renderDepthImage, GPUImageViewType2D, DepthBufferFormat, sm, isr);
+	}
+	renderFramebuffers.SetAllocator(GlobalAllocator());
+	renderFramebuffers.Resize(GPUSwapchainImageCount());
 }
 
 void Render()
 {
+	//StartGPUFrame();
+	auto c = LookupCamera("Main");
+	if (!c)
+	{
+		LogError("Render", "Could not find main camera.");
+		return;
+	}
 }
 
 #if 0

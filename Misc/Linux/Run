@@ -5,15 +5,15 @@ set -e
 cd $PROJECT_DIRECTORY
 
 if [ "$#" = 0 ]; then
-	Build/Linux/Debug/Development/Binary/Engine
+	prime-run Build/Linux/Debug/Development/Binary/Engine
 elif [ "$#" = 1 && "$1" = "AddressSanitizer" ]; then
-	Build/Linux/AddressSanitizer/Debug/Development/Binary/Engine
+	prime-run Build/Linux/AddressSanitizer/Debug/Development/Binary/Engine
 elif [ "$#" = 1 && "$1" = "ThreadSanitizer" ]; then
-	Build/Linux/ThreadSanitizer/Debug/Development/Binary/Engine
+	prime-run Build/Linux/ThreadSanitizer/Debug/Development/Binary/Engine
 elif [ "$#" = 2 ]; then
-	Build/Linux/"$1"/"$2"/Binary/Engine
+	prime-run Build/Linux/"$1"/"$2"/Binary/Engine
 elif [ "$#" = 3 ]; then
-	Build/Linux/"$1"/"$2"/"$3"/Binary/Engine
+	prime-run Build/Linux/"$1"/"$2"/"$3"/Binary/Engine
 else
 	echo "Invalid number of arguments."
 fi

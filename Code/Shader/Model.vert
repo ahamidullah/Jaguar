@@ -11,7 +11,7 @@ layout (location = 0) out vec3 fragmentNormal;
 void main()
 {
 	gl_Position = objects[0].modelViewProjection * vec4(vertexPosition, 1.0);
-	if (materials[0].shadingModel == PHONG_SHADING_MODEL)
+	if (materials[0].shadingModel == PhongShadingModel)
 	{
 		fragmentNormal = vertexNormal;
 	}

@@ -22,7 +22,7 @@ vec3 diffuse(vec3 intensity, vec3 receiveDirection)
 
 void main()
 {
-	if (materials[0].shadingModel == PHONG_SHADING_MODEL)
+	if (materials[0].shadingModel == PhongShadingModel)
 	{
 		vec3 ambientIntensity = vec3(0.15f, 0.15f, 0.15f);
 		vec3 diffuseIntensity = vec3(0.6f, 0.6f, 0.6f);

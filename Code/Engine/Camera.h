@@ -5,6 +5,7 @@
 
 struct Camera
 {
+	String name;
 	f32 pitch, yaw, roll;
 	Transform transform;
 	f32 fov;
@@ -12,4 +13,6 @@ struct Camera
 	f32 speed;
 };
 
-Camera *NewCamera(V3 pos, V3 lookAt, f32 speed, f32 fov);
+Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov);
+ArrayView<Camera> Cameras();
+Camera *LookupCamera(String name);

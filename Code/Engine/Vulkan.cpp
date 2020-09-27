@@ -1,6 +1,7 @@
 #ifdef VulkanBuild
 
 #include "Vulkan.h"
+#include "ShaderGlobal.h"
 #include "Render.h"
 #include "Math.h"
 #include "Basic/DLL.h"
@@ -20,20 +21,7 @@
 #undef VK_DEVICE_FUNCTION
 
 const auto VulkanMaxFramesInFlight = 2;
-
-// @TODO: Move this to render.c.
-#define SHADOW_MAP_WIDTH  1024
-#define SHADOW_MAP_HEIGHT 1024
-#define SHADOW_MAP_INITIAL_LAYOUT GFX_IMAGE_LAYOUT_UNDEFINED
-#define SHADOW_MAP_FORMAT GFX_FORMAT_D16_UNORM
-#define SHADOW_MAP_IMAGE_USAGE_FLAGS ((GfxImageUsage)(GFX_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT | GFX_IMAGE_USAGE_SAMPLED))
-#define SHADOW_MAP_SAMPLE_COUNT_FLAGS GFX_SAMPLE_COUNT_1
-// Depth bias and slope are used to avoid shadowing artifacts.
-// Constant depth bias factor is always applied.
-#define SHADOW_MAP_CONSTANT_DEPTH_BIAS 0.25
-// Slope depth bias factor is applied depending on the polygon's slope.
-#define SHADOW_MAP_SLOPE_DEPTH_BIAS 1.25
-#define SHADOW_MAP_FILTER GFX_LINEAR_FILTER
+const auto VulkanInitialDescriptorSetBufferSize = MegabytesToBytes(4);
 
 // @TODO: Make sure that all failable Vulkan calls are VkCheck'd.
 // @TODO: Do eg.
@@ -117,20 +105,13 @@ struct VulkanAsyncStagingBufferResources
 
 struct VulkanThreadLocal
 {
-	ValuePool<VkFence> fencePool;
-	ValuePool<VkBuffer> imagePool;
 	// Frame resources.
-	StaticArray<StaticArray<FramePool<VkBuffer>, GPUBufferTypeCount>, VulkanMaxFramesInFlight> frameBufferPool;
 	StaticArray<StaticArray<VkCommandPool, GPUQueueTypeCount>, VulkanMaxFramesInFlight> frameCommandPools;
-	StaticArray<StaticArray<FramePool<VkCommandBuffer>, GPUQueueTypeCount>, VulkanMaxFramesInFlight> frameCommandBufferPool;
 	StaticArray<StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount>, VulkanMaxFramesInFlight> frameQueuedCommandBuffers;
 	// Async resources.
 	// @TODO: Could use double buffers to avoid the locking.
-	Spinlock asyncBufferLock;
-	StaticArray<ValuePool<VkBuffer>, GPUBufferTypeCount> asyncBufferPool;
 	Spinlock asyncCommandBufferLock;
 	StaticArray<VkCommandPool, GPUQueueTypeCount> asyncCommandPools;
-	StaticArray<ValuePool<VkCommandBuffer>, GPUQueueTypeCount> asyncCommandBufferPool;
 	StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount> asyncQueuedCommandBuffers;
 	StaticArray<Array<Array<VkCommandBuffer>>, GPUQueueTypeCount> asyncPendingCommandBuffers;
 	StaticArray<Array<bool *>, GPUQueueTypeCount> asyncSignals;
@@ -258,8 +239,6 @@ String VkResultToString(VkResult r)
 			return "VK_ERROR_INVALID_SHADER_NV";
 		case (VK_ERROR_NOT_PERMITTED_EXT):
 			return "VK_ERROR_NOT_PERMITTED_EXT";
-		case (VK_RESULT_RANGE_SIZE):
-			return "VK_RESULT_RANGE_SIZE";
 		case (VK_RESULT_MAX_ENUM):
 			return "VK_RESULT_MAX_ENUM";
 		case (VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT):
@@ -349,6 +328,49 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDeb
     return 0;
 }
 
+GPUMemoryHeapInfo GPUMemoryUsage()
+{
+	auto bp = VkPhysicalDeviceMemoryBudgetPropertiesEXT
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT
+	};
+	auto mp = VkPhysicalDeviceMemoryProperties2
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+		.pNext = &bp,
+	};
+	vkGetPhysicalDeviceMemoryProperties2(vkPhysicalDevice, &mp);
+	return
+	{
+		.usage = bp.heapUsage[vkMemoryTypeToHeapIndex[VulkanGPUOnlyMemory]],
+		.budget = bp.heapBudget[vkMemoryTypeToHeapIndex[VulkanGPUOnlyMemory]],
+	};
+}
+
+void LogGPUMemoryInfo()
+{
+	auto bp = VkPhysicalDeviceMemoryBudgetPropertiesEXT
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT
+	};
+	auto mp = VkPhysicalDeviceMemoryProperties2
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+		.pNext = &bp,
+	};
+	vkGetPhysicalDeviceMemoryProperties2(vkPhysicalDevice, &mp);
+	LogInfo("Vulkan", "Memory info:");
+	for (auto i = 0; i < vkMemoryHeapCount; i++)
+	{
+		LogInfo(
+			"Vulkan",
+			"	Heap: %d, Usage: %fmb, Total: %fmb",
+			i,
+			BytesToMegabytes(bp.heapUsage[i]),
+			BytesToMegabytes(bp.heapBudget[i]));
+	}
+}
+
 void VulkanMemoryAllocation::Free()
 {
 	// @TODO
@@ -433,6 +455,8 @@ VulkanMemoryBlockAllocator NewVulkanMemoryBlockAllocator(VulkanMemoryType t, s64
 	};
 }
 
+VkBuffer NewVulkanBuffer(VkBufferUsageFlags u, s64 size);
+
 VulkanMemoryAllocation *VulkanMemoryBlockAllocator::Allocate(s64 size, s64 align)
 {
 	this->lock.Lock();
@@ -450,11 +474,12 @@ VulkanMemoryAllocation *VulkanMemoryBlockAllocator::Allocate(s64 size, s64 align
 			.allocationSize = (VkDeviceSize)this->blockSize,
 			.memoryTypeIndex = vkMemoryTypeToMemoryIndex[this->memoryType],
 		};
-		if (!vkAllocateMemory(vkDevice, &ai, NULL, &newBlock->vkMemory))
-		{
-			Abort("Vulkan", "Failed to allocate GPU memory for block allocator..."); // @TODO
-			return NULL;
-		}
+		VkCheck(vkAllocateMemory(vkDevice, &ai, NULL, &newBlock->vkMemory)); // @TODO
+		//if (!vkAllocateMemory(vkDevice, &ai, NULL, &newBlock->vkMemory))
+		//{
+			//Abort("Vulkan", "Failed to allocate GPU memory for block allocator."); // @TODO
+			//return NULL;
+		//}
 		newBlock->frontier = 0;
 		newBlock->allocations = NewArrayIn<VulkanMemoryAllocation>(GlobalAllocator(), 0);
 		if (IsVulkanMemoryTypeCPUVisible(this->memoryType))
@@ -484,42 +509,6 @@ VulkanMemoryAllocation *VulkanMemoryBlockAllocator::Allocate(s64 size, s64 align
 	}
 	Assert(b->frontier <= this->blockSize);
 	return a;
-}
-
-Array<GPUMemoryHeapInfo> GPUMemoryHeapInfos()
-{
-	auto bp = VkPhysicalDeviceMemoryBudgetPropertiesEXT
-	{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT
-	};
-	auto mp = VkPhysicalDeviceMemoryProperties2
-	{
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
-		.pNext = &bp,
-	};
-	vkGetPhysicalDeviceMemoryProperties2(vkPhysicalDevice, &mp);
-	auto heaps = NewArray<GPUMemoryHeapInfo>(vkMemoryHeapCount);
-	for (auto i = 0; i < vkMemoryHeapCount; i++)
-	{
-		heaps[i].usage = bp.heapUsage[i];
-		heaps[i].budget = bp.heapBudget[i];
-	}
-	return heaps;
-}
-
-void PrintGPUMemoryHeapInfo()
-{
-	LogInfo("Vulkan", "GPU memory info:");
-	auto hi = GPUMemoryHeapInfos();
-	for (auto i = 0; i < hi.count; i++)
-	{
-		LogInfo(
-			"Vulkan",
-			"	Heap: %d, Usage: %fmb, Total: %fmb",
-			i,
-			BytesToMegabytes(hi[i].usage),
-			BytesToMegabytes(hi[i].budget));
-	}
 }
 
 #ifdef __linux__
@@ -611,19 +600,19 @@ void InitializeGPU(Window *win)
 		vkEnumerateInstanceLayerProperties(&numInstLayers, NULL);
 		auto instLayers = NewArray<VkLayerProperties>(numInstLayers);
 		vkEnumerateInstanceLayerProperties(&numInstLayers, &instLayers[0]);
-		LogInfo("Vulkan", "Vulkan layers:");
+		LogVerbose("Vulkan", "Vulkan layers:");
 		for (auto il : instLayers)
 		{
-			LogInfo("Vulkan", "\t%s", il.layerName);
+			LogVerbose("Vulkan", "\t%s", il.layerName);
 		}
 		auto numInstExts = u32{0};
 		VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &numInstExts, NULL));
 		auto instExts = NewArray<VkExtensionProperties>(numInstExts);
 		VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &numInstExts, instExts.elements));
-		LogInfo("Vulkan", "Available Vulkan instance extensions:");
+		LogVerbose("Vulkan", "Available Vulkan instance extensions:");
 		for (auto ie : instExts)
 		{
-			LogInfo("Vulkan", "\t%s", ie.extensionName);
+			LogVerbose("Vulkan", "\t%s", ie.extensionName);
 		}
 		auto ai = VkApplicationInfo
 		{
@@ -671,18 +660,28 @@ void InitializeGPU(Window *win)
 		VkCheck(vkEnumeratePhysicalDevices(vkInstance, &numPhysDevs, NULL));
 		if (numPhysDevs == 0)
 		{
-			Abort("Vulkan", "Could not find any physical devices.");
+			Abort("Vulkan", "Could not find any graphics devices.");
 		}
-		LogVerbose("Vulkan", "Available physical device count: %d.", numPhysDevs);
+		LogVerbose("Vulkan", "Available graphics device count: %d.", numPhysDevs);
 		auto physDevs = NewArray<VkPhysicalDevice>(numPhysDevs);
 		VkCheck(vkEnumeratePhysicalDevices(vkInstance, &numPhysDevs, &physDevs[0]));
+		if (DebugBuild)
+		{
+			LogVerbose("Vulkan", "Available graphics devices:");
+			for (auto pd : physDevs)
+			{
+				auto dp = VkPhysicalDeviceProperties{};
+				vkGetPhysicalDeviceProperties(pd, &dp);
+				LogVerbose("Vulkan", "\t%s", dp.deviceName);
+			}
+		}
 		for (auto pd : physDevs)
 		{
 			if (DebugBuild)
 			{
 				auto dp = VkPhysicalDeviceProperties{};
 				vkGetPhysicalDeviceProperties(pd, &dp);
-				LogVerbose("Vulkan", "Considering physical device %s...", dp.deviceName);
+				LogVerbose("Vulkan", "Considering graphics device %s.", dp.deviceName);
 			}
 			auto df = VkPhysicalDeviceFeatures{};
 			vkGetPhysicalDeviceFeatures(pd, &df);
@@ -694,30 +693,30 @@ void InitializeGPU(Window *win)
 			VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &numDevExts, NULL));
 			auto devExts = NewArray<VkExtensionProperties>(numDevExts);
 			VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &numDevExts, devExts.elements));
-			auto foundExt = false;
 			auto missingDevExt = (const char *){};
 			for (auto rde : reqDevExts)
 			{
 				missingDevExt = rde;
-				auto found = false;
 				for (auto de : devExts)
 				{
 					if (CStringsEqual(de.extensionName, rde))
 					{
-						foundExt = true;
-						goto outer;
+						missingDevExt = NULL;
+						break;
 					}
 				}
+				if (missingDevExt)
+				{
+					break;
+				}
 			}
-			outer:
-			if (!foundExt)
+			if (missingDevExt)
 			{
-				LogVerbose("Vulkan", "Skipping physical device: missing device extension %s.", missingDevExt);
+				LogVerbose("Vulkan", "Skipping graphics device: missing device extension %s.", missingDevExt);
 				continue;
 			}
 			// Make sure the swap chain is compatible with our window surface.
 			// If we have at least one supported surface format and present mode, we will consider the device.
-			// @TODO: Should we die if error, or just skip this physical device?
 			auto numSurfFmts = u32{};
 			VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd, vkSurface, &numSurfFmts, NULL));
 			auto numPresentModes = u32{};
@@ -814,17 +813,17 @@ void InitializeGPU(Window *win)
 				vkSurfaceFormat = surfFmt;
 				vkPresentMode = presentMode;
 				foundSuitablePhysDev = true;
-				LogInfo("Vulkan", "Vulkan device extensions:");
+				LogVerbose("Vulkan", "Vulkan device extensions:");
 				for (auto de : devExts)
 				{
-					LogInfo("Vulkan", "\t%s", de.extensionName);
+					LogVerbose("Vulkan", "\t%s", de.extensionName);
 				}
 				break;
 			}
 		}
 		if (!foundSuitablePhysDev)
 		{
-			Abort("Vulkan", "Could not find suitable physical device.");
+			Abort("Vulkan", "Could not find suitable graphics device.");
 		}
 	}
 	// Physical device info.
@@ -858,7 +857,7 @@ void InitializeGPU(Window *win)
 		}
 		auto devProps = VkPhysicalDeviceProperties{};
 		vkGetPhysicalDeviceProperties(vkPhysicalDevice, &devProps);
-		LogInfo("Vulkan", "Selected device %s.", devProps.deviceName);
+		LogInfo("Vulkan", "Selected graphics device %s.", devProps.deviceName);
 		vkBufferImageGranularity = devProps.limits.bufferImageGranularity;
 		auto memProps = VkPhysicalDeviceMemoryProperties{};
 		vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProps);
@@ -964,12 +963,16 @@ void InitializeGPU(Window *win)
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 		};
-		for (auto i = 0; i < VulkanMaxFramesInFlight; i++)
+		if (vkPresentQueueFamily != vkQueueFamilies[GPUGraphicsQueue])
 		{
-			if (vkPresentQueueFamily != vkQueueFamilies[GPUGraphicsQueue])
+			for (auto i = 0; i < VulkanMaxFramesInFlight; i++)
 			{
 				VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &vkImageOwnershipSemaphores[i]));
 			}
+		}
+		for (auto i = 0; i < VulkanMaxFramesInFlight; i++)
+		{
+			VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &vkImageAcquiredSemaphores[i]));
 		}
 	}
 	// Initialize memory allocators.
@@ -1119,6 +1122,123 @@ void InitializeGPU(Window *win)
 			};
 			VkCheck(vkCreateImageView(vkDevice, &ci, NULL, &vkSwapchainImageViews[i]));
 		}
+	}
+	{
+		auto ci = VkFenceCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+		};
+		for (auto i = 0; i < VulkanMaxFramesInFlight; i += 1)
+		{
+			VkCheck(vkCreateFence(vkDevice, &ci, NULL, &vkFrameFences[i]));
+		}
+	}
+	vkGPUBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUOnlyMemory, MegabytesToBytes(256));
+	vkCPUToGPUBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanCPUToGPUMemory, MegabytesToBytes(256));
+	//vkGPUToCPUBlockAllocator = NewVulkanMemoryBlockAllocator(MegabytesToBytes(64));
+	{
+		auto ps = VkDescriptorPoolSize
+		{
+			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 100, // @TODO
+		};
+		auto ci = VkDescriptorPoolCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
+			.maxSets = 100, // @TODO
+			.poolSizeCount = 1,
+			.pPoolSizes = &ps,
+		};
+		VkCheck(vkCreateDescriptorPool(vkDevice, &ci, NULL, &vkDescriptorPool));
+	}
+	// Set up descriptors.
+	{
+		PushContextAllocator(GlobalAllocator());
+		Defer(PopContextAllocator());
+		vkDescriptorSets.Resize(vkSwapchainImages.count);
+		vkDescriptorSetBuffers.Resize(vkSwapchainImages.count);
+		vkDescriptorSetLayouts.Resize(ShaderDescriptorSetCount);
+		for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+		{
+			vkDescriptorSets[i].Resize(ShaderDescriptorSetCount);
+			vkDescriptorSetBuffers[i].Resize(ShaderDescriptorSetCount);
+		}
+		auto fci = VkFenceCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		};
+		VkCheck(vkCreateFence(vkDevice, &fci, NULL, &vkDescriptorSetUpdateFence));
+		auto MakeDescriptorSetGroup = [](s64 setIndex, ArrayView<VkDescriptorSetLayoutBinding> bindings)
+		{
+			auto slci = VkDescriptorSetLayoutCreateInfo
+			{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+				.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+				.bindingCount = (u32)bindings.count,
+				.pBindings = bindings.elements,
+			};
+			VkCheck(vkCreateDescriptorSetLayout(vkDevice, &slci, NULL, &vkDescriptorSetLayouts[setIndex]));
+			auto layouts = NewArray<VkDescriptorSetLayout>(vkSwapchainImages.count);
+			for (auto i = 0; i < vkSwapchainImages.count; i++)
+			{
+				layouts[i] = vkDescriptorSetLayouts[setIndex];
+			}
+			auto ai = VkDescriptorSetAllocateInfo
+			{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = vkDescriptorPool,
+				.descriptorSetCount = (u32)vkSwapchainImages.count,
+				.pSetLayouts = layouts.elements,
+			};
+			auto sets = NewArray<VkDescriptorSet>(vkSwapchainImages.count);
+			VkCheck(vkAllocateDescriptorSets(vkDevice, &ai, sets.elements));
+			for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+			{
+				vkDescriptorSets[i][setIndex] = sets[i];
+			}
+			for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+			{
+				vkDescriptorSetBuffers[i][setIndex] = NewVulkanBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanInitialDescriptorSetBufferSize);
+			}
+		};
+		auto global = MakeStaticArray<VkDescriptorSetLayoutBinding>(
+			VkDescriptorSetLayoutBinding
+			{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			});
+		MakeDescriptorSetGroup(ShaderGlobalDescriptorSetIndex, global);
+		auto view = MakeStaticArray<VkDescriptorSetLayoutBinding>(
+			VkDescriptorSetLayoutBinding
+			{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			});
+		MakeDescriptorSetGroup(ShaderViewDescriptorSetIndex, view);
+		auto material = MakeStaticArray<VkDescriptorSetLayoutBinding>(
+			VkDescriptorSetLayoutBinding
+			{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+			});
+		MakeDescriptorSetGroup(ShaderMaterialDescriptorSetIndex, material);
+		auto object = MakeStaticArray<VkDescriptorSetLayoutBinding>(
+			VkDescriptorSetLayoutBinding
+			{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			});
+		MakeDescriptorSetGroup(ShaderObjectDescriptorSetIndex, object);
 	}
 }
 
@@ -1326,77 +1446,30 @@ GPUFence SubmitAsyncGPUCommandBuffers(GPUQueueType t)
 	return {};
 }
 
-#if 0
-VkBufferUsageFlags GPUBufferTypeToVulkanBufferUsageFlag(GPUBufferType t)
+s64 GPUSwapchainImageCount()
 {
-	switch (t)
-	{
-	case GPUVertexBuffer:
-	{
-		return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	} break;
-	case GPUIndexBuffer:
-	{
-		return VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-	} break;
-	case GPUUniformBuffer:
-	{
-		return VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-	} break;
-	case GPUTransferBuffer
-	{
-	} break;
-	case GPUBufferTypeCount:
-	default:
-	{
-		Abort("Vulkan", "Unknown buffer type %d.", t);
-	} break;
-	}
-	return VkBufferUsageFlag{};
+	return vkSwapchainImages.count;
 }
-#endif
 
-VkBuffer NewVulkanBuffer(GPUBufferType t, s64 size)
+VkBuffer NewVulkanBuffer(VkBufferUsageFlags u, s64 size)
 {
 	auto b = VkBuffer{};
 	auto ci = VkBufferCreateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = (VkDeviceSize)size,
+		.usage = u,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 	};
 	VkCheck(vkCreateBuffer(vkDevice, &ci, NULL, &b));
 	return b;
 }
 
-VkBuffer NewFrameVulkanBuffer(GPUBufferType t, s64 size)
+GPUBuffer NewGPUBuffer(VkBufferUsageFlags u, s64 size)
 {
-	auto b = vkThreadLocal[ThreadIndex()].frameBufferPool[vkFrameIndex][t].GetValue();
-	if (!b)
-	{
-		b = NewVulkanBuffer(t, size);
-	}
-	return b;
-}
-
-VkBuffer NewAsyncVulkanBuffer(GPUBufferType t, s64 size)
-{
-	auto b = vkThreadLocal[ThreadIndex()].asyncBufferPool[t].Get();
-	if (!b)
-	{
-		b = NewVulkanBuffer(t, size);
-	}
-	return b;
-}
-
-GPUBuffer NewGPUBuffer(GPUBufferType t, s64 size)
-{
-	vkThreadLocal[ThreadIndex()].asyncBufferLock.Lock();
-	Defer(vkThreadLocal[ThreadIndex()].asyncBufferLock.Unlock());
 	auto b = GPUBuffer
 	{
-		.type = t,
-		.vkBuffer = NewAsyncVulkanBuffer(t, size),
+		.vkBuffer = NewVulkanBuffer(u, size),
 	};
 	auto mr = VkMemoryRequirements{};
 	vkGetBufferMemoryRequirements(vkDevice, b.vkBuffer, &mr);
@@ -1407,12 +1480,25 @@ GPUBuffer NewGPUBuffer(GPUBufferType t, s64 size)
 	return b;
 }
 
+GPUBuffer NewGPUVertexBuffer(s64 size)
+{
+	return NewGPUBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
+}
+
+GPUBuffer NewGPUIndexBuffer(s64 size)
+{
+	return NewGPUBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
+}
+
+GPUBuffer NewGPUUniformBuffer(s64 size)
+{
+	return NewGPUBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
+}
+
 void GPUBuffer::Free()
 {
 	this->memory->Free();
-	vkThreadLocal[ThreadIndex()].asyncBufferLock.Lock();
-	Defer(vkThreadLocal[ThreadIndex()].asyncBufferLock.Unlock());
-	vkThreadLocal[ThreadIndex()].asyncBufferPool[this->type].Release(this->vkBuffer);
+	// @TODO
 }
 
 GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst)
@@ -1420,7 +1506,7 @@ GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst)
 	auto sb = GPUFrameStagingBuffer
 	{
 		.size = size,
-		.vkBuffer = NewFrameVulkanBuffer(GPUTransferBuffer, size),
+		.vkBuffer = NewVulkanBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size),
 		.vkDestinationBuffer = dst.vkBuffer,
 	};
 	auto mr = VkMemoryRequirements{};
@@ -1449,7 +1535,7 @@ GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst)
 {
 	auto sb = GPUAsyncStagingBuffer
 	{
-		.vkBuffer = NewAsyncVulkanBuffer(GPUTransferBuffer, size),
+		.vkBuffer = NewVulkanBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size),
 		.vkDestinationBuffer = dst.vkBuffer,
 	};
 	auto mr = VkMemoryRequirements{};
@@ -1479,18 +1565,75 @@ void GPUAsyncStagingBuffer::Flush()
 	tl->asyncPendingStagingBuffers.Append({this->memory, this->vkBuffer});
 }
 
+GPUImage NewGPUImage(s64 w, s64 h, GPUFormat f, GPUImageLayout il, GPUImageUsageFlags uf, GPUSampleCount sc)
+{
+	auto ci = VkImageCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = f,
+		.extent =
+		{
+			.width = (u32)w,
+			.height = (u32)h,
+			.depth = 1,
+		},
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = sc,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = uf,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = il,
+	};
+	auto i = GPUImage{};
+	VkCheck(vkCreateImage(vkDevice, &ci, NULL, &i.vkImage));
+	auto mr = VkMemoryRequirements{};
+	vkGetImageMemoryRequirements(vkDevice, i.vkImage, &mr);
+	auto mem = vkGPUBlockAllocator.Allocate(mr.size, mr.alignment);
+	VkCheck(vkBindImageMemory(vkDevice, i.vkImage, mem->vkMemory, mem->offset));
+	i.memory = mem;
+	return i;
+}
+
+GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr)
+{
+	auto ci = VkImageViewCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = src.vkImage,
+		.viewType = t,
+		.format = f,
+		.components = 
+		{
+			.r = sm.r,
+			.g = sm.g,
+			.b = sm.b,
+			.a = sm.a,
+		},
+		.subresourceRange =
+		{
+			.aspectMask = isr.aspectMask,
+			.baseMipLevel = isr.baseMipLevel,
+			.levelCount = isr.levelCount,
+			.baseArrayLayer = isr.baseArrayLayer,
+			.layerCount = isr.layerCount,
+		},
+	};
+	auto iv = GPUImageView{};
+	VkCheck(vkCreateImageView(vkDevice, &ci, NULL, &iv.vkImageView));
+	return iv;
+}
+
 GPUFence NewGPUFence()
 {
-	auto f = vkThreadLocal[ThreadIndex()].fencePool.Get();
-	if (!f)
+	auto f = GPUFence{};
+	auto ci = VkFenceCreateInfo
 	{
-		auto ci = VkFenceCreateInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-		};
-		VkCheck(vkCreateFence(vkDevice, &ci, NULL, &f));
-	}
-	return GPUFence{f};
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+	};
+	VkCheck(vkCreateFence(vkDevice, &ci, NULL, &f.vkFence));
+	return f;
 }
 
 bool GPUFence::Check()
@@ -1525,8 +1668,7 @@ bool GPUFence::Wait(u64 timeout)
 
 void GPUFence::Free()
 {
-	VkCheck(vkResetFences(vkDevice, 1, &this->vkFence));
-	vkThreadLocal[ThreadIndex()].fencePool.Release(this->vkFence);
+	// @TODO
 }
 
 bool WaitForFences(ArrayView<GPUFence> fs, bool waitAll, u64 timeout)
@@ -1549,8 +1691,24 @@ void FreeGPUFences(ArrayView<GPUFence> fs)
 	VkCheck(vkResetFences(vkDevice, fs.count, (VkFence *)fs.elements));
 	for (auto f : fs)
 	{
-		vkThreadLocal[ThreadIndex()].fencePool.Release(f.vkFence);
+		// @TODO
 	}
+}
+
+GPUSemaphore NewGPUSemaphore()
+{
+	auto s = GPUSemaphore{};
+	auto ci = VkSemaphoreCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+	};
+	VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &s.vkSemaphore));
+	return s;
+}
+
+void GPUSemaphore::Free()
+{
+	// @TODO
 }
 
 void StartGPUFrame()
@@ -1562,8 +1720,6 @@ void StartGPUFrame()
 	{
 		for (auto i = 0; i < GPUQueueTypeCount; i += 1)
 		{
-			tl.frameBufferPool[vkFrameIndex][i].Reset();
-			tl.frameCommandBufferPool[vkFrameIndex][i].Reset();
 			VkCheck(vkResetCommandPool(vkDevice, tl.frameCommandPools[vkFrameIndex][i], 0));
 		}
 		tl.asyncCommandBufferLock.Lock();
@@ -1580,7 +1736,7 @@ void StartGPUFrame()
 				tl.asyncFences[i].UnorderedRemove(j);
 				*tl.asyncSignals[i][j] = true;
 				tl.asyncSignals[i].UnorderedRemove(j);
-				tl.asyncCommandBufferPool[i].ReleaseAll(tl.asyncPendingCommandBuffers[i][j]);
+				// @TODO: tl.asyncPendingCommandBuffers[i][j].Free();
 				tl.asyncPendingCommandBuffers[i][j].Resize(0);
 			}
 		}
@@ -1596,7 +1752,7 @@ void StartGPUFrame()
 			// @TODO: Take locks...
 			tl.asyncStagingSignals.UnorderedRemove(i);
 			tl.asyncPendingStagingBuffers[i].memory->Free();
-			tl.asyncBufferPool[GPUTransferQueue].Release(tl.asyncPendingStagingBuffers[i].vkBuffer);
+			// @TODO: tl.asyncPendingStagingBuffers[i].Free();
 			tl.asyncPendingStagingBuffers.UnorderedRemove(i);
 		}
 		tl.asyncStagingBufferLock.Unlock();

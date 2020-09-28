@@ -45,7 +45,6 @@ struct String
 	String(char *s);
 	String(const char *s);
 	String(Array<u8> buf);
-	//operator StringView();
 	const u8 &operator[](s64 i);
 	bool operator==(String s);
 	bool operator!=(String s);
@@ -55,17 +54,17 @@ struct String
 	String Copy(s64 start, s64 end);
 	char *CString();
 	String View(s64 start, s64 end);
-	void Free();
 	s64 FindFirst(u8 c);
 	s64 FindLast(u8 c);
 	Array<String> Split(char seperator);
-	u64 Hash();
 };
 
 String NewString(const char *s);
+String NewStringFromRange(String s, s64 start, s64 end);
 String NewStringFromBuffer(Array<u8> b);
-String FormatString(String fmt, ...);
 bool ParseInteger(String s, s64 *out);
+String FormatString(String fmt, ...);
+u64 HashString(String *s);
 
 template <typename... StringPack>
 String JoinStringsIn(Allocator *a, StringPack... sp)
@@ -95,7 +94,6 @@ struct StringBuilder
 {
 	Array<u8> buffer;
 
-	//operator StringView();
 	u8 &operator[](s64 i);
 	const u8 &operator[](s64 i) const;
 	bool operator==(StringBuilder sb);
@@ -106,7 +104,6 @@ struct StringBuilder
 	struct String String();
 	struct String StringIn(Allocator *a);
 	struct String View(s64 start, s64 end);
-	void Free();
 	void Resize(s64 len);
 	void Reserve(s64 reserve);
 	void Append(struct String s);
@@ -122,5 +119,5 @@ struct StringBuilder
 
 StringBuilder NewStringBuilder(s64 len);
 StringBuilder NewStringBuilderIn(Allocator *a, s64 len);
-StringBuilder NewStringBuilderWithCapacity(s64 len, s64 cap);
-StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 len, s64 cap);
+StringBuilder NewStringBuilderWithCapacity(s64 cap);
+StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 cap);

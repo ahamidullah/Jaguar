@@ -39,6 +39,8 @@ void InitializeGPU(Window *win);
 void StartGPUFrame();
 void FinishGPUFrame();
 
+void CompileGPUShaderFromFile(String filepath, bool *err);
+
 struct GPUMemoryHeapInfo
 {
 	u64 usage;
@@ -104,14 +106,6 @@ struct GPUPipeline
 	VkPipeline vkPipeline;
 };
 
-enum GPUQueueType
-{
-	GPUGraphicsQueue,
-	GPUTransferQueue,
-	GPUComputeQueue,
-	GPUQueueTypeCount
-};
-
 struct GPUBuffer
 {
 	VulkanMemoryAllocation *memory;
@@ -169,35 +163,65 @@ GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUS
 
 struct GPUCommandBuffer
 {
-	GPUQueueType type;
 	VkCommandBuffer vkCommandBuffer;
 
 	void BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb);
 	void EndRenderPass();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
-	void BindPipeline(GPUPipeline p);
+	//void BindShader(GPUShader s);
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
 	void BindIndexBuffer(GPUBuffer b);
-	//void BindDescriptorSets(GPUPipelineBindPoint pbp, GPUPipelineLayout pl, s64 firstSet, ArrayView<GPUDescriptorSet> dss);
-	//void BindDescriptors(ArrayView<GPUDescriptors> ds);
 	void DrawIndexedVertices(s64 numIndices, s64 firstIndex, s64 vertexOffset);
 	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
 	void CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h);
 };
 
-struct GPUFrameCommandBuffer : GPUCommandBuffer
+struct GPUFrameGraphicsCommandBuffer : GPUCommandBuffer
 {
 	void Queue();
 };
 
-struct GPUAsyncCommandBuffer : GPUCommandBuffer
+GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer();
+
+struct GPUFrameTransferCommandBuffer : GPUCommandBuffer
+{
+	void Queue();
+};
+
+GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer();
+
+struct GPUFrameComputeCommandBuffer : GPUCommandBuffer
+{
+	void Queue();
+};
+
+GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer();
+
+struct GPUAsyncGraphicsCommandBuffer : GPUCommandBuffer
 {
 	void Queue(bool *signalOnCompletion);
 };
 
-GPUFence SubmitFrameGPUCommandBuffers(GPUQueueType t, ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
-GPUFence SubmitAsyncGPUCommandBuffers();
+GPUAsyncGraphicsCommandBuffer NewGPUAsyncGraphicsCommandBuffer();
+
+struct GPUAsyncTransferCommandBuffer : GPUCommandBuffer
+{
+	void Queue(bool *signalOnCompletion);
+};
+
+GPUAsyncTransferCommandBuffer NewGPUAsyncTransferCommandBuffer();
+
+struct GPUAsyncComputeCommandBuffer : GPUCommandBuffer
+{
+	void Queue(bool *signalOnCompletion);
+};
+
+GPUAsyncComputeCommandBuffer NewGPUAsyncComputeCommandBuffer();
+
+GPUFence SubmitGPUFrameGraphicsCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
+GPUFence SubmitGPUFrameTransferCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
+GPUFence SubmitGPUFrameComputeCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
 
 s64 GPUSwapchainImageCount();
 

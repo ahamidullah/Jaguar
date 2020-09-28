@@ -6,6 +6,7 @@
 #include "Math.h"
 #include "Basic/DLL.h"
 #include "Basic/Array.h"
+#include "Basic/HashTable.h"
 #include "Basic/Log.h"
 #include "Basic/Memory.h"
 #include "Common.h"
@@ -54,9 +55,19 @@ const auto VulkanInitialDescriptorSetBufferSize = MegabytesToBytes(4);
 // @TODO: Read image pixels and mesh verices/indices directly into Gfx accessable staging memory.
 // @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
 
+enum VulkanQueueType
+{
+	VulkanGraphicsQueue,
+	VulkanTransferQueue,
+	VulkanComputeQueue,
+	VulkanMainQueueTypeCount,
+	VulkanPresentQueue = VulkanMainQueueTypeCount,
+	VulkanTotalQueueTypeCount
+};
+
 enum VulkanMemoryType
 {
-	VulkanGPUOnlyMemory,
+	VulkanGPUMemory,
 	VulkanCPUToGPUMemory,
 	VulkanGPUToCPUMemory,
 	VulkanMemoryTypeCount
@@ -106,19 +117,25 @@ struct VulkanAsyncStagingBufferResources
 struct VulkanThreadLocal
 {
 	// Frame resources.
-	StaticArray<StaticArray<VkCommandPool, GPUQueueTypeCount>, VulkanMaxFramesInFlight> frameCommandPools;
-	StaticArray<StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount>, VulkanMaxFramesInFlight> frameQueuedCommandBuffers;
+	StaticArray<StaticArray<VkCommandPool, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight> frameCommandPools;
+	StaticArray<StaticArray<Array<VkCommandBuffer>, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight> frameQueuedCommandBuffers;
 	// Async resources.
 	// @TODO: Could use double buffers to avoid the locking.
 	Spinlock asyncCommandBufferLock;
-	StaticArray<VkCommandPool, GPUQueueTypeCount> asyncCommandPools;
-	StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount> asyncQueuedCommandBuffers;
-	StaticArray<Array<Array<VkCommandBuffer>>, GPUQueueTypeCount> asyncPendingCommandBuffers;
-	StaticArray<Array<bool *>, GPUQueueTypeCount> asyncSignals;
-	StaticArray<Array<GPUFence>, GPUQueueTypeCount> asyncFences;
+	StaticArray<VkCommandPool, VulkanMainQueueTypeCount> asyncCommandPools;
+	StaticArray<Array<VkCommandBuffer>, VulkanMainQueueTypeCount> asyncQueuedCommandBuffers;
+	StaticArray<Array<Array<VkCommandBuffer>>, VulkanMainQueueTypeCount> asyncPendingCommandBuffers;
+	StaticArray<Array<bool *>, VulkanMainQueueTypeCount> asyncSignals;
+	StaticArray<Array<GPUFence>, VulkanMainQueueTypeCount> asyncFences;
 	Spinlock asyncStagingBufferLock;
 	Array<bool> asyncStagingSignals;
 	Array<VulkanAsyncStagingBufferResources> asyncPendingStagingBuffers;
+};
+
+struct VulkanShaderModules
+{
+	Array<VkShaderStageFlagBits> stages;
+	Array<VkShaderModule> modules;
 };
 
 auto vkThreadLocal = Array<VulkanThreadLocal>{};
@@ -126,13 +143,11 @@ auto vkDebugMessenger = VkDebugUtilsMessengerEXT{};
 auto vkInstance = VkInstance{};
 auto vkPhysicalDevice = VkPhysicalDevice{};
 auto vkDevice = VkDevice{};
-auto vkQueueFamilies = StaticArray<u32, GPUQueueTypeCount>{};
-auto vkQueues = StaticArray<VkQueue, GPUQueueTypeCount>{};
+auto vkQueueFamilies = StaticArray<u32, VulkanTotalQueueTypeCount>{};
+auto vkQueues = StaticArray<VkQueue, VulkanTotalQueueTypeCount>{};
 auto vkChangeImageOwnershipFromGraphicsToPresentQueueCommands = Array<VkCommandBuffer>{};
 auto vkPresentMode = VkPresentModeKHR{};
 auto vkPresentCommandPool = VkCommandPool{};
-auto vkPresentQueueFamily = u32{};
-auto vkPresentQueue = VkQueue{};
 auto vkSurface = VkSurfaceKHR{};
 auto vkSurfaceFormat = VkSurfaceFormatKHR{};
 auto vkBufferImageGranularity = s64{};
@@ -144,17 +159,6 @@ auto vkGPUBlockAllocator = VulkanMemoryBlockAllocator{};
 auto vkCPUToGPUBlockAllocator = VulkanMemoryBlockAllocator{};
 auto vkGPUToCPUBlockAllocator = VulkanMemoryBlockAllocator{};
 auto vkCPUToGPUFrameAllocator = VulkanMemoryFrameAllocator{};
-// @TODO: Explain these and how they interact with the command queues...
-// @TODO: We could store async queues in thread local storage and avoid locking.
-//auto vkAsyncQueueLocks = StaticArray<SpinLock, GPUQueueTypeCount>{};
-//auto vkAsyncQueues = StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount>{};
-//auto vkAsyncSignals StaticArray<Array<bool *>, GPUQueueTypeCount>{};
-//auto vkAsyncQueueIndices = StaticArray<(volatile s64), GPUQueueTypeCount>{}
-//auto vkAsyncCommandPools = StaticArray<VkCommandPool, GPUQueueTypeCount>{}
-// @TODO: Explain how command buffer queues work.
-// @TODO: We could store frame queues in thread local storage and avoid locking.
-auto vkFrameQueueLocks = StaticArray<Spinlock, GPUQueueTypeCount>{};
-auto vkFrameQueues = StaticArray<Array<VkCommandBuffer>, GPUQueueTypeCount>{};
 auto vkSwapchain = VkSwapchainKHR{};
 auto vkSwapchainImageIndex = u32{}; // @TODO
 auto vkSwapchainImages = Array<VkImage>{};
@@ -172,6 +176,8 @@ auto vkDrawCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight
 // @TODO: Could be thread-local lock-free double buffer.
 auto vkFrameIndex = u32{};
 auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
+auto vkShaders = NewHashTableIn<String, VulkanShaderModules>(GlobalAllocator(), 0, HashString);
+auto vkPipelines = NewHashTableIn<String, VkPipeline>(GlobalAllocator(), 0, HashString);
 
 #define VkCheck(x)\
 	do {\
@@ -342,8 +348,8 @@ GPUMemoryHeapInfo GPUMemoryUsage()
 	vkGetPhysicalDeviceMemoryProperties2(vkPhysicalDevice, &mp);
 	return
 	{
-		.usage = bp.heapUsage[vkMemoryTypeToHeapIndex[VulkanGPUOnlyMemory]],
-		.budget = bp.heapBudget[vkMemoryTypeToHeapIndex[VulkanGPUOnlyMemory]],
+		.usage = bp.heapUsage[vkMemoryTypeToHeapIndex[VulkanGPUMemory]],
+		.budget = bp.heapBudget[vkMemoryTypeToHeapIndex[VulkanGPUMemory]],
 	};
 }
 
@@ -797,19 +803,19 @@ void InitializeGPU(Window *win)
 			if (graphicsQueueFam != -1 && presentQueueFam != -1 && computeQueueFam != -1)
 			{
 				vkPhysicalDevice = pd;
-				vkQueueFamilies[GPUGraphicsQueue] = graphicsQueueFam;
+				vkQueueFamilies[VulkanGraphicsQueue] = graphicsQueueFam;
 				// The graphics queue family can always be used as the transfer queue family, but if
 				// we can find a dedicated transfer queue family, use that instead.
 				if (dedicatedTransferQueueFam != -1)
 				{
-					vkQueueFamilies[GPUTransferQueue] = dedicatedTransferQueueFam;
+					vkQueueFamilies[VulkanTransferQueue] = dedicatedTransferQueueFam;
 				}
 				else
 				{
-					vkQueueFamilies[GPUTransferQueue] = graphicsQueueFam;
+					vkQueueFamilies[VulkanTransferQueue] = graphicsQueueFam;
 				}
-				vkQueueFamilies[GPUComputeQueue] = computeQueueFam;
-				vkPresentQueueFamily = presentQueueFam;
+				vkQueueFamilies[VulkanComputeQueue] = computeQueueFam;
+				vkQueueFamilies[VulkanPresentQueue] = presentQueueFam;
 				vkSurfaceFormat = surfFmt;
 				vkPresentMode = presentMode;
 				foundSuitablePhysDev = true;
@@ -833,7 +839,7 @@ void InitializeGPU(Window *win)
 			auto e = (VulkanMemoryType)i;
 			switch (e)
 			{
-			case VulkanGPUOnlyMemory:
+			case VulkanGPUMemory:
 			{
 				vkMemoryTypeToMemoryFlags[i] = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			} break;
@@ -890,28 +896,28 @@ void InitializeGPU(Window *win)
 			VkDeviceQueueCreateInfo
 			{
 				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-				.queueFamilyIndex = vkQueueFamilies[GPUGraphicsQueue],
+				.queueFamilyIndex = vkQueueFamilies[VulkanGraphicsQueue],
 				.queueCount = 1,
 				.pQueuePriorities = &queuePrio,
 			});
-		if (vkQueueFamilies[GPUGraphicsQueue] != vkPresentQueueFamily)
+		if (vkQueueFamilies[VulkanPresentQueue] != vkQueueFamilies[VulkanGraphicsQueue])
 		{
 			queueCIs.Append(
 				VkDeviceQueueCreateInfo
 				{
 					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-					.queueFamilyIndex = vkPresentQueueFamily,
+					.queueFamilyIndex = vkQueueFamilies[VulkanPresentQueue],
 					.queueCount = 1,
 					.pQueuePriorities = &queuePrio,
 				});
 		}
-		if (vkQueueFamilies[GPUTransferQueue] != vkQueueFamilies[GPUGraphicsQueue])
+		if (vkQueueFamilies[VulkanTransferQueue] != vkQueueFamilies[VulkanGraphicsQueue])
 		{
 			queueCIs.Append(
 				VkDeviceQueueCreateInfo
 				{
 					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-					.queueFamilyIndex = vkQueueFamilies[GPUTransferQueue],
+					.queueFamilyIndex = vkQueueFamilies[VulkanTransferQueue],
 					.queueCount = 1,
 					.pQueuePriorities = &queuePrio,
 				});
@@ -952,18 +958,17 @@ void InitializeGPU(Window *win)
 #undef VK_DEVICE_FUNCTION
 	//LogVulkanInitialization();
 	// Create command queues.
-	for (auto i = 0; i < GPUQueueTypeCount; i += 1)
+	for (auto i = 0; i < VulkanTotalQueueTypeCount; i += 1)
 	{
 		vkGetDeviceQueue(vkDevice, vkQueueFamilies[i], 0, &vkQueues[i]); // No return.
 	}
-	vkGetDeviceQueue(vkDevice, vkPresentQueueFamily, 0, &vkPresentQueue); // No return.
 	// Create the presentation semaphores.
 	{
 		auto ci = VkSemaphoreCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 		};
-		if (vkPresentQueueFamily != vkQueueFamilies[GPUGraphicsQueue])
+		if (vkQueueFamilies[VulkanPresentQueue] != vkQueueFamilies[VulkanGraphicsQueue])
 		{
 			for (auto i = 0; i < VulkanMaxFramesInFlight; i++)
 			{
@@ -982,9 +987,9 @@ void InitializeGPU(Window *win)
 			auto e = (VulkanMemoryType)i;
 			switch (e)
 			{
-			case VulkanGPUOnlyMemory:
+			case VulkanGPUMemory:
 			{
-				vkGPUBlockAllocator.memoryType = VulkanGPUOnlyMemory;
+				vkGPUBlockAllocator.memoryType = VulkanGPUMemory;
 			} break;
 			case VulkanCPUToGPUMemory:
 			{
@@ -1013,7 +1018,7 @@ void InitializeGPU(Window *win)
 		};
 		for (auto &tl : vkThreadLocal)
 		{
-			for (auto i = 0; i < GPUQueueTypeCount; i++)
+			for (auto i = 0; i < VulkanMainQueueTypeCount; i++)
 			{
 				ci.queueFamilyIndex = vkQueueFamilies[i];
 				VkCheck(vkCreateCommandPool(vkDevice, &ci, NULL, &tl.asyncCommandPools[i]));
@@ -1023,7 +1028,7 @@ void InitializeGPU(Window *win)
 		{
 			for (auto i = 0; i < VulkanMaxFramesInFlight; i += 1)
 			{
-				for (auto j = 0; j < GPUQueueTypeCount; j += 1)
+				for (auto j = 0; j < VulkanMainQueueTypeCount; j += 1)
 				{
 					ci.queueFamilyIndex = vkQueueFamilies[j];
 					VkCheck(vkCreateCommandPool(vkDevice, &ci, NULL, &tl.frameCommandPools[i][j]));
@@ -1072,11 +1077,11 @@ void InitializeGPU(Window *win)
 			.clipped = 1,
 			.oldSwapchain = NULL,
 		};
-		if (vkPresentQueueFamily != vkQueueFamilies[GPUGraphicsQueue])
+		if (vkQueueFamilies[VulkanPresentQueue] != vkQueueFamilies[VulkanGraphicsQueue])
 		{
 			auto fams = MakeStaticArray<u32>(
-				vkQueueFamilies[GPUGraphicsQueue],
-				vkPresentQueueFamily);
+				vkQueueFamilies[VulkanGraphicsQueue],
+				vkQueueFamilies[VulkanPresentQueue]);
 			ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 			ci.queueFamilyIndexCount = fams.Count();
 			ci.pQueueFamilyIndices = fams.elements;
@@ -1134,7 +1139,7 @@ void InitializeGPU(Window *win)
 			VkCheck(vkCreateFence(vkDevice, &ci, NULL, &vkFrameFences[i]));
 		}
 	}
-	vkGPUBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUOnlyMemory, MegabytesToBytes(256));
+	vkGPUBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, MegabytesToBytes(256));
 	vkCPUToGPUBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanCPUToGPUMemory, MegabytesToBytes(256));
 	//vkGPUToCPUBlockAllocator = NewVulkanMemoryBlockAllocator(MegabytesToBytes(64));
 	{
@@ -1153,7 +1158,7 @@ void InitializeGPU(Window *win)
 		};
 		VkCheck(vkCreateDescriptorPool(vkDevice, &ci, NULL, &vkDescriptorPool));
 	}
-	// Set up descriptors.
+	// Descriptors.
 	{
 		PushContextAllocator(GlobalAllocator());
 		Defer(PopContextAllocator());
@@ -1240,9 +1245,20 @@ void InitializeGPU(Window *win)
 			});
 		MakeDescriptorSetGroup(ShaderObjectDescriptorSetIndex, object);
 	}
+	// Pipeline layout.
+	{
+		auto ci = VkPipelineLayoutCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = (u32)vkDescriptorSetLayouts.count,
+			.pSetLayouts = vkDescriptorSetLayouts.elements,
+			.pushConstantRangeCount = 0,
+		};
+		VkCheck(vkCreatePipelineLayout(vkDevice, &ci, NULL, &vkPipelineLayout));
+	}
 }
 
-VkCommandBuffer NewVulkanCommandBuffer(GPUQueueType t, VkCommandPool p)
+VkCommandBuffer NewVulkanCommandBuffer(VkCommandPool p)
 {
     auto ai = VkCommandBufferAllocateInfo
     {
@@ -1262,28 +1278,95 @@ VkCommandBuffer NewVulkanCommandBuffer(GPUQueueType t, VkCommandPool p)
 	return cb;
 }
 
-GPUFrameCommandBuffer NewGPUFrameCommandBuffer(GPUQueueType t)
+GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer()
 {
-	auto cb = GPUFrameCommandBuffer{};
-	cb.type = t;
-    cb.vkCommandBuffer = NewVulkanCommandBuffer(t, vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][t]);
-	//DisableJobSwitching();
+	auto cb = GPUFrameGraphicsCommandBuffer{};
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanGraphicsQueue]);
 	return cb;
 }
 
-// @TODO: Move queue type into type.
-//        Move buffer type into name.
-//        Move present queue in line with other queues.
-
-GPUAsyncCommandBuffer NewGPUAsyncCommandBuffer(GPUQueueType t)
+void GPUFrameGraphicsCommandBuffer::Queue()
 {
-	auto cb = GPUAsyncCommandBuffer{};
-	cb.type = t;
+	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
+	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanGraphicsQueue].Append(this->vkCommandBuffer);
+}
+
+GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
+{
+	auto cb = GPUFrameTransferCommandBuffer{};
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanTransferQueue]);
+	return cb;
+}
+
+void GPUFrameTransferCommandBuffer::Queue()
+{
+	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
+	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanTransferQueue].Append(this->vkCommandBuffer);
+}
+
+GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer()
+{
+	auto cb = GPUFrameComputeCommandBuffer{};
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanComputeQueue]);
+	return cb;
+}
+
+void GPUFrameComputeCommandBuffer::Queue()
+{
+	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
+	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanComputeQueue].Append(this->vkCommandBuffer);
+}
+
+VkCommandBuffer NewVulkanAsyncCommandBuffer(VulkanQueueType t)
+{
 	vkThreadLocal[ThreadIndex()].asyncCommandBufferLock.Lock();
 	Defer(vkThreadLocal[ThreadIndex()].asyncCommandBufferLock.Unlock());
-	cb.vkCommandBuffer = NewVulkanCommandBuffer(t, vkThreadLocal[ThreadIndex()].asyncCommandPools[t]);
-	//DisableJobSwitching();
+	return NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].asyncCommandPools[t]);
+}
+
+void QueueVulkanAsyncCommandBuffer(VkCommandBuffer cb, VulkanQueueType t, bool *signalOnCompletion)
+{
+	VkCheck(vkEndCommandBuffer(cb));
+	vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Lock();
+	Defer(vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Unlock());
+	vkThreadLocal[CurrentThread()].asyncQueuedCommandBuffers[t].Append(cb);
+	vkThreadLocal[CurrentThread()].asyncSignals[t].Append(signalOnCompletion);
+}
+
+GPUAsyncGraphicsCommandBuffer NewGPUAsyncGraphicsCommandBuffer()
+{
+	auto cb = GPUAsyncGraphicsCommandBuffer{};
+	cb.vkCommandBuffer = NewVulkanAsyncCommandBuffer(VulkanGraphicsQueue);
 	return cb;
+}
+
+void GPUAsyncGraphicsCommandBuffer::Queue(bool *signalOnCompletion)
+{
+	QueueVulkanAsyncCommandBuffer(this->vkCommandBuffer, VulkanGraphicsQueue, signalOnCompletion);
+}
+
+GPUAsyncTransferCommandBuffer NewGPUAsyncTransferCommandBuffer()
+{
+	auto cb = GPUAsyncTransferCommandBuffer{};
+	cb.vkCommandBuffer = NewVulkanAsyncCommandBuffer(VulkanTransferQueue);
+	return cb;
+}
+
+void GPUAsyncTransferCommandBuffer::Queue(bool *signalOnCompletion)
+{
+	QueueVulkanAsyncCommandBuffer(this->vkCommandBuffer, VulkanTransferQueue, signalOnCompletion);
+}
+
+GPUAsyncComputeCommandBuffer NewGPUAsyncComputeCommandBuffer()
+{
+	auto cb = GPUAsyncComputeCommandBuffer{};
+	cb.vkCommandBuffer = NewVulkanAsyncCommandBuffer(VulkanComputeQueue);
+	return cb;
+}
+
+void GPUAsyncComputeCommandBuffer::Queue(bool *signalOnCompletion)
+{
+	QueueVulkanAsyncCommandBuffer(this->vkCommandBuffer, VulkanComputeQueue, signalOnCompletion);
 }
 
 void GPUCommandBuffer::BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb)
@@ -1342,10 +1425,10 @@ void GPUCommandBuffer::SetScissor(s64 w, s64 h)
 	vkCmdSetScissor(this->vkCommandBuffer, 0, 1, &scissor);
 }
 
-void GPUCommandBuffer::BindPipeline(GPUPipeline p)
-{
-	vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p.vkPipeline);
-}
+//void GPUCommandBuffer::BindPipeline(GPUPipeline p)
+//{
+	//vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p.vkPipeline);
+//}
 
 void GPUCommandBuffer::BindVertexBuffer(GPUBuffer b, s64 bindPoint)
 {
@@ -1407,22 +1490,7 @@ void GPUCommandBuffer::CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h)
 	vkCmdCopyBufferToImage(this->vkCommandBuffer, b.vkBuffer, i.vkImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void GPUFrameCommandBuffer::Queue()
-{
-	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][this->type].Append(this->vkCommandBuffer);
-}
-
-void GPUAsyncCommandBuffer::Queue(bool *signalOnCompletion)
-{
-	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Lock();
-	Defer(vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Unlock());
-	vkThreadLocal[CurrentThread()].asyncQueuedCommandBuffers[this->type].Append(this->vkCommandBuffer);
-	vkThreadLocal[CurrentThread()].asyncSignals[this->type].Append(signalOnCompletion);
-}
-
-GPUFence SubmitFrameGPUCommandBuffers(GPUQueueType t, ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+GPUFence SubmitVulkanFrameCommandBuffers(VulkanQueueType t, ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
 {
 	auto cbs = &vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkFrameIndex][t];
 	auto si = VkSubmitInfo
@@ -1441,9 +1509,19 @@ GPUFence SubmitFrameGPUCommandBuffers(GPUQueueType t, ArrayView<GPUSemaphore> wa
 	return f;
 }
 
-GPUFence SubmitAsyncGPUCommandBuffers(GPUQueueType t)
+GPUFence SubmitGPUFrameGraphicsCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
 {
-	return {};
+	return SubmitVulkanFrameCommandBuffers(VulkanGraphicsQueue, waitSems, waitStages, signalSems);
+}
+
+GPUFence SubmitGPUFrameTransferCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+{
+	return SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, waitSems, waitStages, signalSems);
+}
+
+GPUFence SubmitGPUFrameComputeCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+{
+	return SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, waitSems, waitStages, signalSems);
 }
 
 s64 GPUSwapchainImageCount()
@@ -1526,7 +1604,7 @@ void GPUFrameStagingBuffer::Flush()
 	{
 		.vkBuffer = this->vkDestinationBuffer,
 	};
-	auto cb = NewGPUFrameCommandBuffer(GPUTransferQueue);
+	auto cb = NewGPUFrameTransferCommandBuffer();
 	cb.CopyBuffer(this->size, src, dst, 0, 0);
 	cb.Queue();
 }
@@ -1555,7 +1633,7 @@ void GPUAsyncStagingBuffer::Flush()
 	{
 		.vkBuffer = this->vkDestinationBuffer,
 	};
-	auto cb = NewGPUAsyncCommandBuffer(GPUTransferQueue);
+	auto cb = NewGPUAsyncTransferCommandBuffer();
 	cb.CopyBuffer(this->memory->size, src, dst, 0, 0);
 	auto tl = &vkThreadLocal[ThreadIndex()];
 	tl->asyncStagingBufferLock.Lock();
@@ -1718,12 +1796,12 @@ void StartGPUFrame()
 	VkCheck(vkAcquireNextImageKHR(vkDevice, vkSwapchain, U64Max, vkImageAcquiredSemaphores[vkFrameIndex], NULL, &vkSwapchainImageIndex));
 	for (auto &tl : vkThreadLocal)
 	{
-		for (auto i = 0; i < GPUQueueTypeCount; i += 1)
+		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
 		{
 			VkCheck(vkResetCommandPool(vkDevice, tl.frameCommandPools[vkFrameIndex][i], 0));
 		}
 		tl.asyncCommandBufferLock.Lock();
-		for (auto i = 0; i < GPUQueueTypeCount; i += 1)
+		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
 		{
 			for (auto j = 0; j < tl.asyncFences[i].count; )
 			{
@@ -1763,6 +1841,39 @@ void StartGPUFrame()
 void FinishGPUFrame()
 {
 	vkFrameIndex = (vkFrameIndex + 1) % VulkanMaxFramesInFlight;
+}
+
+void CompileGPUShaderFromFile(String filepath, bool *err)
+{
+	auto spirvInfo = GenerateVulkanSPIRV(filepath, err);
+	if (*err)
+	{
+		LogError("Vulkan", "Failed to generate SPIRV for file %k.", filepath);
+		return;
+	}
+	auto s = VulkanShaderModules
+	{
+		.stages = spirvInfo.stages,
+	};
+	for (auto fp : spirvInfo.filepaths)
+	{
+		auto spirv = ReadEntireFile(fp, err);
+		if (*err)
+		{
+			LogError("Vulkan", "Failed to read SPIRV file %k from shader %k.", fp, filepath);
+			return;
+		}
+		auto ci = VkShaderModuleCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = (u32)spirv.Length(),
+			.pCode = (u32 *)&spirv[0],
+		};
+		auto m = VkShaderModule{};
+		VkCheck(vkCreateShaderModule(vkDevice, &ci, NULL, &m));
+		s.modules.Append(m);
+	}
+	vkShaders.Insert(spirvInfo.name, s);
 }
 
 #endif

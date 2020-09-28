@@ -1,21 +1,106 @@
-#if 0
-#include "Basic.h"
+#include "Parser.h"
 
-Parser CreateParser(const String &filepath, const String &delimiters, bool *error)
+Parser NewParser(String filepath, String delims, bool *err)
 {
-	auto fileString = ReadEntireFile(filepath, error);
-	if (*error)
+	auto str = ReadEntireFile(filepath, err);
+	if (*err)
 	{
 		return Parser{};
 	}
-	*error = false;
+	*err = false;
 	return
 	{
-		.string = fileString,
-		.delimiters = delimiters,
+		.string = str,
+		.delimiters = delims,
+		.line = 1,
+		.column = 1,
 	};
 }
 
+Parser NewParserFromString(String str, String delims)
+{
+	return
+	{
+		.string = str,
+		.delimiters = delims,
+		.line = 1,
+		.column = 1,
+	};
+}
+
+bool Parser::IsDelimiter(char c)
+{
+	for (auto d : this->delimiters)
+	{
+		if (c == d)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void Parser::Advance()
+{
+	if (this->index >= this->string.Length())
+	{
+		return;
+	}
+	if (this->string[this->index] == '\n')
+	{
+		this->line += 1;
+		this->column = 0;
+	}
+	this->index += 1;
+	this->column += 1;
+}
+
+String Parser::Line()
+{
+	if (this->index >= this->string.Length())
+	{
+		return "";
+	}
+	auto start = this->index;
+	while (this->index < this->string.Length() && this->string[this->index] != '\n')
+	{
+		this->Advance();
+	}
+	if (this->string[this->index] == '\n')
+	{
+		this->Advance();
+	}
+	Assert(this->index > start);
+	return NewStringFromRange(this->string, start, this->index - 1);
+}
+
+String Parser::Token()
+{
+	while (this->index < this->string.Length() && (this->string[this->index] == ' ' || this->string[this->index] == '\t'))
+	{
+		this->Advance();
+	}
+	if (this->index >= this->string.Length())
+	{
+		return "";
+	}
+	auto start = this->index;
+	if (this->IsDelimiter(this->string[this->index]))
+	{
+		this->Advance();
+	}
+	else
+	{
+		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]))
+		{
+			this->Advance();
+		}
+	}
+	Assert(this->index > start);
+	return NewStringFromRange(this->string, start, this->index - 1);
+}
+
+#if 0
 bool IsParserDelimiter(Parser *parser, char c)
 {
 	for (auto d : parser->delimiters)

@@ -1,4 +1,6 @@
 #include "Render.h"
+#include "Shader.h"
+#include "Basic/File.h"
 
 s64 RenderWidth()
 {
@@ -17,7 +19,8 @@ const auto DepthBufferSampleCount = GPUSampleCount1;
 
 auto renderDepthImage = GPUImage{};
 auto renderDepthImageView = GPUImageView{};
-auto renderFramebuffers = Array<GPUFramebuffer>{};
+auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(GlobalAllocator(), 0);
+auto renderAspectRatio = 0;
 
 void InitializeRenderer(void *jobParam)
 {
@@ -43,8 +46,82 @@ void InitializeRenderer(void *jobParam)
 		};
 		renderDepthImageView = NewGPUImageView(renderDepthImage, GPUImageViewType2D, DepthBufferFormat, sm, isr);
 	}
-	renderFramebuffers.SetAllocator(GlobalAllocator());
 	renderFramebuffers.Resize(GPUSwapchainImageCount());
+	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
+	// Load shaders.
+	{
+		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader");
+		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Code");
+		auto fps = ShaderFilepaths();
+		auto err = false;
+		for (auto fp : fps)
+		{
+			CompileGPUShaderFromFile(fp, &err);
+			if (err)
+			{
+				LogError("Failed to compile shader %k, skipping.\n", fp);
+				continue;
+			}
+		}
+	}
+}
+
+void UpdateRenderUniforms()
+{
+#if 0
+	auto cb = NewGPUFrameTransferCommandBuffer();
+	auto u = 1;
+	auto sb = NewGPUFrameStagingBuffer(sizeof(u32), );
+	*(u32 *)sb.memory->map = u;
+
+
+
+
+
+	auto commandBuffer = CreateGPUCommandBuffer(GFX_TRANSFER_COMMAND_QUEUE, GPU_RESOURCE_LIFETIME_FRAME);
+	u32 u = 1;
+	{
+		void *stagingMemory;
+		auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+		CopyMemory(&u, stagingMemory, sizeof(u32));
+		GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], 0, 0);
+		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][GLOBAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+	}
+	{
+		void *stagingMemory;
+		auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+		CopyMemory(&u, stagingMemory, sizeof(u32));
+		GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], 0, 0);
+		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][VIEW_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+	}
+	{
+		void *stagingMemory;
+		auto stagingBuffer = CreateGPUBuffer(sizeof(u32), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+		CopyMemory(&u, stagingMemory, sizeof(u32));
+		GfxRecordCopyBufferCommand(commandBuffer, sizeof(u32), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], 0, 0);
+		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][MATERIAL_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(u32));
+	}
+	{
+		auto projectionMatrix = CreateInfinitePerspectiveProjectionMatrix(0.01f, camera->fov, renderGlobals.aspectRatio);
+		auto viewMatrix = CreateViewMatrix(camera->transform.position, CalculateForwardVector(camera->transform.rotation));
+		//auto viewMatrix = CreateViewMatrix({20000, -20000, 20000}, Normalize(V3{0, 0, 0} - V3{20000, -20000, 20000}));
+		//SetRotationMatrix(&viewMatrix, ToMatrix(camera->transform.rotation));
+		//auto viewMatrix = ViewMatrix(camera->transform.position, -camera->transform.position);
+		//M4 m = projectionMatrix * viewMatrix;
+		M4 m = projectionMatrix * viewMatrix;
+		void *stagingMemory;
+		auto stagingBuffer = CreateGPUBuffer(sizeof(M4), GFX_TRANSFER_SOURCE_BUFFER, GFX_CPU_TO_GPU_MEMORY, GPU_RESOURCE_LIFETIME_FRAME, &stagingMemory);
+		CopyMemory(&m, stagingMemory, sizeof(M4));
+		GfxRecordCopyBufferCommand(commandBuffer, sizeof(M4), stagingBuffer, renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], 0, 0);
+		GfxUpdateDescriptorSets(renderGlobals.descriptorSets[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], renderGlobals.descriptorSetBuffers[swapchainImageIndex][OBJECT_DESCRIPTOR_SET_INDEX], GFX_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0, sizeof(M4));
+	}
+
+	QueueGPUCommandBuffer(commandBuffer, NULL);
+
+	//GfxSubmitInfo submitInfo;
+	//ArrayAppend(&submitInfo.commandBuffers, commandBuffer);
+	//GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.descriptorSetUpdateFence);
+#endif
 }
 
 void Render()
@@ -56,6 +133,12 @@ void Render()
 		LogError("Render", "Could not find main camera.");
 		return;
 	}
+	UpdateRenderUniforms();
+	//auto transferFence = SubmitGPUFrameTransferCommandBuffers({}, {}, {});
+	auto cb = NewGPUFrameGraphicsCommandBuffer();
+	cb.SetViewport(RenderWidth(), RenderHeight());
+	cb.SetScissor(RenderWidth(), RenderHeight());
+	//cb.Queue();
 }
 
 #if 0

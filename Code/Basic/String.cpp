@@ -135,6 +135,15 @@ String::String(const char *s)
 	this->literal = true;
 }
 
+String NewStringFromRange(String s, s64 start, s64 end)
+{
+	Assert(start >= 0);
+	Assert(end >= start);
+	auto b = NewArray<u8>(end - start);
+	CopyArray(s.buffer.View(start, end), b);
+	return NewStringFromBuffer(b);
+}
+
 String NewStringFromBuffer(Array<u8> b)
 {
 	String s;
@@ -263,20 +272,14 @@ Array<String> String::Split(char seperator)
 	return splits;
 }
 
-// @TODO: Where did I get this from? Is the Knuth hash better?
-u64 String::Hash()
+String FormatString(String fmt, ...)
 {
-    auto hash = u64{5381};
-    for (auto c : this->buffer)
-    {
-        hash = ((hash << 5) + hash) + c;
-	}
-    return hash;
-}
-
-void String::Free()
-{
-	this->buffer.Free();
+	va_list args;
+	va_start(args, fmt);
+	auto sb = StringBuilder{};
+	sb.FormatVarArgs(fmt, args);
+	va_end(args);
+	return NewStringFromBuffer(sb.buffer);
 }
 
 bool ParseInteger(String s, s64 *out)
@@ -291,6 +294,17 @@ bool ParseInteger(String s, s64 *out)
     	*out = (*out * 10) + c - '0';
     }
     return true;
+}
+
+// @TODO: Where did I get this from? Is the Knuth hash better?
+u64 HashString(String *s)
+{
+    auto hash = u64{5381};
+    for (auto c : *s)
+    {
+        hash = ((hash << 5) + hash) + c;
+	}
+    return hash;
 }
 
 StringBuilder NewStringBuilderIn(Allocator *a, s64 len)
@@ -489,9 +503,4 @@ s64 StringBuilder::FindLast(u8 c)
 		}
 	}
 	return last;
-}
-
-void StringBuilder::Free()
-{
-	this->buffer.Free();
 }

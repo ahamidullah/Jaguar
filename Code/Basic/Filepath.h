@@ -2,10 +2,14 @@
 
 #include "String.h"
 
-void FilepathDirectory(StringBuilder *sb, String path);
-void FilepathFilename(StringBuilder *sb, String path);
-void FilepathExtension(StringBuilder *sb, String path);
-void SetFilepathExtension(StringBuilder *path, String ext);
+void FilepathDirectoryIn(StringBuilder *sb, String path);
+String FilepathDirectory(String path);
+void FilepathFilenameIn(StringBuilder *sb, String path);
+String FilepathFilename(String path);
+void FilepathExtensionIn(StringBuilder *sb, String path);
+String FilepathExtension(String path);
+void SetFilepathExtensionIn(StringBuilder *path, String ext);
+String SetFilepathExtension(String path, String ext);
 
 template <typename... StringPack>
 String JoinFilepaths(StringPack... sp)
@@ -15,7 +19,7 @@ String JoinFilepaths(StringPack... sp)
 	{
 		return "";
 	}
-	auto len = (sp.length + ...) + (count - 1);
+	auto len = (String{sp}.Length() + ...) + (count - 1);
 	auto sb = NewStringBuilderWithCapacity(len);
 	auto AddPathComponent = [](StringBuilder *sb, String c)
 	{
@@ -23,5 +27,5 @@ String JoinFilepaths(StringPack... sp)
 		sb->Append("/");
 	};
 	(AddPathComponent(&sb, sp), ...);
-	return {sb.buffer, false};
+	return NewStringFromBuffer(sb.buffer);
 }

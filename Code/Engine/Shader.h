@@ -1,15 +1,13 @@
 #pragma once
 
-#if 0
+#include "Basic/String.h"
 
-struct Shader
+struct VulkanSPIRVInfo
 {
 	String name;
-	Array<GfxShaderModule> modules;
-	Array<GfxShaderStage> stages;
+	Array<String> filepaths;
+	Array<VkShaderStageFlagBits> stages;
 };
 
-void LoadShaders();
-Shader *GetShader(const String &name);
-
-#endif
+Array<String> ShaderFilepaths();
+VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err);

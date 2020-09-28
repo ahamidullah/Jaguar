@@ -30,7 +30,7 @@ bool File::Close()
 		return false;
 	}
 	this->handle = -1;
-	this->path.Free();
+	this->path = "";
 	return true;
 }
 

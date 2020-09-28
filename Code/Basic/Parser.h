@@ -1,20 +1,21 @@
-#if 0
 #pragma once
 
 #include "String.h"
-
-#define STANDARD_PARSER_DELIMITERS " \t:;\",(){}=-+*/\n"
 
 struct Parser
 {
 	String string;
 	String delimiters;
-	s64 index = 0;
-	s64 line = 1;
-	s64 column = 1;
+	bool done;
+	s64 index;
+	s64 line;
+	s64 column;
+
+	bool IsDelimiter(char c);
+	void Advance();
+	String Line();
+	String Token();
 };
 
-Parser CreateParser(const String &filepath, const String &delimiters, bool *error);
-String GetParserToken(Parser *parser);
-String GetParserLine(Parser *parser);
-#endif
+Parser NewParser(String filepath, String delims, bool *err);
+Parser NewParserFromString(String str, String delims);

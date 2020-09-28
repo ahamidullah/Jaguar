@@ -7,8 +7,6 @@ const auto HashTableMaxLoadFactor = 0.75f;
 // @TODO: Handle zero type.
 //        How to handle empty hash? Maybe try to guess the hash function based on the type of key and abort if we fail.
 
-typedef u64 (*HashProcedure)(void *);
-
 template <typename K, typename V>
 struct KeyValuePair
 {
@@ -19,6 +17,7 @@ struct KeyValuePair
 template <typename K, typename V>
 struct HashTable
 {
+	typedef u64 (*HashProcedure)(K *);
 	Array<u64> hashes;
 	Array<KeyValuePair<K, V>> buckets;
 	HashProcedure hashProcedure;
@@ -36,7 +35,7 @@ struct HashTable
 };
 
 template <typename K, typename V>
-HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, HashProcedure hp)
+HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, typename HashTable<K, V>::HashProcedure hp)
 {
 	auto ht = HashTable<K, V>
 	{
@@ -52,7 +51,7 @@ HashTable<K, V> NewHashTableIn(Allocator *a, s64 len, HashProcedure hp)
 }
 
 template <typename K, typename V>
-HashTable<K, V> NewHashTable(s64 len, HashProcedure hp)
+HashTable<K, V> NewHashTable(s64 len, typename HashTable<K, V>::HashProcedure hp)
 {
 	return NewHashTableIn<K, V>(ContextAllocator(), len, hp);
 }
@@ -204,8 +203,6 @@ void HashTable<K, V>::Reserve(s64 reserve)
 			newBuckets[ni].key = this->buckets[i].key;
 			newBuckets[ni].value = this->buckets[i].value;
 		}
-		this->hashes.Free();
-		this->buckets.Free();
 		this->buckets = newBuckets;
 		this->hashes = newHashes;
 		this->loadFactor = (f32)this->count / (f32)this->buckets.count;

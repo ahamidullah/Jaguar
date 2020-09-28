@@ -218,7 +218,6 @@ struct Array
 	T *begin();
 	T *end();
 	void SetAllocator(Allocator *a);
-	void Free();
 	void Reserve(s64 reserve);
 	void Resize(s64 count);
 	void Append(T e);
@@ -493,6 +492,7 @@ ArrayView<T> Array<T>::Sift(SiftProcedure s)
 	};
 }
 
+#if 0
 template <typename T>
 void Array<T>::Free()
 {
@@ -505,6 +505,7 @@ void Array<T>::Free()
 	this->capacity = 0;
 	this->elements = NULL;
 }
+#endif
 
 template <typename T>
 T Array<T>::PopBack()

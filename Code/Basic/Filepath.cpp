@@ -2,7 +2,7 @@
 #include "String.h"
 
 // FilepathDirectory returns all but the last component of the path.
-void FilepathDirectory(StringBuilder *sb, String path)
+void FilepathDirectoryIn(StringBuilder *sb, String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
@@ -12,8 +12,15 @@ void FilepathDirectory(StringBuilder *sb, String path)
 	return sb->Append(path.View(0, slash));
 }
 
+String FilepathDirectory(String path)
+{
+	auto sb = NewStringBuilder(0);
+	FilepathDirectoryIn(&sb, path);
+	return NewStringFromBuffer(sb.buffer);
+}
+
 // FilepathFilename returns the last component of the path.
-void FilepathFilename(StringBuilder *sb, String path)
+void FilepathFilenameIn(StringBuilder *sb, String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
@@ -24,8 +31,15 @@ void FilepathFilename(StringBuilder *sb, String path)
 	sb->Append(path.View(slash + 1, path.Length() - (slash + 1)));
 }
 
+String FilepathFilename(String path)
+{
+	auto sb = NewStringBuilder(0);
+	FilepathFilenameIn(&sb, path);
+	return NewStringFromBuffer(sb.buffer);
+}
+
 // FilepathExtension returns the file extension including the dot.
-void FilepathExtension(StringBuilder *sb, String path)
+void FilepathExtensionIn(StringBuilder *sb, String path)
 {
 	auto dot = path.FindLast('.');
 	if (dot < 0)
@@ -35,9 +49,16 @@ void FilepathExtension(StringBuilder *sb, String path)
 	return sb->Append(path.View(dot, path.Length() - dot));
 }
 
+String FilepathExtension(String path)
+{
+	auto sb = NewStringBuilder(0);
+	FilepathExtensionIn(&sb, path);
+	return NewStringFromBuffer(sb.buffer);
+}
+
 // SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
 // If no dot character is found, a dot character and the supplied extension are appended to the path.
-void SetFilepathExtension(StringBuilder *path, String ext)
+void SetFilepathExtensionIn(StringBuilder *path, String ext)
 {
 	auto dot = path->FindLast('.');
 	if (dot < 0)
@@ -48,6 +69,14 @@ void SetFilepathExtension(StringBuilder *path, String ext)
 	}
 	path->Resize(dot + ext.Length());
 	CopyArray(ext.buffer, path->View(dot, path->Length()).buffer);
+}
+
+String SetFilepathExtension(String path, String ext)
+{
+	auto sb = NewStringBuilderWithCapacity(path.Length());
+	sb.Append(path);
+	SetFilepathExtensionIn(&sb, ext);
+	return NewStringFromBuffer(sb.buffer);
 }
 
 #if 0

@@ -95,7 +95,7 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
-	auto i = AtomicAdd64(&threadCount, 1);
+	auto i = AtomicFetchAndAdd64(&threadCount, 1);
 	auto wrapperParam = (ThreadProcedureWrapperParameters *)GlobalAllocator()->Allocate(sizeof(ThreadProcedureWrapperParameters));
 	wrapperParam->threadIndex = i;
 	wrapperParam->procedure = proc;

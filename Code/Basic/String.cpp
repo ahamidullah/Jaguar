@@ -188,12 +188,12 @@ bool String::operator!=(String s)
 
 const u8 *String::begin()
 {
-	return &(*this)[0];
+	return this->buffer.begin();
 }
 
 const u8 *String::end()
 {
-	return &(*this)[this->Length()];
+	return this->buffer.end();
 }
 
 s64 String::Length()
@@ -366,12 +366,12 @@ bool StringBuilder::operator!=(StringBuilder sb)
 
 u8 *StringBuilder::begin()
 {
-	return &(*this)[0];
+	return this->buffer.begin();
 }
 
 u8 *StringBuilder::end()
 {
-	return &(*this)[this->Length()];
+	return this->buffer.end();
 }
 
 s64 StringBuilder::Length()
@@ -387,13 +387,14 @@ String StringBuilder::String()
 struct String StringBuilder::View(s64 start, s64 end)
 {
 	Assert(start <= end);
-	auto buf = Array<u8>
+	Assert(end <= this->buffer.count);
+	auto b = Array<u8>
 	{
 		.allocator = NullAllocator(),
-		.elements = &this->buffer[start],
+		.elements = &this->buffer.elements[start],
 		.count = end - start,
 	};
-	return NewStringFromBuffer(buf);
+	return NewStringFromBuffer(b);
 }
 
 struct String StringBuilder::StringIn(Allocator *a)

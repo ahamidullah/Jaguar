@@ -7,7 +7,6 @@ Parser NewParser(String filepath, String delims, bool *err)
 	{
 		return Parser{};
 	}
-	*err = false;
 	return
 	{
 		.string = str,
@@ -71,12 +70,12 @@ String Parser::Line()
 		this->Advance();
 	}
 	Assert(this->index > start);
-	return NewStringFromRange(this->string, start, this->index - 1);
+	return this->string.View(start, this->index);
 }
 
 String Parser::Token()
 {
-	while (this->index < this->string.Length() && (this->string[this->index] == ' ' || this->string[this->index] == '\t'))
+	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}
@@ -91,13 +90,25 @@ String Parser::Token()
 	}
 	else
 	{
-		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]))
+		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]) && !IsCharWhitespace(this->string[this->index]))
 		{
 			this->Advance();
 		}
 	}
 	Assert(this->index > start);
-	return NewStringFromRange(this->string, start, this->index - 1);
+	return this->string.View(start, this->index);
+}
+
+void Parser::Eat(char c)
+{
+	while (this->index < this->string.Length() && this->string[this->index] != c)
+	{
+		this->Advance();
+	}
+	if (this->index < this->string.Length())
+	{
+		this->Advance();
+	}
 }
 
 #if 0

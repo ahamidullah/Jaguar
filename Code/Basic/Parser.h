@@ -15,6 +15,7 @@ struct Parser
 	void Advance();
 	String Line();
 	String Token();
+	void Eat(char c);
 };
 
 Parser NewParser(String filepath, String delims, bool *err);

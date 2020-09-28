@@ -25,33 +25,46 @@ VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err)
 {
 	if (!FileExists(filepath))
 	{
-		LogError("Vulkan", "File %k does not exist.\n", filepath);
+		LogError("Vulkan", "File %k does not exist.", filepath);
 		*err = true;
 		return {};
 	}
 	// Write out a new version of the shader, inserting the text for the include files.
 	auto ppFilepath = FormatString("Build/Linux/Shader/Code/%k", FilepathFilename(filepath));
 	auto ppFile = OpenFile(ppFilepath, OpenFileWriteOnly | OpenFileCreate, err);
-	auto stageFlags = Array<VkShaderStageFlagBits>{};
-	auto stageDefines = Array<String>{};
-	auto stageExts = Array<String>{};
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to open preprocessed shader output file %k.\n", ppFilepath);
+		LogError("Vulkan", "Failed to open preprocessed shader output file %k.", ppFilepath);
 		return {};
 	}
 	Defer(ppFile.Close());
+	auto stageFlags = Array<VkShaderStageFlagBits>{};
+	auto stageDefines = Array<String>{};
+	auto stageExts = Array<String>{};
 	auto fileParser = NewParser(filepath, "", err);
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to create parser for shader %k.\n", filepath);
+		LogError("Vulkan", "Failed to create parser for shader %k.", filepath);
 		return {};
 	}
 	auto braceDepth = 0;
 	for (auto line = fileParser.Line(); line != ""; line = fileParser.Line())
 	{
-		auto lineParser = NewParserFromString(line, " \"");
+		auto lineParser = NewParserFromString(line, "\"");
 		auto t = lineParser.Token();
+		if (t == "{")
+		{
+			braceDepth += 1;
+		}
+		else if (t == "}")
+		{
+			braceDepth -= 1;
+			if (braceDepth == 0)
+			{
+				ppFile.WriteString("#endif\n");
+				continue;
+			}
+		}
 		if (t == "Stage:")
 		{
 			auto s = lineParser.Token();
@@ -78,11 +91,11 @@ VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err)
 			}
 			ppFile.WriteString("#ifdef ");
 			ppFile.WriteString(s);
-			ppFile.WriteString("\n");
-			t = lineParser.Token();
+			ppFile.WriteString("\n\n");
+			t = fileParser.Token();
 			if (t != "{")
 			{
-				LogError("Vulkan", "In %k, expected '{' on line %ld after Stage.", filepath, lineParser.line);
+				LogError("Vulkan", "Failed to parse %k, expected '{' on line %ld after Stage.", filepath, fileParser.line);
 				*err = true;
 				return {};
 			}
@@ -90,42 +103,32 @@ VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err)
 			{
 				braceDepth += 1;
 			}
-		}
-		else if (t == "{")
-		{
-			braceDepth += 1;
-		}
-		else if (t == "}")
-		{
-			braceDepth -= 1;
-			if (braceDepth == 0)
-			{
-				ppFile.WriteString("#endif\n");
-			}
+			fileParser.Eat('\n');
 		}
 		else if (t == "#include")
 		{
 			if (lineParser.Token() != "\"")
 			{
-				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.\n", filepath, lineParser.line, lineParser.column);
+				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.", filepath, lineParser.line, lineParser.column);
 				*err = true;
 				return {};
 			}
 			auto includeFilepath = JoinFilepaths("Code/Shader", lineParser.Token());
 			if (lineParser.Token() != "\"")
 			{
-				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.\n", filepath, lineParser.line, lineParser.column);
+				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.", filepath, lineParser.line, lineParser.column);
 				*err = true;
 				return {};
 			}
 			auto includeFileContents = ReadEntireFile(includeFilepath, err);
 			if (*err)
 			{
-				LogError("Vulkan", "Failed to read include file %k at %k:%ld.\n", includeFilepath, filepath, lineParser.line);
+				LogError("Vulkan", "Failed to read include file %k at %k:%ld.", includeFilepath, filepath, lineParser.line);
 				*err = true;
 				return {};
 			}
 			ppFile.WriteString(includeFileContents);
+			ppFile.WriteString("\n");
 		}
 		else
 		{
@@ -141,10 +144,10 @@ VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err)
 	for (auto i = 0; i < stageFlags.count; i += 1) 
 	{
 		auto spirvFilepath = FormatString("Build/Linux/Shader/Binary/%k%k.spirv", name, stageExts[i]);
-		auto cmd = FormatString("glslangValidator -D%k -V %k -o %k", stageDefines[i], ppFilepath, spirvFilepath);
+		auto cmd = FormatString("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].View(1, stageExts[i].Length()), ppFilepath, spirvFilepath);
 		if (RunProcess(cmd) != 0)
 		{
-			LogError("Vulkan", "\nShader compilation command failed: %k.\n", cmd);
+			LogError("Vulkan", "Shader compilation command failed: %k.", cmd);
 			*err = true;
 			return {};
 		}

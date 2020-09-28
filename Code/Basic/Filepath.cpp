@@ -28,7 +28,7 @@ void FilepathFilenameIn(StringBuilder *sb, String path)
 		sb->Append(path);
 		return;
 	}
-	sb->Append(path.View(slash + 1, path.Length() - (slash + 1)));
+	sb->Append(path.View(slash + 1, path.Length()));
 }
 
 String FilepathFilename(String path)
@@ -46,7 +46,7 @@ void FilepathExtensionIn(StringBuilder *sb, String path)
 	{
 		return;
 	}
-	return sb->Append(path.View(dot, path.Length() - dot));
+	return sb->Append(path.View(dot, path.Length()));
 }
 
 String FilepathExtension(String path)

@@ -4,6 +4,6 @@
 #define ShaderObjectDescriptorSetIndex 3
 #define ShaderDescriptorSetCount 4
 
-#define ShaderFlatShadingModel 0
-#define ShaderPhongShadingModel 1
-#define ShaderPBRShadingModel 2
+#define FlatShadingModel 0
+#define PhongShadingModel 1
+#define PBRShadingModel 2

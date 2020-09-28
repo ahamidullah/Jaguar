@@ -27,5 +27,6 @@ String JoinFilepaths(StringPack... sp)
 		sb->Append("/");
 	};
 	(AddPathComponent(&sb, sp), ...);
+	sb.Resize(sb.Length() - 1); // Get rid of the last extraneous '/'.
 	return NewStringFromBuffer(sb.buffer);
 }

@@ -1288,7 +1288,7 @@ GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer()
 void GPUFrameGraphicsCommandBuffer::Queue()
 {
 	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanGraphicsQueue].Append(this->vkCommandBuffer);
+	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkFrameIndex][VulkanGraphicsQueue].Append(this->vkCommandBuffer);
 }
 
 GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
@@ -1301,7 +1301,7 @@ GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
 void GPUFrameTransferCommandBuffer::Queue()
 {
 	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanTransferQueue].Append(this->vkCommandBuffer);
+	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkFrameIndex][VulkanTransferQueue].Append(this->vkCommandBuffer);
 }
 
 GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer()
@@ -1314,7 +1314,7 @@ GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer()
 void GPUFrameComputeCommandBuffer::Queue()
 {
 	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[CurrentThread()].frameQueuedCommandBuffers[vkFrameIndex][VulkanComputeQueue].Append(this->vkCommandBuffer);
+	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkFrameIndex][VulkanComputeQueue].Append(this->vkCommandBuffer);
 }
 
 VkCommandBuffer NewVulkanAsyncCommandBuffer(VulkanQueueType t)
@@ -1327,10 +1327,10 @@ VkCommandBuffer NewVulkanAsyncCommandBuffer(VulkanQueueType t)
 void QueueVulkanAsyncCommandBuffer(VkCommandBuffer cb, VulkanQueueType t, bool *signalOnCompletion)
 {
 	VkCheck(vkEndCommandBuffer(cb));
-	vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Lock();
-	Defer(vkThreadLocal[CurrentThread()].asyncCommandBufferLock.Unlock());
-	vkThreadLocal[CurrentThread()].asyncQueuedCommandBuffers[t].Append(cb);
-	vkThreadLocal[CurrentThread()].asyncSignals[t].Append(signalOnCompletion);
+	vkThreadLocal[ThreadIndex()].asyncCommandBufferLock.Lock();
+	Defer(vkThreadLocal[ThreadIndex()].asyncCommandBufferLock.Unlock());
+	vkThreadLocal[ThreadIndex()].asyncQueuedCommandBuffers[t].Append(cb);
+	vkThreadLocal[ThreadIndex()].asyncSignals[t].Append(signalOnCompletion);
 }
 
 GPUAsyncGraphicsCommandBuffer NewGPUAsyncGraphicsCommandBuffer()

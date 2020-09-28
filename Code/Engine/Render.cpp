@@ -52,6 +52,7 @@ void InitializeRenderer(void *jobParam)
 	{
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader");
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Code");
+		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Binary");
 		auto fps = ShaderFilepaths();
 		auto err = false;
 		for (auto fp : fps)
@@ -59,7 +60,7 @@ void InitializeRenderer(void *jobParam)
 			CompileGPUShaderFromFile(fp, &err);
 			if (err)
 			{
-				LogError("Failed to compile shader %k, skipping.\n", fp);
+				LogError("Render", "Failed to compile shader %k, skipping.", fp);
 				continue;
 			}
 		}

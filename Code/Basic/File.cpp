@@ -2,32 +2,31 @@
 #include "String.h"
 #include "Time.h"
 
-bool ReadEntireFileIn(StringBuilder *sb, String path)
+void ReadEntireFileIn(StringBuilder *sb, String path, bool *err)
 {
-	auto err = false;
-	auto f = OpenFile(path, OpenFileReadOnly, &err);
-	if (err)
+	auto f = OpenFile(path, OpenFileReadOnly, err);
+	if (*err)
 	{
-		return false;
+		return;
 	}
 	Defer(f.Close());
-	auto flen = f.Length(&err);
-	if (err)
+	auto flen = f.Length(err);
+	if (*err)
 	{
-		return false;
+		return;
 	}
 	auto i = sb->Length();
 	sb->Resize(sb->Length() + flen);
 	if (!f.Read(sb->View(i, sb->Length()).buffer))
 	{
-		return false;
+		*err = true;
+		return;
 	}
-	return true;
 }
 
 String ReadEntireFile(String path, bool *err)
 {
 	auto sb = StringBuilder{};
-	*err = ReadEntireFileIn(&sb, path);
+	ReadEntireFileIn(&sb, path, err);
 	return NewStringFromBuffer(sb.buffer);
 }

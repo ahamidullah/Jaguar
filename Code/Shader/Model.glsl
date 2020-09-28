@@ -1,6 +1,6 @@
 #version 420
 
-ShaderStage: Vertex
+Stage: Vertex
 {
 	#include "../Engine/ShaderGlobal.h"
 	#include "Global.inc"
@@ -20,7 +20,7 @@ ShaderStage: Vertex
 	}
 }
 
-ShaderStage: Fragment
+Stage: Fragment
 {
 	#include "../Engine/ShaderGlobal.h"
 	#include "Global.inc"

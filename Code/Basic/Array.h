@@ -137,6 +137,8 @@ ArrayView<T> ArrayView<T>::View(s64 start, s64 end)
 	};
 }
 
+template <typename T> Array<T> NewArray(s64 count);
+
 template <typename T>
 Array<T> ArrayView<T>::Copy(s64 start, s64 end)
 {

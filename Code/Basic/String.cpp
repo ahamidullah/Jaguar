@@ -296,17 +296,6 @@ bool ParseInteger(String s, s64 *out)
     return true;
 }
 
-// @TODO: Where did I get this from? Is the Knuth hash better?
-u64 HashString(String *s)
-{
-    auto hash = u64{5381};
-    for (auto c : *s)
-    {
-        hash = ((hash << 5) + hash) + c;
-	}
-    return hash;
-}
-
 StringBuilder NewStringBuilderIn(Allocator *a, s64 len)
 {
 	auto sb = StringBuilder

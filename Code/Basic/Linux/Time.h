@@ -3,6 +3,12 @@
 #include "../PCH.h"
 #include "Common.h"
 
+#define SecondsToNanoseconds(s) (s * 1000000000)
+#define NanosecondsToMilliseconds(n) (n / 1000000)
+#define NanosecondsToSeconds(n) (NanosecondsToMilliseconds(n) / 1000)
+#define NanosecondsToMinutes(n) (NanosecondsToSeconds(n) / 60)
+#define NanosecondsToHours(n) (NanosecondsToMinutes(n) / 60)
+
 struct Date
 {
 	s64 year;

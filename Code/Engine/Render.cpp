@@ -1,6 +1,8 @@
 #include "Render.h"
 #include "Shader.h"
+#include "ShaderGlobal.h"
 #include "Basic/File.h"
+#include "Basic/Filepath.h"
 
 s64 RenderWidth()
 {
@@ -12,63 +14,101 @@ s64 RenderHeight()
 	return 1000;
 }
 
-const auto DepthBufferFormat = GPUFormatD32SfloatS8Uint;
-const auto DepthBufferInitialLayout = GPUImageLayoutUndefined;
-const auto DepthBufferImageUsage = GPUImageUsageDepthStencilAttachment;
-const auto DepthBufferSampleCount = GPUSampleCount1;
-
 auto renderDepthImage = GPUImage{};
 auto renderDepthImageView = GPUImageView{};
 auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(GlobalAllocator(), 0);
 auto renderAspectRatio = 0;
+
+auto globalUniform = GPUUniform{};
+auto viewUniform = GPUUniform{};
+auto materialUniform = GPUUniform{};
+auto objectUniform = GPUUniform{};
 
 void InitializeRenderer(void *jobParam)
 {
 	// @TODO: Use an allocator.
 	InitializeGPU((Window *)jobParam);
 	LogGPUMemoryInfo();
-	renderDepthImage = NewGPUImage(RenderWidth(), RenderHeight(), DepthBufferFormat, DepthBufferInitialLayout, DepthBufferImageUsage, DepthBufferSampleCount);
-	{
-		auto sm = GPUSwizzleMapping
-		{
-			.r = GPUSwizzleMappingIdentity,
-			.g = GPUSwizzleMappingIdentity,
-			.b = GPUSwizzleMappingIdentity,
-			.a = GPUSwizzleMappingIdentity,
-		};
-		auto isr = GPUImageSubresourceRange
-		{
-			.aspectMask = GPUImageAspectDepth,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		};
-		renderDepthImageView = NewGPUImageView(renderDepthImage, GPUImageViewType2D, DepthBufferFormat, sm, isr);
-	}
-	renderFramebuffers.Resize(GPUSwapchainImageCount());
-	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
-	// Load shaders.
+	if (DevelopmentBuild)
 	{
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader");
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Code");
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Binary");
-		auto fps = ShaderFilepaths();
-		auto err = false;
-		for (auto fp : fps)
+		auto BuildShader = [](GPUShader s, String filename)
 		{
-			CompileGPUShaderFromFile(fp, &err);
+			// @TODO: Watch the shader file and recompile if it changes.
+			auto err = false;
+			auto path = JoinFilepaths("Code/Shader", filename);
+			GPUCompileShaderFromFile(s, path, &err);
 			if (err)
 			{
-				LogError("Render", "Failed to compile shader %k, skipping.", fp);
-				continue;
+				LogError("Render", "Failed to compile shader %k.", path);
+			}
+		};
+		for (auto i = 0; i < GPUShaderCount; i += 1)
+		{
+			switch ((GPUShader)i)
+			{
+			case GPUModelShader:
+			{
+				BuildShader(GPUModelShader, "Model.glsl");
+			} break;
+			case GPUShaderCount:
+			default:
+			{
+				Abort("Render", "Unknown shader ID %d.", i);
+			} break;
 			}
 		}
 	}
+	else
+	{
+		Abort("Vulkan", "@TODO: Load shaders in release build.");
+	}
+	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
+	globalUniform = GPUAddUniform(ShaderGlobalDescriptorSet);
+	viewUniform = GPUAddUniform(ShaderViewDescriptorSet);
+	materialUniform = GPUAddUniform(ShaderMaterialDescriptorSet);
+	objectUniform = GPUAddUniform(ShaderObjectDescriptorSet);
 }
 
-void UpdateRenderUniforms()
+void UpdateRenderUniforms(Camera *c)
 {
+	u32 temp = 1;
+	auto buffers = Array<GPUUniformBufferWriteDescription>{};
+	buffers.Append(
+		{
+			.uniform = globalUniform,
+			.size = sizeof(u32),
+			.data = &temp,
+		});
+	buffers.Append(
+		{
+			.uniform = viewUniform,
+			.size = sizeof(u32),
+			.data = &temp,
+		});
+	buffers.Append(
+		{
+			.uniform = materialUniform,
+			.size = sizeof(u32),
+			.data = &temp,
+		});
+	auto pm = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
+	auto vm = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
+	auto m = pm * vm;
+	auto u = GPUObjectUniforms
+	{
+		.modelViewProjection = pm * vm,
+	};
+	buffers.Append(
+		{
+			.uniform = objectUniform,
+			.size = sizeof(GPUObjectUniforms),
+			.data = &u,
+		});
+	GPUUpdateUniforms(buffers, {});
+
 #if 0
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	auto u = 1;
@@ -127,19 +167,26 @@ void UpdateRenderUniforms()
 
 void Render()
 {
-	//StartGPUFrame();
+	GPUBeginFrame();
 	auto c = LookupCamera("Main");
 	if (!c)
 	{
 		LogError("Render", "Could not find main camera.");
 		return;
 	}
-	UpdateRenderUniforms();
-	//auto transferFence = SubmitGPUFrameTransferCommandBuffers({}, {}, {});
-	auto cb = NewGPUFrameGraphicsCommandBuffer();
-	cb.SetViewport(RenderWidth(), RenderHeight());
-	cb.SetScissor(RenderWidth(), RenderHeight());
-	//cb.Queue();
+	UpdateRenderUniforms(c);
+	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
+	GPUSubmitFrameTransferCommandBuffers();
+	{
+		auto cb = NewGPUFrameGraphicsCommandBuffer();
+		cb.SetViewport(RenderWidth(), RenderHeight());
+		cb.SetScissor(RenderWidth(), RenderHeight());
+		cb.BeginRender(GPUModelShader, GPUDefaultFramebuffer());
+		cb.EndRender();
+		cb.Queue();
+	}
+	GPUSubmitFrameGraphicsCommandBuffers();
+	GPUEndFrame();
 }
 
 #if 0

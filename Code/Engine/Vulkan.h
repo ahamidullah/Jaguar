@@ -36,10 +36,16 @@ typedef VkPipelineStageFlagBits GPUPipelineStage;
 
 void InitializeGPU(Window *win);
 
-void StartGPUFrame();
-void FinishGPUFrame();
+enum GPUShader
+{
+	GPUModelShader,
+	GPUShaderCount
+};
 
-void CompileGPUShaderFromFile(String filepath, bool *err);
+void GPUCompileShaderFromFile(GPUShader s, String path, bool *err);
+
+void GPUBeginFrame();
+void GPUEndFrame();
 
 struct GPUMemoryHeapInfo
 {
@@ -75,36 +81,7 @@ GPUFence NewGPUFence();
 bool WaitForGPUFences(ArrayView<GPUFence> fs, bool waitAll, u64 timeout);
 void ResetGPUFences(ArrayView<GPUFence> fs);
 
-struct GPUSemaphore
-{
-	VkSemaphore vkSemaphore;
-
-	void Free();
-};
-
-GPUSemaphore NewGPUSemaphore();
-
-struct GPUShader
-{
-	VkShaderModule shader;
-};
-
-GPUShader NewShader();
-
-struct GPUFramebuffer
-{
-	VkFramebuffer vkFramebuffer;
-};
-
-struct GPURenderPass
-{
-	VkRenderPass vkRenderPass;
-};
-
-struct GPUPipeline
-{
-	VkPipeline vkPipeline;
-};
+// @TODO: Get rid of the memory allocation in the struct?
 
 struct GPUBuffer
 {
@@ -116,7 +93,6 @@ struct GPUBuffer
 
 GPUBuffer NewGPUVertexBuffer(s64 size);
 GPUBuffer NewGPUIndexBuffer(s64 size);
-GPUBuffer NewGPUUniformBuffer(s64 size);
 
 struct GPUBufferView
 {
@@ -137,6 +113,11 @@ struct GPUImage
 
 GPUImage NewGPUImage(s64 w, s64 h, GPUFormat f, GPUImageLayout il, GPUImageUsageFlags uf, GPUSampleCount sc);
 
+struct GPUImageView
+{
+	VkImageView vkImageView;
+};
+
 struct GPUSwizzleMapping
 {
 	GPUSwizzle r;
@@ -154,22 +135,37 @@ struct GPUImageSubresourceRange
 	u32 layerCount;
 };
 
-struct GPUImageView
+GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr);
+
+struct GPUTexture
 {
+	VkImage vkImage;
 	VkImageView vkImageView;
 };
 
-GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr);
+struct GPUSampler
+{
+	VkSampler vkSampler;
+};
+
+struct GPUFramebuffer
+{
+	u64 id;
+	s64 w;
+	s64 h;
+	Array<GPUImageView> attachments;
+};
+
+GPUFramebuffer GPUDefaultFramebuffer();
 
 struct GPUCommandBuffer
 {
 	VkCommandBuffer vkCommandBuffer;
 
-	void BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb);
-	void EndRenderPass();
+	void BeginRender(GPUShader s, GPUFramebuffer fb);
+	void EndRender();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
-	//void BindShader(GPUShader s);
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
 	void BindIndexBuffer(GPUBuffer b);
 	void DrawIndexedVertices(s64 numIndices, s64 firstIndex, s64 vertexOffset);
@@ -219,19 +215,22 @@ struct GPUAsyncComputeCommandBuffer : GPUCommandBuffer
 
 GPUAsyncComputeCommandBuffer NewGPUAsyncComputeCommandBuffer();
 
-GPUFence SubmitGPUFrameGraphicsCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
-GPUFence SubmitGPUFrameTransferCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
-GPUFence SubmitGPUFrameComputeCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems);
+GPUFence GPUSubmitFrameGraphicsCommandBuffers();
+GPUFence GPUSubmitFrameTransferCommandBuffers();
+GPUFence GPUSubmitFrameComputeCommandBuffers();
 
 s64 GPUSwapchainImageCount();
 
 struct GPUFrameStagingBuffer
 {
+	void *map;
 	s64 size;
 	VkBuffer vkBuffer;
 	VkBuffer vkDestinationBuffer;
 
 	void Flush();
+	void FlushIn(GPUCommandBuffer cb);
+	void *Map();
 };
 
 GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst);
@@ -243,10 +242,62 @@ struct GPUAsyncStagingBuffer
 	VkBuffer vkDestinationBuffer;
 
 	void Flush();
+	void FlushIn(GPUCommandBuffer cb);
+	void *Map();
 };
 
 GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst);
 
 void ClearGPUFrameResources(s64 frameIndex);
+
+struct GPUGlobalUniforms
+{
+	u32 dummy;
+};
+
+struct GPUViewUniforms
+{
+	u32 dummy;
+};
+
+struct GPUMaterialUniforms
+{
+	u32 dummy;
+};
+
+struct GPUObjectUniforms
+{
+	M4 modelViewProjection;
+};
+
+struct GPUUniform
+{
+	s64 set;
+	s64 index;
+};
+
+struct GPUUniformBufferWriteDescription
+{
+	GPUUniform uniform;
+	s64 size; // @TODO: Get rid of this field. (The update function should know the size already based on the set.)
+	void *data;
+};
+
+struct GPUUniformImageWriteDescription
+{
+	GPUUniform uniform;
+	GPUSampler sampler;
+	GPUImageView imageView;
+	GPUImageLayout layout;
+};
+
+// @TODO: Copy uniform buffer.
+
+GPUUniform GPUAddUniform(s64 set);
+void GPUUpdateUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView<GPUUniformImageWriteDescription> ts);
+
+GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments);
+
+VkRenderPass TEMPORARY_CREATE_RENDER_PASS();
 
 #endif

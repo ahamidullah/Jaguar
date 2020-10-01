@@ -9,5 +9,5 @@ struct VulkanSPIRVInfo
 	Array<VkShaderStageFlagBits> stages;
 };
 
-Array<String> ShaderFilepaths();
+Array<String> GPUShaderFilepaths();
 VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err);

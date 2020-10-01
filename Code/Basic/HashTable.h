@@ -17,7 +17,7 @@ struct KeyValuePair
 template <typename K, typename V>
 struct HashTable
 {
-	typedef u64 (*HashProcedure)(K *);
+	typedef u64 (*HashProcedure)(K);
 	Array<u64> hashes;
 	Array<KeyValuePair<K, V>> buckets;
 	HashProcedure hashProcedure;
@@ -64,7 +64,7 @@ void HashTable<K, V>::Insert(K k, V v)
 	this->Reserve(this->count + 1);
 	// @TODO: Would a two-pass solution be faster? First pass figure which keys need to be inserted
 	// and their indices, then resize the table if necessary, then second pass does the insertions.
-	auto hash = this->hashProcedure(&k);
+	auto hash = this->hashProcedure(k);
 	if (hash == HashTableVacantHashSentinel)
 	{
 		hash = 0;
@@ -104,7 +104,7 @@ V *DoLookup(HashTable<K, V> *h, K k, V *notFound)
 	{
 		return notFound;
 	}
-	auto hash = h->hashProcedure(&k);
+	auto hash = h->hashProcedure(k);
 	if (hash == HashTableVacantHashSentinel)
 	{
 		hash = 0;
@@ -140,7 +140,7 @@ template <typename K, typename V>
 V *HashTable<K, V>::LookupPointer(K k)
 {
 	auto notFound = (V *){};
-	return DoLookup(this, k, &notFound);
+	return DoLookup(this, k, notFound);
 }
 
 template <typename K, typename V>
@@ -197,7 +197,7 @@ void HashTable<K, V>::Reserve(s64 reserve)
 		auto newBuckets = NewArrayIn<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
 		for (auto i = 0; i < this->buckets.count; i += 1)
 		{
-			auto newHash = this->hashProcedure(&this->buckets[i].key);
+			auto newHash = this->hashProcedure(this->buckets[i].key);
 			auto ni = newHash % newBuckets.count;
 			newHashes[ni] = newHash;
 			newBuckets[ni].key = this->buckets[i].key;
@@ -207,13 +207,4 @@ void HashTable<K, V>::Reserve(s64 reserve)
 		this->hashes = newHashes;
 		this->loadFactor = (f32)this->count / (f32)this->buckets.count;
 	}
-}
-
-u64 HashU32(void *u)
-{
-	auto x = *(u32 *)u;
-	x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = (x >> 16) ^ x;
-    return x;
 }

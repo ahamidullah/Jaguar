@@ -6,23 +6,31 @@
 #include "Math.h"
 #include "Basic/DLL.h"
 #include "Basic/Array.h"
+#include "Basic/Hash.h"
 #include "Basic/HashTable.h"
 #include "Basic/Log.h"
 #include "Basic/Memory.h"
+#include "Basic/Atomic.h"
 #include "Common.h"
 
 #define VK_EXPORTED_FUNCTION(name) PFN_##name name = NULL;
 #define VK_GLOBAL_FUNCTION(name) PFN_##name name = NULL;
 #define VK_INSTANCE_FUNCTION(name) PFN_##name name = NULL;
 #define VK_DEVICE_FUNCTION(name) PFN_##name name = NULL;
-#include "VulkanFunction.h"
+	#include "VulkanFunction.h"
 #undef VK_EXPORTED_FUNCTION
 #undef VK_GLOBAL_FUNCTION
 #undef VK_INSTANCE_FUNCTION
 #undef VK_DEVICE_FUNCTION
 
 const auto VulkanMaxFramesInFlight = 2;
+const auto VulkanAcquireImageTimeout = SecondsToNanoseconds(2);
 const auto VulkanInitialDescriptorSetBufferSize = MegabytesToBytes(4);
+const auto VulkanVertexBufferBindID = 0;
+const auto VulkanDepthBufferFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
+const auto VulkanDepthBufferInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+const auto VulkanDepthBufferImageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+const auto VulkanDepthBufferSampleCount = VK_SAMPLE_COUNT_1_BIT;
 
 // @TODO: Make sure that all failable Vulkan calls are VkCheck'd.
 // @TODO: Do eg.
@@ -71,6 +79,12 @@ enum VulkanMemoryType
 	VulkanCPUToGPUMemory,
 	VulkanGPUToCPUMemory,
 	VulkanMemoryTypeCount
+};
+
+struct VulkanShader
+{
+	Array<VkShaderStageFlagBits> vkStages;
+	Array<VkShaderModule> vkModules;
 };
 
 struct VulkanMemoryFrameAllocator
@@ -132,11 +146,25 @@ struct VulkanThreadLocal
 	Array<VulkanAsyncStagingBufferResources> asyncPendingStagingBuffers;
 };
 
-struct VulkanShaderModules
+struct VulkanFramebufferKey
 {
-	Array<VkShaderStageFlagBits> stages;
-	Array<VkShaderModule> modules;
+	VkRenderPass renderPass;
+	u64 framebufferID;
+
+	bool operator==(VulkanFramebufferKey v)
+	{
+		if (this->renderPass == v.renderPass && this->framebufferID == v.framebufferID)
+		{
+			return true;
+		}
+		return false;
+	}
 };
+
+u64 HashVulkanFramebufferKey(VulkanFramebufferKey k)
+{
+	return HashPointer(k.renderPass) ^ Hash64(k.framebufferID);
+}
 
 auto vkThreadLocal = Array<VulkanThreadLocal>{};
 auto vkDebugMessenger = VkDebugUtilsMessengerEXT{};
@@ -165,19 +193,28 @@ auto vkSwapchainImages = Array<VkImage>{};
 auto vkSwapchainImageViews = Array<VkImageView>{};
 auto vkPipelineLayout = VkPipelineLayout{};
 auto vkDescriptorPool = VkDescriptorPool{};
+// @TODO: Convert some of these Arrays to StaticArrays?
 auto vkDescriptorSetLayouts = Array<VkDescriptorSetLayout>{}; 
 auto vkDescriptorSets = Array<Array<VkDescriptorSet>>{};
 auto vkDescriptorSetBuffers = Array<Array<VkBuffer>>{};
+auto vkDescriptorSetBufferMemory = Array<Array<VulkanMemoryAllocation *>>{};
 auto vkDescriptorSetUpdateFence = VkFence{};
 // @TODO: Explain how semaphores work and interact.
 auto vkImageOwnershipSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
 auto vkImageAcquiredSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
-auto vkDrawCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
-// @TODO: Could be thread-local lock-free double buffer.
+auto vkFrameGraphicsCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
+auto vkFrameTransfersCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
 auto vkFrameIndex = u32{};
 auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
-auto vkShaders = NewHashTableIn<String, VulkanShaderModules>(GlobalAllocator(), 0, HashString);
-auto vkPipelines = NewHashTableIn<String, VkPipeline>(GlobalAllocator(), 0, HashString);
+auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderCount>{};
+auto vkPipelines = StaticArray<VkPipeline, GPUShaderCount>{};
+auto vkPipelineCache = VkPipelineCache{};
+auto vkShaders = StaticArray<VulkanShader, GPUShaderCount>{};
+auto vkFramebufferCache = NewHashTableIn<VulkanFramebufferKey, VkFramebuffer>(GlobalAllocator(), 0, HashVulkanFramebufferKey);
+auto vkDefaultFramebufferAttachments = NewArrayIn<Array<GPUImageView>>(GlobalAllocator(), 0);
+auto vkDefaultDepthImageMemory = (VulkanMemoryAllocation *){};
+auto vkDefaultDepthImage = VkImage{};
+auto vkDefaultDepthImageView = VkImageView{};
 
 #define VkCheck(x)\
 	do {\
@@ -273,6 +310,24 @@ String VkResultToString(VkResult r)
 	return "UnknownVkResultCode";
 }
 
+String GPUShaderName(GPUShader s)
+{
+	switch (s)
+	{
+	case GPUModelShader:
+	{
+		return "Model";
+	} break;
+	case GPUShaderCount:
+	default:
+	{
+		LogError("Vulkan", "Invalid shader %d.", s);
+		return "";
+	};
+	}
+	return "";
+}
+
 u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *data, void *userData)
 {
 	auto log = LogLevel{};
@@ -326,10 +381,10 @@ u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDeb
 		typeStr = "Unknown";
 	};
 	}
-	if (sevStr == "Error")
-	{
+	//if (sevStr == "Error")
+	//{
 		//Abort("Vulkan", "%k: %k: %s", sevStr, typeStr, data->pMessage);
-	}
+	//}
 	LogPrint(log, "Vulkan", "%k: %k: %s", sevStr, typeStr, data->pMessage);
     return 0;
 }
@@ -978,6 +1033,8 @@ void InitializeGPU(Window *win)
 		for (auto i = 0; i < VulkanMaxFramesInFlight; i++)
 		{
 			VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &vkImageAcquiredSemaphores[i]));
+			VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &vkFrameGraphicsCompleteSemaphores[i]));
+			VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &vkFrameTransfersCompleteSemaphores[i]));
 		}
 	}
 	// Initialize memory allocators.
@@ -1035,6 +1092,8 @@ void InitializeGPU(Window *win)
 				}
 			}
 		}
+		ci.queueFamilyIndex = vkQueueFamilies[VulkanPresentQueue];
+		VkCheck(vkCreateCommandPool(vkDevice, &ci, NULL, &vkPresentCommandPool));
 	}
 	// Create swapchain.
 	{
@@ -1164,18 +1223,20 @@ void InitializeGPU(Window *win)
 		Defer(PopContextAllocator());
 		vkDescriptorSets.Resize(vkSwapchainImages.count);
 		vkDescriptorSetBuffers.Resize(vkSwapchainImages.count);
+		vkDescriptorSetBufferMemory.Resize(vkSwapchainImages.count);
 		vkDescriptorSetLayouts.Resize(ShaderDescriptorSetCount);
 		for (auto i = 0; i < vkSwapchainImages.count; i += 1)
 		{
 			vkDescriptorSets[i].Resize(ShaderDescriptorSetCount);
 			vkDescriptorSetBuffers[i].Resize(ShaderDescriptorSetCount);
+			vkDescriptorSetBufferMemory[i].Resize(ShaderDescriptorSetCount);
 		}
 		auto fci = VkFenceCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 		};
 		VkCheck(vkCreateFence(vkDevice, &fci, NULL, &vkDescriptorSetUpdateFence));
-		auto MakeDescriptorSetGroup = [](s64 setIndex, ArrayView<VkDescriptorSetLayoutBinding> bindings)
+		auto MakeDescriptorSetGroup = [](s64 set, ArrayView<VkDescriptorSetLayoutBinding> bindings)
 		{
 			auto slci = VkDescriptorSetLayoutCreateInfo
 			{
@@ -1184,11 +1245,11 @@ void InitializeGPU(Window *win)
 				.bindingCount = (u32)bindings.count,
 				.pBindings = bindings.elements,
 			};
-			VkCheck(vkCreateDescriptorSetLayout(vkDevice, &slci, NULL, &vkDescriptorSetLayouts[setIndex]));
+			VkCheck(vkCreateDescriptorSetLayout(vkDevice, &slci, NULL, &vkDescriptorSetLayouts[set]));
 			auto layouts = NewArray<VkDescriptorSetLayout>(vkSwapchainImages.count);
 			for (auto i = 0; i < vkSwapchainImages.count; i++)
 			{
-				layouts[i] = vkDescriptorSetLayouts[setIndex];
+				layouts[i] = vkDescriptorSetLayouts[set];
 			}
 			auto ai = VkDescriptorSetAllocateInfo
 			{
@@ -1201,11 +1262,15 @@ void InitializeGPU(Window *win)
 			VkCheck(vkAllocateDescriptorSets(vkDevice, &ai, sets.elements));
 			for (auto i = 0; i < vkSwapchainImages.count; i += 1)
 			{
-				vkDescriptorSets[i][setIndex] = sets[i];
+				vkDescriptorSets[i][set] = sets[i];
 			}
 			for (auto i = 0; i < vkSwapchainImages.count; i += 1)
 			{
-				vkDescriptorSetBuffers[i][setIndex] = NewVulkanBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanInitialDescriptorSetBufferSize);
+				vkDescriptorSetBuffers[i][set] = NewVulkanBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanInitialDescriptorSetBufferSize);
+				auto mr = VkMemoryRequirements{};
+				vkGetBufferMemoryRequirements(vkDevice, vkDescriptorSetBuffers[i][set], &mr);
+				vkDescriptorSetBufferMemory[i][set] = vkGPUBlockAllocator.Allocate(mr.size, mr.alignment);
+				VkCheck(vkBindBufferMemory(vkDevice, vkDescriptorSetBuffers[i][set], vkDescriptorSetBufferMemory[i][set]->vkMemory, vkDescriptorSetBufferMemory[i][set]->offset));
 			}
 		};
 		auto global = MakeStaticArray<VkDescriptorSetLayoutBinding>(
@@ -1216,7 +1281,7 @@ void InitializeGPU(Window *win)
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			});
-		MakeDescriptorSetGroup(ShaderGlobalDescriptorSetIndex, global);
+		MakeDescriptorSetGroup(ShaderGlobalDescriptorSet, global);
 		auto view = MakeStaticArray<VkDescriptorSetLayoutBinding>(
 			VkDescriptorSetLayoutBinding
 			{
@@ -1225,7 +1290,7 @@ void InitializeGPU(Window *win)
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			});
-		MakeDescriptorSetGroup(ShaderViewDescriptorSetIndex, view);
+		MakeDescriptorSetGroup(ShaderViewDescriptorSet, view);
 		auto material = MakeStaticArray<VkDescriptorSetLayoutBinding>(
 			VkDescriptorSetLayoutBinding
 			{
@@ -1234,7 +1299,7 @@ void InitializeGPU(Window *win)
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 			});
-		MakeDescriptorSetGroup(ShaderMaterialDescriptorSetIndex, material);
+		MakeDescriptorSetGroup(ShaderMaterialDescriptorSet, material);
 		auto object = MakeStaticArray<VkDescriptorSetLayoutBinding>(
 			VkDescriptorSetLayoutBinding
 			{
@@ -1243,7 +1308,7 @@ void InitializeGPU(Window *win)
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			});
-		MakeDescriptorSetGroup(ShaderObjectDescriptorSetIndex, object);
+		MakeDescriptorSetGroup(ShaderObjectDescriptorSet, object);
 	}
 	// Pipeline layout.
 	{
@@ -1256,6 +1321,272 @@ void InitializeGPU(Window *win)
 		};
 		VkCheck(vkCreatePipelineLayout(vkDevice, &ci, NULL, &vkPipelineLayout));
 	}
+	// Pipeline cache.
+	{
+		auto ci = VkPipelineCacheCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+		};
+		vkCreatePipelineCache(vkDevice, &ci, NULL, &vkPipelineCache);
+	}
+	// Default depth image.
+	{
+		auto ici = VkImageCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.imageType = VK_IMAGE_TYPE_2D,
+			.format = VulkanDepthBufferFormat,
+			.extent =
+			{
+				.width = (u32)RenderWidth(),
+				.height = (u32)RenderHeight(),
+				.depth = 1,
+			},
+			.mipLevels = 1,
+			.arrayLayers = 1,
+			.samples = VulkanDepthBufferSampleCount,
+			.tiling = VK_IMAGE_TILING_OPTIMAL,
+			.usage = VulkanDepthBufferImageUsage,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.initialLayout = VulkanDepthBufferInitialLayout,
+		};
+		VkCheck(vkCreateImage(vkDevice, &ici, NULL, &vkDefaultDepthImage));
+		auto mr = VkMemoryRequirements{};
+		vkGetImageMemoryRequirements(vkDevice, vkDefaultDepthImage, &mr);
+		auto mem = vkGPUBlockAllocator.Allocate(mr.size, mr.alignment);
+		VkCheck(vkBindImageMemory(vkDevice, vkDefaultDepthImage, mem->vkMemory, mem->offset));
+		auto vci = VkImageViewCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = vkDefaultDepthImage,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = VulkanDepthBufferFormat,
+			.components = 
+			{
+				.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+				.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			},
+			.subresourceRange =
+			{
+				.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1,
+			},
+		};
+		VkCheck(vkCreateImageView(vkDevice, &vci, NULL, &vkDefaultDepthImageView));
+	}
+	vkDefaultFramebufferAttachments.Resize(vkSwapchainImages.count);
+	for (auto i = 0; i < vkDefaultFramebufferAttachments.count; i += 1)
+	{
+		vkDefaultFramebufferAttachments[i].SetAllocator(GlobalAllocator());
+		vkDefaultFramebufferAttachments[i].Append({vkSwapchainImageViews[i]});
+		vkDefaultFramebufferAttachments[i].Append({vkDefaultDepthImageView});
+	}
+	{
+		vkChangeImageOwnershipFromGraphicsToPresentQueueCommands.Resize(vkSwapchainImages.count);
+		auto ai = VkCommandBufferAllocateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = vkPresentCommandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = (u32)vkSwapchainImages.count,
+		};
+		VkCheck(vkAllocateCommandBuffers(vkDevice, &ai, vkChangeImageOwnershipFromGraphicsToPresentQueueCommands.elements));
+		for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+		{
+			auto bi = VkCommandBufferBeginInfo
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+				.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+			};
+			VkCheck(vkBeginCommandBuffer(vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[i], &bi));
+			auto mb = VkImageMemoryBarrier
+			{
+				.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+				.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+				.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+				.srcQueueFamilyIndex = vkQueueFamilies[VulkanGraphicsQueue],
+				.dstQueueFamilyIndex = vkQueueFamilies[VulkanPresentQueue],
+				.image = vkSwapchainImages[i],
+				.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+			};
+			vkCmdPipelineBarrier(vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &mb);
+			VkCheck(vkEndCommandBuffer(vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[i]));
+		}
+	}
+}
+
+VkPipeline MakeVulkanPipeline(GPUShader s, VulkanShader vs, VkRenderPass rp)
+{
+	switch (s)
+	{
+	case GPUModelShader:
+	{
+		auto assemblyCI = VkPipelineInputAssemblyStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE,
+		};
+		auto viewport = VkViewport
+		{
+			.x = 0.0f,
+			.y = 0.0f,
+			.width = (f32)RenderWidth(),
+			.height = (f32)RenderHeight(),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f,
+		};
+		auto scissor = VkRect2D
+		{
+			.offset = {0, 0},
+			.extent = (VkExtent2D){(u32)RenderWidth(), (u32)RenderHeight()},
+		};
+		auto viewportCI = VkPipelineViewportStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = 1,
+			.pViewports = &viewport,
+			.scissorCount = 1,
+			.pScissors = &scissor,
+		};
+		auto rasterCI = VkPipelineRasterizationStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.depthClampEnable = VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+			.depthBiasEnable = false,
+			.lineWidth = 1.0f,
+		};
+		auto multisampleCI = VkPipelineMultisampleStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
+		};
+		auto depthCI = VkPipelineDepthStencilStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			.depthTestEnable = VK_TRUE,
+			.depthWriteEnable = VK_TRUE,
+			.depthCompareOp = VK_COMPARE_OP_LESS,
+			.depthBoundsTestEnable = VK_FALSE,
+			.stencilTestEnable = VK_FALSE,
+		};
+		auto blendStates = MakeStaticArray<VkPipelineColorBlendAttachmentState>(
+			VkPipelineColorBlendAttachmentState
+			{
+				.blendEnable = true,
+				.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				.colorBlendOp = VK_BLEND_OP_ADD,
+				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+				.alphaBlendOp = VK_BLEND_OP_ADD,
+				.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+			}
+		);
+		auto blendCI = VkPipelineColorBlendStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.logicOpEnable = VK_FALSE,
+			.logicOp = VK_LOGIC_OP_COPY,
+			.attachmentCount = (u32)blendStates.Count(),
+			.pAttachments = blendStates.elements,
+			.blendConstants = {},
+		};
+		auto vertAttrs = MakeStaticArray<VkVertexInputAttributeDescription>(
+			VkVertexInputAttributeDescription
+			{
+				.location = 0,
+				.binding = VulkanVertexBufferBindID,
+				.format = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset = offsetof(Vertex1P1N, position),
+			},
+			VkVertexInputAttributeDescription
+			{
+				.location = 1,
+				.binding = VulkanVertexBufferBindID,
+				.format = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset = offsetof(Vertex1P1N, normal),
+			}
+		);
+		auto vertBindings = MakeStaticArray<VkVertexInputBindingDescription>(
+			VkVertexInputBindingDescription
+			{
+				.binding = VulkanVertexBufferBindID,
+				.stride = sizeof(Vertex1P1N),
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+			}
+		);
+		auto vertexCI = VkPipelineVertexInputStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.vertexBindingDescriptionCount = (u32)vertBindings.Count(),
+			.pVertexBindingDescriptions = vertBindings.elements,
+			.vertexAttributeDescriptionCount = (u32)vertAttrs.Count(),
+			.pVertexAttributeDescriptions = vertAttrs.elements,
+		};
+		auto dynStates = MakeStaticArray<VkDynamicState>(
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+		);
+		auto dynStateCI = VkPipelineDynamicStateCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			.dynamicStateCount = (u32)dynStates.Count(),
+			.pDynamicStates = dynStates.elements,
+		};
+		auto stages = Array<VkPipelineShaderStageCreateInfo>{};
+		for (auto i = 0; i < vs.vkModules.count; i += 1)
+		{
+			stages.Append(
+				{
+					.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+					.stage = vs.vkStages[i],
+					.module = vs.vkModules[i],
+					.pName = "main",
+				}
+			);
+		}
+		auto ci = VkGraphicsPipelineCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+			.stageCount = (u32)stages.count,
+			.pStages = stages.elements,
+			.pVertexInputState = &vertexCI,
+			.pInputAssemblyState = &assemblyCI,
+			.pViewportState = &viewportCI,
+			.pRasterizationState = &rasterCI,
+			.pMultisampleState = &multisampleCI,
+			.pDepthStencilState = &depthCI,
+			.pColorBlendState = &blendCI,
+			.pDynamicState = &dynStateCI,
+			.layout = vkPipelineLayout,
+			.renderPass = rp,
+			.subpass = 0,
+			.basePipelineHandle = VK_NULL_HANDLE,
+			.basePipelineIndex = -1,
+		};
+		auto p = VkPipeline{};
+		VkCheck(vkCreateGraphicsPipelines(vkDevice, vkPipelineCache, 1, &ci, NULL, &p));
+		return p;
+	} break;
+	case GPUShaderCount:
+	default:
+	{
+		LogError("Vulkan", "Failed to find pipeline creation code for shader %k.", GPUShaderName(s));
+	} break;
+	}
+	return {};
 }
 
 VkCommandBuffer NewVulkanCommandBuffer(VkCommandPool p)
@@ -1369,8 +1700,45 @@ void GPUAsyncComputeCommandBuffer::Queue(bool *signalOnCompletion)
 	QueueVulkanAsyncCommandBuffer(this->vkCommandBuffer, VulkanComputeQueue, signalOnCompletion);
 }
 
-void GPUCommandBuffer::BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb)
+VkFramebuffer MakeVulkanFramebuffer(VkRenderPass rp, GPUFramebuffer fb)
 {
+	auto vkFB = vkFramebufferCache.Lookup({rp, fb.id}, 0);
+	if (vkFB)
+	{
+		return vkFB;
+	}
+	auto ci = VkFramebufferCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+		.renderPass = rp,
+		.attachmentCount = (u32)fb.attachments.count,
+		.pAttachments = (VkImageView *)fb.attachments.elements, // @TODO: ... not thrilled about this
+		.width = (u32)fb.w,
+		.height = (u32)fb.h,
+		.layers = 1,
+	};
+	VkCheck(vkCreateFramebuffer(vkDevice, &ci, NULL, &vkFB));
+	vkFramebufferCache.Insert({rp, fb.id}, vkFB);
+	return vkFB;
+}
+
+void GPUCommandBuffer::BeginRender(GPUShader s, GPUFramebuffer fb)
+{
+	Assert(fb.id > vkSwapchainImages.count || fb.id == vkSwapchainImageIndex);
+	auto rp = vkRenderPasses[s];
+	if (!rp)
+	{
+		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader renderpass.");
+		return;
+	}
+	auto vkFB = MakeVulkanFramebuffer(rp, fb);
+	auto p = vkPipelines[s];
+	if (!p)
+	{
+		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader pipeline.");
+		return;
+	}
+	vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
 	auto clearColor = VkClearValue
 	{
 		.color.float32 = {0.04f, 0.19f, 0.34f, 1.0f},
@@ -1384,8 +1752,8 @@ void GPUCommandBuffer::BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb)
 	auto bi = VkRenderPassBeginInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = rp.vkRenderPass,
-		.framebuffer = fb.vkFramebuffer,
+		.renderPass = rp,
+		.framebuffer = vkFB,
 		.renderArea =
 		{
 			.offset = {0, 0},
@@ -1397,7 +1765,7 @@ void GPUCommandBuffer::BeginRenderPass(GPURenderPass rp, GPUFramebuffer fb)
 	vkCmdBeginRenderPass(this->vkCommandBuffer, &bi, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void GPUCommandBuffer::EndRenderPass()
+void GPUCommandBuffer::EndRender()
 {
 	vkCmdEndRenderPass(this->vkCommandBuffer);
 }
@@ -1490,38 +1858,71 @@ void GPUCommandBuffer::CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h)
 	vkCmdCopyBufferToImage(this->vkCommandBuffer, b.vkBuffer, i.vkImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-GPUFence SubmitVulkanFrameCommandBuffers(VulkanQueueType t, ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+void SubmitVulkanFrameCommandBuffers(VulkanQueueType t, ArrayView<VkSemaphore> waitSems, ArrayView<VkPipelineStageFlags> waitStages, ArrayView<VkSemaphore> signalSems, VkFence f)
 {
 	auto cbs = &vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkFrameIndex][t];
+	// WRONG ... ALL THREADS
 	auto si = VkSubmitInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = (u32)waitSems.count,
-		.pWaitSemaphores = (VkSemaphore *)waitSems.elements,
+		.pWaitSemaphores = waitSems.elements,
 		.pWaitDstStageMask = waitStages.elements,
 		.commandBufferCount = (u32)cbs->count,
 		.pCommandBuffers = cbs->elements,
 		.signalSemaphoreCount = (u32)signalSems.count,
-		.pSignalSemaphores = (VkSemaphore *)signalSems.elements,
+		.pSignalSemaphores = signalSems.elements,
 	};
-	auto f = NewGPUFence();
-	VkCheck(vkQueueSubmit(vkQueues[t], 1, &si, f.vkFence));
-	return f;
+	VkCheck(vkQueueSubmit(vkQueues[t], 1, &si, f));
 }
 
-GPUFence SubmitGPUFrameGraphicsCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+//GPUFence GPUSubmitFrameGraphicsCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+GPUFence GPUSubmitFrameGraphicsCommandBuffers()
 {
-	return SubmitVulkanFrameCommandBuffers(VulkanGraphicsQueue, waitSems, waitStages, signalSems);
+	#if 0
+		// @TODO: Do this stuff?
+	    if (demo->separate_present_queue) {
+        // We have to transfer ownership from the graphics queue family to the
+        // present queue family to be able to present.  Note that we don't have
+        // to transfer from present queue family back to graphics queue family at
+        // the start of the next frame because we don't care about the image's
+        // contents at that point.
+        VkImageMemoryBarrier image_ownership_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                                                        .pNext = NULL,
+                                                        .srcAccessMask = 0,
+                                                        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                                                        .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                                        .srcQueueFamilyIndex = demo->graphics_queue_family_index,
+                                                        .dstQueueFamilyIndex = demo->present_queue_family_index,
+                                                        .image = demo->swapchain_image_resources[demo->current_buffer].image,
+                                                        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+
+        vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0,
+                             NULL, 0, NULL, 1, &image_ownership_barrier);
+	#endif
+	auto waitSems = MakeStaticArray<VkSemaphore>(
+		vkFrameTransfersCompleteSemaphores[vkFrameIndex],
+		vkImageAcquiredSemaphores[vkFrameIndex]);
+	auto waitStages = MakeStaticArray<VkPipelineStageFlags>(
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+	auto signalSems = MakeStaticArray<VkSemaphore>(vkFrameGraphicsCompleteSemaphores[vkFrameIndex]);
+	SubmitVulkanFrameCommandBuffers(VulkanGraphicsQueue, waitSems, waitStages, signalSems, vkFrameFences[vkFrameIndex]);
+	return GPUFence{vkFrameFences[vkFrameIndex]};
 }
 
-GPUFence SubmitGPUFrameTransferCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+GPUFence GPUSubmitFrameTransferCommandBuffers()
 {
-	return SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, waitSems, waitStages, signalSems);
+	auto signalSems = MakeStaticArray<VkSemaphore>(vkFrameTransfersCompleteSemaphores[vkFrameIndex]);
+	SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, {}, {}, signalSems, VK_NULL_HANDLE);
+	return {}; // @TODO
 }
 
-GPUFence SubmitGPUFrameComputeCommandBuffers(ArrayView<GPUSemaphore> waitSems, ArrayView<GPUPipelineStageFlags> waitStages, ArrayView<GPUSemaphore> signalSems)
+GPUFence GPUSubmitFrameComputeCommandBuffers()
 {
-	return SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, waitSems, waitStages, signalSems);
+	//return SubmitVulkanFrameCommandBuffers(VulkanTransferQueue, waitSems, waitStages, signalSems);
+	return {};
 }
 
 s64 GPUSwapchainImageCount()
@@ -1568,11 +1969,6 @@ GPUBuffer NewGPUIndexBuffer(s64 size)
 	return NewGPUBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
 }
 
-GPUBuffer NewGPUUniformBuffer(s64 size)
-{
-	return NewGPUBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, size);
-}
-
 void GPUBuffer::Free()
 {
 	this->memory->Free();
@@ -1590,9 +1986,13 @@ GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst)
 	auto mr = VkMemoryRequirements{};
 	vkGetBufferMemoryRequirements(vkDevice, sb.vkBuffer, &mr);
 	auto mem = vkCPUToGPUFrameAllocator.Allocate(mr.size, mr.alignment, vkFrameIndex);
+	sb.map = mem->map;
 	VkCheck(vkBindBufferMemory(vkDevice, sb.vkBuffer, mem->vkMemory, mem->offset));
 	return sb;
 }
+
+// @TODO: Get rid of flushing? Could just create your own transfer command buffer and do the copy.
+// Would allow for multiple copies to get combined into a single command buffer...
 
 void GPUFrameStagingBuffer::Flush()
 {
@@ -1607,6 +2007,24 @@ void GPUFrameStagingBuffer::Flush()
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	cb.CopyBuffer(this->size, src, dst, 0, 0);
 	cb.Queue();
+}
+
+void GPUFrameStagingBuffer::FlushIn(GPUCommandBuffer cb)
+{
+	auto src = GPUBuffer
+	{
+		.vkBuffer = this->vkBuffer,
+	};
+	auto dst = GPUBuffer
+	{
+		.vkBuffer = this->vkDestinationBuffer,
+	};
+	cb.CopyBuffer(this->size, src, dst, 0, 0);
+}
+
+void *GPUFrameStagingBuffer::Map()
+{
+	return this->map;
 }
 
 GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst)
@@ -1641,6 +2059,24 @@ void GPUAsyncStagingBuffer::Flush()
 	tl->asyncStagingSignals.Resize(tl->asyncStagingSignals.count + 1);
 	cb.Queue(&tl->asyncStagingSignals[tl->asyncStagingSignals.count - 1]);
 	tl->asyncPendingStagingBuffers.Append({this->memory, this->vkBuffer});
+}
+
+void GPUAsyncStagingBuffer::FlushIn(GPUCommandBuffer cb)
+{
+	auto src = GPUBuffer
+	{
+		.vkBuffer = this->vkBuffer,
+	};
+	auto dst = GPUBuffer
+	{
+		.vkBuffer = this->vkDestinationBuffer,
+	};
+	cb.CopyBuffer(this->memory->size, src, dst, 0, 0);
+}
+
+void *GPUAsyncStagingBuffer::Map()
+{
+	return this->memory->map;
 }
 
 GPUImage NewGPUImage(s64 w, s64 h, GPUFormat f, GPUImageLayout il, GPUImageUsageFlags uf, GPUSampleCount sc)
@@ -1773,32 +2209,21 @@ void FreeGPUFences(ArrayView<GPUFence> fs)
 	}
 }
 
-GPUSemaphore NewGPUSemaphore()
-{
-	auto s = GPUSemaphore{};
-	auto ci = VkSemaphoreCreateInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-	};
-	VkCheck(vkCreateSemaphore(vkDevice, &ci, NULL, &s.vkSemaphore));
-	return s;
-}
-
-void GPUSemaphore::Free()
-{
-	// @TODO
-}
-
-void StartGPUFrame()
+void GPUBeginFrame()
 {
 	VkCheck(vkWaitForFences(vkDevice, 1, &vkFrameFences[vkFrameIndex], true, U32Max));
 	VkCheck(vkResetFences(vkDevice, 1, &vkFrameFences[vkFrameIndex]));
-	VkCheck(vkAcquireNextImageKHR(vkDevice, vkSwapchain, U64Max, vkImageAcquiredSemaphores[vkFrameIndex], NULL, &vkSwapchainImageIndex));
+	VkCheck(vkAcquireNextImageKHR(vkDevice, vkSwapchain, VulkanAcquireImageTimeout, vkImageAcquiredSemaphores[vkFrameIndex], VK_NULL_HANDLE, &vkSwapchainImageIndex));
 	for (auto &tl : vkThreadLocal)
 	{
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
 		{
 			VkCheck(vkResetCommandPool(vkDevice, tl.frameCommandPools[vkFrameIndex][i], 0));
+		}
+		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+		{
+			// We do not need to free the command buffers individually because we reset their command pool.
+			tl.frameQueuedCommandBuffers[vkFrameIndex][i].Resize(0);
 		}
 		tl.asyncCommandBufferLock.Lock();
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
@@ -1838,29 +2263,153 @@ void StartGPUFrame()
 	vkCPUToGPUFrameAllocator.Free(vkFrameIndex);
 }
 
-void FinishGPUFrame()
+void GPUEndFrame()
 {
+	if (vkQueueFamilies[VulkanPresentQueue] != vkQueueFamilies[VulkanGraphicsQueue])
+	{
+		// If we are using separate queues, change image ownership to the present queue before
+		// presenting, waiting for the draw complete semaphore and signalling the ownership released
+		// semaphore when finished.
+		auto stage = VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+		auto si = VkSubmitInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = &vkFrameGraphicsCompleteSemaphores[vkFrameIndex],
+			.pWaitDstStageMask = &stage,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[vkSwapchainImageIndex],
+			.signalSemaphoreCount = 1,
+			.pSignalSemaphores = &vkImageOwnershipSemaphores[vkFrameIndex],
+		};
+		VkCheck(vkQueueSubmit(vkQueues[VulkanPresentQueue], 1, &si, VK_NULL_HANDLE));
+	}
+	// If we are using separate queues we have to wait for image ownership, otherwise wait for draw
+	// complete.
+	auto pi = VkPresentInfoKHR
+	{
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.pNext = NULL,
+		.waitSemaphoreCount = 1,
+		.swapchainCount = 1,
+		.pSwapchains = &vkSwapchain,
+		.pImageIndices = &vkSwapchainImageIndex,
+	};
+	if (vkQueueFamilies[VulkanPresentQueue] != vkQueueFamilies[VulkanGraphicsQueue])
+	{
+		pi.pWaitSemaphores = &vkImageOwnershipSemaphores[vkFrameIndex];
+	}
+	else
+	{
+		pi.pWaitSemaphores = &vkFrameGraphicsCompleteSemaphores[vkFrameIndex];
+	}
+	VkCheck(vkQueuePresentKHR(vkQueues[VulkanPresentQueue], &pi));
 	vkFrameIndex = (vkFrameIndex + 1) % VulkanMaxFramesInFlight;
 }
 
-void CompileGPUShaderFromFile(String filepath, bool *err)
+VkRenderPass MakeVulkanRenderPass(GPUShader s)
 {
-	auto spirvInfo = GenerateVulkanSPIRV(filepath, err);
+	switch (s)
+	{
+	case GPUModelShader:
+	{
+		VkAttachmentDescription attachments[] =
+		{
+			{
+				.format = vkSurfaceFormat.format,
+				.samples = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			},
+			{
+				.format = VK_FORMAT_D32_SFLOAT_S8_UINT,
+				.samples = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			},
+		};
+		VkAttachmentReference colorAttachments[] =
+		{
+			{
+				.attachment = 0,
+				.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			},
+		};
+		VkAttachmentReference stencilAttachment =
+		{
+			.attachment = 1,
+			.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		};
+		#define CArrayCount(x) (sizeof(x) / sizeof(x[0]))
+		VkSubpassDescription subpassDescriptions[] =
+		{
+			{
+				.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+				.colorAttachmentCount = CArrayCount(colorAttachments),
+				.pColorAttachments = colorAttachments,
+				.pDepthStencilAttachment = &stencilAttachment,
+			},
+		};
+		VkSubpassDependency subpassDependencies[] =
+		{
+			{
+				.srcSubpass = VK_SUBPASS_EXTERNAL,
+				.dstSubpass = 0,
+				.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.srcAccessMask = 0,
+				.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			},
+		};
+		VkRenderPassCreateInfo renderPassCreateInfo =
+		{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = CArrayCount(attachments),
+			.pAttachments = attachments,
+			.subpassCount = CArrayCount(subpassDescriptions),
+			.pSubpasses = subpassDescriptions,
+			.dependencyCount = CArrayCount(subpassDependencies),
+			.pDependencies = subpassDependencies,
+		};
+		VkRenderPass renderPass;
+		VkCheck(vkCreateRenderPass(vkDevice, &renderPassCreateInfo, NULL, &renderPass));
+		return renderPass;
+	} break;
+	case GPUShaderCount:
+	default:
+	{
+		LogError("Vulkan", "Unknown shader %d.", s);
+	} break;
+	}
+	return {};
+}
+
+void GPUCompileShaderFromFile(GPUShader s, String path, bool *err)
+{
+	auto spirv = GenerateVulkanSPIRV(path, err);
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to generate SPIRV for file %k.", filepath);
+		LogError("Vulkan", "Failed to generate SPIRV for file %k.", path);
 		return;
 	}
-	auto s = VulkanShaderModules
+	auto vs = VulkanShader
 	{
-		.stages = spirvInfo.stages,
+		.vkStages = spirv.stages,
 	};
-	for (auto fp : spirvInfo.filepaths)
+	for (auto fp : spirv.filepaths)
 	{
 		auto spirv = ReadEntireFile(fp, err);
 		if (*err)
 		{
-			LogError("Vulkan", "Failed to read SPIRV file %k from shader %k.", fp, filepath);
+			LogError("Vulkan", "Failed to read SPIRV file %k from shader %k.", fp, path);
 			return;
 		}
 		auto ci = VkShaderModuleCreateInfo
@@ -1871,9 +2420,114 @@ void CompileGPUShaderFromFile(String filepath, bool *err)
 		};
 		auto m = VkShaderModule{};
 		VkCheck(vkCreateShaderModule(vkDevice, &ci, NULL, &m));
-		s.modules.Append(m);
+		vs.vkModules.Append(m);
 	}
-	vkShaders.Insert(spirvInfo.name, s);
+	vkShaders[s] = vs;
+	auto rp = MakeVulkanRenderPass(s);
+	vkRenderPasses[s] = rp;
+	vkPipelines[s] = MakeVulkanPipeline(s, vs, rp);
+}
+
+GPUUniform GPUAddUniform(s64 set)
+{
+	// @TODO
+	return
+	{
+		.set = set,
+		.index = 0,
+	};
+}
+
+void GPUUpdateUniforms(ArrayView<GPUUniformBufferWriteDescription> bs, ArrayView<GPUUniformImageWriteDescription> is)
+{
+	// @TODO: Combine writes/copies to adjacent indices?
+	auto cb = NewGPUFrameTransferCommandBuffer();
+	for (auto b : bs)
+	{
+		auto sb = NewGPUFrameStagingBuffer(b.size, GPUBuffer{.vkBuffer = vkDescriptorSetBuffers[vkSwapchainImageIndex][b.uniform.set]}); // @TODO
+		CopyArray(NewArrayView((u8 *)b.data, b.size), NewArrayView((u8 *)sb.Map(), b.size));
+		sb.FlushIn(cb);
+	}
+	cb.Queue();
+	auto vkBufferInfos = NewArrayWithCapacity<VkDescriptorBufferInfo>(bs.count);
+	for (auto b : bs)
+	{
+		vkBufferInfos.Append(
+			VkDescriptorBufferInfo
+			{
+				.buffer = vkDescriptorSetBuffers[vkSwapchainImageIndex][b.uniform.set],
+				.offset = (VkDeviceSize)(b.size * b.uniform.index),
+				.range = (VkDeviceSize)b.size,
+			});
+	}
+	auto vkImageInfos = NewArrayWithCapacity<VkDescriptorImageInfo>(is.count);
+	for (auto i : is)
+	{
+		vkImageInfos.Append(
+			VkDescriptorImageInfo
+			{
+				.sampler = i.sampler.vkSampler,
+				.imageView = i.imageView.vkImageView,
+				.imageLayout = i.layout,
+			});
+	}
+	auto writes = NewArrayWithCapacity<VkWriteDescriptorSet>(bs.count + is.count);
+	for (auto i = 0; i < bs.count; i+= 1)
+	{
+		writes.Append(
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vkDescriptorSets[vkSwapchainImageIndex][bs[i].uniform.set],
+				.dstBinding = 0,
+				.dstArrayElement = (u32)bs[i].uniform.index,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pBufferInfo = &vkBufferInfos[i],
+			});
+	}
+	for (auto i = 0; i < is.count; i+= 1)
+	{
+		writes.Append(
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vkDescriptorSets[vkSwapchainImageIndex][is[i].uniform.set],
+				.dstBinding = 0,
+				.dstArrayElement = (u32)is[i].uniform.index,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.pImageInfo = &vkImageInfos[i],
+			});
+	}
+	// @TODO: Handle copies.
+	vkUpdateDescriptorSets(vkDevice, (u32)writes.count, writes.elements, 0, NULL); // No return.
+}
+
+GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments)
+{
+	static auto idGenerator = (u64)vkSwapchainImages.count;
+	auto id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, 1);
+	if (id < vkSwapchainImages.count)
+	{
+		id = AtomicFetchAndAdd64((s64 *)&idGenerator, vkSwapchainImages.count);
+	}
+	return
+	{
+		.id = id,
+		.w = w,
+		.h = h,
+		.attachments = attachments.Copy(0, attachments.count),
+	};
+}
+
+GPUFramebuffer GPUDefaultFramebuffer()
+{
+	return
+	{
+		.id = vkSwapchainImageIndex,
+		.w = RenderWidth(),
+		.h = RenderHeight(),
+		.attachments = vkDefaultFramebufferAttachments[vkSwapchainImageIndex],
+	};
 }
 
 #endif

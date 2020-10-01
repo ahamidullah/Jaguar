@@ -64,7 +64,6 @@ String NewStringFromRange(String s, s64 start, s64 end);
 String NewStringFromBuffer(Array<u8> b);
 bool ParseInteger(String s, s64 *out);
 String FormatString(String fmt, ...);
-u64 HashString(String *s);
 
 template <typename... StringPack>
 String JoinStringsIn(Allocator *a, StringPack... sp)

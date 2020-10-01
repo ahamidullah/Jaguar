@@ -37,11 +37,11 @@ auto jobLock = Spinlock{};
 auto workerThreads = []() -> Array<WorkerThread>
 {
 	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), CPUProcessorCount());
-	for (auto &t : wts)
-	{
-		t.platformThread = NewThread(WorkerThreadProcedure, &t.parameter);
-	}
 	wts[wts.count - 1].platformThread = CurrentThread();
+	for (auto i = 0; i < wts.count - 1; i += 1)
+	{
+		wts[i].platformThread = NewThread(WorkerThreadProcedure, &wts[i].parameter);
+	}
 	for (auto i = 0; i < wts.count; i++)
 	{
 		SetThreadProcessorAffinity(wts[i].platformThread, i);
@@ -338,6 +338,5 @@ void WaitForJobCounter(JobCounter *counter)
 
 s64 WorkerThreadCount()
 {
-	return 4;
-	//return ArrayLength(workerThreads);
+	return workerThreads.count;
 }

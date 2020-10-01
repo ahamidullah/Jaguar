@@ -1,11 +1,8 @@
 #pragma once
 
-#if 0
-
 #include "Asset.h"
 #include "Math.h"
 #include "Transform.h"
-#include "GPU.h"
 
 struct Vertex1P1C1UV1N1T
 {
@@ -27,6 +24,7 @@ struct Vertex1P1N
 	V3 normal;
 };
 
+#if 0
 struct MeshAsset
 {
 	GPUIndexedGeometry gpuGeometry;
@@ -43,5 +41,4 @@ struct MeshInstance
 {
 	String assetName;
 };
-
 #endif

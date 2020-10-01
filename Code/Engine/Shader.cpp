@@ -1,9 +1,11 @@
+#ifdef VulkanBuild
+
 #include "Shader.h"
 #include "Basic/Parser.h"
 #include "Basic/File.h"
 #include "Basic/Filepath.h"
 
-Array<String> ShaderFilepaths()
+Array<String> GPUShaderFilepaths()
 {
 	auto a = Array<String>{};
 	auto shaderDir = String{"Code/Shader"};
@@ -155,3 +157,5 @@ VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err)
 	}
 	return si;
 }
+
+#endif

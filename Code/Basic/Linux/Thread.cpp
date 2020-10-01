@@ -103,7 +103,7 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	auto t = Thread{};
 	if (pthread_create(&t, &attrs, ThreadProcedureWrapper, wrapperParam))
 	{
-		Abort("Thread", "Failed on pthread_create(): %k.", PlatformError());
+		Abort("Thread", "Failed pthread_create(): %k.", PlatformError());
 	}
 	return t;
 }
@@ -115,7 +115,7 @@ void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
 	CPU_SET(cpuIndex, &cs);
 	if (pthread_setaffinity_np(t, sizeof(cs), &cs))
 	{
-		Abort("Thread", "Failed on pthread_setaffinity_np(): %k.", PlatformError());
+		Abort("Thread", "Failed pthread_setaffinity_np(): %k.", PlatformError());
 	}
 }
 

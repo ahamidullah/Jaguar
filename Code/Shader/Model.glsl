@@ -1,10 +1,10 @@
 #version 420
 
+#include "../Engine/ShaderGlobal.h"
+#include "Global.inc"
+
 Stage: Vertex
 {
-	#include "../Engine/ShaderGlobal.h"
-	#include "Global.inc"
-
 	layout (location = 0) in vec3 vertexPosition;
 	layout (location = 1) in vec3 vertexNormal;
 
@@ -22,9 +22,6 @@ Stage: Vertex
 
 Stage: Fragment
 {
-	#include "../Engine/ShaderGlobal.h"
-	#include "Global.inc"
-
 	layout (location = 0) in vec3 fragmentNormal;
 
 	layout (location = 0) out vec4 outputColor;

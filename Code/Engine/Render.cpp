@@ -34,26 +34,26 @@ void InitializeRenderer(void *jobParam)
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader");
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Code");
 		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Binary");
-		auto BuildShader = [](GPUShader s, String filename)
+		auto BuildShader = [](GPUShaderID id, String filename)
 		{
 			// @TODO: Watch the shader file and recompile if it changes.
 			auto err = false;
 			auto path = JoinFilepaths("Code/Shader", filename);
-			GPUCompileShaderFromFile(s, path, &err);
+			GPUCompileShaderFromFile(id, path, &err);
 			if (err)
 			{
 				LogError("Render", "Failed to compile shader %k.", path);
 			}
 		};
-		for (auto i = 0; i < GPUShaderCount; i += 1)
+		for (auto i = 0; i < GPUShaderIDCount; i += 1)
 		{
-			switch ((GPUShader)i)
+			switch ((GPUShaderID)i)
 			{
-			case GPUModelShader:
+			case GPUModelShaderID:
 			{
-				BuildShader(GPUModelShader, "Model.glsl");
+				BuildShader(GPUModelShaderID, "Model.glsl");
 			} break;
-			case GPUShaderCount:
+			case GPUShaderIDCount:
 			default:
 			{
 				Abort("Render", "Unknown shader ID %d.", i);
@@ -181,7 +181,7 @@ void Render()
 		auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
-		cb.BeginRender(GPUModelShader, GPUDefaultFramebuffer());
+		cb.BeginRender(GPUModelShaderID, GPUDefaultFramebuffer());
 		cb.EndRender();
 		cb.Queue();
 	}

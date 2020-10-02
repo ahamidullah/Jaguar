@@ -206,10 +206,10 @@ auto vkFrameGraphicsCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFrame
 auto vkFrameTransfersCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
 auto vkFrameIndex = u32{};
 auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
-auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderCount>{};
-auto vkPipelines = StaticArray<VkPipeline, GPUShaderCount>{};
+auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderIDCount>{};
+auto vkPipelines = StaticArray<VkPipeline, GPUShaderIDCount>{};
 auto vkPipelineCache = VkPipelineCache{};
-auto vkShaders = StaticArray<VulkanShader, GPUShaderCount>{};
+auto vkShaders = StaticArray<VulkanShader, GPUShaderIDCount>{};
 auto vkFramebufferCache = NewHashTableIn<VulkanFramebufferKey, VkFramebuffer>(GlobalAllocator(), 0, HashVulkanFramebufferKey);
 auto vkDefaultFramebufferAttachments = NewArrayIn<Array<GPUImageView>>(GlobalAllocator(), 0);
 auto vkDefaultDepthImageMemory = (VulkanMemoryAllocation *){};
@@ -310,18 +310,18 @@ String VkResultToString(VkResult r)
 	return "UnknownVkResultCode";
 }
 
-String GPUShaderName(GPUShader s)
+String GPUShaderName(GPUShaderID id)
 {
-	switch (s)
+	switch (id)
 	{
-	case GPUModelShader:
+	case GPUModelShaderID:
 	{
 		return "Model";
 	} break;
-	case GPUShaderCount:
+	case GPUShaderIDCount:
 	default:
 	{
-		LogError("Vulkan", "Invalid shader %d.", s);
+		LogError("Vulkan", "Invalid shader id %d.", id);
 		return "";
 	};
 	}
@@ -1421,11 +1421,11 @@ void InitializeGPU(Window *win)
 	}
 }
 
-VkPipeline MakeVulkanPipeline(GPUShader s, VulkanShader vs, VkRenderPass rp)
+VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
 {
-	switch (s)
+	switch (id)
 	{
-	case GPUModelShader:
+	case GPUModelShaderID:
 	{
 		auto assemblyCI = VkPipelineInputAssemblyStateCreateInfo
 		{
@@ -1546,13 +1546,13 @@ VkPipeline MakeVulkanPipeline(GPUShader s, VulkanShader vs, VkRenderPass rp)
 			.pDynamicStates = dynStates.elements,
 		};
 		auto stages = Array<VkPipelineShaderStageCreateInfo>{};
-		for (auto i = 0; i < vs.vkModules.count; i += 1)
+		for (auto i = 0; i < s.vkModules.count; i += 1)
 		{
 			stages.Append(
 				{
 					.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-					.stage = vs.vkStages[i],
-					.module = vs.vkModules[i],
+					.stage = s.vkStages[i],
+					.module = s.vkModules[i],
 					.pName = "main",
 				}
 			);
@@ -1580,10 +1580,10 @@ VkPipeline MakeVulkanPipeline(GPUShader s, VulkanShader vs, VkRenderPass rp)
 		VkCheck(vkCreateGraphicsPipelines(vkDevice, vkPipelineCache, 1, &ci, NULL, &p));
 		return p;
 	} break;
-	case GPUShaderCount:
+	case GPUShaderIDCount:
 	default:
 	{
-		LogError("Vulkan", "Failed to find pipeline creation code for shader %k.", GPUShaderName(s));
+		LogError("Vulkan", "Failed to find pipeline creation code for shader %k.", GPUShaderName(id));
 	} break;
 	}
 	return {};
@@ -1722,17 +1722,17 @@ VkFramebuffer MakeVulkanFramebuffer(VkRenderPass rp, GPUFramebuffer fb)
 	return vkFB;
 }
 
-void GPUCommandBuffer::BeginRender(GPUShader s, GPUFramebuffer fb)
+void GPUCommandBuffer::BeginRender(GPUShaderID sid, GPUFramebuffer fb)
 {
 	Assert(fb.id > vkSwapchainImages.count || fb.id == vkSwapchainImageIndex);
-	auto rp = vkRenderPasses[s];
+	auto rp = vkRenderPasses[sid];
 	if (!rp)
 	{
 		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader renderpass.");
 		return;
 	}
 	auto vkFB = MakeVulkanFramebuffer(rp, fb);
-	auto p = vkPipelines[s];
+	auto p = vkPipelines[sid];
 	if (!p)
 	{
 		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader pipeline.");
@@ -2307,11 +2307,11 @@ void GPUEndFrame()
 	vkFrameIndex = (vkFrameIndex + 1) % VulkanMaxFramesInFlight;
 }
 
-VkRenderPass MakeVulkanRenderPass(GPUShader s)
+VkRenderPass MakeVulkanRenderPass(GPUShaderID sid)
 {
-	switch (s)
+	switch (sid)
 	{
-	case GPUModelShader:
+	case GPUModelShaderID:
 	{
 		VkAttachmentDescription attachments[] =
 		{
@@ -2383,16 +2383,16 @@ VkRenderPass MakeVulkanRenderPass(GPUShader s)
 		VkCheck(vkCreateRenderPass(vkDevice, &renderPassCreateInfo, NULL, &renderPass));
 		return renderPass;
 	} break;
-	case GPUShaderCount:
+	case GPUShaderIDCount:
 	default:
 	{
-		LogError("Vulkan", "Unknown shader %d.", s);
+		LogError("Vulkan", "Unknown shader id %d.", sid);
 	} break;
 	}
 	return {};
 }
 
-void GPUCompileShaderFromFile(GPUShader s, String path, bool *err)
+void GPUCompileShaderFromFile(GPUShaderID id, String path, bool *err)
 {
 	auto spirv = GenerateVulkanSPIRV(path, err);
 	if (*err)
@@ -2400,7 +2400,7 @@ void GPUCompileShaderFromFile(GPUShader s, String path, bool *err)
 		LogError("Vulkan", "Failed to generate SPIRV for file %k.", path);
 		return;
 	}
-	auto vs = VulkanShader
+	auto s = VulkanShader
 	{
 		.vkStages = spirv.stages,
 	};
@@ -2420,12 +2420,12 @@ void GPUCompileShaderFromFile(GPUShader s, String path, bool *err)
 		};
 		auto m = VkShaderModule{};
 		VkCheck(vkCreateShaderModule(vkDevice, &ci, NULL, &m));
-		vs.vkModules.Append(m);
+		s.vkModules.Append(m);
 	}
-	vkShaders[s] = vs;
-	auto rp = MakeVulkanRenderPass(s);
-	vkRenderPasses[s] = rp;
-	vkPipelines[s] = MakeVulkanPipeline(s, vs, rp);
+	vkShaders[id] = s;
+	auto rp = MakeVulkanRenderPass(id);
+	vkRenderPasses[id] = rp;
+	vkPipelines[id] = MakeVulkanPipeline(id, s, rp);
 }
 
 GPUUniform GPUAddUniform(s64 set)
@@ -2515,7 +2515,7 @@ GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachmen
 		.id = id,
 		.w = w,
 		.h = h,
-		.attachments = attachments.Copy(0, attachments.count),
+		.attachments = attachments.CopyIn(GlobalAllocator()),
 	};
 }
 

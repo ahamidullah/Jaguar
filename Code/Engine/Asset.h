@@ -12,7 +12,7 @@ enum AssetType
 
 enum AssetID
 {
-	SponzaAssetID,
+	TriangleNoIndicesAssetID,
 	AssetIDCount
 };
 
@@ -28,3 +28,4 @@ void UnloadAsset(AssetID id);
 void *LockAsset(AssetID id);
 void UnlockAsset(AssetID id);
 String AssetIDToString();
+String AssetPath(AssetID id);

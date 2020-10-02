@@ -111,6 +111,36 @@ void Parser::Eat(char c)
 	}
 }
 
+s64 Parser::PeekChar()
+{
+	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
+	{
+		this->Advance();
+	}
+	if (this->index >= this->string.Length())
+	{
+		return -1;
+	}
+	return this->string[this->index];
+}
+
+void Parser::Expect(u8 c)
+{
+	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
+	{
+		this->Advance();
+	}
+	if (this->index >= this->string.Length())
+	{
+		Abort("Parser", "Expected character %c, got end of parser.", (char)c);
+	}
+	if (this->string[this->index] != c)
+	{
+		Abort("Parser", "Expected character %c, got %c.", (char)c, (char)this->string[this->index]);
+	}
+	this->Advance();
+}
+
 #if 0
 bool IsParserDelimiter(Parser *parser, char c)
 {

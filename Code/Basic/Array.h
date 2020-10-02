@@ -50,7 +50,10 @@ struct ArrayView
 	T *end();
 	ArrayView<u8> Bytes();
 	ArrayView<T> View(s64 start, s64 end);
-	Array<T> Copy(s64 start, s64 end);
+	Array<T> Copy();
+	Array<T> CopyIn(Allocator *a);
+	Array<T> CopyRange(s64 start, s64 end);
+	Array<T> CopyRangeIn(Allocator *a, s64 start, s64 end);
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -140,12 +143,32 @@ ArrayView<T> ArrayView<T>::View(s64 start, s64 end)
 template <typename T> Array<T> NewArray(s64 count);
 
 template <typename T>
-Array<T> ArrayView<T>::Copy(s64 start, s64 end)
+Array<T> ArrayView<T>::Copy()
+{
+	return this->CopyIn(ContextAllocator());
+}
+
+template <typename T>
+Array<T> ArrayView<T>::CopyIn(Allocator *a)
+{
+	auto r = NewArrayIn<T>(a, this->count);
+	CopyArray(*this, r);
+	return r;
+}
+
+template <typename T>
+Array<T> ArrayView<T>::CopyRange(s64 start, s64 end)
+{
+	this->CopyRangeIn(ContextAllocator(), start, end);
+}
+
+template <typename T>
+Array<T> ArrayView<T>::CopyRangeIn(Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
-	auto a = NewArray<T>(end - start);
-	CopyArray(this->View(start, end), a);
-	return a;
+	auto r = NewArrayIn<T>(a, end - start);
+	CopyArray(this->View(start, end), r);
+	return r;
 }
 
 template <typename T>
@@ -228,7 +251,10 @@ struct Array
 	void UnorderedRemove(s64 index);
 	typedef bool (*SiftProcedure)(T t);
 	ArrayView<T> Sift(SiftProcedure s);
-	Array<T> Copy(s64 start, s64 end);
+	Array<T> Copy();
+	Array<T> CopyIn(Allocator *a);
+	Array<T> CopyRange(s64 start, s64 end);
+	Array<T> CopyRangeIn(Allocator *a, s64 start, s64 end);
 	ArrayView<T> View(s64 start, s64 end);
 	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
@@ -346,12 +372,32 @@ T *Array<T>::end()
 }
 
 template <typename T>
-Array<T> Array<T>::Copy(s64 start, s64 end)
+Array<T> Array<T>::Copy()
+{
+	return this->CopyIn(ContextAllocator());
+}
+
+template <typename T>
+Array<T> Array<T>::CopyIn(Allocator *a)
+{
+	auto r = NewArrayIn<T>(a, this->count);
+	CopyArray(*this, r);
+	return r;
+}
+
+template <typename T>
+Array<T> Array<T>::CopyRange(s64 start, s64 end)
+{
+	return this->CopyRangeIn(ContextAllocator(), start, end);
+}
+
+template <typename T>
+Array<T> Array<T>::CopyRangeIn(Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
-	auto a = NewArray<T>(end - start);
-	CopyArray(this->View(start, end), a);
-	return a;
+	auto r = NewArrayIn<T>(a, end - start);
+	CopyArray(this->View(start, end), r);
+	return r;
 }
 
 template <typename T>
@@ -673,4 +719,3 @@ s64 StaticArray<T, N>::FindLast(T e)
 	auto v = this->View(0, N);
 	return ArrayFindLast<T>(&v, e);
 }
-

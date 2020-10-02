@@ -1,5 +1,10 @@
 #pragma once
 
+#include "Basic/String.h"
+
+void InitializeModelAssets();
+void LoadModelAsset(String name);
+
 #if 0
 
 #include "Mesh.h"

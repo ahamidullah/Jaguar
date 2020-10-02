@@ -1,11 +1,26 @@
 #include "Asset.h"
 
+#include "Asset.h"
+//#define STBI_MALLOC AllocateMemory
+//#define STBI_REALLOC ResizeMemory
+//#define STBI_FREE DeallocateMemory
+//#define STB_IMAGE_IMPLEMENTATION
+//#define STB_IMAGE_WRITE_IMPLEMENTATION
+//#define TINYGLTF_NOEXCEPTION
+//#define TINYGLTF_IMPLEMENTATION
+////#include "tiny_gltf.h"
+//#undef TINYGLTF_IMPLEMENTATION
+//#undef STB_IMAGE_IMPLEMENTATION
+//#undef STB_IMAGE_WRITE_IMPLEMENTATION
+
 void InitializeAssets(void *)
 {
+	InitializeModelAssets();
 }
 
-void LoadAsset(AssetID id)
+void LoadAsset(String name)
 {
+	LoadModelAsset(name);
 }
 
 #if 0

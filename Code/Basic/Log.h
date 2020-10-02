@@ -17,6 +17,7 @@ enum LogLevel
 };
 
 struct String;
+void SetLogLevel(LogLevel l);
 void ConsolePrint(String fmt, ...);
 //void ConsolePrint(const char *fmt, ...);
 #define LogPrint(lvl, cat, fmt, ...) LogPrintActual(__FILE__, __func__, __LINE__, lvl, cat, fmt, ##__VA_ARGS__)

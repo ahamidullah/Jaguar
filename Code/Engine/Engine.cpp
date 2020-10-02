@@ -23,12 +23,12 @@ auto cam = (Camera *){};
 
 void InitializeGameLoop()
 {
-	LoadAsset(SponzaAssetID);
 	cam = NewCamera("Main", {10000, -10000, 10000}, {0, 0, 0}, 100.4f, DegreesToRadians(90.0f));
-	auto e = NewEntity();
-	auto t = Transform{};
-	SetEntityTransform(e, t);
-	SetEntityModel(e, SponzaAssetID);
+	LoadAsset("Box");
+	//auto e = NewEntity();
+	//auto t = Transform{};
+	//SetEntityTransform(e, t);
+	//SetEntityModel(e, SponzaAssetID);
 }
 
 void GameLoop(f32 deltaTime)

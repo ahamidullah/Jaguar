@@ -51,7 +51,10 @@ struct String
 	const u8 *begin();
 	const u8 *end();
 	s64 Length();
-	String Copy(s64 start, s64 end);
+	String Copy();
+	String CopyIn(Allocator *a);
+	String CopyRange(s64 start, s64 end);
+	String CopyRangeIn(Allocator *a, s64 start, s64 end);
 	char *CString();
 	String View(s64 start, s64 end);
 	s64 FindFirst(u8 c);
@@ -60,9 +63,11 @@ struct String
 };
 
 String NewString(const char *s);
-String NewStringFromRange(String s, s64 start, s64 end);
 String NewStringFromBuffer(Array<u8> b);
-bool ParseInteger(String s, s64 *out);
+s64 ParseInteger(String s, bool *err);
+s64 ParseIntegerAbort(String s);
+f32 ParseFloat(String s, bool *err);
+f32 ParseFloatAbort(String s);
 String FormatString(String fmt, ...);
 
 template <typename... StringPack>
@@ -73,13 +78,10 @@ String JoinStringsIn(Allocator *a, StringPack... sp)
 	{
 		return "";
 	}
-	auto len = (sp.Length() + ...);
+	auto len = (String{sp}.Length() + ...);
 	auto sb = NewStringBuilderWithCapacityIn(a, len);
-	(sb->Append(sp), ...);
-	return
-	{
-		.buffer = sb.buffer,
-	};
+	(sb.Append(sp), ...);
+	return NewStringFromBuffer(sb.buffer);
 }
 
 template <typename... StringPack>

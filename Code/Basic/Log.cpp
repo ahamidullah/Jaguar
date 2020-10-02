@@ -18,7 +18,7 @@ auto crashHandlers = NewArrayIn<CrashHandler>(GlobalAllocator(), 0);
 
 String LogFileDirectory()
 {
-	return String{"Data/Log/"};
+	return "Data/Log/";
 }
 
 LogLevel *LogLevelPointer()

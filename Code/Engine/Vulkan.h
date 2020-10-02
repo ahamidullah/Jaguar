@@ -36,13 +36,13 @@ typedef VkPipelineStageFlagBits GPUPipelineStage;
 
 void InitializeGPU(Window *win);
 
-enum GPUShader
+enum GPUShaderID
 {
-	GPUModelShader,
-	GPUShaderCount
+	GPUModelShaderID,
+	GPUShaderIDCount
 };
 
-void GPUCompileShaderFromFile(GPUShader s, String path, bool *err);
+void GPUCompileShaderFromFile(GPUShaderID id, String path, bool *err);
 
 void GPUBeginFrame();
 void GPUEndFrame();
@@ -162,7 +162,7 @@ struct GPUCommandBuffer
 {
 	VkCommandBuffer vkCommandBuffer;
 
-	void BeginRender(GPUShader s, GPUFramebuffer fb);
+	void BeginRender(GPUShaderID id, GPUFramebuffer fb);
 	void EndRender();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);

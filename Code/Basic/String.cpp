@@ -72,14 +72,33 @@ StringView::StringView(const char *s)
 	this->buffer = NewArrayView<u8>((u8 *)s, len);
 }
 
-String StringView::Copy(s64 start, s64 end)
+String StringView::CopyIn(Allocator *a)
+{
+	return
+	{
+		this->buffer.CopyIn(a),
+		false,
+	}
+}
+
+String StringView::Copy()
+{
+	return this->CopyIn(ContextAllocator());
+}
+
+String StringView::CopyRangeIn(Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	return
 	{
-		this->buffer.Copy(start, end),
+		this->buffer.CopyRangeIn(a, start, end),
 		false,
 	};
+}
+
+String StringView::CopyRange(s64 start, s64 end)
+{
+	return this->CopyRangeIn(ContextAllocator(), start, end);
 }
 
 StringView StringView::View(s64 start, s64 end)
@@ -135,13 +154,9 @@ String::String(const char *s)
 	this->literal = true;
 }
 
-String NewStringFromRange(String s, s64 start, s64 end)
+String NewString(const char *s)
 {
-	Assert(start >= 0);
-	Assert(end >= start);
-	auto b = NewArray<u8>(end - start);
-	CopyArray(s.buffer.View(start, end), b);
-	return NewStringFromBuffer(b);
+	return s;
 }
 
 String NewStringFromBuffer(Array<u8> b)
@@ -201,10 +216,24 @@ s64 String::Length()
 	return this->buffer.count;
 }
 
-String String::Copy(s64 start, s64 end)
+String String::Copy()
 {
-	Assert(end >= start);
-	return NewStringFromBuffer(this->buffer.Copy(start, end));
+	return this->CopyIn(ContextAllocator());
+}
+
+String String::CopyIn(Allocator *a)
+{
+	return NewStringFromBuffer(this->buffer.CopyIn(a));
+}
+
+String String::CopyRange(s64 start, s64 end)
+{
+	return this->CopyRangeIn(ContextAllocator(), start, end);
+}
+
+String String::CopyRangeIn(Allocator *a, s64 start, s64 end)
+{
+	return NewStringFromBuffer(this->buffer.CopyRangeIn(a, start, end));
 }
 
 char *String::CString()
@@ -252,7 +281,7 @@ Array<String> String::Split(char seperator)
 		{
 			if (curLen > 0)
 			{
-				splits.Append(this->Copy(curStart, i - 1));
+				splits.Append(this->CopyRange(curStart, i - 1));
 				curLen = 0;
 			}
 		}
@@ -267,7 +296,7 @@ Array<String> String::Split(char seperator)
 	}
 	if (curLen > 0)
 	{
-		splits.Append(this->Copy(curStart, this->Length() - 1));
+		splits.Append(this->CopyRange(curStart, this->Length() - 1));
 	}
 	return splits;
 }
@@ -282,18 +311,53 @@ String FormatString(String fmt, ...)
 	return NewStringFromBuffer(sb.buffer);
 }
 
-bool ParseInteger(String s, s64 *out)
+s64 ParseInteger(String s, bool *err)
 {
-    *out = 0;
+    auto n = 0;
     for (auto c : s)
     {
     	if (!IsCharDigit(c))
     	{
-    		return false;
+    		*err = true;
+    		return 0;
     	}
-    	*out = (*out * 10) + c - '0';
+    	n = (n * 10) + c - '0';
     }
-    return true;
+    return n;
+}
+
+s64 ParseIntegerAbort(String s)
+{
+	auto err = false;
+	auto n = ParseInteger(s, &err);
+	if (err)
+	{
+		Abort("String", "Failed parse integer for string %k.", s);
+	}
+	return n;
+}
+
+f32 ParseFloat(String s, bool *err)
+{
+	auto cs = s.CString();
+	auto end = (char *){};
+	auto f = strtof(cs, &end);
+	if (end != &cs[s.Length()])
+	{
+		*err = true;
+	}
+	return f;
+}
+
+f32 ParseFloatAbort(String s)
+{
+	auto err = false;
+	auto f = ParseFloat(s, &err);
+	if (err)
+	{
+		Abort("String", "Failed to parse float %k.", s);
+	}
+	return f;
 }
 
 StringBuilder NewStringBuilderIn(Allocator *a, s64 len)

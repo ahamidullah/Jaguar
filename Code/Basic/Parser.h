@@ -16,6 +16,8 @@ struct Parser
 	String Line();
 	String Token();
 	void Eat(char c);
+	s64 PeekChar();
+	void Expect(u8 c);
 };
 
 Parser NewParser(String filepath, String delims, bool *err);

@@ -1,4 +1,70 @@
 #include "Model.h"
+#include "GLTF.h"
+#include "Basic/File.h"
+#include "Basic/Filepath.h"
+#include "Basic/HashTable.h"
+#include "Basic/Hash.h"
+#include "Basic/Parser.h"
+
+#ifdef DevelopmentBuild
+	const auto ModelDirectory = NewString("Data/Model");
+
+	auto modelFilepaths = NewHashTableIn<String, String>(GlobalAllocator(), 0, HashString);
+#endif
+
+void InitializeModelAssets()
+{
+	if (DevelopmentBuild)
+	{
+		auto itr = DirectoryIteration{};
+		while (itr.Iterate(ModelDirectory))
+		{
+			if (!itr.isDirectory)
+			{
+				LogVerbose("Model", "File %k is not a directory, skipping.", itr.filename);
+				continue;
+			}
+			auto name = itr.filename;
+			auto path = JoinFilepaths(ModelDirectory, itr.filename, "glTF", JoinStrings(name, ".gltf"));
+			if (!FileExists(path))
+			{
+				LogVerbose("Model", "%k does not exist in directory %k, skipping.", JoinStrings(name, ".gltf"), JoinFilepaths(ModelDirectory, itr.filename, "glTF"));
+				continue;
+			}
+			modelFilepaths.Insert(name.CopyIn(GlobalAllocator()), path.CopyIn(GlobalAllocator()));
+			LogVerbose("Model", "Registered %k to filepath %k.", name, path);
+		}
+	}
+}
+
+void LoadModelAssetFromFile(String name)
+{
+	auto path = modelFilepaths.Lookup(name, "");
+	if (path == "")
+	{
+		LogError("Model", "Failed to find a registered file path for %k, skipping load.", name);
+		return;
+	}
+	auto err = false;
+	auto gltf = GLTFParseFile(path, &err);
+	if (err)
+	{
+		LogError("Model", "Failed to parse glTF file for %k, skipping load.", path);
+		return;
+	}
+}
+
+void LoadModelAsset(String name)
+{
+	if (DevelopmentBuild)
+	{
+		LoadModelAssetFromFile(name);
+	}
+	else
+	{
+		Abort("Model", "@TODO: Load model assets in release mode.");
+	}
+}
 
 #if 0
 void LoadModelAsset(void *jobParameterPointer)

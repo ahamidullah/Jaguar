@@ -4,18 +4,6 @@ set -e
 
 cd $PROJECT_DIRECTORY
 
-if [ "$#" = 0 ]; then
-	prime-run Build/Linux/Debug/Development/Binary/Engine
-elif [ "$#" = 1 && "$1" = "AddressSanitizer" ]; then
-	prime-run Build/Linux/AddressSanitizer/Debug/Development/Binary/Engine
-elif [ "$#" = 1 && "$1" = "ThreadSanitizer" ]; then
-	prime-run Build/Linux/ThreadSanitizer/Debug/Development/Binary/Engine
-elif [ "$#" = 2 ]; then
-	prime-run Build/Linux/"$1"/"$2"/Binary/Engine
-elif [ "$#" = 3 ]; then
-	prime-run Build/Linux/"$1"/"$2"/"$3"/Binary/Engine
-else
-	echo "Invalid number of arguments."
-fi
+prime-run Build/Linux/Debug/Development/Binary/Engine "$@"
 
 cd - >& /dev/null

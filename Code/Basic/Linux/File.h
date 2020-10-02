@@ -30,7 +30,7 @@ struct DirectoryIteration
 	DIR *dir;
 	struct dirent *dirent;
 	String filename;
-	bool isDir;
+	bool isDirectory;
 
 	bool Iterate(String path);
 };

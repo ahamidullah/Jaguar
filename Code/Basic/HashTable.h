@@ -1,3 +1,5 @@
+#pragma once
+
 const auto HashTableVacantHashSentinel = (u64)-1;
 const auto HashTableDeletedHashSentinel = (u64)-2;
 const auto HashTableDefaultInitialLength = 16;

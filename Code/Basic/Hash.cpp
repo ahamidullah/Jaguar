@@ -40,14 +40,14 @@ u64 HashPointer(void *p)
 }
 
 // @TODO: Where did I get this from? Is the Knuth hash better?
-u64 HashString(String *s)
+u64 HashString(String s)
 {
-    auto hash = u64{5381};
-    for (auto c : *s)
+    auto x = u64{5381};
+    for (auto c : s)
     {
-        hash = ((hash << 5) + hash) + c;
+        x = ((x << 5) + x) + c;
 	}
-    return hash;
+    return x;
 }
 
 void Hasher32::Add(u32 x)

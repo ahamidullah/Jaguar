@@ -1,44 +1,47 @@
 #pragma once
 
-#include "Basic/Array.h"
+#include "Parser.h"
 
-struct JSONObjectField;
+void JSONEatFieldValue(Parser *p);
 
-struct JSONObject
+template <typename F>
+void JSONParseObject(Parser *p, F &&proc)
 {
-	Array<JSONObjectField> pairs;
-};
-
-enum JSONValueType
-{
-	JSONNumberType,
-	JSONStringType,
-	JSONBooleanType,
-	JSONArrayType,
-	JSONObjectType,
-};
-
-struct JSONValue
-{
-	JSONValueType type;
-	union
+	p->Expect('{');
+	for (auto t = p->Token(); t != "" && t != "}"; t = p->Token())
 	{
-		s64 number;
-		String string;
-		bool boolean;
-		Array<JSONValue> array;
-		JSONObject object;
-	};
-	s64 Number();
-	String String();
-	bool Boolean();
-	Array<JSONValue> Array();
-	JSONObject Object();
-};
+		auto name = t.View(1, t.Length() - 2);
+		auto start = p->index;
+		proc(p, name);
+		if (p->index == start)
+		{
+			// User did not care about the value, so just eat it.
+			JSONEatFieldValue(p);
+		}
+		if (p->PeekChar() == ',')
+		{
+			p->Advance();
+		}
+	}
+}
 
-struct JSONObjectField
+template <typename F>
+void JSONParseList(Parser *p, F &&proc)
 {
-	String name;
-	JSONValue value;
-};
-
+	p->Expect('[');
+	auto c = p->PeekChar();
+	for (; c != -1 && c != ']'; c = p->PeekChar())
+	{
+		if (c == ',')
+		{
+			p->Advance();
+		}
+		auto start = p->index;
+		proc(p);
+		Assert(p->index != start);
+	}
+	if (c == ']')
+	{
+		p->Advance();
+	}
+}

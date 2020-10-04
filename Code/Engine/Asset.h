@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Model.h"
-#include "Mesh.h"
 #include "Basic/String.h"
 
 enum AssetType

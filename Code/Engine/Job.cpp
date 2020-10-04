@@ -235,9 +235,8 @@ void *WorkerThreadProcedure(void *parameter)
 				break;
 			}
 
-			// Calling SwitchToFiber will suspend this WorkerThreadProcedure and start running the
-			// job on this thread.  The job procedure will eventually finish or call
-			// WaitForJobCounter, at which point this WorkerThreadProcedure will resume.
+			// Calling SwitchToFiber will suspend this WorkerThreadProcedure and start running the job on this thread.
+			// The job procedure will eventually finish or call WaitForJobCounter, at which point this WorkerThreadProcedure will resume.
 			SwitchToFiber(&activeJobFiber->platformFiber);
 
 			auto scheduledJob = &activeJobFiber->parameter.scheduledJob;

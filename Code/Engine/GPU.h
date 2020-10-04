@@ -1,3 +1,11 @@
+#pragma once
+
+#include "Vulkan.h"
+
+struct GPUIndexedGeometry
+{
+};
+
 #if 0
 #pragma once
 

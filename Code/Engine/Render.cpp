@@ -165,6 +165,8 @@ void UpdateRenderUniforms(Camera *c)
 #endif
 }
 
+extern MeshAsset mesh;
+
 void Render()
 {
 	GPUBeginFrame();
@@ -182,6 +184,9 @@ void Render()
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
 		cb.BeginRender(GPUModelShaderID, GPUDefaultFramebuffer());
+		cb.BindIndexBuffer(mesh.indexBuffer, mesh.indexType);
+		cb.BindVertexBuffer(mesh.vertexBuffer, 0);
+		cb.DrawIndexedVertices(mesh.indexCount, 0, 0);
 		cb.EndRender();
 		cb.Queue();
 	}

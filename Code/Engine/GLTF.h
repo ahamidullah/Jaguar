@@ -54,13 +54,13 @@ enum GLTFAccessorComponentType
 
 enum GLTFAccessorType
 {
-	GLTFScalarType,
-	GLTFVec2Type,
-	GLTFVec3Type,
-	GLTFVec4Type,
-	GLTFMat2Type,
-	GLTFMat3Type,
-	GLTFMat4Type,
+	GLTFScalarType = 1,
+	GLTFVec2Type = 2,
+	GLTFVec3Type = 3,
+	GLTFVec4Type = 4,
+	GLTFMat2Type = 4,
+	GLTFMat3Type = 9,
+	GLTFMat4Type = 16,
 };
 
 // An accessor defines how to retreive data from a bufferView as a typed array.
@@ -104,6 +104,7 @@ struct GLTFBuffer
 {
 	s64 byteLength;
 	String uri;
+	//File uriFile;
 };
 
 struct GLTF
@@ -116,5 +117,6 @@ struct GLTF
 };
 
 GLTF GLTFParseFile(String path, bool *err);
+s64 GLTFComponentTypeToSize(GLTFAccessorComponentType t);
 
 #endif

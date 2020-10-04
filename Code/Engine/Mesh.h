@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Asset.h"
+#include "GPU.h"
 #include "Math.h"
 #include "Transform.h"
 
@@ -24,21 +24,24 @@ struct Vertex1P1N
 	V3 normal;
 };
 
-#if 0
-struct MeshAsset
+struct SubmeshAsset
 {
-	GPUIndexedGeometry gpuGeometry;
-	struct Submesh
-	{
-		u32 indexCount;
-		u32 firstIndex;
-		u32 vertexOffset;
-	};
-	Array<Submesh> submeshes;
+	u32 indexCount;
+	u32 firstIndex;
+	u32 vertexOffset;
 };
 
-struct MeshInstance
+struct MeshAsset
 {
-	String assetName;
+	u32 indexCount;
+	GPUIndexType indexType;
+	GPUBuffer vertexBuffer;
+	GPUBuffer indexBuffer;
+	//GPUIndexedGeometry gpuGeometry;
+	//Array<SubmeshAsset> submeshes;
 };
-#endif
+
+struct Mesh
+{
+	String meshName;
+};

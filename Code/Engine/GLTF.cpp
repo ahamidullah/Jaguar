@@ -14,7 +14,8 @@ GLTFBuffer GLTFParseBuffer(Parser *p)
 		}
 		else if (name == "uri")
 		{
-			b.uri = p->Token();
+			auto uri = p->Token();
+			b.uri = uri.View(1, uri.Length() - 1);
 		}
 	});
 	return b;
@@ -259,6 +260,37 @@ GLTF GLTFParseFile(String path, bool *err)
 		}
 	});
 	return gltf;
+}
+
+s64 GLTFComponentTypeToSize(GLTFAccessorComponentType t)
+{
+	switch (t)
+	{
+	case GLTFByteType:
+	{
+		return 1;
+	} break;
+	case GLTFUnsignedByteType:
+	{
+		return 1;
+	} break;
+	case GLTFShortType:
+	{
+		return 2;
+	} break;
+	case GLTFUnsignedShortType:
+	{
+		return 2;
+	} break;
+	case GLTFUnsignedIntType:
+	{
+		return 4;
+	} break;
+	case GLTFFloatType:
+	{
+		return 4;
+	} break;
+	}
 }
 
 #endif

@@ -1,29 +1,24 @@
 #pragma once
 
-#include "Basic/String.h"
-
-void InitializeModelAssets();
-void LoadModelAsset(String name);
-
-#if 0
-
 #include "Mesh.h"
+#include "Basic/String.h"
 
 struct ModelAsset
 {
 	MeshAsset *mesh;
-	SkeletonAsset *skeleton;
+	//Skeleton *skeleton;
 
-	#if DEBUG_BUILD
+	#if DebugBuild
 		String name;
 	#endif
 };
 
-struct ModelInstance
+struct Model
 {
-	String assetName;
-	MeshInstance mesh;
-	SkeletonInstance *skeleton;
+	//String modelName;
+	Mesh mesh;
+	//Skeleton *skeleton;
 };
 
-#endif
+void InitializeModelAssets();
+ModelAsset LoadModelAsset(String name);

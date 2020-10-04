@@ -92,15 +92,17 @@ struct VulkanMemoryFrameAllocator
 	Spinlock lock;
 	s64 capacity;
 	s64 size;
-	StaticArray<s64, VulkanMaxFramesInFlight> frameSizes;
+	s64 index;
+	// We keep +1 of VulkanMaxFramesInFlight to handle the case of allocations which come before we've actually gotten the fence signal confirming the frame's resources are cleared.
+	StaticArray<s64, VulkanMaxFramesInFlight + 1> frameSizes;
 	s64 start, end;
-	StaticArray<Array<VulkanMemoryAllocation>, VulkanMaxFramesInFlight> allocations;
+	StaticArray<Array<VulkanMemoryAllocation>, VulkanMaxFramesInFlight + 1> allocations;
 	VkDeviceMemory vkMemory;
 	VulkanMemoryType memoryType;
 	void *map;
 
-	VulkanMemoryAllocation *Allocate(s64 size, s64 alignment, s64 frameIndex);
-	void Free(s64 frameIndex);
+	VulkanMemoryAllocation *Allocate(s64 size, s64 alignment);
+	void FreeOldestFrame();
 };
 
 struct VulkanMemoryBlock
@@ -131,7 +133,8 @@ struct VulkanAsyncStagingBufferResources
 struct VulkanThreadLocal
 {
 	// Frame resources.
-	StaticArray<StaticArray<VkCommandPool, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight> frameCommandPools;
+	// We need VulkanMaxFramesInFlight + 1 frame command pools because someone might try submitting frame command buffers before GPUBeginFrame.
+	StaticArray<StaticArray<VkCommandPool, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight + 1> frameCommandPools;
 	StaticArray<StaticArray<Array<VkCommandBuffer>, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight> frameQueuedCommandBuffers;
 	// Async resources.
 	// @TODO: Could use double buffers to avoid the locking.
@@ -204,7 +207,12 @@ auto vkImageOwnershipSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlig
 auto vkImageAcquiredSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
 auto vkFrameGraphicsCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
 auto vkFrameTransfersCompleteSemaphores = StaticArray<VkSemaphore, VulkanMaxFramesInFlight>{};
-auto vkFrameIndex = u32{};
+auto vkFrameIndex = u64{};
+// Some vulkan pooled frame resources (such as frame command pools) cannot exist per-frame because we need to be able to allocate for frame X before we wait on the frame fence.
+// We can't free those resources on a per-frame basis because that would also free all resources allocated in this frame before the call to GPUBeginFrame.
+// So, we keep track of NumberOfFrames + 1 number of resource groups
+auto vkFrameExpandedIndex = u64{};
+auto vkFrameExpandedFreeIndex = u64{1};
 auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
 auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderIDCount>{};
 auto vkPipelines = StaticArray<VkPipeline, GPUShaderIDCount>{};
@@ -474,20 +482,20 @@ VulkanMemoryFrameAllocator NewVulkanMemoryFrameAllocator(s64 cap)
 	return a;
 }
 
-VulkanMemoryAllocation *VulkanMemoryFrameAllocator::Allocate(s64 size, s64 align, s64 frameIndex)
+VulkanMemoryAllocation *VulkanMemoryFrameAllocator::Allocate(s64 size, s64 align)
 {
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
 	auto alignOffset = AlignAddress(this->end, align) - this->end;
-	this->frameSizes[frameIndex] += alignOffset + size;
+	this->frameSizes[vkFrameExpandedIndex] += alignOffset + size;
 	this->size += alignOffset + size;
 	if (this->size > this->capacity)
 	{
 		// @TODO: Fallback to block allocators.
 		Abort("Vulkan", "Frame allocator ran out of space...");
 	}
-	this->allocations[frameIndex].Resize(this->allocations[frameIndex].count + 1);
-	auto a = &this->allocations[frameIndex][this->allocations[frameIndex].count - 1];
+	this->allocations[vkFrameExpandedIndex].Resize(this->allocations[vkFrameExpandedIndex].count + 1);
+	auto a = &this->allocations[vkFrameExpandedIndex][this->allocations[vkFrameExpandedIndex].count - 1];
 	a->size = size;
 	a->vkMemory = this->vkMemory;
 	a->offset = (this->end + alignOffset) % this->capacity;
@@ -496,14 +504,14 @@ VulkanMemoryAllocation *VulkanMemoryFrameAllocator::Allocate(s64 size, s64 align
 	return a;
 }
 
-void VulkanMemoryFrameAllocator::Free(s64 frameIndex)
+void VulkanMemoryFrameAllocator::FreeOldestFrame()
 {
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
-	this->start = (this->start + this->frameSizes[frameIndex]) % this->capacity;
-	this->size -= this->frameSizes[frameIndex];
-	this->frameSizes[frameIndex] = 0;
-	this->allocations[frameIndex].Resize(0);
+	this->start = (this->start + this->frameSizes[vkFrameExpandedFreeIndex]) % this->capacity;
+	this->size -= this->frameSizes[vkFrameExpandedFreeIndex];
+	this->frameSizes[vkFrameExpandedFreeIndex] = 0;
+	this->allocations[vkFrameExpandedFreeIndex].Resize(0);
 }
 
 VulkanMemoryBlockAllocator NewVulkanMemoryBlockAllocator(VulkanMemoryType t, s64 blockSize)
@@ -553,6 +561,7 @@ VulkanMemoryAllocation *VulkanMemoryBlockAllocator::Allocate(s64 size, s64 align
 		}
 	}
 	auto b = &this->blocks[this->blocks.count - 1];
+	LogInfo("Vulkan", "b->frontier: %ld", b->frontier);
 	b->allocations.Resize(b->allocations.count + 1);
 	auto a = &b->allocations[b->allocations.count - 1];
 	a->size = size;
@@ -1083,7 +1092,7 @@ void InitializeGPU(Window *win)
 		}
 		for (auto &tl : vkThreadLocal)
 		{
-			for (auto i = 0; i < VulkanMaxFramesInFlight; i += 1)
+			for (auto i = 0; i < VulkanMaxFramesInFlight + 1; i += 1)
 			{
 				for (auto j = 0; j < VulkanMainQueueTypeCount; j += 1)
 				{
@@ -1612,7 +1621,7 @@ VkCommandBuffer NewVulkanCommandBuffer(VkCommandPool p)
 GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer()
 {
 	auto cb = GPUFrameGraphicsCommandBuffer{};
-    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanGraphicsQueue]);
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameExpandedIndex][VulkanGraphicsQueue]);
 	return cb;
 }
 
@@ -1625,7 +1634,7 @@ void GPUFrameGraphicsCommandBuffer::Queue()
 GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
 {
 	auto cb = GPUFrameTransferCommandBuffer{};
-    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanTransferQueue]);
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameExpandedIndex][VulkanTransferQueue]);
 	return cb;
 }
 
@@ -1638,7 +1647,7 @@ void GPUFrameTransferCommandBuffer::Queue()
 GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer()
 {
 	auto cb = GPUFrameComputeCommandBuffer{};
-    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameIndex][VulkanComputeQueue]);
+    cb.vkCommandBuffer = NewVulkanCommandBuffer(vkThreadLocal[ThreadIndex()].frameCommandPools[vkFrameExpandedIndex][VulkanComputeQueue]);
 	return cb;
 }
 
@@ -1762,6 +1771,7 @@ void GPUCommandBuffer::BeginRender(GPUShaderID sid, GPUFramebuffer fb)
 		.clearValueCount = (u32)clearValues.Count(),
 		.pClearValues = clearValues.elements,
 	};
+	vkCmdBindDescriptorSets(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, 0, ShaderDescriptorSetCount, vkDescriptorSets[vkSwapchainImageIndex].elements, 0, NULL);
 	vkCmdBeginRenderPass(this->vkCommandBuffer, &bi, VK_SUBPASS_CONTENTS_INLINE);
 }
 
@@ -1804,9 +1814,9 @@ void GPUCommandBuffer::BindVertexBuffer(GPUBuffer b, s64 bindPoint)
 	vkCmdBindVertexBuffers(this->vkCommandBuffer, bindPoint, 1, &b.vkBuffer, &offset);
 }
 
-void GPUCommandBuffer::BindIndexBuffer(GPUBuffer b)
+void GPUCommandBuffer::BindIndexBuffer(GPUBuffer b, GPUIndexType t)
 {
-	vkCmdBindIndexBuffer(this->vkCommandBuffer, b.vkBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(this->vkCommandBuffer, b.vkBuffer, 0, t);
 }
 
 /*
@@ -1985,7 +1995,7 @@ GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst)
 	};
 	auto mr = VkMemoryRequirements{};
 	vkGetBufferMemoryRequirements(vkDevice, sb.vkBuffer, &mr);
-	auto mem = vkCPUToGPUFrameAllocator.Allocate(mr.size, mr.alignment, vkFrameIndex);
+	auto mem = vkCPUToGPUFrameAllocator.Allocate(mr.size, mr.alignment);
 	sb.map = mem->map;
 	VkCheck(vkBindBufferMemory(vkDevice, sb.vkBuffer, mem->vkMemory, mem->offset));
 	return sb;
@@ -2218,12 +2228,7 @@ void GPUBeginFrame()
 	{
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
 		{
-			VkCheck(vkResetCommandPool(vkDevice, tl.frameCommandPools[vkFrameIndex][i], 0));
-		}
-		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
-		{
-			// We do not need to free the command buffers individually because we reset their command pool.
-			tl.frameQueuedCommandBuffers[vkFrameIndex][i].Resize(0);
+			VkCheck(vkResetCommandPool(vkDevice, tl.frameCommandPools[vkFrameExpandedFreeIndex][i], 0));
 		}
 		tl.asyncCommandBufferLock.Lock();
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
@@ -2260,7 +2265,7 @@ void GPUBeginFrame()
 		}
 		tl.asyncStagingBufferLock.Unlock();
 	}
-	vkCPUToGPUFrameAllocator.Free(vkFrameIndex);
+	vkCPUToGPUFrameAllocator.FreeOldestFrame();
 }
 
 void GPUEndFrame()
@@ -2304,6 +2309,16 @@ void GPUEndFrame()
 		pi.pWaitSemaphores = &vkFrameGraphicsCompleteSemaphores[vkFrameIndex];
 	}
 	VkCheck(vkQueuePresentKHR(vkQueues[VulkanPresentQueue], &pi));
+	for (auto &tl : vkThreadLocal)
+	{
+		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+		{
+			// We do not need to free the command buffers individually because we reset their command pool.
+			tl.frameQueuedCommandBuffers[vkFrameIndex][i].Resize(0);
+		}
+	}
+	vkFrameExpandedIndex = (vkFrameExpandedIndex + 1) % (VulkanMaxFramesInFlight + 1);
+	vkFrameExpandedFreeIndex = (vkFrameExpandedIndex + 1) % (VulkanMaxFramesInFlight + 1);
 	vkFrameIndex = (vkFrameIndex + 1) % VulkanMaxFramesInFlight;
 }
 

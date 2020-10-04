@@ -3,6 +3,7 @@
 #ifdef VulkanBuild
 
 #include "PCH.h"
+#include "Math.h"
 #include "Media/Window.h"
 #include "Basic/String.h"
 
@@ -33,6 +34,10 @@ typedef VkSampleCountFlagBits GPUSampleCount;
 typedef VkFlags GPUPipelineStageFlags;
 typedef VkPipelineStageFlagBits GPUPipelineStage;
 #define GPU_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+
+typedef VkIndexType GPUIndexType;
+#define GPUIndexTypeUint16 VK_INDEX_TYPE_UINT16
+#define GPUIndexTypeUint32 VK_INDEX_TYPE_UINT32
 
 void InitializeGPU(Window *win);
 
@@ -167,7 +172,7 @@ struct GPUCommandBuffer
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
-	void BindIndexBuffer(GPUBuffer b);
+	void BindIndexBuffer(GPUBuffer b, GPUIndexType t);
 	void DrawIndexedVertices(s64 numIndices, s64 firstIndex, s64 vertexOffset);
 	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
 	void CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h);

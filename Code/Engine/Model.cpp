@@ -37,24 +37,115 @@ void InitializeModelAssets()
 	}
 }
 
-void LoadModelAssetFromFile(String name)
+auto mesh = MeshAsset{};
+
+ModelAsset LoadModelAssetFromFile(String name)
 {
-	auto path = modelFilepaths.Lookup(name, "");
-	if (path == "")
+	auto gltfPath = modelFilepaths.Lookup(name, "");
+	if (gltfPath == "")
 	{
 		LogError("Model", "Failed to find a registered file path for %k, skipping load.", name);
-		return;
+		return {};
 	}
 	auto err = false;
-	auto gltf = GLTFParseFile(path, &err);
+	auto gltf = GLTFParseFile(gltfPath, &err);
 	if (err)
 	{
-		LogError("Model", "Failed to parse glTF file for %k, skipping load.", path);
-		return;
+		LogError("Model", "Failed to parse glTF file for %k, skipping load.", gltfPath);
+		return {};
 	}
+	auto buffers = Array<Array<u8>>{};
+	for (auto b : gltf.buffers)
+	{
+		auto p = JoinFilepaths(FilepathDirectory(gltfPath), b.uri);
+		auto s = ReadEntireFile(p, &err);
+		if (err)
+		{
+			LogError("Model", "Failed to read glTF URI file %k.", p);
+			return {};
+		}
+		buffers.Append(s.buffer);
+	}
+	auto model = ModelAsset{};
+	auto vertexCount = 0;
+	for (auto m : gltf.meshes)
+	{
+		for (auto p : m.primitives)
+		{
+			// Indices.
+			{
+				auto acc = &gltf.accessors[p.indices];
+				auto indicesSize = acc->count * acc->type * GLTFComponentTypeToSize(acc->componentType);
+				switch (GLTFComponentTypeToSize(acc->componentType))
+				{
+				case 2:
+				{
+					mesh.indexType = GPUIndexTypeUint16;
+				} break;
+				case 4:
+				{
+					mesh.indexType = GPUIndexTypeUint32;
+				} break;
+				default:
+				{
+					Abort("Model", "Incompatible glTF mesh index size %d.", GLTFComponentTypeToSize(acc->componentType));
+				}
+				}
+				mesh.indexCount = acc->count;
+				mesh.indexBuffer = NewGPUIndexBuffer(indicesSize);
+				auto s = NewGPUFrameStagingBuffer(indicesSize, mesh.indexBuffer);
+				auto bv = &gltf.bufferViews[acc->bufferView];
+				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
+				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)s.Map(), indicesSize));
+				s.Flush();
+			}
+			// Vertices.
+			{
+				auto verticesSize = 0;
+				auto positionAccessorIndex = -1;
+				auto normalAccessorIndex = -1;
+				for (auto a : p.attributes)
+				{
+					if (a.type == GLTFPositionType)
+					{
+						auto acc = &gltf.accessors[a.index];
+						verticesSize += acc->count * acc->type * GLTFComponentTypeToSize(acc->componentType);
+						positionAccessorIndex = a.index;
+					}
+					else if (a.type == GLTFNormalType)
+					{
+						auto acc = &gltf.accessors[a.index];
+						verticesSize += acc->count * acc->type * GLTFComponentTypeToSize(acc->componentType);
+						normalAccessorIndex = a.index;
+					}
+				}
+				// Copy vertex data to GPU buffer, making sure it is interleaved.
+				mesh.vertexBuffer = NewGPUVertexBuffer(verticesSize);
+				auto s = NewGPUFrameStagingBuffer(verticesSize, mesh.vertexBuffer);
+				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset)
+				{
+					auto acc = &gltf.accessors[accIndex];
+					auto bv = &gltf.bufferViews[acc->bufferView];
+					auto b = (V3 *)(buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset);
+					auto dst = (V3 *)(((u8 *)s.Map()) + offset);
+					for (auto i = 0; i < acc->count; i += 1)
+					{
+						PrintV3(*b);
+						*dst = *b;
+						dst += 2;
+						b += 1;
+					}
+				};
+				CopyVertexAttributes(positionAccessorIndex, 0);
+				CopyVertexAttributes(normalAccessorIndex, sizeof(V3));
+				s.Flush();
+			}
+		}
+	}
+	return {};
 }
 
-void LoadModelAsset(String name)
+ModelAsset LoadModelAsset(String name)
 {
 	if (DevelopmentBuild)
 	{
@@ -64,6 +155,7 @@ void LoadModelAsset(String name)
 	{
 		Abort("Model", "@TODO: Load model assets in release mode.");
 	}
+	return {};
 }
 
 #if 0

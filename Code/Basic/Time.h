@@ -10,11 +10,20 @@ struct String;
 
 struct Timer
 {
-	Time start;
-	f64 runningSum;
-	u64 iteration;
 	String name;
+	Time start;
+	s64 iteration;
+	s64 runningSum;
+
+	Duration Elapsed();
+	void Print();
+	void Reset();
 };
 
-#define StartTimer(timerName) Timer TIMER_#timerName = {.name = #timerName, .start = GetTime(), .iteration = 1}
-#define PrintTimer(timerName) PrintTimerActual(&TIMER_##timerName)
+Timer NewTimer(String name);
+
+s64 SecondsToNanoseconds(s64 s);
+s64 NanosecondsToMilliseconds(s64 n);
+s64 NanosecondsToSeconds(s64 n);
+s64 NanosecondsToMinutes(s64 n);
+s64 NanosecondsToHours(s64 n);

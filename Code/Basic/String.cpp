@@ -167,13 +167,6 @@ String NewStringFromBuffer(Array<u8> b)
 	return s;
 }
 
-#if 0
-String::operator StringView()
-{
-	return {this->buffer};
-}
-#endif
-
 const u8 &String::operator[](s64 i)
 {
 	Assert(i >= 0 && i < this->Length());
@@ -311,6 +304,13 @@ String FormatString(String fmt, ...)
 	return NewStringFromBuffer(sb.buffer);
 }
 
+String FormatStringVarArgs(String fmt, va_list args)
+{
+	auto sb = StringBuilder{};
+	sb.FormatVarArgs(fmt, args);
+	return NewStringFromBuffer(sb.buffer);
+}
+
 s64 ParseInteger(String s, bool *err)
 {
     auto n = 0;
@@ -387,13 +387,6 @@ StringBuilder NewStringBuilderWithCapacity(s64 cap)
 {
 	return NewStringBuilderWithCapacityIn(ContextAllocator(), cap);
 }
-
-#if 0
-StringBuilder::operator StringView()
-{
-	return {this->buffer};
-}
-#endif
 
 u8 &StringBuilder::operator[](s64 i)
 {
@@ -508,7 +501,6 @@ void StringBuilder::FormatVarArgs(struct String fmt, va_list args)
 	};
 	auto cfmt = fmt.CString();
 	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], cfmt, args);
-	DeallocateMemory(cfmt);
 	this->buffer.Resize(len);
 }
 

@@ -2,7 +2,7 @@
 #include "String.h"
 #include "Time.h"
 
-void ReadEntireFileIn(StringBuilder *sb, String path, bool *err)
+void ReadEntireFileIn(Array<u8> *a, String path, bool *err)
 {
 	auto f = OpenFile(path, OpenFileReadOnly, err);
 	if (*err)
@@ -15,18 +15,17 @@ void ReadEntireFileIn(StringBuilder *sb, String path, bool *err)
 	{
 		return;
 	}
-	auto i = sb->Length();
-	sb->Resize(sb->Length() + flen);
-	if (!f.Read(sb->View(i, sb->Length()).buffer))
+	a->Resize(a->count + flen);
+	if (!f.Read(*a))
 	{
 		*err = true;
 		return;
 	}
 }
 
-String ReadEntireFile(String path, bool *err)
+Array<u8> ReadEntireFile(String path, bool *err)
 {
-	auto sb = StringBuilder{};
-	ReadEntireFileIn(&sb, path, err);
-	return NewStringFromBuffer(sb.buffer);
+	auto a = Array<u8>{};
+	ReadEntireFileIn(&a, path, err);
+	return a;
 }

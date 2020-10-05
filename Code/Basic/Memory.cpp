@@ -20,37 +20,37 @@ void *AlignPointer(void *addr, s64 align)
 
 u8 *SetAllocationHeaderAndData(void *mem, s64 size, s64 align)
 {
-	auto header = (u8 *)AlignPointer(mem, alignof(AllocationHeader));
-	auto data = header + sizeof(AllocationHeader);
-	if ((IntegerPointer)data % align == 0)
+	auto hdr = (u8 *)AlignPointer(mem, alignof(AllocationHeader));
+	auto dat = hdr + sizeof(AllocationHeader);
+	if ((IntegerPointer)dat % align == 0)
 	{
 		// Make room to store number of bytes between the end of the header and the start of the data.
 		// We need this when we go to free the pointer.
-		data += align;
+		dat += align;
 	}
 	else
 	{
-		data = (u8 *)AlignPointer(data, align);
+		dat = (u8 *)AlignPointer(dat, align);
 	}
 	// Right now we store the number of bytes from the start of the data to the start of the header,
 	// but we could store from the start of data to the end of the header. That would save us if the
 	// size of the AllocationHeader ever got too big...
-	auto bytesFromDataToHeader = data - header;
+	auto bytesFromDataToHeader = dat - hdr;
 	if (bytesFromDataToHeader > U8Max)
 	{
 		// Move the header up.
-		header = (u8 *)AlignPointer(data - sizeof(AllocationHeader) - alignof(AllocationHeader), alignof(AllocationHeader));
-		Assert(header >= mem);
-		Assert(header < data);
-		bytesFromDataToHeader = data - header;
+		hdr = (u8 *)AlignPointer(dat - sizeof(AllocationHeader) - alignof(AllocationHeader), alignof(AllocationHeader));
+		Assert(hdr >= mem);
+		Assert(hdr < dat);
+		bytesFromDataToHeader = dat - hdr;
 		Assert(bytesFromDataToHeader < U8Max);
 		Assert(bytesFromDataToHeader >= sizeof(AllocationHeader));
 	}
-	((AllocationHeader *)header)->size = size;
-	((AllocationHeader *)header)->alignment = align;
-	((AllocationHeader *)header)->startOfAllocation = mem;
-	*(data - 1) = bytesFromDataToHeader;
-	return data;
+	((AllocationHeader *)hdr)->size = size;
+	((AllocationHeader *)hdr)->alignment = align;
+	((AllocationHeader *)hdr)->start = mem;
+	*(dat - 1) = bytesFromDataToHeader;
+	return dat;
 }
 
 AllocationHeader *GetAllocationHeader(void *mem)
@@ -195,8 +195,6 @@ void GlobalHeapArrayAllocator::Free()
 {
 	Abort("Memory", "Unsupported call to Free in GlobalHeapArrayAllocator.");
 }
-
-ThreadLocal auto globalHeapLockThreadID = -1;
 
 GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
 {

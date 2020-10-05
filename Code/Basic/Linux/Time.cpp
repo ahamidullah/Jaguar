@@ -88,9 +88,10 @@ bool Time::operator<(Time t)
 
 Duration Time::operator-(Time t)
 {
+	Assert(this->ts.tv_sec > t.ts.tv_sec || (this->ts.tv_sec == t.ts.tv_sec && this->ts.tv_nsec >= t.ts.tv_nsec));
 	return
 	{
-		.nanoseconds = (SecondsToNanoseconds(t.ts.tv_sec - this->ts.tv_sec)) + (t.ts.tv_nsec - this->ts.tv_nsec),
+		.nanoseconds = SecondsToNanoseconds(this->ts.tv_sec - t.ts.tv_sec) + (this->ts.tv_nsec - t.ts.tv_nsec),
 	};
 }
 

@@ -35,8 +35,15 @@ struct MeshAsset
 {
 	u32 indexCount;
 	GPUIndexType indexType;
+#if OLD_VULKAN_BUFFER
 	GPUBuffer vertexBuffer;
 	GPUBuffer indexBuffer;
+#else
+	GPUBufferX vertexBuffer;
+	GPUBufferX indexBuffer;
+	s64 vertexOffset;
+	s64 firstIndex;
+#endif
 	//GPUIndexedGeometry gpuGeometry;
 	//Array<SubmeshAsset> submeshes;
 };

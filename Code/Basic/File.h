@@ -6,5 +6,5 @@
 	#error Unsupported platform.
 #endif
 
-void ReadEntireFileIn(StringBuilder *sb, String path, bool *err);
-String ReadEntireFile(String path, bool *err);
+void ReadEntireFileIn(Array<u8> *a, String path, bool *err);
+Array<u8> ReadEntireFile(String path, bool *err);

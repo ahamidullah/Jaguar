@@ -11,7 +11,6 @@ char UppercaseChar(char c);
 char LowercaseChar(char c);
 
 struct String;
-typedef s32 Rune;
 
 #if 0
 struct StringView
@@ -44,7 +43,6 @@ struct String
 	String();
 	String(char *s);
 	String(const char *s);
-	String(Array<u8> buf);
 	const u8 &operator[](s64 i);
 	bool operator==(String s);
 	bool operator!=(String s);
@@ -69,6 +67,7 @@ s64 ParseIntegerAbort(String s);
 f32 ParseFloat(String s, bool *err);
 f32 ParseFloatAbort(String s);
 String FormatString(String fmt, ...);
+String FormatStringVarArgs(String fmt, va_list args);
 
 template <typename... StringPack>
 String JoinStringsIn(Allocator *a, StringPack... sp)

@@ -6,6 +6,7 @@
 #include "Media/Input.h"
 #include "Basic/Process.h"
 #include "Basic/Log.h"
+#include "Basic/Time.h"
 
 s64 windowWidth, windowHeight;
 

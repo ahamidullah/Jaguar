@@ -46,13 +46,11 @@ Stage: Fragment
 			vec3 ambientIntensity = vec3(0.15f, 0.15f, 0.15f);
 			vec3 diffuseIntensity = vec3(0.6f, 0.6f, 0.6f);
 			vec3 directionalLightDirection = vec3(-0.707107, -0.707107, -0.707107);
-
 			vec3 directionalLightingResult = vec3(0);
 			{
 				vec3 receiveDirection = normalize(-directionalLightDirection);
 				directionalLightingResult = ambient(ambientIntensity) + diffuse(diffuseIntensity, receiveDirection);
 			}
-
 			outputColor = vec4(directionalLightingResult, 1.0);
 		}
 		else

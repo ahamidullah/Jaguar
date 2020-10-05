@@ -2,14 +2,14 @@
 
 Parser NewParser(String filepath, String delims, bool *err)
 {
-	auto str = ReadEntireFile(filepath, err);
+	auto buf = ReadEntireFile(filepath, err);
 	if (*err)
 	{
 		return Parser{};
 	}
 	return
 	{
-		.string = str,
+		.string = NewStringFromBuffer(buf),
 		.delimiters = delims,
 		.line = 1,
 		.column = 1,

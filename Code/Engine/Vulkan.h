@@ -96,17 +96,24 @@ struct GPUBuffer
 	void Free();
 };
 
-GPUBuffer NewGPUVertexBuffer(s64 size);
-GPUBuffer NewGPUIndexBuffer(s64 size);
-
-struct GPUBufferView
+enum GPUBufferType
 {
-	VkBufferView vkBufferView;
-
-	void Free();
+	GPUVertexBuffer,
+	GPUIndexBuffer,
+	GPUBufferTypeCount
 };
 
-GPUBufferView NewGPUBufferView(GPUBuffer src, GPUFormat fmt, s64 offset, s64 range);
+struct GPUBufferX
+{
+	VkBuffer vkBuffer;
+	s64 offset;
+
+	void Free(GPUBufferType t);
+};
+
+GPUBuffer NewGPUVertexBuffer(s64 size);
+GPUBuffer NewGPUIndexBuffer(s64 size);
+GPUBuffer NewGPUIndirectBuffer(s64 size);
 
 struct GPUImage
 {
@@ -163,6 +170,8 @@ struct GPUFramebuffer
 
 GPUFramebuffer GPUDefaultFramebuffer();
 
+#define OLD_VULKAN_BUFFER 0
+
 struct GPUCommandBuffer
 {
 	VkCommandBuffer vkCommandBuffer;
@@ -171,9 +180,15 @@ struct GPUCommandBuffer
 	void EndRender();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
+#if OLD_VULKAN_BUFFER
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
 	void BindIndexBuffer(GPUBuffer b, GPUIndexType t);
-	void DrawIndexedVertices(s64 numIndices, s64 firstIndex, s64 vertexOffset);
+#else
+	void BindVertexBuffer(GPUBufferX b, s64 bindPoint);
+	void BindIndexBuffer(GPUBufferX b, GPUIndexType t);
+#endif
+	void DrawIndexed(s64 numIndices, s64 firstIndex, s64 vertexOffset);
+	void DrawIndexedIndirect(GPUBuffer b, s64 count);
 	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
 	void CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h);
 };
@@ -232,6 +247,7 @@ struct GPUFrameStagingBuffer
 	s64 size;
 	VkBuffer vkBuffer;
 	VkBuffer vkDestinationBuffer;
+	s64 offset;
 
 	void Flush();
 	void FlushIn(GPUCommandBuffer cb);
@@ -239,6 +255,7 @@ struct GPUFrameStagingBuffer
 };
 
 GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst);
+GPUFrameStagingBuffer NewGPUFrameStagingBufferX(s64 size, GPUBufferX dst);
 
 struct GPUAsyncStagingBuffer
 {

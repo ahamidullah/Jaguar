@@ -58,38 +58,6 @@ void LogCrashHandler(File crashLog)
 {
 }
 
-#if 0
-void InitializeLog()
-{
-	#ifdef DebugBuild
-		/*
-		Assert(IsGlobalHeapInitialized());
-		auto sb = StringBuilder{};
-		sb.Append(LogFileDirectory());
-		sb.FormatTime();
-		auto dir = sb.String();
-		return; // @TODO
-		if (!CreateDirectory(dir))
-		{
-			LogError("Log", "Failed to create log directory %k.\n", dir);
-			LogInfo("Log", "Initialized logging.\n");
-			return;
-		}
-		sb.Append("/");
-		sb.Append("Global.log");
-		auto logPath = sb.String();
-		auto err = false;
-		logFile = OpenFile(logPath, OpenFileWriteOnly | OpenFileCreate, &err);
-		if (err)
-		{
-			LogError("Log", "Failed to open global log file %k.\n", logPath);
-		}
-		LogInfo("Log", "Initialized logging.\n");
-		*/
-	#endif
-}
-#endif
-
 void ConsolePrintVarArgs(String fmt, va_list args)
 {
 	auto sb = StringBuilder{};
@@ -148,9 +116,7 @@ String LogLevelToString(LogLevel l)
 void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String category, String fmt, va_list args)
 {
 	#ifdef DebugBuild
-		auto msgSB = StringBuilder{};
-		msgSB.FormatVarArgs(fmt, args);
-		auto msg = msgSB.View(0, msgSB.Length());
+		auto msg = FormatStringVarArgs(fmt, args);
 		// We need to be a bit careful about not allocating memory, because this might be called using
 		// the fixed-size backup allocator.
 		if (l >= CurrentLogLevel())
@@ -168,9 +134,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 			LogFile()->WriteString("] ");
 			LogFile()->WriteString(LogLevelToString(l));
 			//sb.FormatTime();
-			auto infoSB = StringBuilder{};
-			infoSB.Format("%k:%d %k  |  ", file, line, func);
-			LogFile()->WriteString(infoSB.View(0, infoSB.Length()));
+			LogFile()->WriteString(FormatString("%k:%d %k  |  ", file, line, func));
 			LogFile()->WriteString(msg);
 			LogFile()->WriteString("\n");
 		}
@@ -205,11 +169,10 @@ File NewCrashLogFile()
 	sb.FormatTime();
 	sb.Append(".txt");
 	auto err = false;
-	auto path = sb.String();
+	auto path = sb.View(0, sb.Length());
 	return OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 }
 
-// @TODO: Test a really long abort message during global heap initialization (should just truncate the error message when we run out of stack space).
 void DoAbortActual(String file, String func, s64 line, String category, String fmt, va_list args)
 {
 	static auto aborting = s64{0};
@@ -222,7 +185,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	// not to overflow the stack allocator.
 	// This is pretty ugly and I kind of hate it.
 	auto st = Stacktrace();
-	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, ContextAllocator(), ContextAllocator());
+	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, GlobalAllocator(), GlobalAllocator());
 	SetContextAllocator(&pool);
 	LogFatal(category, "###########################################################################");
 	LogFatal(category, "[ABORT]");

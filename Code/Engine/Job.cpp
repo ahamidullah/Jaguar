@@ -59,7 +59,7 @@ auto idleJobFibers = []() -> FixedPool<JobFiber, JobFiberCount>
 }();
 auto jobQueues = MakeStaticArrayInit<Stack<Job>, JobPriorityCount>(NewStackIn<Job>(GlobalAllocator(), 64));
 auto waitingJobFiberQueue = NewStackIn<JobFiber *>(GlobalAllocator(), 64);
-auto resumableJobFiberQueues = MakeStaticArrayInit<Array<JobFiber *>, JobPriorityCount>(Array<JobFiber *>{.allocator = GlobalAllocator()});
+auto resumableJobFiberQueues = MakeStaticArrayInit<Array<JobFiber *>, JobPriorityCount>(NewArrayIn<JobFiber *>(GlobalAllocator(), 0));
 auto jobCounters = NewSlotAllocator(sizeof(JobCounter), alignof(JobCounter), JobFiberCount, JobFiberCount, GlobalAllocator(), GlobalAllocator());
 ThreadLocal auto runningJobFiber = (JobFiber *){};
 ThreadLocal auto workerThreadFiber = Fiber{};
@@ -85,7 +85,6 @@ void *WorkerThreadProcedure(void *)
 		Defer(jobLock.Unlock());
 		for (auto i = (s64)HighPriorityJob; i >= 0; i -= 1)
 		{
-			auto empty = false;
 			if (resumableJobFiberQueues[i].count > 0)
 			{
 				runFiber = resumableJobFiberQueues[i].PopBack();
@@ -196,144 +195,6 @@ void JobCounter::Free()
 	Defer(jobLock.Unlock());
 	jobCounters.Deallocate(this);
 }
-
-#if 0
-void *WorkerThreadProcedure(void *parameter)
-{
-	ConvertThreadToFiber(&workerThreadFiber);
-	threadIndex = ((WorkerThreadParameter *)parameter)->threadIndex;
-
-	auto activeJobFiber = (JobFiber *){};
-	while (1)
-	{
-		WaitOnSemaphore(&jobsAvailableSemaphore);
-		do
-		{
-			activeJobFiber = NULL;
-			// Get the next job to run. Prefer higher priority jobs and resumable jobs.
-			for (auto i = 0; i < JOB_PRIORITY_COUNT; i++)
-			{
-				if (ReadFromAtomicRingBuffer(&resumableJobQueues[i], &activeJobFiber))
-				{
-					break;
-				}
-				// Avoid copying the Job twice by getting the idle job fiber before we know if we have a job.
-				// If there are no more jobs left, just write the job fiber back to the idle job fiber list.
-				activeJobFiber = PopFromFrontOfAtomicLinkedList(&idleJobFiberList);
-				if (ReadFromAtomicRingBuffer(&jobQueues[i], &activeJobFiber->parameter.scheduledJob))
-				{
-					break;
-				}
-				else
-				{
-					PushToFrontOfAtomicLinkedList(&idleJobFiberList, activeJobFiber);
-					activeJobFiber = NULL;
-				}
-			}
-			if (!activeJobFiber)
-			{
-				break;
-			}
-
-			// Calling SwitchToFiber will suspend this WorkerThreadProcedure and start running the job on this thread.
-			// The job procedure will eventually finish or call WaitForJobCounter, at which point this WorkerThreadProcedure will resume.
-			SwitchToFiber(&activeJobFiber->platformFiber);
-
-			auto scheduledJob = &activeJobFiber->parameter.scheduledJob;
-			if (scheduledJob->finished)
-			{
-				PushToFrontOfAtomicLinkedList(&idleJobFiberList, activeJobFiber);
-				if (!scheduledJob->waitingCounter)
-				{
-					continue;
-				}
-				// Check if the completion of this job caused the associated job counter to reach
-				// zero. If so, mark the job waiting on the counter as resumable.
-				if (auto unfinishedJobCount = AtomicAdd(&scheduledJob->waitingCounter->unfinishedJobCount, -1); unfinishedJobCount > 0)
-				{
-					continue;
-				}
-				// Check to see if the parent job started waiting on the counter yet. If it hasn't
-				// then the job counter's waitingJobFiber will be NULL.
-				auto waitingJobFiber = (JobFiber *)AtomicFetchAndSet((void *volatile *)&scheduledJob->waitingCounter->waitingJobFiber, JOB_FIBER_POINTER_SENTINEL);
-				if (!waitingJobFiber)
-				{
-					continue;
-				}
-				// OK, the job finished, the counter reached zero, and the parent job started
-				// waiting on the counter. Now we can mark the parent job as resumable.
-				WriteToAtomicRingBuffer(&resumableJobQueues[waitingJobFiber->parameter.scheduledJob.priority], waitingJobFiber);
-			}
-			else
-			{
-				if (AtomicCompareAndSwap((void *volatile *)&waitingJobCounter->waitingJobFiber, NULL, activeJobFiber) == JOB_FIBER_POINTER_SENTINEL)
-				{
-					// The waitingJobFiber was not NULL, hence all dependency jobs already finished.
-					// This job can resume immediately.
-					WriteToAtomicRingBuffer(&resumableJobQueues[scheduledJob->priority], activeJobFiber);
-				}
-			}
-		} while (activeJobFiber);
-	}
-	return NULL;
-}
-
-void JobFiberProcedure(void *parameterPointer)
-{
-	auto parameter = (JobFiberParameter *)parameterPointer;
-	Job *activeJob;
-	while (1)
-	{
-		activeJob = &parameter->scheduledJob;
-		activeJob->procedure(activeJob->parameter);
-		activeJob->finished = 1;
-		SwitchToFiber(&workerThreadFiber);
-	}
-}
-
-JobDeclaration CreateJob(JobProcedure procedure, void *parameter)
-{
-	return
-	{
-		.procedure = procedure,
-		.parameter = parameter,
-	};
-}
-
-// @TODO: Switch to a real array.
-void RunJobs(u32 jobCount, JobDeclaration *jobDeclarations, JobPriority priority, JobCounter *counter)
-{
-	if (counter)
-	{
-		counter->unfinishedJobCount = jobCount,
-		counter->waitingJobFiber = NULL;
-	}
-	for (auto i = 0; i < jobCount; i++)
-	{
-		WriteToAtomicRingBuffer(
-			&jobQueues[priority],
-			{
-				.procedure      = jobDeclarations[i].procedure,
-				.parameter      = jobDeclarations[i].parameter,
-				.priority       = priority,
-				.waitingCounter = counter,
-				.finished       = 0,
-			});
-		SignalSemaphore(&jobsAvailableSemaphore);
-	}
-}
-
-void WaitForJobCounter(JobCounter *counter)
-{
-	if (counter->unfinishedJobCount == 0)
-	{
-		return;
-	}
-	waitingJobCounter = counter;
-	SwitchToFiber(&workerThreadFiber);
-}
-
-#endif
 
 s64 WorkerThreadCount()
 {

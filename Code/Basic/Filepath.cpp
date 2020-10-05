@@ -14,7 +14,7 @@ void FilepathDirectoryIn(StringBuilder *sb, String path)
 
 String FilepathDirectory(String path)
 {
-	auto sb = NewStringBuilder(0);
+	auto sb = StringBuilder{};
 	FilepathDirectoryIn(&sb, path);
 	return NewStringFromBuffer(sb.buffer);
 }
@@ -33,7 +33,7 @@ void FilepathFilenameIn(StringBuilder *sb, String path)
 
 String FilepathFilename(String path)
 {
-	auto sb = NewStringBuilder(0);
+	auto sb = StringBuilder{};
 	FilepathFilenameIn(&sb, path);
 	return NewStringFromBuffer(sb.buffer);
 }
@@ -51,7 +51,7 @@ void FilepathExtensionIn(StringBuilder *sb, String path)
 
 String FilepathExtension(String path)
 {
-	auto sb = NewStringBuilder(0);
+	auto sb = StringBuilder{};
 	FilepathExtensionIn(&sb, path);
 	return NewStringFromBuffer(sb.buffer);
 }

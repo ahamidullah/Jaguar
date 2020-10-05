@@ -31,7 +31,7 @@ struct AllocationHeader
 {
 	s64 size;
 	s64 alignment;
-	void *startOfAllocation;
+	void *start;
 };
 
 struct HeapAllocator : Allocator

@@ -35,37 +35,37 @@ void PrintF32Actual(String name, f32 number)
 
 f32 SquareRoot(f32 x)
 {
-	return sqrt(x);
+	return sqrtf(x);
 }
 
 f32 Tan(f32 x)
 {
-	return tan(x);
+	return tanf(x);
 }
 
 f32 Atan2(f32 x, f32 y)
 {
-	return atan2(x, y);
+	return atan2f(x, y);
 }
 
 f32 Sin(f32 x)
 {
-	return sin(x);
+	return sinf(x);
 }
 
 f32 Asin(f32 x)
 {
-	return asin(x);
+	return asinf(x);
 }
 
 f32 Cos(f32 x)
 {
-	return cos(x);
+	return cosf(x);
 }
 
 f32 Acos(f32 x)
 {
-	return acos(x);
+	return acosf(x);
 }
 
 void SinCos(f32 angle, f32 *sin, f32 *cos)

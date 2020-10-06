@@ -20,7 +20,7 @@ void Timer::Print()
 {
 	auto delta = CurrentTime() - this->start;
 	this->runningSum += delta.Millisecond();
-	ConsolePrint("%k: %ldms %fms\n", this->name, delta.Millisecond(), (f32)this->runningSum / (f32)this->iteration);
+	ConsolePrint("%k: %ldns %fms\n", this->name, delta.Nanosecond(), (f32)this->runningSum / (f32)this->iteration);
 	this->iteration += 1;
 }
 

@@ -20,6 +20,7 @@ Settings
 		+ " -std=c++2a"
 		+ " -ffast-math"
 		+ " -fno-exceptions"
+		+ " -fno-exceptions"
 		+ " -Wall"
 		+ " -Wextra"
 		+ " -Wfatal-errors"

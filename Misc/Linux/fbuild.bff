@@ -19,6 +19,7 @@ Settings
 		+ " -I$CodeDirectory$"
 		+ " -std=c++2a"
 		+ " -ffast-math"
+		+ " -fomit-frame-pointer"
 		+ " -fno-exceptions"
 		+ " -fno-exceptions"
 		+ " -Wall"

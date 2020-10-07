@@ -6,6 +6,7 @@
 #include "../Memory.h"
 #include "../Process.h"
 #include "../Time.h"
+#include "../Pool.h"
 
 // ucontext_t is the recommended method for implementing fibers on Linux, but it is apparently very
 // slow because it preserves each fiber's signal mask.
@@ -23,8 +24,12 @@
 
 const auto FiberStackSize = 100 * CPUPageSize();
 const auto FiberStackGuardPageCount = 1;
+const auto FiberStackPlusGuardSize = FiberStackSize + (FiberStackGuardPageCount * CPUPageSize());
+
+auto fiberStackPool = NewValuePoolIn<u8 *>(GlobalAllocator(), 128);
 
 #if __x86_64__
+#if 0
 	__asm(R"(
 		.type GetPlatformContext, @function
 		.global GetPlatformContext
@@ -45,9 +50,10 @@ const auto FiberStackGuardPageCount = 1;
 			xorl %eax, %eax
 			ret)");
 
-		void SetPlatformContext(PlatformContext *c)
-		{
-			__asm(R"(
+		__asm(R"(
+		.type SetPlatformContext, @function
+		.global SetPlatformContext
+		SetPlatformContext:
 			# Should return to the address set with {get, swap}_context.
 			movq 8*0(%rdi), %r8
 			# Load new stack pointer.
@@ -64,15 +70,15 @@ const auto FiberStackGuardPageCount = 1;
 			# Return.
 			xorl %eax, %eax
 			ret)");
-		}
 
-		void SwapPlatformContext(PlatformContext *from, PlatformContext *to, void *arg)
-		{
-			__asm(R"(
+		__asm(R"(
+		.type SwapPlatformContext, @function
+		.global SwapPlatformContext
+		SwapPlatformContext:
 			# Save the return address.
-			movq 8(%rsp), %r8
+			movq (%rsp), %r8
 			movq %r8, 8*0(%rdi) // RIP
-			leaq 16(%rsp), %r8
+			leaq 8(%rsp), %r8
 			movq %r8, 8*1(%rdi) // RSP
 			# Save preserved registers.
 			movq %rbx, 8*2(%rdi)
@@ -102,35 +108,300 @@ const auto FiberStackGuardPageCount = 1;
 			# Return.
 			xorl %eax, %eax
 			ret)");
-		}
+#endif
 
-	struct DoRunPlatformContextParameter
+#if 0
+__attribute__((section(".text")))
+static u8 SetPlatformContextCode[] =
+{
+0x4c, 0x8b, 0x07,
+0x48, 0x8b, 0x67, 0x08,
+0x48, 0x8b, 0x5f, 0x10,
+0x48, 0x8b, 0x6f, 0x18,
+0x4c, 0x8b, 0x67, 0x20,
+0x4c, 0x8b, 0x6f, 0x28,
+0x4c, 0x8b, 0x77, 0x30,
+0x4c, 0x8b, 0x7f, 0x38,
+0x41, 0x50,
+0x31, 0xc0,
+0xc3,
+};
+
+__attribute__((section(".text")))
+static u8 SwapPlatformContextCode[] =
+{
+#if 0
+	0x4c, 0x8b, 0x04, 0x24,
+	0x4c, 0x89, 0x07,
+	0x4c, 0x8d, 0x44, 0x24, 0x08,
+	0x4c, 0x89, 0x47, 0x08,
+	0x48, 0x89, 0x5f, 0x10,
+	0x4c, 0x8b, 0x45, 0x00,
+	0x4c, 0x89, 0x47, 0x18,
+	0x4c, 0x89, 0x67, 0x20,
+	0x4c, 0x89, 0x6f, 0x28,
+	0x4c, 0x89, 0x77, 0x30,
+	0x4c, 0x89, 0x7f, 0x38,
+	0x4c, 0x8b, 0x06,
+	0x48, 0x8b, 0x66, 0x08,
+	0x48, 0x8d, 0x64, 0x24, 0xf8,
+	0x48, 0x8b, 0x5e, 0x10,
+	0x48, 0x8b, 0x6e, 0x18,
+	0x4c, 0x8b, 0x66, 0x20,
+	0x4c, 0x8b, 0x6e, 0x28,
+	0x4c, 0x8b, 0x76, 0x30,
+	0x4c, 0x8b, 0x7e, 0x38,
+	0x48, 0x89, 0xd7,
+	0x41, 0x50,
+	0x31, 0xc0,
+	0xc3,
+#endif
+0x4c, 0x8b, 0x04, 0x24,
+0x4c, 0x89, 0x07,
+0x4c, 0x8d, 0x44, 0x24, 0x08,
+0x4c, 0x89, 0x47, 0x08,
+0x48, 0x89, 0x5f, 0x10,
+0x48, 0x89, 0x6f, 0x18,
+0x4c, 0x89, 0x67, 0x20,
+0x4c, 0x89, 0x6f, 0x28,
+0x4c, 0x89, 0x77, 0x30,
+0x4c, 0x89, 0x7f, 0x38,
+0x4c, 0x8b, 0x06,
+0x48, 0x8b, 0x66, 0x08,
+0x48, 0x8b, 0x5e, 0x10,
+0x48, 0x8b, 0x6e, 0x18,
+0x4c, 0x8b, 0x66, 0x20,
+0x4c, 0x8b, 0x6e, 0x28,
+0x4c, 0x8b, 0x76, 0x30,
+0x4c, 0x8b, 0x7e, 0x38,
+0x48, 0x89, 0xd7,
+0x41, 0x50,
+0x31, 0xc0,
+0xc3,
+};
+#endif
+
+__attribute__((section(".text")))
+static u8 GetSystemContextCode[] =
+{
+	0x4c, 0x8b, 0x04, 0x24,
+	0x4c, 0x89, 0x07,
+	0x4c, 0x8d, 0x44, 0x24, 0x08,
+	0x4c, 0x89, 0x47, 0x08,
+	0x48, 0x89, 0x5f, 0x10,
+	0x48, 0x89, 0x6f, 0x18,
+	0x4c, 0x89, 0x67, 0x20,
+	0x4c, 0x89, 0x6f, 0x28,
+	0x4c, 0x89, 0x77, 0x30,
+	0x4c, 0x89, 0x7f, 0x38,
+	0x31, 0xc0,
+	0xc3,
+};
+
+__attribute__((section(".text")))
+static u8 SetSystemContextCode[] =
+{
+	0x4c, 0x8b, 0x07,
+	0x48, 0x8b, 0x67, 0x08,
+	0x48, 0x8b, 0x5f, 0x10,
+	0x48, 0x8b, 0x6f, 0x18,
+	0x4c, 0x8b, 0x67, 0x20,
+	0x4c, 0x8b, 0x6f, 0x28,
+	0x4c, 0x8b, 0x77, 0x30,
+	0x4c, 0x8b, 0x7f, 0x38,
+	0x41, 0x50,
+	0x31, 0xc0,
+	0xc3,
+};
+
+__attribute__((section(".text")))
+static u8 SwapSystemContextCode[] =
+{
+	0x4c, 0x8b, 0x04, 0x24,
+	0x4c, 0x89, 0x07,
+	0x4c, 0x8d, 0x44, 0x24, 0x08,
+	0x4c, 0x89, 0x47, 0x08,
+	0x48, 0x89, 0x5f, 0x10,
+	0x48, 0x89, 0x6f, 0x18,
+	0x4c, 0x89, 0x67, 0x20,
+	0x4c, 0x89, 0x6f, 0x28,
+	0x4c, 0x89, 0x77, 0x30,
+	0x4c, 0x89, 0x7f, 0x38,
+	0x4c, 0x8b, 0x06,
+	0x48, 0x8b, 0x66, 0x08,
+	0x48, 0x8b, 0x5e, 0x10,
+	0x48, 0x8b, 0x6e, 0x18,
+	0x4c, 0x8b, 0x66, 0x20,
+	0x4c, 0x8b, 0x6e, 0x28,
+	0x4c, 0x8b, 0x76, 0x30,
+	0x4c, 0x8b, 0x7e, 0x38,
+	0x41, 0x50,
+	0x31, 0xc0,
+	0xc3,
+};
+
+__attribute__((section(".text")))
+static u8 StartSystemContextCode[] =
+{
+	0x4c, 0x8b, 0x04, 0x24,
+	0x4c, 0x89, 0x07,
+	0x4c, 0x8d, 0x44, 0x24, 0x08,
+	0x4c, 0x89, 0x47, 0x08,
+	0x48, 0x89, 0x5f, 0x10,
+	0x48, 0x89, 0x6f, 0x18,
+	0x4c, 0x89, 0x67, 0x20,
+	0x4c, 0x89, 0x6f, 0x28,
+	0x4c, 0x89, 0x77, 0x30,
+	0x4c, 0x89, 0x7f, 0x38,
+	0x4c, 0x8b, 0x06,
+	0x48, 0x8b, 0x66, 0x08,
+	0x48, 0x89, 0xd7,
+	0x41, 0x50,
+	0x31, 0xc0,
+	0xc3,
+};
+
+
+	static void (*GetSystemContext)(SystemContext *) = (void (*)(SystemContext *))GetSystemContextCode;
+	static void (*SetSystemContext)(SystemContext *) = (void (*)(SystemContext *))SetSystemContextCode;
+	static void (*SwapSystemContext)(SystemContext *, SystemContext *) = (void (*)(SystemContext *, SystemContext *))SwapSystemContextCode;
+	static void (*StartSystemContext)(SystemContext *, SystemContext *, void *) = (void (*)(SystemContext *, SystemContext *, void *))StartSystemContextCode;
+
+#if 0
+	// @TODO: NOT FIBER PROC
+	void RunPlatformContext(SystemContext *from, SystemContext *to, FiberProcedure proc, void *param, void *stack, s64 stackSize)
 	{
-		FiberProcedure procedure;
+		auto s = (u8 *)stack;
+		// The stack grows down!
+		s += stackSize;
+  		// Make 128 byte scratch space for the Red Zone. This arithmetic will not unalign
+  		// our stack pointer because 128 is a multiple of 16. The Red Zone must also be
+  		// 16-byte aligned.
+  		s -= 128;
+		// Make some room for the parameter.
+		auto p = (DoRunPlatformContextParameter *)s;
+		s -= sizeof(DoRunPlatformContextParameter);
+		// Align stack pointer on 16-byte boundary, required for SysV and SSE.
+  		s = (u8*)((uintptr_t)s & -16L);
+  		// For some reason, SSE segfaults unless I move the stack pointer down by 8 bytes?
+  		// @TODO: WHY????????
+  		s -= 8;
+		//to->rip = proc;
+		to->rsp = s;
+		DoRunSystemContext(from, to, param);
+	}
+	
+	void SwapSystemContext(SystemContext *from, SystemContext *to)
+	{
+		auto s = (u8 *)stack;
+		// The stack grows down!
+		s += stackSize;
+  		// Make 128 byte scratch space for the Red Zone. This arithmetic will not unalign
+  		// our stack pointer because 128 is a multiple of 16. The Red Zone must also be
+  		// 16-byte aligned.
+  		s -= 128;
+		// Make some room for the parameter.
+		auto p = (DoRunPlatformContextParameter *)s;
+		s -= sizeof(DoRunPlatformContextParameter);
+		// Align stack pointer on 16-byte boundary, required for SysV and SSE.
+  		s = (u8*)((uintptr_t)s & -16L);
+  		// For some reason, SSE segfaults unless I move the stack pointer down by 8 bytes?
+  		// @TODO: WHY????????
+  		s -= 8;
+  		if (to->started)
+  		{
+  			DoSwapSystemContext(from, to);
+  		}
+  		else
+  		{
+  			to->started = true;
+  			from->started = true;
+			DoRunSystemContext(from, to, to->param);
+		}
+	}
+#endif
+	typedef void (*SystemContextProcedure)(void *);
+
+	struct RunSystemContextParameter
+	{
+		SystemContextProcedure procedure;
 		void *parameter;
-		PlatformContext *callingContext;
+		SystemContext *callingContext;
+		SystemContext *thisContext;
 	};
 
-	void DoRunPlatformContext(void *param)
+	/*
+	void RunSystemContext(void *param)
 	{
-		auto p = (DoRunPlatformContextParameter *)param;
-		p->procedure(p->parameter);
-		SetPlatformContext(p->callingContext);
+		auto p = (RunSystemContextParameter *)param;
+		// Save the parameters to the stack before swapping back to the calling context.
+		// Once we swap back, the param pointer will be invalid because we stored the parameters on the stack.
+		auto pr = p->procedure;
+		auto pm = p->parameter;
+		SwapSystemContext(p->thisContext, p->callingContext);
+		pr(pm);
+		pthread_exit(NULL);
+	}
+	*/
+
+	void RunSystemContext(SystemContext *from, SystemContext *to, SystemContextProcedure proc, void *param)
+	{
+		to->rip = (void *)proc;
+  		StartSystemContext(from, to, param);
 	}
 
-	// @TODO: NOT FIBER PROC
-	void RunPlatformContext(PlatformContext *from, PlatformContext *to, FiberProcedure proc, void *param, void *stack)
+	SystemContext NewSystemContext(void *stack, s64 stackSize)
 	{
-		auto p = DoRunPlatformContextParameter
-		{
-			.procedure = proc,
-			.parameter = param,
-			.callingContext = from,
-		};
-		to->rip = (void *)DoRunPlatformContext;
-		to->rsp = stack;
-		SwapPlatformContext(from, to, &p);
+		auto s = (u8 *)stack;
+		// The stack grows down!
+		s += stackSize;
+		// Align stack pointer on 16-byte boundary, required for SysV and SSE.
+  		s = (u8 *)((uintptr_t)s & -16L);
+  		// Make 128 byte scratch space for the Red Zone. This arithmetic will not unalign
+  		// our stack pointer because 128 is a multiple of 16. The Red Zone must also be
+  		// 16-byte aligned.
+  		s -= 128;
+  		// For some reason, SSE segfaults unless I move the stack pointer down by 8 bytes.
+  		// @TODO: Why????????
+  		s -= 8;
+  		return
+  		{
+  			.rsp = s,
+  		};
 	}
+	/*
+	SystemContext NewSystemContext(SystemContextProcedure proc, void *param, void *stack, s64 stackSize)
+	{
+		auto s = (u8 *)stack;
+		// The stack grows down!
+		s += stackSize;
+		// Align stack pointer on 16-byte boundary, required for SysV and SSE.
+  		s = (u8 *)((uintptr_t)s & -16L);
+  		// Make 128 byte scratch space for the Red Zone. This arithmetic will not unalign
+  		// our stack pointer because 128 is a multiple of 16. The Red Zone must also be
+  		// 16-byte aligned.
+  		s -= 128;
+  		// For some reason, SSE segfaults unless I move the stack pointer down by 8 bytes.
+  		// @TODO: Why????????
+  		s -= 8;
+  		auto to = SystemContext
+  		{
+  			.rip = (void *)RunSystemContext,
+  			.rsp = s,
+  		};
+  		auto from = SystemContext{};
+  		auto p = RunSystemContextParameter
+  		{
+  			.procedure = proc,
+  			.parameter = param,
+  			.callingContext = &from,
+  			.thisContext = &to,
+  		};
+  		StartSystemContext(&from, &to, &p);
+  		return to;
+	}
+	*/
+
 #else
 	#error Fiber: context switching is not defined for this CPU architecture.
 #endif
@@ -165,6 +436,14 @@ struct FiberCreationInfo
 	ucontext_t *callingContext;
 };
 
+struct RunFiberParameter
+{
+	FiberProcedure procedure;
+	void *parameter;
+	SystemContext *callingContext;
+	SystemContext *thisContext;
+};
+
 #if !NEW_FIBER
 void RunFiber(void *p)
 {
@@ -183,10 +462,16 @@ void RunFiber(void *p)
 
 // @TODO: Move this somewhere else. x64 and maybe linux specific?
 
-void RunFiber(void *params)
+void RunFiber(void *param)
 {
-	auto p = (RunFiberParameters *)params;
-	p->procedure(p->parameter);
+	auto p = (RunFiberParameter *)param;
+	// Save the parameters to the stack before swapping back to the calling context.
+	// Once we swap back, the param pointer will be invalid because we stored the parameters on the stack.
+	auto pr = p->procedure;
+	auto pm = p->parameter;
+	SwapSystemContext(p->thisContext, p->callingContext);
+	pr(pm);
+	pthread_exit(NULL);
 }
 
 #endif
@@ -224,11 +509,27 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 	#endif
 	return f;
 #else
-	auto f = Fiber{};
-	f.contextAllocatorStack.SetAllocator(GlobalAllocator());
-	f.contextAllocator = GlobalAllocator();
-	f.runParameters.procedure = proc;
-	f.runParameters.parameter = param;
+	auto f = Fiber
+	{
+		.contextAllocator = GlobalAllocator(),
+		.contextAllocatorStack = NewArrayIn<Allocator *>(GlobalAllocator(), 0),
+	};
+	auto stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
+	Assert(AlignPointer(stack, CPUPageSize()) == stack);
+	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
+	{
+		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
+	}
+	f.context = NewSystemContext(stack, FiberStackPlusGuardSize);
+	auto cc = SystemContext{};
+	auto p = RunFiberParameter
+	{
+		.procedure = proc,
+		.parameter = param,
+		.callingContext = &cc,
+		.thisContext = &f.context,
+	};
+	RunSystemContext(&cc, &f.context, RunFiber, &p);
 	#ifdef ThreadSanitizerBuild
 		f.tsan = __tsan_create_fiber(0);
 	#endif
@@ -259,30 +560,66 @@ void Fiber::Switch()
 		_longjmp(this->jumpBuffer, 1);
 	}
 #else
-	if (this->context.rsp) // @TODO
+	auto from = RunningFiber();
+	SetRunningFiber(this);
+	SwapSystemContext(&from->context, &this->context);
+	#if 0
+	if (this->runParameters.running)
 	{
 		// This fiber is already running, just resume it's execution.
-		SwapPlatformContext(&RunningFiber()->context, &this->context, 0);
 	}
 	else
 	{
-		auto totalStackSize = FiberStackSize + (FiberStackGuardPageCount * CPUPageSize());
-		auto stack = (u8 *)AllocatePlatformMemory(totalStackSize);
-		Assert(AlignPointer(stack, CPUPageSize()) == stack);
-		if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
+		this->runParameters.running = true;
+		//this->stack = fiberStackPool.Get();
+		//if (!this->stack)
+		if (true)
 		{
-			Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
+			this->stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
+			Assert(AlignPointer(this->stack, CPUPageSize()) == this->stack);
+			if (mprotect(this->stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
+			{
+				Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
+			}
 		}
-		// The stack grows down!
-		stack += totalStackSize;
-		// Align stack pointer on 16-byte boundary, required for SysV and SSE.
-  		stack = (u8*)((uintptr_t)stack & -16L);
-  		// Make 128 byte scratch space for the Red Zone. This arithmetic will not unalign
-  		// our stack pointer because 128 is a multiple of 16. The Red Zone must also be
-  		// 16-byte aligned.
-  		stack -= 128;
-		RunPlatformContext(&RunningFiber()->context, &this->context, RunFiber, &this->runParameters, stack);
+		RunPlatformContext(&from->context, &this->context, RunFiber, &this->runParameters, this->stack, FiberStackPlusGuardSize);
 	}
+	SetRunningFiber(from);
+	if (!this->runParameters.running)
+	{
+		//fiberStackPool.Release(this->stack);
+	}
+	#endif
+	/*
+	auto from = RunningFiber();
+	SetRunningFiber(this);
+	if (this->runParameters.running)
+	{
+		// This fiber is already running, just resume it's execution.
+		SwapSystemContext(&from->context, &this->context);
+	}
+	else
+	{
+		this->runParameters.running = true;
+		//this->stack = fiberStackPool.Get();
+		//if (!this->stack)
+		if (true)
+		{
+			this->stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
+			Assert(AlignPointer(this->stack, CPUPageSize()) == this->stack);
+			if (mprotect(this->stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
+			{
+				Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
+			}
+		}
+		RunPlatformContext(&from->context, &this->context, RunFiber, &this->runParameters, this->stack, FiberStackPlusGuardSize);
+	}
+	SetRunningFiber(from);
+	if (!this->runParameters.running)
+	{
+		//fiberStackPool.Release(this->stack);
+	}
+	*/
 #endif
 }
 

@@ -25,6 +25,7 @@
 #undef VK_DEVICE_FUNCTION
 
 const auto VulkanMaxFramesInFlight = 2;
+const auto VulkanCommandGroupsPerThread = VulkanMaxFramesInFlight + 1;
 const auto VulkanAcquireImageTimeout = SecondsToNanoseconds(2);
 const auto VulkanInitialDescriptorSetBufferSize = MegabytesToBytes(4);
 const auto VulkanVertexBufferBindID = 0;
@@ -132,11 +133,22 @@ struct VulkanAsyncStagingBufferResources
 	VkBuffer vkBuffer;
 };
 
+//auto cb = NewGPUFrameGraphicsCommandBuffer();
+//auto cb = NewGPUFrameTransferCommandBuffer();
+//auto cb = NewGPUSecondaryGraphicsCommandBuffer();
+//auto cb = NewGPUSecondaryTransferCommandBuffer();
+
+//Array<StaticArray<StaticArray<VkCommandBuffer, VulkanMainQueueTypeCount>, VulkanCommandGroupsPerThread>> frameCommandBuffers;
+//StaticArray<StaticArray<Array<VkCommandBuffer>, VulkanMainQueueTypeCount>, VulkanCommandGroupsPerThread> vkFrameCommandBuffersTL;
+StaticArray<StaticArray<Array<VkCommandPool>, VulkanMainQueueTypeCount>, VulkanCommandGroupsPerThread> vkFrameCommandPoolsTL;
+StaticArray<StaticArray<Array<Array<VkCommandBuffer>>, VulkanMainQueueTypeCount>, VulkanCommandGroupsPerThread> vkFrameQueuedCommandBuffersTL;
+StaticArray<StaticArray<Array<ValuePool<VkCommandBuffer>>, VulkanMainQueueTypeCount>, VulkanCommandGroupsPerThread> vkFrameCommandBufferPoolsTL; // @TODO: Initialize the pool with some command buffers on startup.
+
 struct VulkanThreadLocal
 {
 	// Frame resources.
 	// We need VulkanMaxFramesInFlight + 1 frame command pools because someone might try submitting frame command buffers before GPUBeginFrame.
-	StaticArray<StaticArray<VkCommandPool, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight + 1> frameCommandPools;
+	//StaticArray<StaticArray<VkCommandPool, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight + 1> frameCommandPools;
 	StaticArray<StaticArray<Array<VkCommandBuffer>, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight + 1> frameQueuedCommandBuffers;
 	StaticArray<StaticArray<ValuePool<VkCommandBuffer>, VulkanMainQueueTypeCount>, VulkanMaxFramesInFlight + 1> frameCommandBufferRecyclePool; // @TODO: Initialize the pool with some command buffers on startup.
 	// Async resources.
@@ -1110,7 +1122,7 @@ void InitializeGPU(Window *win)
 		vkCPUToGPUFrameAllocator = NewVulkanMemoryFrameAllocator(MegabytesToBytes(256));
 	}
 	vkThreadLocal.Resize(WorkerThreadCount());
-	// Create command pools.
+	// Create command groups.
 	{
 		auto aci = VkCommandPoolCreateInfo
 		{
@@ -1125,22 +1137,6 @@ void InitializeGPU(Window *win)
 				VkCheck(vkCreateCommandPool(vkDevice, &aci, NULL, &tl.asyncCommandPools[i]));
 			}
 		}
-		auto fci = VkCommandPoolCreateInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-		};
-		for (auto &tl : vkThreadLocal)
-		{
-			for (auto i = 0; i < VulkanMaxFramesInFlight + 1; i += 1)
-			{
-				for (auto j = 0; j < VulkanMainQueueTypeCount; j += 1)
-				{
-					fci.queueFamilyIndex = vkQueueFamilies[j];
-					VkCheck(vkCreateCommandPool(vkDevice, &fci, NULL, &tl.frameCommandPools[i][j]));
-				}
-			}
-		}
 		auto pci = VkCommandPoolCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -1148,6 +1144,25 @@ void InitializeGPU(Window *win)
 			.queueFamilyIndex = vkQueueFamilies[VulkanPresentQueue],
 		};
 		VkCheck(vkCreateCommandPool(vkDevice, &pci, NULL, &vkPresentCommandPool));
+		auto fci = VkCommandPoolCreateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		};
+		for (auto i = 0; i < VulkanCommandGroupsPerThread; i += 1)
+		{
+			for (auto j = 0; j < VulkanMainQueueTypeCount; j += 1)
+			{
+				vkFrameQueuedCommandBuffersTL[i][j].Resize(WorkerThreadCount());
+				vkFrameCommandBufferPoolsTL[i][j].Resize(WorkerThreadCount());
+				vkFrameCommandPoolsTL[i][j].Resize(WorkerThreadCount());
+				for (auto k = 0; k < WorkerThreadCount(); k += 1)
+				{
+					fci.queueFamilyIndex = vkQueueFamilies[j];
+					VkCheck(vkCreateCommandPool(vkDevice, &fci, NULL, &vkFrameCommandPoolsTL[i][j][k]));
+				}
+			}
+		}
 	}
 	// Create swapchain.
 	{
@@ -1473,6 +1488,21 @@ void InitializeGPU(Window *win)
 			VkCheck(vkEndCommandBuffer(vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[i]));
 		}
 	}
+	#if 0
+	for (auto i = 0; i < VulkanCommandGroupsPerThread; i += 1)
+	{
+		for (auto j = 0; j < VulkanMainQueueTypeCount; j += 1)
+		{
+			vkFrameCommandBuffersTL[i][j].Resize(WorkerThreadCount());
+			for (auto k = 0; k < vkFrameCommandBuffersTL[i][j].count; k += 1)
+			{
+				auto tt = ValuePool<VkCommandBuffer>{};
+VkCommandBuffer NewVulkanCommandBuffer(ValuePool<VkCommandBuffer> *recycle, VkCommandPool p);
+				vkFrameCommandBuffersTL[i][j][k] = NewVulkanCommandBuffer(&tt, vkFrameCommandPoolsTL[i][j][k]);
+			}
+		}
+	}
+	#endif
 }
 
 VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
@@ -1670,9 +1700,7 @@ VkCommandBuffer NewVulkanCommandBuffer(ValuePool<VkCommandBuffer> *recycle, VkCo
 
 VkCommandBuffer NewVulkanFrameCommandBuffer(VulkanQueueType t)
 {
-	#if DebugBuild
-	#endif
-	return NewVulkanCommandBuffer(&vkThreadLocal[ThreadIndex()].frameCommandBufferRecyclePool[vkExtendedFrameIndex][t], vkThreadLocal[ThreadIndex()].frameCommandPools[vkExtendedFrameIndex][t]);
+	return NewVulkanCommandBuffer(&vkFrameCommandBufferPoolsTL[vkExtendedFrameIndex][t][ThreadIndex()], vkFrameCommandPoolsTL[vkExtendedFrameIndex][t][ThreadIndex()]);
 }
 
 GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer()
@@ -1680,12 +1708,13 @@ GPUFrameGraphicsCommandBuffer NewGPUFrameGraphicsCommandBuffer()
 	auto cb = GPUFrameGraphicsCommandBuffer{};
     cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanGraphicsQueue);
 	return cb;
+	//return GPUFrameGraphicsCommandBuffer{vkFrameCommandBuffersTL[vkExtendedFrameIndex][VulkanGraphicsQueue][ThreadIndex()]};
 }
 
 void GPUFrameGraphicsCommandBuffer::Queue()
 {
 	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkExtendedFrameIndex][VulkanGraphicsQueue].Append(this->vkCommandBuffer);
+	vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][VulkanGraphicsQueue][ThreadIndex()].Append(this->vkCommandBuffer);
 }
 
 GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
@@ -1693,24 +1722,25 @@ GPUFrameTransferCommandBuffer NewGPUFrameTransferCommandBuffer()
 	auto cb = GPUFrameTransferCommandBuffer{};
     cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanTransferQueue);
 	return cb;
+	//return GPUFrameTransferCommandBuffer{vkFrameCommandBuffersTL[vkExtendedFrameIndex][VulkanTransferQueue][ThreadIndex()]};
 }
 
 void GPUFrameTransferCommandBuffer::Queue()
 {
 	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkExtendedFrameIndex][VulkanTransferQueue].Append(this->vkCommandBuffer);
+	vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][VulkanTransferQueue][ThreadIndex()].Append(this->vkCommandBuffer);
 }
 
 GPUFrameComputeCommandBuffer NewGPUFrameComputeCommandBuffer()
 {
-	auto cb = GPUFrameComputeCommandBuffer{};
-    cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanComputeQueue);
-	return cb;
+	//auto cb = GPUFrameComputeCommandBuffer{};
+    //cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanComputeQueue);
+	return {};
 }
 
 void GPUFrameComputeCommandBuffer::Queue()
 {
-	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
+	//VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
 	vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkExtendedFrameIndex][VulkanComputeQueue].Append(this->vkCommandBuffer);
 }
 
@@ -1945,16 +1975,29 @@ void GPUCommandBuffer::CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h)
 
 void SubmitVulkanFrameCommandBuffers(VulkanQueueType t, ArrayView<VkSemaphore> waitSems, ArrayView<VkPipelineStageFlags> waitStages, ArrayView<VkSemaphore> signalSems, VkFence f)
 {
-	auto cbs = &vkThreadLocal[ThreadIndex()].frameQueuedCommandBuffers[vkExtendedFrameIndex][t];
-	// WRONG ... ALL THREADS
+	//for (auto &tq : vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][t])
+	//for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+	//for (auto i = 0; i < vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][t].count; i += 1)
+	//{
+		//for (auto &cb : tq)
+		//for (auto j = 0; j < vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][t][i].count; j += 1)
+		//{
+			//VkCheck(vkEndCommandBuffer(vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][t][i][j]));
+		//}
+	//}
+	auto cbs = Array<VkCommandBuffer>{};
+	for (auto &tq : vkFrameQueuedCommandBuffersTL[vkExtendedFrameIndex][t])
+	{
+		cbs.AppendAll(tq);
+	}
 	auto si = VkSubmitInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = (u32)waitSems.count,
 		.pWaitSemaphores = waitSems.elements,
 		.pWaitDstStageMask = waitStages.elements,
-		.commandBufferCount = (u32)cbs->count,
-		.pCommandBuffers = cbs->elements,
+		.commandBufferCount = (u32)cbs.count,
+		.pCommandBuffers = cbs.elements,
 		.signalSemaphoreCount = (u32)signalSems.count,
 		.pSignalSemaphores = signalSems.elements,
 	};
@@ -2348,9 +2391,48 @@ void GPUBeginFrame()
 	VkCheck(vkWaitForFences(vkDevice, 1, &vkFrameFences[vkFrameIndex], true, U32Max));
 	VkCheck(vkResetFences(vkDevice, 1, &vkFrameFences[vkFrameIndex]));
 	VkCheck(vkAcquireNextImageKHR(vkDevice, vkSwapchain, VulkanAcquireImageTimeout, vkImageAcquiredSemaphores[vkFrameIndex], VK_NULL_HANDLE, &vkSwapchainImageIndex));
+	for (auto &tl : vkFrameCommandPoolsTL[vkExtendedFrameFreeIndex])
+	{
+		for (auto i = 0; i < WorkerThreadCount(); i += 1)
+		{
+			VkCheck(vkResetCommandPool(vkDevice, tl[i], 0));
+		}
+	}
+	/*
+	auto bi = VkCommandBufferBeginInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	for (auto &tl : vkFrameCommandBuffersTL[vkExtendedFrameFreeIndex])
+	{
+		for (auto i = 0; i < tl.count; i += 1)
+		{
+			vkBeginCommandBuffer(tl[i], &bi);
+		}
+	}
+	*/
+	//for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+	//for (auto &tl : vkFrameCommandBufferPoolsTL[vkExtendedFrameFreeIndex])
+	for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+	{
+		for (auto j = 0; j < WorkerThreadCount(); j += 1)
+		{
+			vkFrameCommandBufferPoolsTL[vkExtendedFrameFreeIndex][i][j].ReleaseAll(vkFrameQueuedCommandBuffersTL[vkExtendedFrameFreeIndex][i][j]);
+		}
+		//vkBeginCommandBuffer(vkFrameCommandBuffersTL[vkExtendedFrameFreeIndex][i][ti], &bi);
+	}
+	for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
+	{
+		for (auto j = 0; j < WorkerThreadCount(); j += 1)
+		{
+			vkFrameQueuedCommandBuffersTL[vkExtendedFrameFreeIndex][i][j].Resize(0);
+		}
+	}
 	auto ti = 0;
 	for (auto &tl : vkThreadLocal)
 	{
+	/*
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
 		{
 			auto t = NewTimer("ResetPool");
@@ -2362,11 +2444,7 @@ void GPUBeginFrame()
 				ConsolePrint("^ fi: %d, tl: %d, q %d,\n", vkExtendedFrameFreeIndex, ti, i);
 			}
 		}
-		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)
-		{
-			tl.frameCommandBufferRecyclePool[vkExtendedFrameFreeIndex][i].ReleaseAll(tl.frameQueuedCommandBuffers[vkExtendedFrameFreeIndex][i]);
-			tl.frameQueuedCommandBuffers[vkExtendedFrameFreeIndex][i].Resize(0);
-		}
+	*/
 		ti += 1;
 		tl.asyncCommandBufferLock.Lock();
 		for (auto i = 0; i < VulkanMainQueueTypeCount; i += 1)

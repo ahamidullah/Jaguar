@@ -39,6 +39,7 @@ struct MeshAsset
 	GPUBuffer vertexBuffer;
 	GPUBuffer indexBuffer;
 #else
+	// @TODO: All of this should probably be 32bit.
 	GPUBufferX vertexBuffer;
 	GPUBufferX indexBuffer;
 	s64 vertexOffset;

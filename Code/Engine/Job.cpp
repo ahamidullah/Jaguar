@@ -36,7 +36,7 @@ void JobFiberProcedure(void *);
 auto jobLock = Spinlock{};
 auto workerThreads = []() -> Array<WorkerThread>
 {
-	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), CPUProcessorCount());
+	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), WorkerThreadCount());
 	wts[wts.count - 1].platformThread = CurrentThread();
 	for (auto i = 0; i < wts.count - 1; i += 1)
 	{
@@ -82,8 +82,7 @@ void *WorkerThreadProcedure(void *)
 	{
 		auto runFiber = (JobFiber *){};
 		jobLock.Lock();
-		Defer(jobLock.Unlock());
-		for (auto i = (s64)HighPriorityJob; i >= 0; i -= 1)
+		for (auto i = (s64)HighPriorityJob; i <= LowPriorityJob; i += 1)
 		{
 			if (resumableJobFiberQueues[i].count > 0)
 			{
@@ -101,6 +100,7 @@ void *WorkerThreadProcedure(void *)
 				break;
 			}
 		}
+		jobLock.Unlock();
 		if (!runFiber)
 		{
 			continue;
@@ -108,6 +108,8 @@ void *WorkerThreadProcedure(void *)
 		runningJobFiber = runFiber;
 		runFiber->platformFiber.Switch();
 		auto runJob = &runFiber->parameter.runningJob;
+		jobLock.Lock();
+		Defer(jobLock.Unlock());
 		if (runJob->finished)
 		{
 			idleJobFibers.Release(runFiber);
@@ -143,7 +145,7 @@ JobDeclaration NewJobDeclaration(JobProcedure proc, void *param)
 	};
 }
 
-void RunJobs(ArrayView<JobDeclaration> jds, JobPriority p, JobCounter **c)
+void RunJobs(ArrayView<JobDeclaration> js, JobPriority p, JobCounter **c)
 {
 	jobLock.Lock();
 	Defer(jobLock.Unlock());
@@ -151,18 +153,18 @@ void RunJobs(ArrayView<JobDeclaration> jds, JobPriority p, JobCounter **c)
 	if (c)
 	{
 		*c = (JobCounter *)jobCounters.Allocate(sizeof(JobCounter));
-		(*c)->jobCount = jds.count;
-		(*c)->unfinishedJobCount = jds.count;
+		(*c)->jobCount = js.count;
+		(*c)->unfinishedJobCount = js.count;
 		Assert((*c)->waitingFibers.capacity == 0 && (*c)->waitingFibers.count == 0);
 		counter = *c;
 	}
-	for (auto &jd : jds)
+	for (auto j : js)
 	{
 		jobQueues[p].Push(
 		{
 			.priority = p,
-			.procedure = jd.procedure,
-			.parameter = jd.parameter,
+			.procedure = j.procedure,
+			.parameter = j.parameter,
 			.waitingCounter = counter,
 		});
 	}
@@ -198,5 +200,6 @@ void JobCounter::Free()
 
 s64 WorkerThreadCount()
 {
-	return workerThreads.count;
+	//return CPUProcessorCount();
+	return 4;
 }

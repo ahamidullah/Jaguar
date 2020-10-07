@@ -178,7 +178,7 @@ ValuePool<T> NewValuePoolIn(Allocator *a, s64 cap)
 {
 	return
 	{
-		.elements = NewArrayWithCapacityIn<T>(a, cap, 0),
+		.elements = NewArrayWithCapacityIn<T>(a, cap),
 	};
 };
 

@@ -11,6 +11,7 @@ struct Stack
 	T Pop();
 	T Top();
 	s64 Count();
+	void SetAllocator(Allocator *);
 };
 
 template <typename T>
@@ -38,21 +39,25 @@ template <typename T>
 T Stack<T>::Pop()
 {
 	Assert(this->elements.count > 0);
-	auto r = this->elements[this->elements.count - 1];
-	this->elements.Resize(this->elements.count - 1);
-	return r;
+	return this->elements.PopLast();
 }
 
 template <typename T>
 T Stack<T>::Top()
 {
-	return this->elements[this->elements.count - 1];
+	return *this->elements.Last();
 }
 
 template <typename T>
 s64 Stack<T>::Count()
 {
 	return this->elements.count;
+}
+
+template <typename T>
+void Stack<T>::SetAllocator(Allocator *a)
+{
+	this->elements.SetAllocator(a);
 }
 
 template <typename T, s64 N>

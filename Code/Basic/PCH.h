@@ -16,8 +16,6 @@
 	#include <dlfcn.h>
 
 	// Fiber
-	#include <ucontext.h>
-	#include <setjmp.h>
 	#include <sys/mman.h>
 
 	// File

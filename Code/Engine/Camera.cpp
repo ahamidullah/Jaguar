@@ -24,7 +24,7 @@ Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
 		.speed = speed,
 	};
 	cameras.Append(c);
-	return &cameras[cameras.count - 1];
+	return cameras.Last();
 }
 
 ArrayView<Camera> Cameras()

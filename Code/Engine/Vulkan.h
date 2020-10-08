@@ -39,8 +39,6 @@ typedef VkIndexType GPUIndexType;
 #define GPUIndexTypeUint16 VK_INDEX_TYPE_UINT16
 #define GPUIndexTypeUint32 VK_INDEX_TYPE_UINT32
 
-void InitializeGPU(Window *win);
-
 enum GPUShaderID
 {
 	GPUModelShaderID,
@@ -48,9 +46,6 @@ enum GPUShaderID
 };
 
 void GPUCompileShaderFromFile(GPUShaderID id, String path, bool *err);
-
-void GPUBeginFrame();
-void GPUEndFrame();
 
 struct GPUMemoryHeapInfo
 {
@@ -60,18 +55,6 @@ struct GPUMemoryHeapInfo
 
 GPUMemoryHeapInfo GPUMemoryUsage();
 void LogGPUMemoryInfo();
-
-struct VulkanMemoryAllocation
-{
-	VkDeviceMemory vkMemory;
-	s64 offset;
-	s64 size;
-	void *map;
-
-	void Free();
-};
-
-extern VkDevice vkDevice;
 
 struct GPUFence
 {
@@ -86,49 +69,24 @@ GPUFence NewGPUFence();
 bool WaitForGPUFences(ArrayView<GPUFence> fs, bool waitAll, u64 timeout);
 void ResetGPUFences(ArrayView<GPUFence> fs);
 
-// @TODO: Get rid of the memory allocation in the struct?
-
-struct GPUBuffer
-{
-	VulkanMemoryAllocation *memory;
-	VkBuffer vkBuffer;
-
-	void Free();
-};
-
-enum GPUBufferType
-{
-	GPUVertexBuffer,
-	GPUIndexBuffer,
-	GPUBufferTypeCount
-};
-
 struct GPUBufferX
 {
 	VkBuffer vkBuffer;
 	s64 offset;
-
-	void Free(GPUBufferType t);
 };
 
-GPUBuffer NewGPUVertexBuffer(s64 size);
-GPUBuffer NewGPUIndexBuffer(s64 size);
-GPUBuffer NewGPUIndirectBuffer(s64 size);
+GPUBufferX NewGPUVertexBuffer(s64 size);
+GPUBufferX NewGPUIndexBuffer(s64 size);
+GPUBufferX NewGPUIndirectBuffer(s64 size);
 
 struct GPUImage
 {
 	VkImage vkImage;
-	VulkanMemoryAllocation *memory;
 
 	void Free();
 };
 
 GPUImage NewGPUImage(s64 w, s64 h, GPUFormat f, GPUImageLayout il, GPUImageUsageFlags uf, GPUSampleCount sc);
-
-struct GPUImageView
-{
-	VkImageView vkImageView;
-};
 
 struct GPUSwizzleMapping
 {
@@ -145,6 +103,11 @@ struct GPUImageSubresourceRange
 	u32 levelCount;
 	u32 baseArrayLayer;
 	u32 layerCount;
+};
+
+struct GPUImageView
+{
+	VkImageView vkImageView;
 };
 
 GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr);
@@ -188,9 +151,8 @@ struct GPUCommandBuffer
 	void BindIndexBuffer(GPUBufferX b, GPUIndexType t);
 #endif
 	void DrawIndexed(s64 numIndices, s64 firstIndex, s64 vertexOffset);
-	void DrawIndexedIndirect(GPUBuffer b, s64 count);
-	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
-	void CopyBufferToImage(GPUBuffer b, GPUImage i, u32 w, u32 h);
+	void DrawIndexedIndirect(GPUBufferX cmdBuf, s64 count);
+	void CopyBuffer(s64 size, GPUBufferX src, GPUBufferX dst, s64 srcOffset, s64 dstOffset);
 };
 
 struct GPUFrameGraphicsCommandBuffer : GPUCommandBuffer
@@ -239,27 +201,22 @@ GPUFence GPUSubmitFrameGraphicsCommandBuffers();
 GPUFence GPUSubmitFrameTransferCommandBuffers();
 GPUFence GPUSubmitFrameComputeCommandBuffers();
 
-s64 GPUSwapchainImageCount();
-
 struct GPUFrameStagingBuffer
 {
 	void *map;
 	s64 size;
-	VkBuffer vkBuffer;
-	VkBuffer vkDestinationBuffer;
-	s64 offset;
+	GPUBufferX source;
+	GPUBufferX destination;
 
 	void Flush();
 	void FlushIn(GPUCommandBuffer cb);
 	void *Map();
 };
 
-GPUFrameStagingBuffer NewGPUFrameStagingBuffer(s64 size, GPUBuffer dst);
 GPUFrameStagingBuffer NewGPUFrameStagingBufferX(s64 size, GPUBufferX dst);
 
 struct GPUAsyncStagingBuffer
 {
-	VulkanMemoryAllocation *memory;
 	VkBuffer vkBuffer;
 	VkBuffer vkDestinationBuffer;
 
@@ -268,9 +225,7 @@ struct GPUAsyncStagingBuffer
 	void *Map();
 };
 
-GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst);
-
-void ClearGPUFrameResources(s64 frameIndex);
+//GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst);
 
 struct GPUGlobalUniforms
 {
@@ -321,5 +276,10 @@ void GPUUpdateUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView
 GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments);
 
 VkRenderPass TEMPORARY_CREATE_RENDER_PASS();
+
+void InitializeGPU(Window *win);
+void GPUBeginFrame();
+void GPUEndFrame();
+s64 GPUSwapchainImageCount();
 
 #endif

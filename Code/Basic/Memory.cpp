@@ -88,9 +88,9 @@ Allocator *ContextAllocator()
 	return *ContextAllocatorPointer();
 }
 
-Array<Allocator *> *ContextAllocatorStack()
+Stack<Allocator *> *ContextAllocatorStack()
 {
-	static ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
+	static ThreadLocal auto contextAllocatorStack = Stack<Allocator *>{};
 	return &contextAllocatorStack;
 }
 
@@ -343,17 +343,17 @@ void PushContextAllocator(Allocator *a)
 {
 	if (RunningFiber())
 	{
-		RunningFiber()->contextAllocatorStack.Append(a);
+		RunningFiber()->contextAllocatorStack.Push(a);
 		RunningFiber()->contextAllocator = a;
 		return;
 	}
-	ContextAllocatorStack()->Append(a);
+	ContextAllocatorStack()->Push(a);
 	SetContextAllocator(a);
 }
 
 void PopContextAllocator()
 {
-	auto stk = (Array<Allocator *> *){};
+	auto stk = (Stack<Allocator *> *){};
 	auto ctx = (Allocator **){};
 	if (RunningFiber())
 	{
@@ -365,19 +365,19 @@ void PopContextAllocator()
 		stk = ContextAllocatorStack();
 		ctx = ContextAllocatorPointer();
 	}
-	if (stk->count == 0)
+	if (stk->Count() == 0)
 	{
 		LogError("Memory", "Tried to pop empty context allocator stack.\n");
 		return;
 	}
-	stk->Resize(stk->count - 1);
-	if (stk->count == 0)
+	stk->Pop();
+	if (stk->Count() == 0)
 	{
 		*ctx = GlobalAllocator();
 	}
 	else
 	{
-		*ctx = (*stk)[stk->count - 1];
+		*ctx = stk->Top();
 	}
 }
 
@@ -422,14 +422,13 @@ void AllocatorBlocks::NewBlock()
 	Assert(this->blockSize > 0);
 	if (this->unused.count > 0)
 	{
-		this->used.Append(this->unused[this->unused.count - 1]);
-		this->unused.Resize(this->unused.count - 1);
+		this->used.Append(this->unused.PopLast());
 	}
 	else
 	{
 		this->used.Append((u8 *)this->allocator->Allocate(this->blockSize));
 	}
-	this->frontier = this->used[this->used.count - 1];
+	this->frontier = *this->used.Last();
 	this->end = this->frontier + this->blockSize;
 };
 
@@ -525,9 +524,7 @@ void *SlotAllocator::Allocate(s64 size)
 	Assert(size == this->slotSize);
 	if (this->freeSlots.count > 0)
 	{
-		auto result = this->freeSlots[this->freeSlots.count - 1];
-		this->freeSlots.Resize(this->freeSlots.count - 1);
-		return result;
+		return this->freeSlots.PopLast();
 	}
 	return this->blocks.Allocate(size, this->slotAlignment);
 }

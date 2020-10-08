@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Array.h"
+#include "../Stack.h"
 #include "../PCH.h"
 #include "Common.h"
 
@@ -24,7 +24,7 @@ struct Fiber
 #else
 	SystemContext context;
 	Allocator *contextAllocator;
-	Array<Allocator *> contextAllocatorStack;
+	Stack<Allocator *> contextAllocatorStack;
 #endif
 	#ifdef ThreadSanitizerBuild
 		void *tsan;

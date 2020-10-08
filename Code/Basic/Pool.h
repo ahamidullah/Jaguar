@@ -84,7 +84,7 @@ template <typename T>
 T *Pool<T>::Get()
 {
 	this->GrowIfNecessary(1);
-	return this->freeList.PopBack();
+	return this->freeList.PopLast();
 }
 
 template <typename T>
@@ -193,7 +193,7 @@ T ValuePool<T>::Get()
 {
 	if (this->elements.count > 0)
 	{
-		return this->elements.PopBack();
+		return this->elements.PopLast();
 	}
 	return T{};
 }

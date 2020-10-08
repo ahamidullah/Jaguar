@@ -259,8 +259,9 @@ struct Array
 	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
-	T PopBack();
-	T PopFront();
+	T PopLast();
+	T PopFirst();
+	T *Last();
 };
 
 template <typename T, typename... Ts>
@@ -556,7 +557,7 @@ void Array<T>::Free()
 #endif
 
 template <typename T>
-T Array<T>::PopBack()
+T Array<T>::PopLast()
 {
 	Assert(this->count > 0);
 	this->Resize(this->count - 1);
@@ -564,7 +565,7 @@ T Array<T>::PopBack()
 }
 
 template <typename T>
-T Array<T>::PopFront()
+T Array<T>::PopFirst()
 {
 	Assert(this->count > 0);
 	if (this->count == 1)
@@ -576,6 +577,12 @@ T Array<T>::PopFront()
 	CopyArray(this->View(1, this->count), this->View(0, this->count - 1));
 	this->Resize(this->count - 1);
 	return r;
+}
+
+template <typename T>
+T *Array<T>::Last()
+{
+	return &(*this)[this->count - 1];
 }
 
 template <typename T, s64 N>

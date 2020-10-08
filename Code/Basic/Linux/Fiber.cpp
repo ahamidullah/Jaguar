@@ -428,14 +428,6 @@ void SetRunningFiber(Fiber *f)
 //	LogInfo("Fiber", "Guard pages: %d", FiberStackGuardPageCount);
 //}
 
-struct FiberCreationInfo
-{
-	FiberProcedure procedure;
-	void *parameter;
-	jmp_buf *jumpBuffer;
-	ucontext_t *callingContext;
-};
-
 struct RunFiberParameter
 {
 	FiberProcedure procedure;
@@ -512,7 +504,7 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 	auto f = Fiber
 	{
 		.contextAllocator = GlobalAllocator(),
-		.contextAllocatorStack = NewArrayIn<Allocator *>(GlobalAllocator(), 0),
+		.contextAllocatorStack = NewStackIn<Allocator *>(GlobalAllocator(), 0),
 	};
 	auto stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
 	Assert(AlignPointer(stack, CPUPageSize()) == stack);

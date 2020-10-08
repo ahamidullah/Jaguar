@@ -24,7 +24,7 @@ auto viewUniform = GPUUniform{};
 auto materialUniform = GPUUniform{};
 auto objectUniform = GPUUniform{};
 
-auto ibuf = GPUBuffer{};
+auto ibuf = GPUBufferX{};
 
 void InitializeRenderer(void *jobParam)
 {
@@ -179,7 +179,7 @@ void Render()
 	UpdateRenderUniforms(c);
 	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
 	#if !OLD_VULKAN_BUFFER
-		auto s = NewGPUFrameStagingBuffer(meshes.Count() * sizeof(VkDrawIndexedIndirectCommand), ibuf);
+		auto s = NewGPUFrameStagingBufferX(meshes.Count() * sizeof(VkDrawIndexedIndirectCommand), ibuf);
 		auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), meshes.Count());
 		for (auto i = 0; i < meshes.Count(); i += 1)
 		{

@@ -37,7 +37,7 @@ auto jobLock = Spinlock{};
 auto workerThreads = []() -> Array<WorkerThread>
 {
 	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), WorkerThreadCount());
-	wts[wts.count - 1].platformThread = CurrentThread();
+	wts.Last()->platformThread = CurrentThread();
 	for (auto i = 0; i < wts.count - 1; i += 1)
 	{
 		wts[i].platformThread = NewThread(WorkerThreadProcedure, &wts[i].parameter);
@@ -86,7 +86,7 @@ void *WorkerThreadProcedure(void *)
 		{
 			if (resumableJobFiberQueues[i].count > 0)
 			{
-				runFiber = resumableJobFiberQueues[i].PopBack();
+				runFiber = resumableJobFiberQueues[i].PopLast();
 				break;
 			}
 			else if (jobQueues[i].Count() > 0)
@@ -133,7 +133,7 @@ void InitializeJobs(JobProcedure initProc, void *initParam)
 {
 	auto j = NewJobDeclaration(initProc, initParam);
 	RunJobs(NewArrayView(&j, 1), HighPriorityJob, NULL);
-	WorkerThreadProcedure(&workerThreads[workerThreads.count - 1].parameter);
+	WorkerThreadProcedure(&workerThreads.Last()->parameter);
 }
 
 JobDeclaration NewJobDeclaration(JobProcedure proc, void *param)

@@ -27,7 +27,7 @@ Semaphore NewSemaphore(s64 val);
 
 struct Spinlock
 {
-	volatile s64 handle;
+	volatile s64 value;
 
 	void Lock();
 	void Unlock();

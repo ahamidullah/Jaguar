@@ -271,7 +271,6 @@ GPUMesh NewGPUMesh(s64 vertSize, s64 indSize)
 	Assert(vkMeshInfos.count == vkMeshBuffers.count);
 	auto ib = NewGPUIndexBuffer(indSize);
 	auto vb = NewGPUVertexBuffer(vertSize);
-#if BIG_GPU_MESH
 	auto m = GPUMesh
 	{
 		.indexCount = (u32)(indSize / sizeof(u16)),
@@ -281,56 +280,17 @@ GPUMesh NewGPUMesh(s64 vertSize, s64 indSize)
 		.indexBuffer = ib,
 		.vertexBuffer = vb,
 	};
-#else
-	auto m = GPUMesh
-	{
-		.id = (u64)vkMeshInfos.count,
-	};
-	vkMeshInfos.Append(
-	{
-		.indexCount = (u32)(indSize / sizeof(u16)),
-		.instanceCount = 1,
-		.firstIndex = (u32)(ib.offset / sizeof(u16)),
-		.vertexOffset = (s32)(vb.offset / sizeof(Vertex1P1N)), // @TODO
-	});
-	vkMeshBuffers.Append(
-	{
-		.vkIndexBuffer = ib.vkBuffer,
-		.vkVertexBuffer = vb.vkBuffer,
-	});
-	vkMeshBufferOffsets.Append(
-	{
-		.indexBufferOffset = ib.offset,
-		.vertexBufferOffset = vb.offset,
-	});
-#endif
 	return m;
 }
 
 GPUBuffer GPUMesh::VertexBuffer()
 {
-#if BIG_GPU_MESH
 	return this->vertexBuffer;
-#else
-	return
-	{
-		.vkBuffer = vkMeshBuffers[this->id].vkVertexBuffer,
-		.offset = vkMeshBufferOffsets[this->id].vertexBufferOffset,
-	};
-#endif
 }
 
 GPUBuffer GPUMesh::IndexBuffer()
 {
-#if BIG_GPU_MESH
 	return this->indexBuffer;
-#else
-	return
-	{
-		.vkBuffer = vkMeshBuffers[this->id].vkIndexBuffer,
-		.offset = vkMeshBufferOffsets[this->id].indexBufferOffset,
-	};
-#endif
 }
 
 u64 HashMeshRenderGroupData(MeshRenderGroupData d)
@@ -345,21 +305,14 @@ bool MeshRenderGroupData::operator==(MeshRenderGroupData d)
 
 GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 {
-#if BIG_GPU_MESH
-#if 1
-	#if 1
-	auto t = NewTimer("MeshGroup");
-	// @TODO: Multithread FrameMeshGroup generation.
-	// @TODO: Sort the MeshRenderGroups to minimize state changes.
-	const auto InitialGroupSize = 64;
-	struct FillHashTableParameter
+	struct MergePartitionParameter
 	{
 		HashTable<MeshRenderGroupData, Array<s64>> *hashTable;
 		ArrayView<GPUMesh> meshes;
 	};
-	auto FillHashTable = [](void *param)
+	auto MergePartition = [](void *param)
 	{
-		auto p = (FillHashTableParameter *)param;
+		auto p = (MergePartitionParameter *)param;
 		for (auto i = 0; i < p->meshes.count; i += 1)
 		{
 			auto d = MeshRenderGroupData
@@ -379,14 +332,20 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 			}
 		}
 	};
+	const auto InitialGroupSize = 64;
 	auto hts = NewArray<HashTable<MeshRenderGroupData, Array<s64>>>(WorkerThreadCount());
 	for (auto &ht : hts)
 	{
 		ht = NewHashTable<MeshRenderGroupData, Array<s64>>(InitialGroupSize, HashMeshRenderGroupData);
 	}
+	// A FrameMeshGroup contains multiple render groups, which are a grouping of meshes sharing the same GPU buffer bindings.
+	// First: Merge the meshes with the same buffer bindings together.
+	// This is multithreaded, where each job merges a partition of the input meshes, and once all jobs are finished, the main
+	// thread does a final merge of each thread result.
+	// The result is a hash table with each entry containing the indices of all input meshes sharing the same buffer bindings.
 	{
-		auto params = NewArray<FillHashTableParameter>(WorkerThreadCount());
-		auto js = NewArray<JobDeclaration>(WorkerThreadCount());
+		auto params = NewArrayWithCapacity<MergePartitionParameter>(WorkerThreadCount());
+		auto js = NewArrayWithCapacity<JobDeclaration>(WorkerThreadCount());
 		auto workSize = DivideAndRoundUp(ms.count, WorkerThreadCount());
 		for (auto i = 0; i < WorkerThreadCount(); i += 1)
 		{
@@ -400,72 +359,81 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 			{
 				workEnd -= workEnd - ms.count;
 			}
-			params[i] = FillHashTableParameter
-			{
-				.hashTable = &hts[i],
-				.meshes = ms.View(workStart, workEnd),
-			};
-			js[i] = NewJobDeclaration(FillHashTable, &params[i]);
+			params.Append(
+				MergePartitionParameter
+				{
+					.hashTable = &hts[i],
+					.meshes = ms.View(workStart, workEnd),
+				});
+			js.Append(NewJobDeclaration(MergePartition, params.Last()));
 		}
 		auto c = (JobCounter *){};
 		RunJobs(js, NormalJobPriority, &c);
 		c->Wait();
 	}
-	auto combinedHT = NewHashTable<MeshRenderGroupData, Array<s64>>(InitialGroupSize, HashMeshRenderGroupData);
+	// Each thread is finished with its partial merge, now merge them all together.
+	auto mergeHT = NewHashTable<MeshRenderGroupData, Array<s64>>(InitialGroupSize, HashMeshRenderGroupData);
 	for (auto ht : hts)
 	{
 		for (auto e : ht)
 		{
-			if (auto is = combinedHT.LookupPointer(e.key); is)
+			if (auto is = mergeHT.LookupPointer(e.key); is)
 			{
+				Assert(is->count > 0);
 				is->AppendAll(e.value);
 			}
 			else
 			{
 				auto nis = NewArrayWithCapacity<s64>(meshes.count);
 				nis.AppendAll(e.value);
-				combinedHT.Insert(e.key, nis);
+				mergeHT.Insert(e.key, nis);
 			}
 		}
 	}
-	struct MakeGroupParameter
+	auto gs = NewArrayWithCapacity<MeshRenderGroup>(mergeHT.count);
+	// Now we can construct the actual render groups from the merged mesh indices.
+	// Threre are two code paths depending on the number of render groups.
+	// T = number of worker threads
+	// If the number of groups >= T, then we run one job per group.
+	// Else the number of groups < T, and we partition the work for a each group into T jobs.
+	if (gs.count >= WorkerThreadCount())
 	{
-		ArrayView<s64> meshIndices;
-		ArrayView<GPUMesh> meshes;
-		MeshRenderGroupData data;
-		MeshRenderGroup *group;
-	};
-	auto MakeGroup = [](void *param)
-	{
-		auto p = (MakeGroupParameter *)param;
-		auto cmds = NewGPUFrameIndirectBuffer(p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand));
-		auto s = NewGPUFrameStagingBufferX(p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand), cmds);
-		auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), p->meshIndices.count);
-		for (auto i = 0; i < p->meshIndices.count; i += 1)
+		struct MakeGroupParameter
 		{
-			auto mi = p->meshIndices[i];
-			b[i] = VkDrawIndexedIndirectCommand
-			{
-				.indexCount = p->meshes[mi].indexCount,
-				.instanceCount = p->meshes[mi].instanceCount,
-				.firstIndex = p->meshes[mi].firstIndex,
-				.vertexOffset = p->meshes[mi].vertexOffset,
-			};
-		}
-		s.Flush();
-		*p->group = MeshRenderGroup
-		{
-			.data = p->data,
-			.commands = cmds,
-			.commandCount = p->meshIndices.count,
+			ArrayView<s64> meshIndices;
+			ArrayView<GPUMesh> meshes;
+			MeshRenderGroupData data;
+			MeshRenderGroup *group;
 		};
-	};
-	auto gs = NewArray<MeshRenderGroup>(combinedHT.count);
-	{
-		auto params = NewArray<MakeGroupParameter>(combinedHT.count);
-		auto js = NewArray<JobDeclaration>(combinedHT.count);
+		auto MakeGroup = [](void *param)
+		{
+			auto p = (MakeGroupParameter *)param;
+			auto cmds = NewGPUFrameIndirectBuffer(p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand));
+			auto s = NewGPUFrameStagingBufferX(p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand), cmds);
+			auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), p->meshIndices.count);
+			for (auto i = 0; i < p->meshIndices.count; i += 1)
+			{
+				auto mi = p->meshIndices[i];
+				b[i] = VkDrawIndexedIndirectCommand
+				{
+					.indexCount = p->meshes[mi].indexCount,
+					.instanceCount = p->meshes[mi].instanceCount,
+					.firstIndex = p->meshes[mi].firstIndex,
+					.vertexOffset = p->meshes[mi].vertexOffset,
+				};
+			}
+			s.Flush();
+			*p->group = MeshRenderGroup
+			{
+				.data = p->data,
+				.commands = cmds,
+				.commandCount = p->meshIndices.count,
+			};
+		};
+		auto params = NewArray<MakeGroupParameter>(mergeHT.count);
+		auto js = NewArray<JobDeclaration>(mergeHT.count);
 		auto i = 0;
-		for (auto e : combinedHT)
+		for (auto e : mergeHT)
 		{
 			params[i] = MakeGroupParameter
 			{
@@ -481,196 +449,92 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 		RunJobs(js, NormalJobPriority, &c);
 		c->Wait();
 	}
-	return
+	else
 	{
-		.renderGroups = gs,
-	};
-	#endif
-	#if 0
-	auto ht = NewHashTable<MeshRenderGroupData, Array<s64>>(128, HashMeshRenderGroupData);
-	for (auto i = 0; i < ms.count; i += 1)
-	{
-		auto d = MeshRenderGroupData
+		struct MakeGroupParameter
 		{
-			.vkVertexBuffer = ms[i].vertexBuffer.vkBuffer,
-			.vkIndexBuffer = ms[i].indexBuffer.vkBuffer,
+			ArrayView<s64> meshIndices;
+			ArrayView<GPUMesh> meshes;
+			ArrayView<VkDrawIndexedIndirectCommand> commands;
 		};
-		if (auto is = ht.LookupPointer(d); is)
+		auto MakeGroup = [](void *param)
 		{
-			is->Append(i);
-		}
-		else
-		{
-			auto a = NewArrayWithCapacity<s64>(ms.count);
-			a.Append(i);
-			ht.Insert(d, a);
-		}
-	}
-	auto gs = Array<MeshRenderGroup>{};
-	for (auto e : ht)
-	{
-		auto cmds = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
-		auto s = NewGPUFrameStagingBufferX(e.value.count * sizeof(VkDrawIndexedIndirectCommand), cmds);
-		auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), e.value.count);
-		for (auto i = 0; i < e.value.count; i += 1)
-		{
-			auto mi = e.value[i];
-			b[i] = VkDrawIndexedIndirectCommand
+			auto p = (MakeGroupParameter *)param;
+			for (auto i = 0; i < p->meshIndices.count; i += 1)
 			{
-				.indexCount = ms[mi].indexCount,
-				.instanceCount = ms[mi].instanceCount,
-				.firstIndex = ms[mi].firstIndex,
-				.vertexOffset = ms[mi].vertexOffset,
-			};
-		}
-		s.Flush();
-		gs.Append(
-			MeshRenderGroup
-			{
-				.data = e.key,
-				.commands = cmds,
-				.commandCount = e.value.count,
-			});
-	}
-	return
-	{
-		.renderGroups = gs,
-	};
-	#endif
-	#if 0
-		auto inserted = false;
-		for (auto j = 0; j < ds.count; j += 1)
-		{
-			if (ds[j].vkVertexBuffer == ms[i].vertexBuffer.vkBuffer && ds[j].vkIndexBuffer == ms[i].indexBuffer.vkBuffer)
-			{
-				groupIndices[j].Append(i);
-				inserted = true;
-				break;
-			}
-			cmps += 1;
-		}
-		if (!inserted)
-		{
-			ds.Append(
-				MeshRenderGroupData
+				auto mi = p->meshIndices[i];
+				p->commands[i] = VkDrawIndexedIndirectCommand
 				{
-					.vkVertexBuffer = ms[i].vertexBuffer.vkBuffer,
-					.vkIndexBuffer = ms[i].indexBuffer.vkBuffer,
+					.indexCount = p->meshes[mi].indexCount,
+					.instanceCount = p->meshes[mi].instanceCount,
+					.firstIndex = p->meshes[mi].firstIndex,
+					.vertexOffset = p->meshes[mi].vertexOffset,
+				};
+			}
+		};
+		auto params = NewArrayWithCapacity<MakeGroupParameter>(mergeHT.count * WorkerThreadCount());
+		auto js = NewArrayWithCapacity<JobDeclaration>(mergeHT.count * WorkerThreadCount());
+		auto sbs = NewArrayWithCapacity<GPUFrameStagingBuffer>(mergeHT.count);
+		for (auto e : mergeHT)
+		{
+			auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(e.value.count * sizeof(VkDrawIndexedIndirectCommand), ib);
+			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
+			auto workSize = DivideAndRoundUp(e.value.count, WorkerThreadCount());
+			for (auto i = 0; i < WorkerThreadCount(); i += 1)
+			{
+				auto workStart = i * workSize;
+				if (workStart > e.value.count)
+				{
+					workStart -= workStart - e.value.count;
+				}
+				auto workEnd = (i + 1) * workSize;
+				if (workEnd > e.value.count)
+				{
+					workEnd -= workEnd - e.value.count;
+				}
+				params.Append(
+					MakeGroupParameter
+					{
+						.meshIndices = e.value.View(workStart, workEnd),
+						.meshes = ms,
+						.commands = cmds.View(workStart, workEnd),
+					});
+				js.Append(NewJobDeclaration(MakeGroup, params.Last()));
+			}
+			gs.Append(
+				MeshRenderGroup
+				{
+					.data = e.key,
+					.commands = ib,
+					.commandCount = e.value.count,
 				});
-			auto a = NewArrayWithCapacity<s64>(ms.count);
-			a.Append(i);
-			groupIndices.Append(a);
+			sbs.Append(sb);
+		}
+		auto c = (JobCounter *){};
+		RunJobs(js, NormalJobPriority, &c);
+		c->Wait();
+		for (auto sb : sbs)
+		{
+			sb.Flush();
 		}
 	}
-	ConsolePrint("cmps per frame %d.\n", cmps);
-	auto groups = Array<MeshRenderGroup>{};
-	for (auto i = 0; i < groupIndices.count; i += 1)
-	{
-		auto cmds = NewGPUFrameIndirectBuffer(groupIndices[i].count * sizeof(VkDrawIndexedIndirectCommand));
-		auto s = NewGPUFrameStagingBufferX(groupIndices[i].count * sizeof(VkDrawIndexedIndirectCommand), cmds);
-		auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), groupIndices[i].count);
-		for (auto j = 0; j < groupIndices[i].count; j += 1)
-		{
-			auto mi = groupIndices[i][j];
-			b[j] = VkDrawIndexedIndirectCommand
-			{
-				.indexCount = ms[mi].indexCount,
-				.instanceCount = ms[mi].instanceCount,
-				.firstIndex = ms[mi].firstIndex,
-				.vertexOffset = ms[mi].vertexOffset,
-			};
-		}
-		s.Flush();
-		groups.Append(
-			MeshRenderGroup
-			{
-				.data = ds[i],
-				.commands = cmds,
-				.commandCount = groupIndices[i].count,
-			});
-	}
+	// @TODO: Sort the MeshRenderGroups to minimize state changes.
 	return
 	{
-		.renderGroups = groups,
+		.renderGroups = gs,
 	};
-	#endif
-#else
-	auto ib = NewGPUFrameIndirectBuffer(ms.count * sizeof(VkDrawIndexedIndirectCommand));
-	auto s = NewGPUFrameStagingBufferX(ms.count * sizeof(VkDrawIndexedIndirectCommand), ib);
-	auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), ms.count);
-	for (auto i = 0; i < ms.count; i += 1)
-	{
-		b[i] = VkDrawIndexedIndirectCommand
-		{
-			.indexCount = ms[i].indexCount,
-			.instanceCount = ms[i].instanceCount,
-			.firstIndex = ms[i].firstIndex,
-			.vertexOffset = ms[i].vertexOffset,
-		};
-	}
-	s.Flush();
-	return
-	{
-		.indirectBuffer = ib,
-	};
-#endif
-#else
-	auto ib = NewGPUFrameIndirectBuffer(ms.count * sizeof(VkDrawIndexedIndirectCommand));
-	auto s = NewGPUFrameStagingBufferX(ms.count * sizeof(VkDrawIndexedIndirectCommand), ib);
-	auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), ms.count);
-	for (auto i = 0; i < ms.count; i += 1)
-	{
-		auto mi = &vkMeshInfos[ms[i].id];
-		b[i] = VkDrawIndexedIndirectCommand
-		{
-			.indexCount = mi->indexCount,
-			.instanceCount = mi->instanceCount,
-			.firstIndex = mi->firstIndex,
-			.vertexOffset = mi->vertexOffset,
-		};
-	}
-	s.Flush();
-	return
-	{
-		.indirectBuffer = ib,
-	};
-#endif
 }
 
 void GPUCommandBuffer::DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms)
 {
-#if BIG_GPU_MESH
-#if 1
 	for (auto rg : mg.renderGroups)
 	{
 		vkCmdBindIndexBuffer(this->vkCommandBuffer, rg.data.vkIndexBuffer, 0, GPUIndexTypeUint16);
 		auto offset = (VkDeviceSize)0;
 		vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &rg.data.vkVertexBuffer, &offset);
-		//this->BindIndexBuffer(mb->indexBuffer, GPUIndexTypeUint16);
-		//this->BindVertexBuffer(mb->vertexBuffer, 0);
-		//this->DrawIndexed(mi->indexCount, 0, 0);
 		this->DrawIndexedIndirect(rg.commands, rg.commandCount);
 	}
-#else
-	vkCmdBindIndexBuffer(this->vkCommandBuffer, ms[0].indexBuffer.vkBuffer, 0, GPUIndexTypeUint16);
-	auto offset = (VkDeviceSize)0;
-	vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &ms[0].vertexBuffer.vkBuffer, &offset);
-	//this->BindIndexBuffer(mb->indexBuffer, GPUIndexTypeUint16);
-	//this->BindVertexBuffer(mb->vertexBuffer, 0);
-	//this->DrawIndexed(mi->indexCount, 0, 0);
-	this->DrawIndexedIndirect(mg.indirectBuffer, ms.count);
-#endif
-#else
-	auto mb = &vkMeshBuffers[0];
-	//auto mi = &vkMeshInfos[m.id];
-	vkCmdBindIndexBuffer(this->vkCommandBuffer, mb->vkIndexBuffer, 0, GPUIndexTypeUint16);
-	auto offset = (VkDeviceSize)0;
-	vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &mb->vkVertexBuffer, &offset);
-	//this->BindIndexBuffer(mb->indexBuffer, GPUIndexTypeUint16);
-	//this->BindVertexBuffer(mb->vertexBuffer, 0);
-	//this->DrawIndexed(mi->indexCount, 0, 0);
-	this->DrawIndexedIndirect(mg.indirectBuffer, ms.count);
-#endif
 }
 
 #if DebugBuild
@@ -1322,7 +1186,6 @@ void InitializeGPU(Window *win)
 				}
 				// @TODO: If not vsync... first of VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
 			}
-			presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 			auto numQueueFams = u32{};
 			vkGetPhysicalDeviceQueueFamilyProperties(pd, &numQueueFams, NULL);
 			auto queueFams = NewArray<VkQueueFamilyProperties>(numQueueFams);
@@ -1540,11 +1403,11 @@ void InitializeGPU(Window *win)
 		}
 	}
 	// Initialize memory allocators.
-	vkGPUVertexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(1));
-	vkGPUIndexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(1));
+	vkGPUVertexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(256));
+	vkGPUIndexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(256));
 	vkGPUUniformBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(64));
 	vkCPUStagingBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanCPUToGPUMemory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, MegabytesToBytes(256));
-	vkCPUStagingFrameAllocator = NewVulkanMemoryFrameAllocator(VulkanCPUToGPUMemory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, MegabytesToBytes(256));
+	vkCPUStagingFrameAllocator = NewVulkanMemoryFrameAllocator(VulkanCPUToGPUMemory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, MegabytesToBytes(1024));
 	vkGPUIndirectFrameAllocator = NewVulkanMemoryFrameAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, MegabytesToBytes(64));
 	vkThreadLocal.Resize(WorkerThreadCount());
 	// Create command groups.

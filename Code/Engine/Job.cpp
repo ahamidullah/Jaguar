@@ -10,7 +10,7 @@
 #include "Basic/CPU.h"
 #include "Basic/Memory.h"
 #include "Basic/Pool.h"
-#include "Basic/Queue.h"
+#include "Basic/Dequeue.h"
 
 struct WorkerThreadParameter{};
 
@@ -75,8 +75,8 @@ void JobFiberProcedure(void *param)
 	auto p = (JobFiberParameter *)param;
 	while (true)
 	{
-		p->runningJob.procedure(p->runningJob.parameter);
-		p->runningJob.finished = true;
+		p->procedure(p->parameter);
+		p->finished = true;
 		workerThreadFiber.Switch();
 	}
 }
@@ -103,14 +103,14 @@ void *WorkerThreadProcedure(void *)
 				}
 				runFiber = idleJobFiberPool.Get();
 				auto j = jobQueues[i].PopBack();
-				runFiber->parameter.runningJob = RunningJob
+				runFiber->parameter = JobFiberParameter
 				{
 					.priority = (JobPriority)i,
 					.procedure = j.procedure,
 					.parameter = j.parameter,
 					.waitingCounter = j.waitingCounter,
 				};
-				Assert(runFiber->parameter.runningJob.procedure);
+				Assert(runFiber->parameter.procedure);
 				break;
 			}
 		}
@@ -121,22 +121,21 @@ void *WorkerThreadProcedure(void *)
 		}
 		runningJobFiber = runFiber;
 		runFiber->platformFiber.Switch();
-		auto runJob = &runFiber->parameter.runningJob;
 		jobLock.Lock();
 		Defer(jobLock.Unlock());
-		if (runJob->finished)
+		if (runFiber->parameter.finished)
 		{
 			idleJobFiberPool.Release(runFiber);
-			if (!runJob->waitingCounter)
+			if (!runFiber->parameter.waitingCounter)
 			{
 				continue;
 			}
-			runJob->waitingCounter->unfinishedJobCount -= 1;
-			if (runJob->waitingCounter->unfinishedJobCount == 0)
+			runFiber->parameter.waitingCounter->unfinishedJobCount -= 1;
+			if (runFiber->parameter.waitingCounter->unfinishedJobCount == 0)
 			{
-				for (auto &f : runJob->waitingCounter->waitingFibers)
+				for (auto &f : runFiber->parameter.waitingCounter->waitingFibers)
 				{
-					resumableJobFiberQueues[f->parameter.runningJob.priority].Append(f);
+					resumableJobFiberQueues[f->parameter.priority].Append(f);
 				}
 			}
 		}
@@ -174,6 +173,7 @@ void RunJobs(ArrayView<JobDeclaration> js, JobPriority p, JobCounter **c)
 	}
 	for (auto j : js)
 	{
+		Assert(j.procedure);
 		jobQueues[p].PushFront(
 		{
 			.procedure = j.procedure,

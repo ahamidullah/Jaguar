@@ -39,7 +39,7 @@ String EnvironmentVariable(String name, bool *exists)
 
 Array<String> Stacktrace()
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		const auto maxAddrs = 100;
 		auto addrs = StaticArray<void *, maxAddrs>{};
 		auto numAddrs = backtrace(&addrs[0], maxAddrs);

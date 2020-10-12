@@ -49,9 +49,9 @@ void Spinlock::Lock()
 {
 	while (true)
 	{
-		if (this->handle == 0)
+		if (this->value == 0)
 		{
-			if (!__sync_lock_test_and_set(&this->handle, 1))
+			if (!__sync_lock_test_and_set(&this->value, 1))
 			{
 				return;
 			}
@@ -62,12 +62,12 @@ void Spinlock::Lock()
 
 void Spinlock::Unlock()
 {
-	__sync_lock_release(&this->handle);
+	__sync_lock_release(&this->value);
 }
 
 bool Spinlock::IsLocked()
 {
-	return this->handle == 1;
+	return this->value == 1;
 }
 
 ThreadLocal auto threadIndex = 0;

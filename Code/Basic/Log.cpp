@@ -67,7 +67,7 @@ void ConsolePrintVarArgs(String fmt, va_list args)
 
 void ConsolePrint(String fmt, ...)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		va_list args; // Clang complains if we use 'auto' style declartions with va_list for some reason...
 		va_start(args, fmt);
 		ConsolePrintVarArgs(fmt, args);
@@ -77,7 +77,7 @@ void ConsolePrint(String fmt, ...)
 
 void ConsolePrintCtx(String fmt, ...)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		va_list args; // Clang complains if we use 'auto' style declartions with va_list for some reason...
 		va_start(args, fmt);
 		ConsolePrintVarArgs(fmt, args);
@@ -115,7 +115,7 @@ String LogLevelToString(LogLevel l)
 
 void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String category, String fmt, va_list args)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		auto msg = FormatStringVarArgs(fmt, args);
 		// We need to be a bit careful about not allocating memory, because this might be called using
 		// the fixed-size backup allocator.
@@ -143,7 +143,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 
 void LogPrintActual(String file, String func, s64 line, LogLevel l, String category, String fmt, ...)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		va_list args;
 		va_start(args, fmt);
 		LogPrintVarArgs(file, func, line, l, category, fmt, args);
@@ -153,7 +153,7 @@ void LogPrintActual(String file, String func, s64 line, LogLevel l, String categ
 
 void LogPrintActual(const char *file, const char *func, s64 line, LogLevel l, const char *category, const char *fmt, ...)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		va_list args;
 		va_start(args, fmt);
 		LogPrintVarArgs(file, func, line, l, category, fmt, args);

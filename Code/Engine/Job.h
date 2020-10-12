@@ -24,18 +24,13 @@ struct QueuedJob
 	JobCounter *waitingCounter;
 };
 
-struct RunningJob
+struct JobFiberParameter
 {
 	JobPriority priority;
 	JobProcedure procedure;
 	void *parameter;
 	bool finished;
 	JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
-};
-
-struct JobFiberParameter
-{
-	RunningJob runningJob;
 };
 
 struct JobFiber

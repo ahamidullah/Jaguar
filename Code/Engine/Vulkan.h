@@ -135,20 +135,14 @@ struct GPUFramebuffer
 
 GPUFramebuffer GPUDefaultFramebuffer();
 
-#define BIG_GPU_MESH 1
-
 struct GPUMesh
 {
-	#if BIG_GPU_MESH
-		u32 indexCount;
-		u32 instanceCount;
-		u32 firstIndex;
-		s32 vertexOffset;
-		GPUBuffer indexBuffer;
-		GPUBuffer vertexBuffer;
-	#else
-		u64 id;
-	#endif
+	u32 indexCount;
+	u32 instanceCount;
+	u32 firstIndex;
+	s32 vertexOffset;
+	GPUBuffer indexBuffer;
+	GPUBuffer vertexBuffer;
 
 	GPUBuffer VertexBuffer();
 	GPUBuffer IndexBuffer();

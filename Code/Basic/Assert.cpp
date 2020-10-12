@@ -4,7 +4,7 @@
 
 void AssertActual(bool test, const char *file, const char *func, s64 line, const char *src)
 {
-	#ifdef DebugBuild
+	#if DebugBuild
 		if (!test)
 		{
 			Abort("Assert", "%s: %s: line %d: assertion failed '%s'.", file, func, line, src);

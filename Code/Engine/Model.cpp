@@ -40,7 +40,7 @@ void InitializeModelAssets()
 //auto meshes = StaticArray<MeshAsset, 10000>{};
 //auto meshes = StaticArray<GPUMesh, 10000>{};
 //auto meshes = NewGPUMeshes(10000);
-const auto MeshCount = 100000;
+const auto MeshCount = 1000000;
 auto meshes = NewArray<GPUMesh>(MeshCount);
 
 ModelAsset LoadModelAssetFromFile(String name)

@@ -71,6 +71,29 @@ void Update()
 	GameLoop(0.0f);
 }
 
+void Test2(void *x)
+{
+	LogInfo("Engine", "NUMBER2");
+}
+
+void Test(void *x)
+{
+	LogInfo("Engine", "HELLLLOOOOOO");
+	static auto b = false;
+	if (!b)
+	{
+		b = true;
+	auto j = Array<JobDeclaration>{};
+	for (auto i = 0; i < 100; i += 1)
+	{
+		j.Append(NewJobDeclaration(Test2, NULL));
+	}
+	auto c = (JobCounter *){};
+	RunJobs(j, NormalJobPriority, &c);
+	c->Wait();
+	}
+}
+
 void RunGame(void *)
 {
 	windowWidth = RenderWidth();
@@ -81,8 +104,21 @@ void RunGame(void *)
 	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO
 	InitializeGameLoop();
+	#if 0
+	auto j = Array<JobDeclaration>{};
+	for (auto i = 0; i < 100; i += 1)
+	{
+		j.Append(NewJobDeclaration(Test, NULL));
+	}
+	auto c = (JobCounter *){};
+	RunJobs(j, NormalJobPriority, &c);
+	c->Wait();
+	#endif
+	auto t = NewTimer("Frame");
 	while (true)
 	{
+		t.Print(MillisecondScale);
+		t.Reset();
 		auto winEvents = ProcessInput(&win);
 		if (winEvents.quit)
 		{

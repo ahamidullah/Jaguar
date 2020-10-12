@@ -259,8 +259,7 @@ struct Array
 	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
-	T PopLast();
-	T PopFirst();
+	T Pop();
 	T *Last();
 };
 
@@ -557,26 +556,11 @@ void Array<T>::Free()
 #endif
 
 template <typename T>
-T Array<T>::PopLast()
+T Array<T>::Pop()
 {
 	Assert(this->count > 0);
 	this->Resize(this->count - 1);
 	return this->elements[this->count];
-}
-
-template <typename T>
-T Array<T>::PopFirst()
-{
-	Assert(this->count > 0);
-	if (this->count == 1)
-	{
-		this->Resize(0);
-		return this->elements[0];
-	}
-	auto r = this->elements[0];
-	CopyArray(this->View(1, this->count), this->View(0, this->count - 1));
-	this->Resize(this->count - 1);
-	return r;
 }
 
 template <typename T>
@@ -611,17 +595,6 @@ auto MakeStaticArray(Ts... ts) -> StaticArray<T, sizeof...(ts)>
 	{
 		ts...,
 	};
-	return a;
-}
-
-template <typename T, s64 N>
-StaticArray<T, N> MakeStaticArrayInit(T init)
-{
-	auto a = StaticArray<T, N>{};
-	for (auto i = 0; i < N; i++)
-	{
-		a[i] = init;
-	}
 	return a;
 }
 

@@ -7,9 +7,9 @@ constexpr auto JobFiberCount = 160;
 
 enum JobPriority
 {
-	HighPriorityJob,
-	NormalPriorityJob,
-	LowPriorityJob,
+	HighJobPriority,
+	NormalJobPriority,
+	LowJobPriority,
 	JobPriorityCount
 };
 
@@ -17,7 +17,14 @@ struct JobCounter;
 
 typedef void (*JobProcedure)(void *);
 
-struct Job
+struct QueuedJob
+{
+	JobProcedure procedure;
+	void *parameter;
+	JobCounter *waitingCounter;
+};
+
+struct RunningJob
 {
 	JobPriority priority;
 	JobProcedure procedure;
@@ -28,7 +35,7 @@ struct Job
 
 struct JobFiberParameter
 {
-	Job runningJob;
+	RunningJob runningJob;
 };
 
 struct JobFiber

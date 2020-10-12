@@ -1,7 +1,9 @@
-#version 420
+#version 460
 
 #include "../Engine/ShaderGlobal.h"
 #include "Global.inc"
+
+#extension GL_EXT_nonuniform_qualifier : enable
 
 Stage: Vertex
 {
@@ -9,10 +11,12 @@ Stage: Vertex
 	layout (location = 1) in vec3 vertexNormal;
 
 	layout (location = 0) out vec3 fragmentNormal;
+	layout (location = 1) out flat int fragmentDrawID;
 
 	void main()
 	{
 		gl_Position = objects[0].modelViewProjection * vec4(vertexPosition, 1.0);
+		fragmentDrawID = gl_DrawID;
 		if (materials[0].shadingModel == PhongShadingModel)
 		{
 			fragmentNormal = vertexNormal;
@@ -23,6 +27,7 @@ Stage: Vertex
 Stage: Fragment
 {
 	layout (location = 0) in vec3 fragmentNormal;
+	layout (location = 1) in flat int fragmentDrawID;
 
 	layout (location = 0) out vec4 outputColor;
 

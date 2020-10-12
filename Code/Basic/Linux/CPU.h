@@ -4,7 +4,7 @@
 #include "Common.h"
 
 #if __x86_64__
-	#define CPUHintSpinWaitLoop() _mm_pause()
+	#define CPUSpinWaitHint() _mm_pause()
 	#define CPUCacheLineSize 64
 #else
 	#error Unsupported CPU type.

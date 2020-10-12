@@ -16,19 +16,53 @@ Duration Timer::Elapsed()
 	return CurrentTime() - this->start;
 }
 
-void Timer::Print()
+void Timer::Print(s64 scale)
 {
 	auto delta = CurrentTime() - this->start;
-	this->runningSum += delta.Millisecond();
-	ConsolePrint("%k: %ldns %fms\n", this->name, delta.Nanosecond(), (f32)this->runningSum / (f32)this->iteration);
+	this->runningSum += delta.Nanosecond();
+	auto unit = String{};
+	switch (scale)
+	{
+	case NanosecondScale:
+	{
+		unit = "ns";
+	} break;
+	case MillisecondScale:
+	{
+		unit = "ms";
+	} break;
+	case SecondScale:
+	{
+		unit = "s";
+	} break;
+	case MinuteScale:
+	{
+		unit = "m";
+	} break;
+	case HourScale:
+	{
+		unit = "m";
+	} break;
+	default:
+	{
+		LogError("Time", "Unknown time scale %ld.", scale);
+		unit = "?";
+	};
+	};
+	ConsolePrint("%k: %ld%k, avg: %f%k\n", this->name, delta.Nanosecond() / scale, unit, (f32)(this->runningSum / scale) / (f32)this->iteration, unit);
 	this->iteration += 1;
 }
 
 void Timer::Reset()
 {
 	this->start = CurrentTime();
+}
+
+void Timer::Clear()
+{
+	this->start = CurrentTime();
 	this->runningSum = 0;
-	this->iteration = 0;
+	this->iteration = 1;
 }
 
 s64 SecondsToNanoseconds(s64 s)

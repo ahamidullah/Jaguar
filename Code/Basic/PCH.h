@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <xmmintrin.h>
-#ifdef ThreadSanitizerBuild
-	#include <sanitizer/tsan_interface.h>
-#endif
 #include <string.h> // memcpy @TODO @DELETEME
 #include <stdlib.h> // realloc @TODO @DELETEME
 #include <alloca.h>

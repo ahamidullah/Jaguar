@@ -222,7 +222,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	LogFatal(category, "Stack trace:");
 	for (auto i = 0; i < st.count; i += 1)
 	{
-		LogFatal(category, "\t%d: %k", i, st[i]);
+		LogFatal(category, "%k", i, st[i]);
 	}
 	ExitProcess(ProcessFail);
 }

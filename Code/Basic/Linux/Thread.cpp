@@ -49,21 +49,20 @@ void Spinlock::Lock()
 {
 	while (true)
 	{
-		if (AtomicCompareAndSwap64(&this->handle, 0, 1) == 0)
+		if (this->handle == 0)
 		{
-			return;
+			if (!__sync_lock_test_and_set(&this->handle, 1))
+			{
+				return;
+			}
 		}
-		while (this->handle != 0)
-		{
-			CPUHintSpinWaitLoop();
-		}
-	}
+		CPUSpinWaitHint();
+    }
 }
 
 void Spinlock::Unlock()
 {
-	Assert(this->handle == 1);
-	this->handle = 0;
+	__sync_lock_release(&this->handle);
 }
 
 bool Spinlock::IsLocked()

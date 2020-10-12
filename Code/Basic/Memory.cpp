@@ -88,9 +88,9 @@ Allocator *ContextAllocator()
 	return *ContextAllocatorPointer();
 }
 
-Stack<Allocator *> *ContextAllocatorStack()
+Array<Allocator *> *ContextAllocatorStack()
 {
-	static ThreadLocal auto contextAllocatorStack = Stack<Allocator *>{};
+	static ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
 	return &contextAllocatorStack;
 }
 
@@ -343,17 +343,17 @@ void PushContextAllocator(Allocator *a)
 {
 	if (RunningFiber())
 	{
-		RunningFiber()->contextAllocatorStack.Push(a);
+		RunningFiber()->contextAllocatorStack.Append(a);
 		RunningFiber()->contextAllocator = a;
 		return;
 	}
-	ContextAllocatorStack()->Push(a);
+	ContextAllocatorStack()->Append(a);
 	SetContextAllocator(a);
 }
 
 void PopContextAllocator()
 {
-	auto stk = (Stack<Allocator *> *){};
+	auto stk = (Array<Allocator *> *){};
 	auto ctx = (Allocator **){};
 	if (RunningFiber())
 	{
@@ -365,19 +365,19 @@ void PopContextAllocator()
 		stk = ContextAllocatorStack();
 		ctx = ContextAllocatorPointer();
 	}
-	if (stk->Count() == 0)
+	if (stk->count == 0)
 	{
 		LogError("Memory", "Tried to pop empty context allocator stack.\n");
 		return;
 	}
 	stk->Pop();
-	if (stk->Count() == 0)
+	if (stk->count == 0)
 	{
 		*ctx = GlobalAllocator();
 	}
 	else
 	{
-		*ctx = stk->Top();
+		*ctx = *stk->Last();
 	}
 }
 
@@ -422,7 +422,7 @@ void AllocatorBlocks::NewBlock()
 	Assert(this->blockSize > 0);
 	if (this->unused.count > 0)
 	{
-		this->used.Append(this->unused.PopLast());
+		this->used.Append(this->unused.Pop());
 	}
 	else
 	{
@@ -524,7 +524,7 @@ void *SlotAllocator::Allocate(s64 size)
 	Assert(size == this->slotSize);
 	if (this->freeSlots.count > 0)
 	{
-		return this->freeSlots.PopLast();
+		return this->freeSlots.Pop();
 	}
 	return this->blocks.Allocate(size, this->slotAlignment);
 }
@@ -580,6 +580,7 @@ void *HeapAllocator::AllocateAligned(s64 size, s64 align)
 void *HeapAllocator::Resize(void *mem, s64 newSize)
 {
 	auto h = GetAllocationHeader(mem);
+	Assert(newSize >= h->size);
 	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
 	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
 	this->free.Append(h);

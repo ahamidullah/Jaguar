@@ -5,16 +5,14 @@ const auto HashTableDeletedHashSentinel = (u64)-2;
 const auto HashTableDefaultInitialLength = 16;
 const auto HashTableMaxLoadFactor = 0.75f;
 
-// @TODO: Initializer list.
-// @TODO: Handle zero type.
-//        How to handle empty hash? Maybe try to guess the hash function based on the type of key and abort if we fail.
-
 template <typename K, typename V>
 struct KeyValuePair
 {
 	K key;
 	V value;
 };
+
+template <typename K, typename V> struct HashTableIterator;
 
 template <typename K, typename V>
 struct HashTable
@@ -26,6 +24,8 @@ struct HashTable
 	s64 count;
 	f32 loadFactor;
 
+	HashTableIterator<K, V> begin();
+	HashTableIterator<K, V> end();
 	void Insert(K k, V v);
 	V Lookup(K k, V notFound);
 	V *LookupPointer(K k);
@@ -59,13 +59,32 @@ HashTable<K, V> NewHashTable(s64 len, typename HashTable<K, V>::HashProcedure hp
 }
 
 template <typename K, typename V>
+HashTableIterator<K, V> HashTable<K, V>::begin()
+{
+	auto itr = HashTableIterator<K, V>
+	{
+		.hashTable = this,
+		.index = -1,
+	};
+	return ++itr;
+}
+
+template <typename K, typename V>
+HashTableIterator<K, V> HashTable<K, V>::end()
+{
+	return
+	{
+		.hashTable = this,
+		.index = this->buckets.count,
+	};
+}
+
+template <typename K, typename V>
 void HashTable<K, V>::Insert(K k, V v)
 {
 	// The user has to set the hash procedure, even if the HashTable is zero-initialized.
 	Assert(this->hashProcedure);
 	this->Reserve(this->count + 1);
-	// @TODO: Would a two-pass solution be faster? First pass figure which keys need to be inserted
-	// and their indices, then resize the table if necessary, then second pass does the insertions.
 	auto hash = this->hashProcedure(k);
 	if (hash == HashTableVacantHashSentinel)
 	{
@@ -91,8 +110,7 @@ void HashTable<K, V>::Insert(K k, V v)
 			break;
 		}
 		index = (index + 1) % this->buckets.count;
-		// The table should have expanded before we ever run out of space. Thus, we should never
-		// wrap around to the start index.
+		// The table should expand before we run out of space, so we never wrap around to the start index.
 		Assert(index != startIndex);
 	} while (index != startIndex);
 	this->count += 1;
@@ -115,20 +133,20 @@ V *DoLookup(HashTable<K, V> *h, K k, V *notFound)
 	{
 		hash = 1;
 	}
-	auto find = hash % h->buckets.count;
-	auto lastFind = find;
+	auto i = hash % h->buckets.count;
+	auto end = i;
 	do
 	{
-		if (h->hashes[find] == HashTableVacantHashSentinel)
+		if (h->hashes[i] == HashTableVacantHashSentinel)
 		{
 			return notFound;
 		}
-		else if (h->hashes[find] == hash && h->buckets[find].key == k)
+		else if (h->hashes[i] == hash && h->buckets[i].key == k)
 		{
-			return &h->buckets[find].value;
+			return &h->buckets[i].value;
 		}
-		find = (find + 1) % h->buckets.count;
-	} while (find != lastFind);
+		i = (i + 1) % h->buckets.count;
+	} while (i != end);
 	return NULL;
 }
 
@@ -209,4 +227,45 @@ void HashTable<K, V>::Reserve(s64 reserve)
 		this->hashes = newHashes;
 		this->loadFactor = (f32)this->count / (f32)this->buckets.count;
 	}
+}
+
+template <typename K, typename V>
+struct HashTableIterator
+{
+	HashTable<K, V> *hashTable;
+	s64 index;
+
+	HashTableIterator<K, V> operator++();
+	KeyValuePair<K, V> operator*();
+	bool operator==(HashTableIterator<K, V> itr);
+};
+
+template <typename K, typename V>
+HashTableIterator<K, V> HashTableIterator<K, V>::operator++()
+{
+	this->index += 1;
+	for (; this->index < this->hashTable->buckets.count; this->index += 1)
+	{
+		if (this->hashTable->hashes[this->index] != HashTableVacantHashSentinel && this->hashTable->hashes[this->index] != HashTableDeletedHashSentinel)
+		{
+			break;
+		}
+	}
+	return
+	{
+		.hashTable = this->hashTable,
+		.index = this->index,
+	};
+}
+
+template <typename K, typename V>
+KeyValuePair<K, V> HashTableIterator<K, V>::operator*()
+{
+	return this->hashTable->buckets[this->index];
+}
+
+template <typename K, typename V>
+bool HashTableIterator<K, V>::operator==(HashTableIterator<K, V> itr)
+{
+	return this->hashTable == itr.hashTable && this->index == itr.index;
 }

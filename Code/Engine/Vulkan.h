@@ -69,15 +69,17 @@ GPUFence NewGPUFence();
 bool WaitForGPUFences(ArrayView<GPUFence> fs, bool waitAll, u64 timeout);
 void ResetGPUFences(ArrayView<GPUFence> fs);
 
-struct GPUBufferX
+struct VulkanSubBuffer
 {
 	VkBuffer vkBuffer;
 	s64 offset;
 };
 
-GPUBufferX NewGPUVertexBuffer(s64 size);
-GPUBufferX NewGPUIndexBuffer(s64 size);
-GPUBufferX NewGPUIndirectBuffer(s64 size);
+typedef VulkanSubBuffer GPUBuffer;
+
+GPUBuffer NewGPUVertexBuffer(s64 size);
+GPUBuffer NewGPUIndexBuffer(s64 size);
+GPUBuffer NewGPUFrameIndirectBuffer(s64 size);
 
 struct GPUImage
 {
@@ -133,7 +135,49 @@ struct GPUFramebuffer
 
 GPUFramebuffer GPUDefaultFramebuffer();
 
-#define OLD_VULKAN_BUFFER 0
+#define BIG_GPU_MESH 1
+
+struct GPUMesh
+{
+	#if BIG_GPU_MESH
+		u32 indexCount;
+		u32 instanceCount;
+		u32 firstIndex;
+		s32 vertexOffset;
+		GPUBuffer indexBuffer;
+		GPUBuffer vertexBuffer;
+	#else
+		u64 id;
+	#endif
+
+	GPUBuffer VertexBuffer();
+	GPUBuffer IndexBuffer();
+};
+
+GPUMesh NewGPUMesh(s64 vertSize, s64 indSize);
+
+struct MeshRenderGroupData
+{
+	VkBuffer vkVertexBuffer;
+	VkBuffer vkIndexBuffer;
+
+	bool operator==(MeshRenderGroupData d);
+};
+
+struct MeshRenderGroup
+{
+	MeshRenderGroupData data;
+	VulkanSubBuffer commands;
+	s64 commandCount;
+};
+
+struct GPUMeshGroup
+{
+	Array<MeshRenderGroup> renderGroups;
+	//GPUBuffer indirectBuffer;
+};
+
+GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms);
 
 struct GPUCommandBuffer
 {
@@ -143,16 +187,12 @@ struct GPUCommandBuffer
 	void EndRender();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
-#if OLD_VULKAN_BUFFER
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
 	void BindIndexBuffer(GPUBuffer b, GPUIndexType t);
-#else
-	void BindVertexBuffer(GPUBufferX b, s64 bindPoint);
-	void BindIndexBuffer(GPUBufferX b, GPUIndexType t);
-#endif
 	void DrawIndexed(s64 numIndices, s64 firstIndex, s64 vertexOffset);
-	void DrawIndexedIndirect(GPUBufferX cmdBuf, s64 count);
-	void CopyBuffer(s64 size, GPUBufferX src, GPUBufferX dst, s64 srcOffset, s64 dstOffset);
+	void DrawIndexedIndirect(GPUBuffer cmdBuf, s64 count);
+	void DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms);
+	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
 };
 
 struct GPUFrameGraphicsCommandBuffer : GPUCommandBuffer
@@ -205,15 +245,15 @@ struct GPUFrameStagingBuffer
 {
 	void *map;
 	s64 size;
-	GPUBufferX source;
-	GPUBufferX destination;
+	GPUBuffer source;
+	GPUBuffer destination;
 
 	void Flush();
 	void FlushIn(GPUCommandBuffer cb);
 	void *Map();
 };
 
-GPUFrameStagingBuffer NewGPUFrameStagingBufferX(s64 size, GPUBufferX dst);
+GPUFrameStagingBuffer NewGPUFrameStagingBufferX(s64 size, GPUBuffer dst);
 
 struct GPUAsyncStagingBuffer
 {

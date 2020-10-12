@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Array.h"
-#include "Stack.h"
 
 template <typename T>
 struct Pool
@@ -21,7 +20,7 @@ Pool<T> NewPoolIn(Allocator *a, s64 cap)
 	auto p = Pool<T>
 	{
 		.elements = NewArrayIn<T>(a, cap),
-		.freeList = NewArrayWithCapacityIn<T>(a, cap, 0),
+		.freeList = NewArrayWithCapacityIn<T *>(a, cap),
 	};
 	for (auto &e : p.elements)
 	{
@@ -29,7 +28,7 @@ Pool<T> NewPoolIn(Allocator *a, s64 cap)
 	}
 	for (auto i = 0; i < cap; i++)
 	{
-		p.freeList[i].Append(&p.elements[i]);
+		p.freeList.Append(&p.elements[i]);
 	}
 	return p;
 }
@@ -84,7 +83,7 @@ template <typename T>
 T *Pool<T>::Get()
 {
 	this->GrowIfNecessary(1);
-	return this->freeList.PopLast();
+	return this->freeList.Pop();
 }
 
 template <typename T>
@@ -97,7 +96,8 @@ template <typename T, s64 N>
 struct FixedPool
 {
 	StaticArray<T, N> elements;
-	StaticStack<T *, N> freeList;
+	StaticArray<T *, N> freeList;
+	s64 freeListCount;
 
 	T &operator[](s64 i);
 	T *begin();
@@ -114,7 +114,8 @@ FixedPool<T, N> NewFixedPool()
 	auto p = FixedPool<T, N>{};
 	for (auto i = 0; i < N; i++)
 	{
-		p.freeList.Push(&p.elements[i]);
+		p.freeList[p.freeListCount] = &p.elements[i];
+		p.freeListCount += 1;
 	}
 	return p;
 }
@@ -141,73 +142,29 @@ T *FixedPool<T, N>::end()
 template <typename T, s64 N>
 T *FixedPool<T, N>::Get()
 {
-	Assert(this->freeList.Count() > 0);
-	return this->freeList.Pop();
+	Assert(this->freeListCount > 0);
+	auto e = this->freeList[this->freeListCount - 1];
+	this->freeListCount -= 1;
+	return e;
 }
 
 template <typename T, s64 N>
 void FixedPool<T, N>::Release(T *e)
 {
-	this->freeList.Push(e);
+	this->freeList[this->freeListCount] = e;
+	this->freeListCount += 1;
 }
 
 template <typename T, s64 N>
 s64 FixedPool<T, N>::Used()
 {
-	return N - freeList.Count();
+	return N - this->freeListCount;
 }
 
 template <typename T, s64 N>
 s64 FixedPool<T, N>::Available()
 {
-	return freeList.Count();
-}
-
-template <typename T>
-struct ValuePool
-{
-	Array<T> elements;
-
-	T Get();
-	void Release(T e);
-	void ReleaseAll(ArrayView<T> es);
-};
-
-template <typename T>
-ValuePool<T> NewValuePoolIn(Allocator *a, s64 cap)
-{
-	return
-	{
-		.elements = NewArrayWithCapacityIn<T>(a, cap),
-	};
-};
-
-template <typename T>
-ValuePool<T> NewValuePool(s64 cap)
-{
-	return NewValuePoolIn<T>(ContextAllocator(), cap);
-}
-
-template <typename T>
-T ValuePool<T>::Get()
-{
-	if (this->elements.count > 0)
-	{
-		return this->elements.PopLast();
-	}
-	return T{};
-}
-
-template <typename T>
-void ValuePool<T>::Release(T e)
-{
-	this->elements.Append(e);
-}
-
-template <typename T>
-void ValuePool<T>::ReleaseAll(ArrayView<T> es)
-{
-	this->elements.AppendAll(es);
+	return this->freeListCount;
 }
 
 template <typename T>

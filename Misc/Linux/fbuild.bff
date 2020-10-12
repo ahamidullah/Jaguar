@@ -19,7 +19,6 @@ Settings
 		+ " -I$CodeDirectory$"
 		+ " -std=c++2a"
 		+ " -ffast-math"
-		+ " -fomit-frame-pointer"
 		+ " -fno-exceptions"
 		+ " -fno-exceptions"
 		+ " -Wall"
@@ -124,17 +123,18 @@ Settings
 [
 	.Speed = "Debug"
 	.CompilerOptions =
-		" -O0"
+		" -DDebugBuild"
+		+ " -O0"
 		+ " -g"
-		+ " -DDebugBuild"
 ]
 
 .ClangOptimizedConfig =
 [
 	.Speed = "Optimized"
 	.CompilerOptions =
-		" -Ofast"
-		+ " -DOptimizedBuild"
+		" -DOptimizedBuild"
+		+ " -Ofast"
+		+ " -fomit-frame-pointer"
 ]
 
 .ClangSpeedConfigs =

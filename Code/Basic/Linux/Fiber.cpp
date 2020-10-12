@@ -1,3 +1,4 @@
+#include "../PCH.h"
 #include "../Fiber.h"
 #include "../CPU.h"
 #include "../Thread.h"
@@ -7,6 +8,9 @@
 #include "../Process.h"
 #include "../Time.h"
 #include "../Pool.h"
+#ifdef ThreadSanitizerBuild
+	#include <sanitizer/tsan_interface.h>
+#endif
 
 // ucontext_t is the recommended method for implementing fibers on Linux, but it is apparently very
 // slow because it preserves each fiber's signal mask.
@@ -25,8 +29,6 @@
 const auto FiberStackSize = 100 * CPUPageSize();
 const auto FiberStackGuardPageCount = 1;
 const auto FiberStackPlusGuardSize = FiberStackSize + (FiberStackGuardPageCount * CPUPageSize());
-
-auto fiberStackPool = NewValuePoolIn<u8 *>(GlobalAllocator(), 128);
 
 #if __x86_64__
 #if 0
@@ -504,7 +506,7 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 	auto f = Fiber
 	{
 		.contextAllocator = GlobalAllocator(),
-		.contextAllocatorStack = NewStackIn<Allocator *>(GlobalAllocator(), 0),
+		.contextAllocatorStack = NewArrayIn<Allocator *>(GlobalAllocator(), 0),
 	};
 	auto stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
 	Assert(AlignPointer(stack, CPUPageSize()) == stack);

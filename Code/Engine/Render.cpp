@@ -24,8 +24,6 @@ auto viewUniform = GPUUniform{};
 auto materialUniform = GPUUniform{};
 auto objectUniform = GPUUniform{};
 
-auto ibuf = GPUBufferX{};
-
 void InitializeRenderer(void *jobParam)
 {
 	// @TODO: Use an allocator.
@@ -72,7 +70,6 @@ void InitializeRenderer(void *jobParam)
 	viewUniform = GPUAddUniform(ShaderViewDescriptorSet);
 	materialUniform = GPUAddUniform(ShaderMaterialDescriptorSet);
 	objectUniform = GPUAddUniform(ShaderObjectDescriptorSet);
-	ibuf = NewGPUIndirectBuffer(meshes.Count() * sizeof(VkDrawIndexedIndirectCommand));
 }
 
 void UpdateRenderUniforms(Camera *c)
@@ -167,9 +164,64 @@ void UpdateRenderUniforms(Camera *c)
 #endif
 }
 
+auto rt = NewTimer("Render");
+
+struct SystemAllocator : Allocator
+{
+	void *Allocate(s64 size)
+	{
+		return malloc(size);
+	}
+	void *AllocateAligned(s64 size, s64 align)
+	{
+		return aligned_alloc(size, align);
+	}
+	void *Resize(void *mem, s64 newSize)
+	{
+		return realloc(mem, newSize);
+	}
+	void Deallocate(void *mem)
+	{
+		free(mem);
+	}
+	void Clear()
+	{
+	}
+	void Free()
+	{
+	}
+};
+
 void Render()
 {
+/*
+	auto sys = SystemAllocator{};
+	auto pool = NewPoolAllocator(MegabytesToBytes(4), 1, &sys, &sys);
+	PushContextAllocator(&pool);
+	Defer(
+	{
+		PopContextAllocator();
+		for (auto b : pool.blocks.used)
+		{
+			sys.Deallocate(b);
+		}
+		for (auto b : pool.blocks.unused)
+		{
+			sys.Deallocate(b);
+		}
+	});
+	*/
 	GPUBeginFrame();
+	auto culledMeshes = meshes;
+	//auto culledMeshes = Array<GPUMesh>{};
+	//for (auto m : meshes)
+	//{
+		//if (rand() < RAND_MAX / 10)
+		//{
+			//culledMeshes.Append(m);
+		//}
+	//}
+	rt.Reset();
 	auto c = LookupCamera("Main");
 	if (!c)
 	{
@@ -178,48 +230,32 @@ void Render()
 	}
 	UpdateRenderUniforms(c);
 	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
-	#if !OLD_VULKAN_BUFFER
-		auto s = NewGPUFrameStagingBufferX(meshes.Count() * sizeof(VkDrawIndexedIndirectCommand), ibuf);
-		auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), meshes.Count());
-		for (auto i = 0; i < meshes.Count(); i += 1)
-		{
-			auto c = VkDrawIndexedIndirectCommand
-			{
-				.indexCount = (u32)meshes[i].indexCount,
-				.instanceCount = 1,
-				.firstIndex = (u32)meshes[i].firstIndex,
-				.vertexOffset = (s32)meshes[i].vertexOffset,
-			};
-			b[i] = c;
-		}
-		s.Flush();
-	#endif
+	auto mg = NewGPUFrameMeshGroup(culledMeshes);
 	GPUSubmitFrameTransferCommandBuffers();
 	{
 		auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
 		cb.BeginRender(GPUModelShaderID, GPUDefaultFramebuffer());
-		#if OLD_VULKAN_BUFFER
-			for (auto &m : meshes)
-			{
-				cb.BindIndexBuffer(m.indexBuffer, m.indexType);
-				cb.BindVertexBuffer(m.vertexBuffer, 0);
-				cb.DrawIndexed(m.indexCount, 0, 0);
-			}
-		#else
-			// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
-			// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
-			// @TODO: no need to actually update the command buffers that contain the actual drawing functions
-			// 24.5ms
-			cb.BindIndexBuffer(meshes[0].indexBuffer, GPUIndexTypeUint16);
-			cb.BindVertexBuffer(meshes[0].vertexBuffer, 0);
-			cb.DrawIndexedIndirect(ibuf, meshes.Count());
-		#endif
+		//cb.DrawMeshes(meshes);
+		// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
+		// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
+		// @TODO: no need to actually update the command buffers that contain the actual drawing functions
+		// 24.5ms
+		//for (auto i = 0; i < meshes.Count(); i += 1)
+		//{
+			cb.DrawMeshes(mg, culledMeshes);
+			//mg.Free();
+			//cb.BindIndexBuffer(meshes[0].indexBuffer, GPUIndexTypeUint16);
+			//cb.BindVertexBuffer(meshes[0].vertexBuffer, 0);
+			//cb.DrawIndexed(meshes[i].indexCount, 0, 0);
+			//cb.DrawIndexedIndirect(ibuf, meshes.Count());
+		//}
 		cb.EndRender();
 		cb.Queue();
 	}
 	GPUSubmitFrameGraphicsCommandBuffers();
+	//rt.Print(NanosecondScale);
 	GPUEndFrame();
 }
 

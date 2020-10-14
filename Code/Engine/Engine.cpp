@@ -40,27 +40,27 @@ void GameLoop(f32 deltaTime)
 		auto dYaw = -MouseDeltaX() * MouseSensitivity();
 		cam->transform.RotateEulerLocal({dPitch, dYaw, 0.0f});
 	}
-	if (IsKeyDown(AKey))
+	if (KeyDown(AKey))
 	{
 		cam->transform.position -= cam->speed * cam->transform.Right();
 	}
-	else if (IsKeyDown(DKey))
+	else if (KeyDown(DKey))
 	{
 		cam->transform.position += cam->speed * cam->transform.Right();
 	}
-	if (IsKeyDown(QKey))
+	if (KeyDown(QKey))
 	{
 		cam->transform.position.z -= cam->speed;
 	}
-	else if (IsKeyDown(EKey))
+	else if (KeyDown(EKey))
 	{
 		cam->transform.position.z += cam->speed;
 	}
-	if (IsKeyDown(WKey))
+	if (KeyDown(WKey))
 	{
 		cam->transform.position += cam->speed * cam->transform.Forward();
 	}
-	else if (IsKeyDown(SKey))
+	else if (KeyDown(SKey))
 	{
 		cam->transform.position -= cam->speed * cam->transform.Forward();
 	}

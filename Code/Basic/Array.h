@@ -588,14 +588,32 @@ struct StaticArray
 	s64 FindLast(T e);
 };
 
+/*
+	THIS SUCKS
+		auto vertAttrs = MakeStaticArray(
+			VkVertexInputAttributeDescription
+			{
+				.location = 0,
+				.binding = VulkanVertexBufferBindID,
+				.format = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset = offsetof(Vertex1P1N, position),
+			},
+			VkVertexInputAttributeDescription
+			{
+				.location = 1,
+				.binding = VulkanVertexBufferBindID,
+				.format = VK_FORMAT_R32G32B32_SFLOAT,
+				.offset = offsetof(Vertex1P1N, normal),
+			});
+*/
 template <typename T, typename... Ts>
-auto MakeStaticArray(Ts... ts) -> StaticArray<T, sizeof...(ts)>
+StaticArray<T, sizeof...(Ts) + 1> MakeStaticArray(T t, Ts... ts)
 {
-	auto a = StaticArray<T, sizeof...(ts)>
+	return
 	{
+		t,
 		ts...,
 	};
-	return a;
 }
 
 template <typename T, s64 N>

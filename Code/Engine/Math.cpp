@@ -759,7 +759,7 @@ V3 Quaternion::RotateVector(V3 v)
 	};
 }
 
-M3 Quaternion::ToMatrix()
+M3 Quaternion::Matrix()
 {
 	auto x2 = this->x + this->x;
 	auto y2 = this->y + this->y;
@@ -796,7 +796,7 @@ M3 Quaternion::ToMatrix()
 #endif
 }
 
-EulerAngles Quaternion::ToAngles()
+EulerAngles Quaternion::Euler()
 {
 	auto singularityTest = this->z * this->x - this->w * this->y;
 	auto yawY = 2.0f * (this->w * this->z + this->x * this->y);

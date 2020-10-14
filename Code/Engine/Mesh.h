@@ -4,6 +4,13 @@
 #include "Math.h"
 #include "Transform.h"
 
+enum VertexFormat
+{
+	VertexFormat1P,
+	VertexFormat1P1N,
+	VertexFormat1P1C1UV1N1T,
+};
+
 struct Vertex1P1C1UV1N1T
 {
 	V3 position;

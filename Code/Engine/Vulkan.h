@@ -177,8 +177,8 @@ struct GPUCommandBuffer
 {
 	VkCommandBuffer vkCommandBuffer;
 
-	void BeginRender(GPUShaderID id, GPUFramebuffer fb);
-	void EndRender();
+	void BeginRenderPass(GPUShaderID id, GPUFramebuffer fb);
+	void EndRenderPass();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
 	void BindVertexBuffer(GPUBuffer b, s64 bindPoint);
@@ -241,13 +241,14 @@ struct GPUFrameStagingBuffer
 	s64 size;
 	GPUBuffer source;
 	GPUBuffer destination;
+	s64 offset;
 
 	void Flush();
 	void FlushIn(GPUCommandBuffer cb);
 	void *Map();
 };
 
-GPUFrameStagingBuffer NewGPUFrameStagingBufferX(s64 size, GPUBuffer dst);
+GPUFrameStagingBuffer NewGPUFrameStagingBufferX(GPUBuffer dst, s64 size, s64 offset);
 
 struct GPUAsyncStagingBuffer
 {
@@ -284,13 +285,13 @@ struct GPUObjectUniforms
 struct GPUUniform
 {
 	s64 set;
-	s64 index;
+	s64 blockIndex;
+	s64 elementIndex;
 };
 
 struct GPUUniformBufferWriteDescription
 {
 	GPUUniform uniform;
-	s64 size; // @TODO: Get rid of this field. (The update function should know the size already based on the set.)
 	void *data;
 };
 
@@ -304,14 +305,14 @@ struct GPUUniformImageWriteDescription
 
 // @TODO: Copy uniform buffer.
 
-GPUUniform GPUAddUniform(s64 set);
-void GPUUpdateUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView<GPUUniformImageWriteDescription> ts);
+GPUUniform NewGPUUniform(s64 set);
+void UpdateGPUUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView<GPUUniformImageWriteDescription> ts);
 
 GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments);
 
 VkRenderPass TEMPORARY_CREATE_RENDER_PASS();
 
-void InitializeGPU(Window *win);
+void InitializeGPU(Window *w);
 void GPUBeginFrame();
 void GPUEndFrame();
 s64 GPUSwapchainImageCount();

@@ -142,8 +142,8 @@ struct Quaternion
 	V3 Forward();
 	V3 Up();
 	V3 RotateVector(V3 v);
-	EulerAngles ToAngles();
-	M3 ToMatrix();
+	EulerAngles Euler();
+	M3 Matrix();
 };
 Quaternion operator*(Quaternion a, Quaternion b);
 Quaternion operator*(f32 s, Quaternion q);

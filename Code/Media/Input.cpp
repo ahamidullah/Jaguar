@@ -10,9 +10,9 @@ struct InputButtons
 
 	void Press(s64 i);
 	void Release(s64 i);
-	bool IsDown(s64 i);
-	bool WasPressed(s64 i);
-	bool WasReleased(s64 i);
+	bool Down(s64 i);
+	bool Pressed(s64 i);
+	bool Released(s64 i);
 };
 
 struct Mouse
@@ -63,17 +63,17 @@ void InputButtons::Release(s64 i)
 	this->down[i] = false;
 }
 
-bool InputButtons::IsDown(s64 i)
+bool InputButtons::Down(s64 i)
 {
 	return this->down[i];
 }
 
-bool InputButtons::WasPressed(s64 i)
+bool InputButtons::Pressed(s64 i)
 {
 	return this->pressed[i];
 }
 
-bool InputButtons::WasReleased(s64 i)
+bool InputButtons::Released(s64 i)
 {
 	return this->released[i];
 }
@@ -99,61 +99,61 @@ void InitializeInput()
 	input = NewInput();
 }
 
-bool IsKeyDown(KeySymbol k)
+bool KeyDown(KeySymbol k)
 {
 	auto c = KeySymbolToScancode(k);
 	if (c == 0)
 	{
 		return false;
 	}
-	return input.keyboard.IsDown(c);
+	return input.keyboard.Down(c);
 }
 
-bool WasKeyPressed(KeySymbol k)
+bool KeyPressed(KeySymbol k)
 {
 	auto c = KeySymbolToScancode(k);
 	if (c == 0)
 	{
 		return false;
 	}
-	return input.keyboard.WasPressed(c);
+	return input.keyboard.Pressed(c);
 }
 
-bool WasKeyReleased(KeySymbol k)
+bool KeyReleased(KeySymbol k)
 {
 	auto c = KeySymbolToScancode(k);
 	if (c == 0)
 	{
 		return false;
 	}
-	return input.keyboard.WasReleased(c);
+	return input.keyboard.Released(c);
 }
 
-bool IsMouseButtonDown(MouseButton b)
+bool MouseButtonDown(MouseButton b)
 {
 	if (b < 0 || b >= MouseButtonCount)
 	{
 		return false;
 	}
-	return input.keyboard.IsDown(b);
+	return input.keyboard.Down(b);
 }
 
-bool WasMouseButtonPressed(MouseButton b)
+bool MouseButtonPressed(MouseButton b)
 {
 	if (b < 0 || b >= MouseButtonCount)
 	{
 		return false;
 	}
-	return input.keyboard.WasPressed(b);
+	return input.keyboard.Pressed(b);
 }
 
-bool WasMouseButtonReleased(MouseButton b)
+bool MouseButtonReleased(MouseButton b)
 {
 	if (b < 0 || b >= MouseButtonCount)
 	{
 		return false;
 	}
-	return input.keyboard.WasReleased(b);
+	return input.keyboard.Released(b);
 }
 
 s32 MouseX()

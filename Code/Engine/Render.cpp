@@ -22,7 +22,7 @@ auto renderAspectRatio = 0;
 auto globalUniform = GPUUniform{};
 auto viewUniform = GPUUniform{};
 auto materialUniform = GPUUniform{};
-auto objectUniform = GPUUniform{};
+auto objectUniforms = Array<GPUUniform>{};
 
 void InitializeRenderer(void *jobParam)
 {
@@ -66,14 +66,18 @@ void InitializeRenderer(void *jobParam)
 		Abort("Vulkan", "@TODO: Load shaders in release build.");
 	}
 	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
-	globalUniform = GPUAddUniform(ShaderGlobalDescriptorSet);
-	viewUniform = GPUAddUniform(ShaderViewDescriptorSet);
-	materialUniform = GPUAddUniform(ShaderMaterialDescriptorSet);
-	objectUniform = GPUAddUniform(ShaderObjectDescriptorSet);
+	globalUniform = NewGPUUniform(ShaderGlobalDescriptorSet);
+	viewUniform = NewGPUUniform(ShaderViewDescriptorSet);
+	materialUniform = NewGPUUniform(ShaderMaterialDescriptorSet);
+	for (auto i = 0; i < MeshCount; i += 1)
+	{
+		objectUniforms.Append(NewGPUUniform(ShaderObjectDescriptorSet));
+	}
 }
 
 void UpdateRenderUniforms(Camera *c)
 {
+/*
 	u32 temp = 1;
 	auto buffers = Array<GPUUniformBufferWriteDescription>{};
 	buffers.Append(
@@ -94,20 +98,49 @@ void UpdateRenderUniforms(Camera *c)
 			.size = sizeof(u32),
 			.data = &temp,
 		});
-	auto pm = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
-	auto vm = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
-	auto m = pm * vm;
-	auto u = GPUObjectUniforms
+		*/
+	auto buffers = Array<GPUUniformBufferWriteDescription>{};
+	auto p = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
+	auto v = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
+	auto pvms = NewArrayWithCapacity<GPUObjectUniforms>(meshes.count);
+	auto pv = p * v;
+	static auto rots = Array<Quaternion>{};
+	if (rots.count == 0)
 	{
-		.modelViewProjection = pm * vm,
-	};
-	buffers.Append(
+		for (auto i = 0; i < MeshCount; i += 1)
 		{
-			.uniform = objectUniform,
-			.size = sizeof(GPUObjectUniforms),
-			.data = &u,
-		});
-	GPUUpdateUniforms(buffers, {});
+			rots.Append(NewQuaternion(V3{(f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX}));
+		}
+	}
+	if (KeyDown(RKey))
+	{
+		for (auto i = 0; i < MeshCount; i += 1)
+		{
+			rots[i] = NewQuaternion(V3{(f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX});
+		}
+	}
+	for (auto i = 0; i < MeshCount; i += 1)
+	{
+		auto m = IdentityMatrix;
+		m.SetRotation(rots[i].Matrix());
+		m.SetTranslation(V3{i * 5.0f, 0.0f, 0.0f});
+		pvms.Append(
+			{
+				.modelViewProjection = pv * m,
+			});
+		//PrintM4(pvms.Last()->modelViewProjection);
+		buffers.Append(
+			{
+				.uniform = objectUniforms[i],
+				.data = pvms.Last(),
+			});
+	}
+	static auto ii = 0;
+	if (ii < 3)
+	{
+	UpdateGPUUniforms(buffers, {});
+	ii += 1;
+	}
 #if 0
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	auto u = 1;
@@ -236,7 +269,7 @@ void Render()
 		auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
-		cb.BeginRender(GPUModelShaderID, GPUDefaultFramebuffer());
+		cb.BeginRenderPass(GPUModelShaderID, GPUDefaultFramebuffer());
 		//cb.DrawMeshes(meshes);
 		// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
 		// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
@@ -251,7 +284,7 @@ void Render()
 			//cb.DrawIndexed(meshes[i].indexCount, 0, 0);
 			//cb.DrawIndexedIndirect(ibuf, meshes.Count());
 		//}
-		cb.EndRender();
+		cb.EndRenderPass();
 		cb.Queue();
 	}
 	GPUSubmitFrameGraphicsCommandBuffers();

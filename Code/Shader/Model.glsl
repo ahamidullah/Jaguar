@@ -15,9 +15,10 @@ Stage: Vertex
 
 	void main()
 	{
-		gl_Position = objects[0].modelViewProjection * vec4(vertexPosition, 1.0);
+		gl_Position = objects[0].modelViewProjection[gl_DrawID] * vec4(vertexPosition, 1.0);
 		fragmentDrawID = gl_DrawID;
-		if (materials[0].shadingModel == PhongShadingModel)
+		//if (materials[0].shadingModel == PhongShadingModel)
+		if (true)
 		{
 			fragmentNormal = vertexNormal;
 		}
@@ -46,11 +47,13 @@ Stage: Fragment
 
 	void main()
 	{
-		if (materials[0].shadingModel == PhongShadingModel)
+		//if (materials[0].shadingModel == PhongShadingModel)
+		if (true)
 		{
 			vec3 ambientIntensity = vec3(0.15f, 0.15f, 0.15f);
 			vec3 diffuseIntensity = vec3(0.6f, 0.6f, 0.6f);
-			vec3 directionalLightDirection = vec3(-0.707107, -0.707107, -0.707107);
+			//vec3 directionalLightDirection = vec3(-0.707107, -0.707107, -0.707107);
+			vec3 directionalLightDirection = normalize(vec3(0.0, 0.0, 0.0) - vec3(0.0, 1.0, 1.0));
 			vec3 directionalLightingResult = vec3(0);
 			{
 				vec3 receiveDirection = normalize(-directionalLightDirection);

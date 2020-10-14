@@ -40,10 +40,10 @@ void RotateTransformsEulerLocal(ArrayView<EulerAngles> eas, ArrayView<Transform>
 	Assert(eas.count == out.count);
 	for (auto i = 0; i < out.count; i += 1)
 	{
-		auto angles = out[i].rotation.ToAngles();
-		auto yaw = EulerAngles{.yaw = angles.yaw + eas[i].yaw}.ToQuaternion();
-		auto pitch = EulerAngles{.pitch = angles.pitch + eas[i].pitch}.ToQuaternion();
-		auto roll = EulerAngles{.roll = angles.roll + eas[i].roll}.ToQuaternion();
+		auto e = out[i].rotation.Euler();
+		auto yaw = EulerAngles{.yaw = e.yaw + eas[i].yaw}.ToQuaternion();
+		auto pitch = EulerAngles{.pitch = e.pitch + eas[i].pitch}.ToQuaternion();
+		auto roll = EulerAngles{.roll = e.roll + eas[i].roll}.ToQuaternion();
 		out[i].rotation = (yaw * pitch * roll).Normal();
 	}
 }

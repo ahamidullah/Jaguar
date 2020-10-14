@@ -20,6 +20,9 @@ const auto U64Max = UINT64_MAX;
 const auto S32Max = INT32_MAX;
 const auto S64Max = INT64_MAX;
 
+#define Kilobyte 1024
+#define Megabyte 1024 * Kilobyte
+#define Gigabyte 1024 * Megabyte
 #define KilobytesToBytes(k) ((u32)k * 1024)
 #define MegabytesToBytes(m) (KilobytesToBytes(m) * 1024)
 #define GigabytesToBytes(g) (MegabyteToBytes(g) * 1024)

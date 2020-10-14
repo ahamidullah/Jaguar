@@ -40,7 +40,8 @@ void InitializeModelAssets()
 //auto meshes = StaticArray<MeshAsset, 10000>{};
 //auto meshes = StaticArray<GPUMesh, 10000>{};
 //auto meshes = NewGPUMeshes(10000);
-const auto MeshCount = 1000000;
+//const auto MeshCount = 10000;
+const auto MeshCount = 1;
 auto meshes = NewArray<GPUMesh>(MeshCount);
 
 ModelAsset LoadModelAssetFromFile(String name)
@@ -107,7 +108,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//meshes[i].indexCount = acc->count;
 				//meshes[i].indexBuffer = NewGPUIndexBuffer(indicesSize);
 				//meshes[i].firstIndex = i * 36;// + padding;
-				auto s = NewGPUFrameStagingBufferX(indicesSize, m->IndexBuffer());
+				auto s = NewGPUFrameStagingBufferX(m->IndexBuffer(), indicesSize, 0);
 				auto bv = &gltf.bufferViews[acc->bufferView];
 				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
 				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)s.Map(), indicesSize));
@@ -139,8 +140,8 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//auto iv = m->MapVertexBuffer();
 				//meshes[i].vertexBuffer = NewGPUVertexBuffer(verticesSize);
 				//meshes[i].vertexOffset = i * 24;// + padding;
-				auto s = NewGPUFrameStagingBufferX(verticesSize, m->VertexBuffer());
-				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset)
+				auto s = NewGPUFrameStagingBufferX(m->VertexBuffer(), verticesSize, 0);
+				auto CopyVertexAttributes = [&gltf, &buffers, &s, &i](s64 accIndex, s64 offset)
 				{
 					auto acc = &gltf.accessors[accIndex];
 					auto bv = &gltf.bufferViews[acc->bufferView];
@@ -149,17 +150,22 @@ ModelAsset LoadModelAssetFromFile(String name)
 					auto ofs = V3{};
 					if (offset == 0)
 					{
-						auto r = MeshCount / 100;
-						ofs.x = ((float)rand()/(float)(RAND_MAX/r)) - ((float)r / 2);
-						ofs.y = ((float)rand()/(float)(RAND_MAX/r)) - ((float)r / 2);
-						ofs.z = ((float)rand()/(float)(RAND_MAX/r)) - ((float)r / 2);
+						//auto r = (f32)MeshCount / 10;
+						auto r = (f32)1;
+						ofs.x = i * 10.0f;
+						ofs.y = i * 0.0f;
+						ofs.z = i * 0.0f;
+						//ofs.x = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
+						//ofs.y = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
+						//ofs.z = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
 					}
+					PrintV3(ofs);
 					for (auto i = 0; i < acc->count; i += 1)
 					{
 						auto v = *b;
-						v.x += ofs.x;
-						v.y += ofs.y;
-						v.z += ofs.z;
+						//v.x += ofs.x;
+						//v.y += ofs.y;
+						//v.z += ofs.z;
 						*dst = v;
 						dst += 2;
 						b += 1;

@@ -487,6 +487,7 @@ bool MeshRenderGroupData::operator==(MeshRenderGroupData d)
 	return this->vkVertexBuffer == d.vkVertexBuffer && this->vkIndexBuffer == d.vkIndexBuffer;
 }
 
+		auto xcmds = ArrayView<VkDrawIndexedIndirectCommand>{};
 GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 {
 	struct MergePartitionParameter
@@ -583,7 +584,8 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 	// T = number of worker threads
 	// If the number of groups >= T, then we run one job per group.
 	// Else the number of groups < T, and we partition the work for a each group into T jobs.
-	if (gs.count >= WorkerThreadCount())
+	if (gs.count >= WorkerThreadCount()) // @TODO: Wrong.
+	//if (mergeHT.count >= WorkerThreadCount())
 	{
 		struct MakeGroupParameter
 		{
@@ -643,31 +645,39 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 			ArrayView<s64> meshIndices;
 			ArrayView<GPUMesh> meshes;
 			ArrayView<VkDrawIndexedIndirectCommand> commands;
+			s64 start;
+			s64 end;
 		};
 		auto MakeGroup = [](void *param)
 		{
 			auto p = (MakeGroupParameter *)param;
-			for (auto i = 0; i < p->meshIndices.count; i += 1)
+			for (auto i = p->start; i < p->end; i += 1)
 			{
-				auto mi = p->meshIndices[i];
-				p->commands[i] = VkDrawIndexedIndirectCommand
+				auto mi = p->meshIndices[0];
+				Assert(mi == 0);
+				p->commands[0] = VkDrawIndexedIndirectCommand
 				{
-					.indexCount = p->meshes[mi].indexCount,
-					.instanceCount = p->meshes[mi].instanceCount,
-					.firstIndex = p->meshes[mi].firstIndex,
-					.vertexOffset = p->meshes[mi].vertexOffset,
+					.indexCount = p->meshes[0].indexCount,
+					.instanceCount = p->meshes[0].instanceCount,
+					.firstIndex = p->meshes[0].firstIndex,
+					.vertexOffset = p->meshes[0].vertexOffset,
 				};
 			}
 		};
 		auto params = NewArrayWithCapacity<MakeGroupParameter>(mergeHT.count * WorkerThreadCount());
 		auto js = NewArrayWithCapacity<JobDeclaration>(mergeHT.count * WorkerThreadCount());
 		auto sbs = NewArrayWithCapacity<GPUFrameStagingBuffer>(mergeHT.count);
+		//auto cmds = ArrayView<VkDrawIndexedIndirectCommand>{};
+			auto ib = NewGPUFrameIndirectBuffer(1 * sizeof(VkDrawIndexedIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, 1 * sizeof(VkDrawIndexedIndirectCommand), 0);
 		for (auto e : mergeHT)
 		{
-			auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
-			auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndexedIndirectCommand), 0);
-			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
+			Assert(e.value.count == 1);
+			//auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
+			//auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndexedIndirectCommand), 0);
+			xcmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
 			auto workSize = DivideAndRoundUp(e.value.count, WorkerThreadCount());
+			Assert(workSize == 1);
 			for (auto i = 0; i < WorkerThreadCount(); i += 1)
 			{
 				auto workStart = i * workSize;
@@ -680,12 +690,28 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 				{
 					workEnd -= workEnd - e.value.count;
 				}
+				Assert(workStart == 0 && workEnd == 1 || workStart == 1 && workEnd == 1);
 				params.Append(
 					{
 						.meshIndices = e.value.View(workStart, workEnd),
 						.meshes = ms,
-						.commands = cmds.View(workStart, workEnd),
+						.commands = xcmds.View(workStart, workEnd),
+						.start = workStart,
+						.end = workEnd,
 					});
+				//Assert(params[0].meshIndices.count == 1);
+				Assert(params[0].meshIndices.elements[0] == 0);
+				Assert(params[0].meshes.count == 1);
+				if (i == 0)
+				{
+					Assert(params[i].meshIndices.count == 1);
+					Assert(params[i].commands.count == 1);
+				}
+				else
+				{
+					Assert(params[i].meshIndices.count == 0);
+					Assert(params[i].commands.count == 0);
+				}
 				js.Append(NewJobDeclaration(MakeGroup, params.Last()));
 			}
 			gs.Append(
@@ -699,11 +725,19 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 		auto c = (JobCounter *){};
 		RunJobs(js, NormalJobPriority, &c);
 		c->Wait();
+		Assert(xcmds.count == 1);
+		Assert(meshes[0].indexCount == xcmds[0].indexCount);
+		Assert(meshes[0].instanceCount == xcmds[0].instanceCount);
+		Assert(meshes[0].firstIndex == xcmds[0].firstIndex);
+		Assert(meshes[0].vertexOffset == xcmds[0].vertexOffset);
 		for (auto sb : sbs)
 		{
 			sb.Flush();
 		}
 	}
+	Assert(gs.count == 1);
+	Assert(gs[0].data.vkVertexBuffer == meshes[0].vertexBuffer.vkBuffer);
+	Assert(gs[0].data.vkIndexBuffer == meshes[0].indexBuffer.vkBuffer);
 	// @TODO: Sort the MeshRenderGroups to minimize state changes.
 	return
 	{
@@ -713,11 +747,22 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 
 void GPUCommandBuffer::DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms)
 {
+	Assert(mg.renderGroups.count == 1);
 	for (auto rg : mg.renderGroups)
 	{
+		Assert(meshes[0].indexCount == xcmds[0].indexCount);
+		Assert(meshes[0].instanceCount == xcmds[0].instanceCount);
+		Assert(meshes[0].firstIndex == xcmds[0].firstIndex);
+		Assert(meshes[0].vertexOffset == xcmds[0].vertexOffset);
+		Assert(rg.commandCount == 1);
+		Assert(rg.data.vkIndexBuffer == meshes[0].indexBuffer.vkBuffer);
+		Assert(rg.data.vkVertexBuffer == meshes[0].vertexBuffer.vkBuffer);
+		ConsolePrint("start: %ld, end: %ld, ofs: %ld\n", vkGPUIndirectFrameAllocator.start, vkGPUIndirectFrameAllocator.end, rg.commands.offset);
+		//Assert((vkGPUIndirectFrameAllocator.start < vkGPUIndirectFrameAllocator.end && rg.command.offset < vkGPUIndirectFrameAllocator.end && rg.command.offset > vkGPUIndirectFrameAllocator.start) || (vkGPUIndirectFrameAllocator.start > vkGPUIndirectFrameAllocator.end && ();
 		vkCmdBindIndexBuffer(this->vkCommandBuffer, rg.data.vkIndexBuffer, 0, GPUIndexTypeUint16);
 		auto offset = (VkDeviceSize)0;
 		vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &rg.data.vkVertexBuffer, &offset);
+		//this->DrawIndexed(meshes[0].indexCount, meshes[0].firstIndex, meshes[0].vertexOffset);
 		this->DrawIndexedIndirect(rg.commands, rg.commandCount);
 	}
 }
@@ -1292,6 +1337,7 @@ void InitializeGPU(Window *w)
 				}
 				// @TODO: If not vsync... first of VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
 			}
+			presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 			auto numQueueFams = u32{};
 			vkGetPhysicalDeviceQueueFamilyProperties(pd, &numQueueFams, NULL);
 			auto queueFams = NewArray<VkQueueFamilyProperties>(numQueueFams);
@@ -2376,7 +2422,7 @@ GPUFence GPUSubmitFrameGraphicsCommandBuffers()
 		vkFrameTransfersCompleteSemaphores[vkFrameIndex],
 		vkImageAcquiredSemaphores[vkFrameIndex]);
 	auto waitStages = MakeStaticArray<VkPipelineStageFlags>(
-		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	auto signalSems = MakeStaticArray<VkSemaphore>(vkFrameGraphicsCompleteSemaphores[vkFrameIndex]);
 	SubmitVulkanFrameCommandBuffers(VulkanGraphicsQueue, waitSems, waitStages, signalSems, vkFrameFences[vkFrameIndex]);

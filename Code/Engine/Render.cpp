@@ -135,12 +135,7 @@ void UpdateRenderUniforms(Camera *c)
 				.data = pvms.Last(),
 			});
 	}
-	static auto ii = 0;
-	if (ii < 3)
-	{
 	UpdateGPUUniforms(buffers, {});
-	ii += 1;
-	}
 #if 0
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	auto u = 1;

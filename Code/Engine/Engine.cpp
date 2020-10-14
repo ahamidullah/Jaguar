@@ -24,7 +24,7 @@ auto cam = (Camera *){};
 
 void InitializeGameLoop()
 {
-	cam = NewCamera("Main", {2, 2, 2}, {0, 0, 0}, 1.4f, DegreesToRadians(90.0f));
+	cam = NewCamera("Main", {2, 2, 2}, {0, 0, 0}, 0.2f, DegreesToRadians(90.0f));
 	LoadAsset("Box");
 	//auto e = NewEntity();
 	//auto t = Transform{};

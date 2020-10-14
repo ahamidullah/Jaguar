@@ -163,9 +163,9 @@ ModelAsset LoadModelAssetFromFile(String name)
 					for (auto i = 0; i < acc->count; i += 1)
 					{
 						auto v = *b;
-						//v.x += ofs.x;
-						//v.y += ofs.y;
-						//v.z += ofs.z;
+						v.x += ofs.x;
+						v.y += ofs.y;
+						v.z += ofs.z;
 						*dst = v;
 						dst += 2;
 						b += 1;

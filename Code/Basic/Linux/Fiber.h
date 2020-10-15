@@ -12,6 +12,10 @@
 
 #define NEW_FIBER 1
 
+#if !NEW_FIBER
+#include <setjmp.h>
+#endif
+
 typedef void (*FiberProcedure)(void *);
 
 struct Fiber

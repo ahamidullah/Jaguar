@@ -3,7 +3,10 @@
 #include "Vulkan.h"
 #include "ShaderGlobal.h"
 #include "Render.h"
+#include "Mesh.h"
+#include "Job.h"
 #include "Math.h"
+#include "Shader.h"
 #include "Basic/DLL.h"
 #include "Basic/Array.h"
 #include "Basic/Hash.h"
@@ -12,7 +15,12 @@
 #include "Basic/Memory.h"
 #include "Basic/Atomic.h"
 #include "Basic/Pool.h"
+#include "Basic/Time.h"
+#include "Basic/File.h"
 #include "Common.h"
+
+// @TODO @DELTEME
+extern Array<GPUMesh> meshes;
 
 #define VulkanExportedFunction(name) PFN_##name name = NULL;
 #define VulkanGlobalFunction(name) PFN_##name name = NULL;
@@ -115,7 +123,7 @@ String VkResultToString(VkResult r)
 #define VkCheck(x)\
 	do { \
 		VkResult _r = (x); \
-		if (_r != VK_SUCCESS) Abort("Vulkan", "VkCheck failed on '%s': %k", #x, VkResultToString(_r)); \
+		if (_r != VK_SUCCESS) Abort("Vulkan", "VkCheck failed on %s: %k", #x, VkResultToString(_r)); \
 	} while (0)
 
 // @TODO: Make sure that all failable Vulkan calls are VkCheck'd.
@@ -554,6 +562,8 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 					.endIndex = workEnd,
 				});
 			js.Append(NewJobDeclaration(MergePartition, params.Last()));
+			//if (i == 0)
+				//MergePartition(params.Last());
 		}
 		auto c = (JobCounter *){};
 		RunJobs(js, NormalJobPriority, &c);
@@ -713,6 +723,8 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 					Assert(params[i].commands.count == 0);
 				}
 				js.Append(NewJobDeclaration(MakeGroup, params.Last()));
+			//if (i == 0)
+				//MakeGroup(params.Last());
 			}
 			gs.Append(
 				{

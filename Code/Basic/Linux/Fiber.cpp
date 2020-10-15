@@ -408,10 +408,17 @@ static u8 StartSystemContextCode[] =
 	#error Fiber: context switching is not defined for this CPU architecture.
 #endif
 
+Fiber *fs[4];
+
+#include <stdio.h>
 Fiber **RunningFiberPointer()
 {
-	static ThreadLocal auto f = (Fiber *){};
-	return &f;
+	//static ThreadLocal auto f = (Fiber *){};
+	//static auto fs = NewArray<Fiber *>(WorkerThreadCount());
+	auto i = ThreadIndex();
+	Assert(i >= 0 && i < 4);
+	//printf("%ld\n", i);
+	return &fs[i];
 }
 
 Fiber *RunningFiber()
@@ -439,6 +446,15 @@ struct RunFiberParameter
 };
 
 #if !NEW_FIBER
+#include <ucontext.h>
+struct FiberCreationInfo
+{
+	FiberProcedure procedure;
+	void *parameter;
+	jmp_buf *jumpBuffer;
+	ucontext_t *callingContext;
+};
+
 void RunFiber(void *p)
 {
 	auto fci = (FiberCreationInfo *)p;
@@ -461,10 +477,10 @@ void RunFiber(void *param)
 	auto p = (RunFiberParameter *)param;
 	// Save the parameters to the stack before swapping back to the calling context.
 	// Once we swap back, the param pointer will be invalid because we stored the parameters on the stack.
-	auto pr = p->procedure;
-	auto pm = p->parameter;
+	auto fiberProc = p->procedure;
+	auto fiberParam = p->parameter;
 	SwapSystemContext(p->thisContext, p->callingContext);
-	pr(pm);
+	fiberProc(fiberParam);
 	pthread_exit(NULL);
 }
 
@@ -495,9 +511,7 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 		.callingContext = &tempContext,
 	};
 	makecontext(&f.context, (void(*)())RunFiber, 1, &fci);
-	auto t = NewTimer("ContextSwaps");
 	swapcontext(&tempContext, &f.context);
-	t.Print();
 	#ifdef ThreadSanitizerBuild
 		f.tsan = __tsan_create_fiber(0);
 	#endif
@@ -556,6 +570,8 @@ void Fiber::Switch()
 #else
 	auto from = RunningFiber();
 	SetRunningFiber(this);
+	Assert(from);
+	Assert(this);
 	SwapSystemContext(&from->context, &this->context);
 	#if 0
 	if (this->runParameters.running)

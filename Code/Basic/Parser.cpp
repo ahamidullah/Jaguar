@@ -1,4 +1,6 @@
 #include "Parser.h"
+#include "File.h"
+#include "Log.h"
 
 Parser NewParser(String filepath, String delims, bool *err)
 {

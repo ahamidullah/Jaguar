@@ -31,6 +31,7 @@ struct JobFiberParameter
 	void *parameter;
 	bool finished;
 	JobCounter *waitingCounter; // The job counter waiting on this job to complete. Can be NULL.
+	s64 threadIndex;
 };
 
 struct JobFiber

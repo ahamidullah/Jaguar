@@ -73,26 +73,35 @@ void Update()
 
 void Test2(void *x)
 {
-	LogInfo("Engine", "NUMBER2");
+	//LogInfo("Engine", "NUMBER2");
 }
 
 void Test(void *x)
 {
 	LogInfo("Engine", "HELLLLOOOOOO");
-	static auto b = false;
-	if (!b)
 	{
-		b = true;
-	auto j = Array<JobDeclaration>{};
-	for (auto i = 0; i < 100; i += 1)
-	{
-		j.Append(NewJobDeclaration(Test2, NULL));
+		auto j = Array<JobDeclaration>{};
+		for (auto i = 0; i < 1000; i += 1)
+		{
+			j.Append(NewJobDeclaration(Test2, NULL));
+		}
+		auto c = (JobCounter *){};
+		RunJobs(j, NormalJobPriority, &c);
+		c->Wait();
 	}
-	auto c = (JobCounter *){};
-	RunJobs(j, NormalJobPriority, &c);
-	c->Wait();
+	{
+		auto j = Array<JobDeclaration>{};
+		for (auto i = 0; i < 1000; i += 1)
+		{
+			j.Append(NewJobDeclaration(Test2, NULL));
+		}
+		auto c = (JobCounter *){};
+		RunJobs(j, NormalJobPriority, &c);
+		c->Wait();
 	}
 }
+
+#include <stdio.h>
 
 void RunGame(void *)
 {
@@ -106,17 +115,57 @@ void RunGame(void *)
 	InitializeGameLoop();
 	#if 0
 	auto j = Array<JobDeclaration>{};
-	for (auto i = 0; i < 100; i += 1)
+	for (auto i = 0; i < 150; i += 1)
 	{
 		j.Append(NewJobDeclaration(Test, NULL));
 	}
 	auto c = (JobCounter *){};
 	RunJobs(j, NormalJobPriority, &c);
 	c->Wait();
+	ExitProcess(ProcessSuccess);
 	#endif
 	auto t = NewTimer("Frame");
+	#if 0
+	for (auto i = 0; i < 1000; i += 1)
+	{
+		auto j = Array<JobDeclaration>{};
+		j.Append(NewJobDeclaration(Test2, NULL));
+		auto c = (JobCounter *){};
+		RunJobs(j, NormalJobPriority, NULL);
+		//c->Wait();
+	}
+	#else
+		for (auto i = 0; i < 100000; i += 1)
+		{
+			for (auto k = 0; k < 1; k += 1)
+			{
+				//printf("doing %d\n", i);
+				auto c = (JobCounter *){};
+				auto j = Array<JobDeclaration>{};
+				j.Append(NewJobDeclaration(Test2, NULL));
+				RunJobs(j, NormalJobPriority, &c);
+				c->Wait();
+				//Assert(c->waitingFibers.count == 1);
+				if (c->waitingFibers.count != 1)
+				{
+					//printf("missing %ld\n", c->waitingFibers.count);
+				}
+			}
+			/*
+			for (auto k = 0; k < 1; k += 1)
+			{
+				auto c = (JobCounter *){};
+				auto j = Array<JobDeclaration>{};
+				j.Append(NewJobDeclaration(Test2, NULL));
+				RunJobs(j, NormalJobPriority, &c);
+				c->Wait();
+			}
+			*/
+		}
+	#endif
 	while (true)
 	{
+		//c->Wait();
 		t.Print(MillisecondScale);
 		t.Reset();
 		auto winEvents = ProcessInput(&win);
@@ -153,7 +202,8 @@ void LogBuildOptions()
 	#endif
 }
 
-s32 ApplicationEntry(s32 argc, char *argv[])
+//s32 ApplicationEntry(s32 argc, char *argv[])
+s32 main(s32 argc, char *argv[])
 {
 	LogBuildOptions();
 	InitializeInput();

@@ -3,6 +3,20 @@
 #include "Array.h"
 #include "Log.h"
 
+s64 DivideAndRoundUp(s64 x, s64 y);
+/*
+// @TODO: Move this out of here.
+s64 DivideAndRoundUp(s64 x, s64 y)
+{
+	auto result = s64{x / y};
+	if (x % y != 0)
+	{
+		result += 1;
+	}
+	return result;
+}
+*/
+
 template <typename T>
 struct Dequeue
 {
@@ -137,6 +151,7 @@ void Dequeue<T>::PushFront(T e)
 		}
 		this->start = this->blockSize - 1;
 	}
+	auto i = this->start;
 	this->activeBlocks[0][this->start] = e;
 	this->start -= 1;
 	this->count += 1;

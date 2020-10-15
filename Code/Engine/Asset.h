@@ -22,7 +22,7 @@ struct LoadAssetJobParameters
 };
 
 void InitializeAssets(void *jobParameter);
-void LoadAsset(AssetID id);
+void LoadAsset(String name);
 void UnloadAsset(AssetID id);
 void *LockAsset(AssetID id);
 void UnlockAsset(AssetID id);

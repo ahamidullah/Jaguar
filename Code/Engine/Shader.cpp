@@ -4,6 +4,8 @@
 #include "Basic/Parser.h"
 #include "Basic/File.h"
 #include "Basic/Filepath.h"
+#include "Basic/Log.h"
+#include "Basic/Process.h"
 
 Array<String> GPUShaderFilepaths()
 {

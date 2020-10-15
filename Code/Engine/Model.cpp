@@ -5,6 +5,8 @@
 #include "Basic/HashTable.h"
 #include "Basic/Hash.h"
 #include "Basic/Parser.h"
+#include "Basic/Memory.h"
+#include "Basic/Log.h"
 
 #ifdef DevelopmentBuild
 	const auto ModelDirectory = NewString("Data/Model");

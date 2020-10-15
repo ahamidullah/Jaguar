@@ -5,8 +5,7 @@
 #else
 	#error Unsupported platform.
 #endif
-
-struct String;
+#include "String.h"
 
 struct Timer
 {

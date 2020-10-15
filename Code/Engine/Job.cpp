@@ -12,7 +12,10 @@
 #include "Basic/Pool.h"
 #include "Basic/Dequeue.h"
 
-struct WorkerThreadParameter{};
+struct WorkerThreadParameter
+{
+	s64 threadIndex;
+};
 
 struct WorkerThread
 {
@@ -25,20 +28,7 @@ void JobFiberProcedure(void *);
 
 // @TODO: More granular locking?
 auto jobLock = Spinlock{};
-auto workerThreads = []() -> Array<WorkerThread>
-{
-	auto wts = NewArrayIn<WorkerThread>(GlobalAllocator(), WorkerThreadCount());
-	wts.Last()->platformThread = CurrentThread();
-	for (auto i = 0; i < wts.count - 1; i += 1)
-	{
-		wts[i].platformThread = NewThread(WorkerThreadProcedure, &wts[i].parameter);
-	}
-	for (auto i = 0; i < wts.count; i++)
-	{
-		SetThreadProcessorAffinity(wts[i].platformThread, i);
-	}
-	return wts;
-}();
+auto workerThreads = Array<WorkerThread>{};
 auto idleJobFiberPool = []() -> FixedPool<JobFiber, JobFiberCount>
 {
 	auto p = NewFixedPool<JobFiber, JobFiberCount>();
@@ -62,13 +52,20 @@ auto resumableJobFiberQueues = []() -> StaticArray<Array<JobFiber *>, JobPriorit
 	auto a = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
 	for (auto &q : a)
 	{
-		q = NewArrayIn<JobFiber *>(GlobalAllocator(), 0);
+		q = NewArrayWithCapacityIn<JobFiber *>(GlobalAllocator(), 100);
 	}
 	return a;
 }();
 auto jobCounterPool = NewPoolIn<JobCounter>(GlobalAllocator(), 0);
-ThreadLocal auto runningJobFiber = (JobFiber *){};
-ThreadLocal auto workerThreadFiber = Fiber{};
+auto runningJobFibers = NewArray<JobFiber *>(WorkerThreadCount());
+//ThreadLocal auto runningJobFiber = (JobFiber *){};
+//ThreadLocal auto workerThreadFiber = Fiber{};
+auto wtf = NewArray<bool>(WorkerThreadCount());
+auto workerThreadFibers = NewArray<Fiber>(WorkerThreadCount());
+ThreadLocal auto waitingJobCounter = (JobCounter *){};
+
+#include "string.h"
+#include <stdio.h>
 
 void JobFiberProcedure(void *param)
 {
@@ -77,13 +74,26 @@ void JobFiberProcedure(void *param)
 	{
 		p->procedure(p->parameter);
 		p->finished = true;
-		workerThreadFiber.Switch();
+		auto ii = p->threadIndex;
+		//printf("Switch to worker: %ld\n", ii + 1);
+		//printf("ThreadID: %ld, JobFiberProcedure, finished job %p, switching back to worker thread %ld\n", ThreadID(), p->procedure, ii);
+		workerThreadFibers[ThreadIndex()].Switch();
 	}
 }
 
-void *WorkerThreadProcedure(void *)
+void RunGame(void *);
+void Test2(void *);
+
+void *WorkerThreadProcedure(void *param)
 {
-	ConvertThreadToFiber(&workerThreadFiber);
+	//auto ii = ThreadIndex();
+	auto p = (WorkerThreadParameter *)param;
+	//printf("ThreadID: %ld, ThreadIndex: %ld\n", ThreadID(), p->threadIndex);
+	//printf("RunGame: %p, Test2: %p\n", RunGame, Test2);
+	auto ii = p->threadIndex;
+	ConvertThreadToFiber(&workerThreadFibers[ThreadIndex()]);
+	auto ff = (JobFiber *){};
+	auto fff = JobFiber{};
 	while (true)
 	{
 		auto runFiber = (JobFiber *){};
@@ -93,6 +103,8 @@ void *WorkerThreadProcedure(void *)
 			if (resumableJobFiberQueues[i].count > 0)
 			{
 				runFiber = resumableJobFiberQueues[i].Pop();
+				//printf("resuming\n");
+				//Assert(runFiber->parameter.procedure == RunGame);
 				break;
 			}
 			else if (jobQueues[i].Count() > 0)
@@ -109,28 +121,57 @@ void *WorkerThreadProcedure(void *)
 					.procedure = j.procedure,
 					.parameter = j.parameter,
 					.waitingCounter = j.waitingCounter,
+					.threadIndex = ii,
 				};
-				Assert(runFiber->parameter.procedure);
+				if (j.waitingCounter)
+				{
+					//Assert(j.waitingCounter->waitingFibers.count == 1);
+					//Assert(runFiber->parameter.waitingCounter->waitingFibers.count == 1);
+				}
+				//Assert(runFiber->parameter.procedure);
 				break;
 			}
+		}
+		ff = runFiber;
+		if (ff)
+		{
+			//printf("GET %p %ld\n", runFiber, ii + 1);
+			fff = *runFiber;
 		}
 		jobLock.Unlock();
 		if (!runFiber)
 		{
 			continue;
 		}
-		runningJobFiber = runFiber;
+		runningJobFibers[ThreadIndex()] = runFiber;
+		//printf("ThreadID: %ld, WorkerThreadProcedure, running job fiber %p(%p)\n", ThreadID(), runFiber, runFiber->parameter.procedure);
 		runFiber->platformFiber.Switch();
+		#if 0
 		jobLock.Lock();
-		Defer(jobLock.Unlock());
+		Assert(ff == runFiber);
+		memcmp(runFiber, &ff, sizeof(JobFiber));
+		//printf("RELEASE %p, %ld\n", runFiber, ii + 1);
 		if (runFiber->parameter.finished)
 		{
+			idleJobFiberPool.Release(runFiber);
+			//ConsolePrint("%ld\n", idleJobFiberPool.Available());
+		}
+		jobLock.Unlock();
+		#else
+		jobLock.Lock();
+		Defer(jobLock.Unlock());
+		//Assert(runFiber->parameter.waitingCounter->waitingFibers.count == 1);
+		if (runFiber->parameter.finished)
+		{
+			//printf("ThreadID: %ld, WorkerThreadProcedure, done with fiber %p(%p), finished job, finished counter %p\n", ThreadID(), runFiber, runFiber->parameter.procedure, runFiber->parameter.waitingCounter);
 			idleJobFiberPool.Release(runFiber);
 			if (!runFiber->parameter.waitingCounter)
 			{
 				continue;
 			}
 			runFiber->parameter.waitingCounter->unfinishedJobCount -= 1;
+			//Assert(runFiber->parameter.waitingCounter->unfinishedJobCount == 0);
+			//Assert(runFiber->parameter.waitingCounter->waitingFibers.count == 1);
 			if (runFiber->parameter.waitingCounter->unfinishedJobCount == 0)
 			{
 				for (auto &f : runFiber->parameter.waitingCounter->waitingFibers)
@@ -138,15 +179,47 @@ void *WorkerThreadProcedure(void *)
 					resumableJobFiberQueues[f->parameter.priority].Append(f);
 				}
 			}
+		//	printf("rq: %ld\n", resumableJobFiberQueues[0].count);
 		}
+		else
+		{
+			//printf("ThreadID: %ld, WorkerThreadProcedure, done with fiber, retiring fiber %p(%p)\n", ThreadID(), runFiber, runFiber->parameter.procedure);
+			// @TODO: Job counter locking.
+			if (waitingJobCounter->unfinishedJobCount == 0)
+			{
+				// All of the dependency jobs already finished. This job can resume immediately.
+				resumableJobFiberQueues[runFiber->parameter.priority].Append(runFiber);
+			}
+			else
+			{
+				// The dependency jobs are still running. Add this fiber to the wait list.
+				waitingJobCounter->waitingFibers.Append(runFiber);
+			}
+		}
+		#endif
 	}
 }
 
 void InitializeJobs(JobProcedure initProc, void *initParam)
 {
+	workerThreads = NewArrayIn<WorkerThread>(GlobalAllocator(), WorkerThreadCount());
+	workerThreads[0].platformThread = CurrentThread();
+	//workerThreads.Last()->platformThread = CurrentThread();
+	for (auto i = 1; i < workerThreads.count; i += 1)
+	//for (auto i = 0; i < workerThreads.count - 1; i += 1)
+	{
+		workerThreads[i].parameter.threadIndex = i;
+		workerThreads[i].platformThread = NewThread(WorkerThreadProcedure, &workerThreads[i].parameter);
+	}
+	for (auto i = 0; i < workerThreads.count; i += 1)
+	{
+		wtf[i] = true;
+		SetThreadProcessorAffinity(workerThreads[i].platformThread, i);
+	}
 	auto j = NewJobDeclaration(initProc, initParam);
 	RunJobs(NewArrayView(&j, 1), HighJobPriority, NULL);
-	WorkerThreadProcedure(&workerThreads.Last()->parameter);
+	WorkerThreadProcedure(&workerThreads[0].parameter);
+	//WorkerThreadProcedure(&workerThreads.Last()->parameter);
 }
 
 JobDeclaration NewJobDeclaration(JobProcedure proc, void *param)
@@ -165,37 +238,80 @@ void RunJobs(ArrayView<JobDeclaration> js, JobPriority p, JobCounter **c)
 	auto counter = (JobCounter *){};
 	if (c)
 	{
+		counter = jobCounterPool.Get();
+		counter->jobCount = js.count;
+		counter->unfinishedJobCount = js.count;
+		counter->waitingFibers.SetAllocator(GlobalAllocator());
+		Assert(counter->waitingFibers.capacity == 0 && counter->waitingFibers.count == 0);
+		*c = counter;
+	/*
 		*c = jobCounterPool.Get();
 		(*c)->jobCount = js.count;
 		(*c)->unfinishedJobCount = js.count;
+		(*c)->waitingFibers.SetAllocator(GlobalAllocator());
 		Assert((*c)->waitingFibers.capacity == 0 && (*c)->waitingFibers.count == 0);
 		counter = *c;
+	*/
 	}
 	for (auto j : js)
 	{
 		Assert(j.procedure);
+		auto qj = QueuedJob
+		{
+			.procedure = j.procedure,
+			.parameter = j.parameter,
+			.waitingCounter = counter,
+		};
+		if (c)
+		{
+			//Assert(qj.waitingCounter->waitingFibers.count == 0);
+		}
+		jobQueues[p].PushFront(qj);
+		/*
 		jobQueues[p].PushFront(
 		{
 			.procedure = j.procedure,
 			.parameter = j.parameter,
 			.waitingCounter = counter,
 		});
+		*/
+	}
+	if (c)
+	{
+		//Assert(counter->jobCount == 1);
+		//Assert(counter->unfinishedJobCount == 1);
+		//Assert(counter->waitingFibers.count == 0);
 	}
 }
 
 void JobCounter::Wait()
 {
+	if (this->unfinishedJobCount == 0)
+	{
+		// The jobs already finished.
+		//printf("ThreadID: %ld, JobCounter::Wait(), job counter %p already finished, returning\n", ThreadID(), this);
+		return;
+	}
+	waitingJobCounter = this;
+	auto ii = ThreadIndex();
+	#if 0
 	// @TODO: Have a per-counter lock?
 	{
 		jobLock.Lock();
 		Defer(jobLock.Unlock());
 		if (this->unfinishedJobCount == 0)
 		{
+			//Assert(0);
+			printf("ThreadID: %ld, JobCounter::Wait(), job counter %p already finished, returning\n", ThreadID(), this);
 			return;
 		}
-		this->waitingFibers.Append(runningJobFiber);
+		this->waitingFibers.Append(runningJobFibers[ii]);
+		Assert(wtf[ii] == false);
 	}
-	workerThreadFiber.Switch();
+	#endif
+	//Assert(this->waitingFibers.count == 1);
+	//printf("ThreadID: %ld, JobCounter::Wait(), waiting on job counter %p, switching to worker thread %ld\n", ThreadID(), this, ii);
+	workerThreadFibers[ThreadIndex()].Switch();
 }
 
 void JobCounter::Reset()

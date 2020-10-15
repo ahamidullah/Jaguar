@@ -1,4 +1,5 @@
 #include "XCBConnection.h"
+#include "Basic/Log.h"
 
 xcb_connection_t *XCBConnection()
 {

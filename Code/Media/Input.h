@@ -11,6 +11,32 @@
 
 const auto ScancodeCount = u32{256};
 
+struct InputButtons
+{
+	Array<bool> down;
+	Array<bool> pressed;
+	Array<bool> released;
+
+	void Press(s64 i);
+	void Release(s64 i);
+	bool Down(s64 i);
+	bool Pressed(s64 i);
+	bool Released(s64 i);
+};
+
+struct Mouse
+{
+	s32 wheel;
+	s32 x;
+	s32 y;
+	s32 deltaX;
+	s32 deltaY;
+	f32 rawDeltaX;
+	f32 rawDeltaY;
+	f32 sensitivity;
+	InputButtons buttons;
+};
+
 void InitializeInput();
 s32 MouseX();
 s32 MouseY();

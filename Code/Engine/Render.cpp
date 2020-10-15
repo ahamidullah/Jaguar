@@ -1,8 +1,12 @@
 #include "Render.h"
 #include "Shader.h"
 #include "ShaderGlobal.h"
+#include "Camera.h"
+#include "Media/Input.h"
 #include "Basic/File.h"
 #include "Basic/Filepath.h"
+#include "Basic/Memory.h"
+#include "Basic/Log.h"
 
 s64 RenderWidth()
 {
@@ -13,6 +17,9 @@ s64 RenderHeight()
 {
 	return 1000;
 }
+
+// @TODO @DELTEME
+extern Array<GPUMesh> meshes;
 
 auto renderDepthImage = GPUImage{};
 auto renderDepthImageView = GPUImageView{};

@@ -1,5 +1,6 @@
 #include "Event.h"
 #include "XCBConnection.h"
+#include "../Input.h"
 #include "Basic/Log.h"
 
 PlatformEvents ProcessPlatformEvents(Window *w, InputButtons *kb, Mouse *m)

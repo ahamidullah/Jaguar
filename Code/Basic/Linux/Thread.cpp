@@ -3,6 +3,8 @@
 #include "../Process.h"
 #include "../String.h"
 #include "../Memory.h"
+#include "../CPU.h"
+#include "../Atomic.h"
 
 Mutex NewMutex()
 {
@@ -73,16 +75,16 @@ bool Spinlock::IsLocked()
 ThreadLocal auto threadIndex = 0;
 auto threadCount = s64{1};
 
-struct ThreadStartParameters
+struct RunThreadParameters
 {
 	s64 threadIndex;
 	ThreadProcedure procedure;
 	void *param;
 };
 
-void *ThreadStart(void *param)
+void *RunThread(void *param)
 {
-	auto p = (ThreadStartParameters *)param;
+	auto p = (RunThreadParameters *)param;
 	threadIndex = p->threadIndex;
 	return p->procedure(p->param);
 }
@@ -95,12 +97,12 @@ Thread NewThread(ThreadProcedure proc, void *param)
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
 	auto i = AtomicFetchAndAdd64(&threadCount, 1);
-	auto p = (ThreadStartParameters *)GlobalAllocator()->Allocate(sizeof(ThreadStartParameters));
+	auto p = (RunThreadParameters *)GlobalAllocator()->Allocate(sizeof(RunThreadParameters));
 	p->threadIndex = i;
 	p->procedure = proc;
 	p->param = param;
 	auto t = Thread{};
-	if (pthread_create(&t, &attrs, ThreadStart, p))
+	if (pthread_create(&t, &attrs, RunThread, p))
 	{
 		Abort("Thread", "Failed pthread_create(): %k.", PlatformError());
 	}
@@ -153,9 +155,15 @@ s64 ThreadID()
 	return syscall(__NR_gettid);
 }
 
+#include <assert.h>
+#include <stdio.h>
 s64 ThreadIndex()
 {
-	return threadIndex;
+	auto i = threadIndex;
+	assert(i >= 0 && i < 4);
+	//printf("%d\n", i);
+	assert(i == threadIndex);
+	return i;
 }
 
 s64 ThreadCount()

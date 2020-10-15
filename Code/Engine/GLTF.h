@@ -3,6 +3,8 @@
 #if DevelopmentBuild
 
 #include "Basic/Array.h"
+#include "Basic/String.h"
+#include "Basic/Log.h"
 
 enum GLTFAttributeType
 {

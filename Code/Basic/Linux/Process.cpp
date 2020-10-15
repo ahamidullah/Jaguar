@@ -1,5 +1,6 @@
 #include "../Process.h"
 #include "../PCH.h"
+#include "../Log.h"
 
 s32 RunProcess(String cmd)
 {

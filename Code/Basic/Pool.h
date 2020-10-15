@@ -112,7 +112,7 @@ template <typename T, s64 N>
 FixedPool<T, N> NewFixedPool()
 {
 	auto p = FixedPool<T, N>{};
-	for (auto i = 0; i < N; i++)
+	for (auto i = 0; i < N; i += 1)
 	{
 		p.freeList[p.freeListCount] = &p.elements[i];
 		p.freeListCount += 1;
@@ -142,7 +142,7 @@ T *FixedPool<T, N>::end()
 template <typename T, s64 N>
 T *FixedPool<T, N>::Get()
 {
-	Assert(this->freeListCount > 0);
+	Assert(this->freeListCount > 0 && this->freeListCount <= N);
 	auto e = this->freeList[this->freeListCount - 1];
 	this->freeListCount -= 1;
 	return e;
@@ -151,7 +151,9 @@ T *FixedPool<T, N>::Get()
 template <typename T, s64 N>
 void FixedPool<T, N>::Release(T *e)
 {
+	Assert(this->freeListCount < N);
 	this->freeList[this->freeListCount] = e;
+	Assert(e > this->elements.elements && e < this->elements.elements + N);
 	this->freeListCount += 1;
 }
 

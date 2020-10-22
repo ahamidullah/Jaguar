@@ -39,13 +39,15 @@ typedef VkIndexType GPUIndexType;
 #define GPUIndexTypeUint16 VK_INDEX_TYPE_UINT16
 #define GPUIndexTypeUint32 VK_INDEX_TYPE_UINT32
 
-enum GPUShaderID
+struct GPUShader
 {
-	GPUModelShaderID,
-	GPUShaderIDCount
+	Array<VkShaderStageFlagBits> vkStages;
+	Array<VkShaderModule> vkModules;
+	VkRenderPass vkRenderPass;
+	VkPipeline vkPipeline;
 };
 
-void GPUCompileShaderFromFile(GPUShaderID id, String path, bool *err);
+GPUShader CompileGPUShader(String filename, bool *err);
 
 struct GPUMemoryHeapInfo
 {
@@ -114,12 +116,6 @@ struct GPUImageView
 
 GPUImageView NewGPUImageView(GPUImage src, GPUImageViewType t, GPUFormat f, GPUSwizzleMapping sm, GPUImageSubresourceRange isr);
 
-struct GPUTexture
-{
-	VkImage vkImage;
-	VkImageView vkImageView;
-};
-
 struct GPUSampler
 {
 	VkSampler vkSampler;
@@ -128,12 +124,22 @@ struct GPUSampler
 struct GPUFramebuffer
 {
 	u64 id;
-	s64 w;
-	s64 h;
-	Array<GPUImageView> attachments;
+	u32 width;
+	u32 height;
+	Array<VkImageView> attachments;
 };
 
 GPUFramebuffer GPUDefaultFramebuffer();
+
+#if 0
+struct VulkanMeshRenderGroupData
+{
+	VkBuffer vkVertexBuffer;
+	VkBuffer vkIndexBuffer;
+	StaticArray<Array<VkDescriptorSet>, ShaderDescriptorSetCount> vkDescriptorSets;
+
+	bool operator==(VulkanMeshRenderGroupData data);
+};
 
 struct GPUMesh
 {
@@ -172,12 +178,200 @@ struct GPUMeshGroup
 };
 
 GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms);
+#endif
+
+struct GPUGlobalUniforms
+{
+	u32 dummy;
+};
+
+struct GPUViewUniforms
+{
+	u32 dummy;
+};
+
+struct GPUMaterialUniforms
+{
+	V4 color;
+};
+
+struct GPUObjectUniforms
+{
+	M4 modelViewProjection;
+};
+
+// A uniform may have more than one instance if it is updated while in use.
+struct VulkanUniformInstance
+{
+	bool inUse;
+	GPUBuffer buffer;
+	s64 blockIndex;
+	s64 elementIndex;
+};
+
+struct GPUUniform
+{
+	s64 set;
+	s64 index;
+	Array<VulkanUniformInstance> instances;
+};
+
+GPUUniform NewGPUUniform(String s, s64 set);
+
+struct GPUUniformBufferWriteDescription
+{
+	GPUUniform *uniform;
+	void *data;
+};
+
+struct GPUUniformImageWriteDescription
+{
+	GPUUniform uniform;
+	GPUSampler sampler;
+	GPUImageView imageView;
+	GPUImageLayout layout;
+};
+
+// @TODO: Copy uniform buffer.
+
+void UpdateGPUUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView<GPUUniformImageWriteDescription> ts);
+
+struct GPUSubmesh
+{
+	//u32 vertexOffset;
+	//u32 indexOffset;
+	u32 indexCount;
+};
+
+struct GPUMeshAsset
+{
+	u32 firstIndex;
+	s32 vertexOffset; // @TODO: Get rid of this field?
+	Array<GPUSubmesh> submeshes;
+	// @TODO: Get rid of the offsets?
+	GPUBuffer vertexBuffer;
+	GPUBuffer indexBuffer;
+};
+
+struct GPUMeshAssetCreateInfo
+{
+	s64 vertexCount;
+	s64 vertexSize;
+	s64 indexCount;
+	s64 indexSize;
+	ArrayView<u32> submeshIndices;
+};
+
+void NewGPUMeshAssetBlock(Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out);
+GPUMeshAsset NewGPUMeshAsset(Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds);
+
+struct GPUMesh
+{
+	GPUMeshAsset *asset;
+	GPUUniform uniform;
+};
+
+void NewGPUMeshBlock(ArrayView<GPUMeshAsset *> as, ArrayView<GPUMesh *> out);
+GPUMesh NewGPUMesh(GPUMeshAsset *a);
+
+struct GPUMaterial
+{
+	VkDescriptorSet vkDescriptorSet;
+	s64 elementIndex;
+	GPUUniform uniform;
+};
+
+Array<GPUMaterial> NewGPUMaterialBlock();
+GPUMaterial NewGPUMaterial();
+
+struct GPURenderPacket
+{
+	GPUMesh *mesh;
+	GPUMaterial *material;
+	// Array<GPUMaterial *> materials;
+	//s64 bindingGroupIndex;
+};
+
+GPURenderPacket NewGPURenderPacket(GPUMesh *mesh, GPUMaterial *mat);
+
+struct VulkanDrawCallBindingGroup
+{
+	VkBuffer vkVertexBuffer;
+	VkBuffer vkIndexBuffer;
+	ArrayView<VkDescriptorSet> vkObjectDescriptorSet;
+	VkDescriptorSet vkMaterialDescriptorSet;
+
+	bool operator==(VulkanDrawCallBindingGroup b);
+};
+
+struct VulkanDrawCall
+{
+	VkDescriptorSet vkObjectIndexDescriptorSet;
+	VkDescriptorSet vkMaterialIndexDescriptorSet;
+	VulkanSubBuffer indirectCommands;
+	s64 indirectCommandCount;
+};
+
+struct GPURenderBatch
+{
+	//Array<VulkanDrawCall> drawCalls;
+	u64 drawBufferPointer;
+	VulkanSubBuffer indirectCommands;
+	s64 indirectCommandCount;
+};
+
+GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<Array<GPUUniform>> lateBindings);
+
+#if 0
+struct GPUMeshAsset
+{
+	u32 indexCount;
+	u32 instanceCount;
+	u32 firstIndex;
+	s32 vertexOffset;
+	// @TODO: Get rid of the offsets?
+	GPUBuffer vertexBuffer;
+	GPUBuffer indexBuffer;
+
+	GPUBuffer VertexBuffer();
+	GPUBuffer IndexBuffer();
+};
+
+GPUMeshAsset NewGPUMeshAsset(s64 vertSize, s64 indSize);
+
+struct GPUMesh
+{
+	u32 indexCount;
+	u32 instanceCount;
+	u32 firstIndex;
+	s32 vertexOffset;
+	s64 renderGroupIndex;
+};
+
+struct GPUModelAsset
+{
+	mesh
+	materials
+	uniform?
+	well what goes here?
+};
+
+struct GPUModel
+{
+	Array<GPUMesh> meshes;
+	Array<Array<GPUMaterial>> materials;
+	GPUUniform objectUniform;
+};
+
+GPUMesh NewGPUMesh(GPUMeshAsset asset, ArrayView<GPUUniform> uniforms);
+
+#endif
 
 struct GPUCommandBuffer
 {
 	VkCommandBuffer vkCommandBuffer;
 
-	void BeginRenderPass(GPUShaderID id, GPUFramebuffer fb);
+	void BeginRenderPass(GPUShader s, GPUFramebuffer fb);
 	void EndRenderPass();
 	void SetViewport(s64 w, s64 h);
 	void SetScissor(s64 w, s64 h);
@@ -185,7 +379,7 @@ struct GPUCommandBuffer
 	void BindIndexBuffer(GPUBuffer b, GPUIndexType t);
 	void DrawIndexed(s64 numIndices, s64 firstIndex, s64 vertexOffset);
 	void DrawIndexedIndirect(GPUBuffer cmdBuf, s64 count);
-	void DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms);
+	void DrawRenderBatch(GPURenderBatch rb);
 	void CopyBuffer(s64 size, GPUBuffer src, GPUBuffer dst, s64 srcOffset, s64 dstOffset);
 };
 
@@ -261,52 +455,6 @@ struct GPUAsyncStagingBuffer
 };
 
 //GPUAsyncStagingBuffer NewGPUAsyncStagingBuffer(s64 size, GPUBuffer dst);
-
-struct GPUGlobalUniforms
-{
-	u32 dummy;
-};
-
-struct GPUViewUniforms
-{
-	u32 dummy;
-};
-
-struct GPUMaterialUniforms
-{
-	u32 dummy;
-};
-
-struct GPUObjectUniforms
-{
-	M4 modelViewProjection;
-};
-
-struct GPUUniform
-{
-	s64 set;
-	s64 blockIndex;
-	s64 elementIndex;
-};
-
-struct GPUUniformBufferWriteDescription
-{
-	GPUUniform uniform;
-	void *data;
-};
-
-struct GPUUniformImageWriteDescription
-{
-	GPUUniform uniform;
-	GPUSampler sampler;
-	GPUImageView imageView;
-	GPUImageLayout layout;
-};
-
-// @TODO: Copy uniform buffer.
-
-GPUUniform NewGPUUniform(s64 set);
-void UpdateGPUUniforms(ArrayView<GPUUniformBufferWriteDescription> us, ArrayView<GPUUniformImageWriteDescription> ts);
 
 GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments);
 

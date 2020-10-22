@@ -35,49 +35,33 @@ u8 *SetAllocationHeaderAndData(void *mem, s64 size, s64 align)
 	// Right now we store the number of bytes from the start of the data to the start of the header,
 	// but we could store from the start of data to the end of the header. That would save us if the
 	// size of the AllocationHeader ever got too big...
-	auto bytesFromDataToHeader = dat - hdr;
-	if (bytesFromDataToHeader > U8Max)
+	auto numBytesFromDataToHeader = dat - hdr;
+	if (numBytesFromDataToHeader > U8Max)
 	{
 		// Move the header up.
 		hdr = (u8 *)AlignPointer(dat - sizeof(AllocationHeader) - alignof(AllocationHeader), alignof(AllocationHeader));
 		Assert(hdr >= mem);
 		Assert(hdr < dat);
-		bytesFromDataToHeader = dat - hdr;
-		Assert(bytesFromDataToHeader < U8Max);
-		Assert(bytesFromDataToHeader >= sizeof(AllocationHeader));
+		numBytesFromDataToHeader = dat - hdr;
+		Assert(numBytesFromDataToHeader < U8Max);
+		Assert(numBytesFromDataToHeader >= sizeof(AllocationHeader));
 	}
 	((AllocationHeader *)hdr)->size = size;
 	((AllocationHeader *)hdr)->alignment = align;
 	((AllocationHeader *)hdr)->start = mem;
-	*(dat - 1) = bytesFromDataToHeader;
+	*(dat - 1) = numBytesFromDataToHeader;
 	return dat;
 }
 
 AllocationHeader *GetAllocationHeader(void *mem)
 {
-	auto bytesFromDataToHeader = *((u8 *)mem - 1);
-	return (AllocationHeader *)((u8 *)mem - bytesFromDataToHeader);
+	auto numBytesFromDataToHeader = *((u8 *)mem - 1);
+	return (AllocationHeader *)((u8 *)mem - numBytesFromDataToHeader);
 }
 
-Allocator **ContextAllocatorPointer()
-{
-	static ThreadLocal auto contextAllocator = (Allocator *){};
-	if (!contextAllocator)
-	{
-		contextAllocator = GlobalAllocator();
-	}
-	return &contextAllocator;
-}
-
-void SetContextAllocator(Allocator *a)
-{
-	if (RunningFiber())
-	{
-		RunningFiber()->contextAllocator = a;
-		return;
-	}
-	*ContextAllocatorPointer() = a;
-}
+// We want these variables to have constant initialization so other global variable initializers can use the context allocator.
+ThreadLocal auto contextAllocator = (Allocator *){};
+ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
 
 Allocator *ContextAllocator()
 {
@@ -85,13 +69,53 @@ Allocator *ContextAllocator()
 	{
 		return RunningFiber()->contextAllocator;
 	}
-	return *ContextAllocatorPointer();
+	if (!contextAllocator)
+	{
+		return GlobalAllocator();
+	}
+	return contextAllocator;
 }
 
-Array<Allocator *> *ContextAllocatorStack()
+void PushContextAllocator(Allocator *a)
 {
-	static ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
-	return &contextAllocatorStack;
+	if (RunningFiber())
+	{
+		RunningFiber()->contextAllocatorStack.Append(a);
+		RunningFiber()->contextAllocator = a;
+		return;
+	}
+	contextAllocatorStack.Append(a);
+	contextAllocator = a;
+}
+
+void PopContextAllocator()
+{
+	auto stk = (Array<Allocator *> *){};
+	auto ctx = (Allocator **){};
+	if (RunningFiber())
+	{
+		stk = &RunningFiber()->contextAllocatorStack;
+		ctx = &RunningFiber()->contextAllocator;
+	}
+	else
+	{
+		stk = &contextAllocatorStack;
+		ctx = &contextAllocator;
+	}
+	if (stk->count == 0)
+	{
+		LogError("Memory", "Tried to pop an empty context allocator stack.\n");
+		return;
+	}
+	stk->Pop();
+	if (stk->count == 0)
+	{
+		*ctx = GlobalAllocator();
+	}
+	else
+	{
+		*ctx = *stk->Last();
+	}
 }
 
 const auto DefaultMemoryAlignment = 16;
@@ -196,15 +220,6 @@ void GlobalHeapArrayAllocator::Free()
 	Abort("Memory", "Unsupported call to Free in GlobalHeapArrayAllocator.");
 }
 
-GlobalHeapAllocator NewGlobalHeapAllocator(HeapAllocator h)
-{
-	// This constructor function exists because C++ sucks and does not let you use brace initialization if the struct has a virtual method.
-	// Why? I don't know! So, we'll just use this awkward function instead.
-	auto a = GlobalHeapAllocator{};
-	a.heap = h;
-	return a;
-}
-
 void *GlobalHeapAllocator::Allocate(s64 size)
 {
 	if (this->lock.IsLocked() && this->lockThreadID == ThreadID())
@@ -301,14 +316,6 @@ void GlobalHeapAllocator::Free()
 	this->heap.Free();
 }
 
-// cases:
-// two calls to GlobalAllocator
-// calls to ContextAllocator and GlobalAllocator, order
-// multithreaded - two calls to GlobalAllocator
-// multithreaded - calls to ContextAllocator and GlobalAllocator, order
-// recursive cases
-// failure cases
-
 GlobalHeapAllocator *GlobalAllocator()
 {
 	static auto blockAlloc = GlobalHeapBlockAllocator{};
@@ -332,53 +339,6 @@ GlobalHeapAllocator *GlobalAllocator()
 		}
 	}
 	return &alloc;
-}
-
-void InitializeMemory()
-{
-	GlobalAllocator(); // Ensure that the global heap is initialized...
-}
-
-void PushContextAllocator(Allocator *a)
-{
-	if (RunningFiber())
-	{
-		RunningFiber()->contextAllocatorStack.Append(a);
-		RunningFiber()->contextAllocator = a;
-		return;
-	}
-	ContextAllocatorStack()->Append(a);
-	SetContextAllocator(a);
-}
-
-void PopContextAllocator()
-{
-	auto stk = (Array<Allocator *> *){};
-	auto ctx = (Allocator **){};
-	if (RunningFiber())
-	{
-		stk = &RunningFiber()->contextAllocatorStack;
-		ctx = &RunningFiber()->contextAllocator;
-	}
-	else
-	{
-		stk = ContextAllocatorStack();
-		ctx = ContextAllocatorPointer();
-	}
-	if (stk->count == 0)
-	{
-		LogError("Memory", "Tried to pop empty context allocator stack.\n");
-		return;
-	}
-	stk->Pop();
-	if (stk->count == 0)
-	{
-		*ctx = GlobalAllocator();
-	}
-	else
-	{
-		*ctx = *stk->Last();
-	}
 }
 
 void *AllocateMemory(s64 size)
@@ -510,12 +470,12 @@ void PoolAllocator::Free()
 
 SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlign, s64 slotCount, s64 slotsPerBlock, Allocator *blockAlloc, Allocator *arrayAlloc)
 {
-	auto blockCount = (slotCount + (slotsPerBlock - 1)) / slotsPerBlock; // Divide and round up.
+	auto nBlks = (slotCount + (slotsPerBlock - 1)) / slotsPerBlock; // Divide and round up.
 	auto a = SlotAllocator{};
-	a.blocks = NewAllocatorBlocks(slotsPerBlock * slotSize, blockCount, blockAlloc, arrayAlloc);
+	a.blocks = NewAllocatorBlocks(slotsPerBlock * slotSize, nBlks, blockAlloc, arrayAlloc);
 	a.slotSize = slotSize;
 	a.slotAlignment = slotAlign;
-	a.freeSlots = NewArrayIn<void *>(arrayAlloc, 0);
+	a.freeSlots.SetAllocator(arrayAlloc);
 	return a;
 }
 
@@ -531,8 +491,6 @@ void *SlotAllocator::Allocate(s64 size)
 
 void *SlotAllocator::AllocateAligned(s64 size, s64 align)
 {
-	// Allocating aligned memory from a slot allocator does not make sense.
-	// Just return a regular allocation.
 	return this->Allocate(size);
 }
 
@@ -605,6 +563,7 @@ void HeapAllocator::Free()
 	this->free.Resize(0);
 }
 
+// @TODO: Get rid of the NullAllocator...
 void *NullAllocator::Allocate(s64 size)
 {
 	return NULL;
@@ -645,27 +604,13 @@ void *StackAllocator::Allocate(s64 size)
 
 void *StackAllocator::AllocateWithHeader(s64 size, s64 align)
 {
-	this->head = (u8 *)AlignPointer(this->head, alignof(AllocationHeader));
-	auto h = (AllocationHeader *)this->head;
-	h->size = size;
-	h->alignment = align;
-	this->head += sizeof(AllocationHeader);
-	auto oldHead = this->head;
-	this->head = (u8 *)AlignPointer(this->head, align);
-	if (this->head == oldHead)
-	{
-		this->head += align;
-	}
-	*(this->head - 1) = (IntegerPointer)(this->head - (u8 *)h);
-	auto r = this->head;
-	this->head += size;
+	auto mem = (u8 *)AlignPointer(this->head, align);
+	this->head = mem + size;
 	if (this->head - this->buffer > this->size)
 	{
-		ConsoleWrite("Ran out of stack allocator space...\n");
-		SignalDebugBreakpoint();
-		ExitProcess(ProcessFail);
+		Abort("Memory", "Stack allocator ran out of space.");
 	}
-	return r;
+	return mem;
 }
 
 void *StackAllocator::AllocateAligned(s64 size, s64 align)
@@ -675,25 +620,11 @@ void *StackAllocator::AllocateAligned(s64 size, s64 align)
 
 void *StackAllocator::Resize(void *mem, s64 newSize)
 {
-	auto h = GetAllocationHeader(mem);
-	if (((u8 *)mem) + h->size == this->head)
-	{
-		h->size = newSize;
-		this->head = ((u8 *)mem) + newSize;
-		return mem;
-	}
-	auto newMem = this->AllocateWithHeader(newSize, h->alignment);
-	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
-	return newMem;
+	return this->Allocate(newSize);
 }
 
 void StackAllocator::Deallocate(void *mem)
 {
-	auto h = GetAllocationHeader(mem);
-	if (((u8 *)mem) + h->size == this->head)
-	{
-		this->head = (u8 *)h;
-	}
 }
 
 void StackAllocator::Clear()

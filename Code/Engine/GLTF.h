@@ -118,7 +118,7 @@ struct GLTF
 	Array<GLTFBuffer> buffers;
 };
 
-GLTF GLTFParseFile(String path, bool *err);
+GLTF ParseGLTFFile(String path, bool *err);
 s64 GLTFComponentTypeToSize(GLTFAccessorComponentType t);
 
 #endif

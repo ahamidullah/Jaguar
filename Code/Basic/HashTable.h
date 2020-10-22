@@ -27,9 +27,10 @@ struct HashTable
 
 	HashTableIterator<K, V> begin();
 	HashTableIterator<K, V> end();
+	void DoInsert(u64 hash, K k, V v);
 	void Insert(K k, V v);
-	V Lookup(K k, V notFound);
-	V *LookupPointer(K k);
+	V *DoLookup(K k);
+	V *Lookup(K k);
 	void Remove(K k);
 	void Clear();
 	void ClearAndResize(s64 len);
@@ -81,7 +82,7 @@ HashTableIterator<K, V> HashTable<K, V>::end()
 }
 
 template <typename K, typename V>
-void DoHashTableInsert(HashTable<K, V> *ht, u64 hash, K k, V v)
+void HashTable<K, V>::DoInsert(u64 hash, K k, V v)
 {
 	if (hash == HashTableVacantHashSentinel)
 	{
@@ -91,24 +92,20 @@ void DoHashTableInsert(HashTable<K, V> *ht, u64 hash, K k, V v)
 	{
 		hash = 1;
 	}
-	auto i = hash % ht->buckets.count;
+	auto i = hash % this->buckets.count;
 	auto end = i;
 	do
 	{
-		if (ht->hashes[i] == HashTableVacantHashSentinel)
+		if (this->hashes[i] == HashTableVacantHashSentinel || (this->hashes[i] == hash && this->buckets[i].key == k))
 		{
-			ht->hashes[i] = hash;
-			ht->buckets[i].key = k;
-			ht->buckets[i].value = v;
-			ht->count += 1;
-			ht->loadFactor = (f32)ht->count / (f32)ht->buckets.count;
+			this->hashes[i] = hash;
+			this->buckets[i].key = k;
+			this->buckets[i].value = v;
+			this->count += 1;
+			this->loadFactor = (f32)this->count / (f32)this->buckets.count;
 			return;
 		}
-		else if (ht->hashes[i] == hash && ht->buckets[i].key == k)
-		{
-			return;
-		}
-		i = (i + 1) % ht->buckets.count;
+		i = (i + 1) % this->buckets.count;
 		// The table should expand before we run out of space, so we never wrap around to the start index.
 		Assert(i != end);
 	} while (i != end);
@@ -121,17 +118,17 @@ void HashTable<K, V>::Insert(K k, V v)
 	Assert(this->hashProcedure);
 	this->Reserve(this->count + 1);
 	auto h = this->hashProcedure(k);
-	DoHashTableInsert(this, h, k, v);
+	this->DoInsert(h, k, v);
 }
 
 template <typename K, typename V>
-V *DoHashTableLookup(HashTable<K, V> *h, K k, V *notFound)
+V *HashTable<K, V>::Lookup(K k)
 {
-	if (h->buckets.count == 0)
+	if (this->buckets.count == 0)
 	{
-		return notFound;
+		return NULL;
 	}
-	auto hash = h->hashProcedure(k);
+	auto hash = this->hashProcedure(k);
 	if (hash == HashTableVacantHashSentinel)
 	{
 		hash = 0;
@@ -140,34 +137,21 @@ V *DoHashTableLookup(HashTable<K, V> *h, K k, V *notFound)
 	{
 		hash = 1;
 	}
-	auto i = hash % h->buckets.count;
+	auto i = hash % this->buckets.count;
 	auto end = i;
 	do
 	{
-		if (h->hashes[i] == HashTableVacantHashSentinel)
+		if (this->hashes[i] == HashTableVacantHashSentinel)
 		{
-			return notFound;
+			return NULL;
 		}
-		else if (h->hashes[i] == hash && h->buckets[i].key == k)
+		else if (this->hashes[i] == hash && this->buckets[i].key == k)
 		{
-			return &h->buckets[i].value;
+			return &this->buckets[i].value;
 		}
-		i = (i + 1) % h->buckets.count;
+		i = (i + 1) % this->buckets.count;
 	} while (i != end);
 	return NULL;
-}
-
-template <typename K, typename V>
-V HashTable<K, V>::Lookup(K k, V notFound)
-{
-	return *DoHashTableLookup(this, k, &notFound);
-}
-
-template <typename K, typename V>
-V *HashTable<K, V>::LookupPointer(K k)
-{
-	auto notFound = (V *){};
-	return DoHashTableLookup(this, k, notFound);
 }
 
 template <typename K, typename V>
@@ -225,37 +209,9 @@ void HashTable<K, V>::Reserve(s64 reserve)
 		{
 			continue;
 		}
-		DoHashTableInsert(&newHT, this->hashes[i], this->buckets[i].key, this->buckets[i].value);
+		newHT.DoInsert(this->hashes[i], this->buckets[i].key, this->buckets[i].value);
 	}
 	*this = newHT;
-	/*
-	auto newHashes = NewArrayIn<u64>(this->hashes.allocator, (this->buckets.count + reserve) * 2);
-	for (auto &h : newHashes)
-	{
-		h = HashTableVacantHashSentinel;
-	}
-	auto newBuckets = NewArrayIn<KeyValuePair<K, V>>(this->buckets.allocator, newHashes.count);
-	for (auto &b : newBuckets)
-	{
-		b = {};
-	}
-	for (auto i = 0; i < this->buckets.count; i += 1)
-	{
-		if (this->hashes[i] == HashTableVacantHashSentinel || this->hashes[i] == HashTableDeletedHashSentinel)
-		{
-			continue;
-		}
-		auto newHash = this->hashProcedure(this->buckets[i].key);
-		auto ni = newHash % newBuckets.count;
-		Assert(newHashes[ni] == HashTableVacantHashSentinel);
-		newHashes[ni] = newHash;
-		newBuckets[ni].key = this->buckets[i].key;
-		newBuckets[ni].value = this->buckets[i].value;
-	}
-	this->buckets = newBuckets;
-	this->hashes = newHashes;
-	this->loadFactor = (f32)this->count / (f32)this->buckets.count;
-	*/
 }
 
 template <typename K, typename V>

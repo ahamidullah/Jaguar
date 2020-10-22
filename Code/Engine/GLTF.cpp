@@ -3,7 +3,7 @@
 #include "GLTF.h"
 #include "Basic/JSON.h"
 
-GLTFBuffer GLTFParseBuffer(Parser *p)
+GLTFBuffer ParseGLTFBuffer(Parser *p)
 {
 	auto b = GLTFBuffer{};
 	JSONParseObject(p, [&b](Parser *p, String name)
@@ -21,7 +21,7 @@ GLTFBuffer GLTFParseBuffer(Parser *p)
 	return b;
 }
 
-GLTFBufferView GLTFParseBufferView(Parser *p)
+GLTFBufferView ParseGLTFBufferView(Parser *p)
 {
 	auto v = GLTFBufferView{};
 	JSONParseObject(p, [&v](Parser *p, String name)
@@ -50,7 +50,7 @@ GLTFBufferView GLTFParseBufferView(Parser *p)
 	return v;
 }
 
-GLTFMaterial GLTFParseMaterial(Parser *p)
+GLTFMaterial ParseGLTFMaterial(Parser *p)
 {
 	auto m = GLTFMaterial{};
 	JSONParseObject(p, [&m](Parser *p, String name)
@@ -82,7 +82,7 @@ GLTFMaterial GLTFParseMaterial(Parser *p)
 	return m;
 }
 
-GLTFAccessor GLTFParseAccessor(Parser *p)
+GLTFAccessor ParseGLTFAccessor(Parser *p)
 {
 	auto a = GLTFAccessor{};
 	JSONParseObject(p, [&a](Parser *p, String name)
@@ -139,7 +139,7 @@ GLTFAccessor GLTFParseAccessor(Parser *p)
 	return a;
 }
 
-Array<GLTFAttribute> GLTFParseAttributes(Parser *p)
+Array<GLTFAttribute> ParseGLTFAttributes(Parser *p)
 {
 	auto as = Array<GLTFAttribute>{};
 	JSONParseObject(p, [&as](Parser *p, String name)
@@ -166,14 +166,14 @@ Array<GLTFAttribute> GLTFParseAttributes(Parser *p)
 	return as;
 }
 
-GLTFPrimitive GLTFParsePrimitive(Parser *p)
+GLTFPrimitive ParseGLTFPrimitive(Parser *p)
 {
 	auto pr = GLTFPrimitive{};
 	JSONParseObject(p, [&pr](Parser *p, String name)
 	{
 		if (name == "attributes")
 		{
-			pr.attributes = GLTFParseAttributes(p);
+			pr.attributes = ParseGLTFAttributes(p);
 		}
 		else if (name == "indices")
 		{
@@ -191,7 +191,7 @@ GLTFPrimitive GLTFParsePrimitive(Parser *p)
 	return pr;
 }
 
-GLTFMesh GLTFParseMesh(Parser *p)
+GLTFMesh ParseGLTFMesh(Parser *p)
 {
 	auto m = GLTFMesh{};
 	JSONParseObject(p, [&m](Parser *p, String name)
@@ -200,7 +200,7 @@ GLTFMesh GLTFParseMesh(Parser *p)
 		{
 			JSONParseList(p, [&m](Parser *p)
 			{
-				m.primitives.Append(GLTFParsePrimitive(p));
+				m.primitives.Append(ParseGLTFPrimitive(p));
 			});
 		}
 		else if (name == "name")
@@ -212,13 +212,13 @@ GLTFMesh GLTFParseMesh(Parser *p)
 	return m;
 }
 
-GLTF GLTFParseFile(String path, bool *err)
+GLTF ParseGLTFFile(String path, bool *err)
 {
 	auto p = NewParser(path, "[],{}", err);
 	if (*err)
 	{
 		LogError("GLTF", "Failed creating parser for file %k.", path);
-		return {};
+		return GLTF{};
 	}
 	auto gltf = GLTF{};
 	JSONParseObject(&p, [&gltf](Parser *p, String name)
@@ -227,35 +227,35 @@ GLTF GLTFParseFile(String path, bool *err)
 		{
 			JSONParseList(p, [&gltf](Parser *p)
 			{
-				gltf.meshes.Append(GLTFParseMesh(p));
+				gltf.meshes.Append(ParseGLTFMesh(p));
 			});
 		}
 		else if (name == "accessors")
 		{
 			JSONParseList(p, [&gltf](Parser *p)
 			{
-				gltf.accessors.Append(GLTFParseAccessor(p));
+				gltf.accessors.Append(ParseGLTFAccessor(p));
 			});
 		}
 		else if (name == "materials")
 		{
 			JSONParseList(p, [&gltf](Parser *p)
 			{
-				gltf.materials.Append(GLTFParseMaterial(p));
+				gltf.materials.Append(ParseGLTFMaterial(p));
 			});
 		}
 		else if (name == "bufferViews")
 		{
 			JSONParseList(p, [&gltf](Parser *p)
 			{
-				gltf.bufferViews.Append(GLTFParseBufferView(p));
+				gltf.bufferViews.Append(ParseGLTFBufferView(p));
 			});
 		}
 		else if (name == "buffers")
 		{
 			JSONParseList(p, [&gltf](Parser *p)
 			{
-				gltf.buffers.Append(GLTFParseBuffer(p));
+				gltf.buffers.Append(ParseGLTFBuffer(p));
 			});
 		}
 	});

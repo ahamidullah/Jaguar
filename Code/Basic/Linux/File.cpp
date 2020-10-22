@@ -116,7 +116,10 @@ Time File::LastModifiedTime(bool *err)
 		*err = true;
 		return {};
 	}
-	return Time{stat.st_mtim};
+	return
+	{
+		.ts = stat.st_mtim,
+	};
 }
 
 bool DirectoryIteration::Iterate(String path)

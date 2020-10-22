@@ -1,26 +1,25 @@
 #version 460
 
-#include "../Engine/ShaderGlobal.h"
 #include "Global.inc"
-
-#extension GL_EXT_nonuniform_qualifier : enable
 
 Stage: Vertex
 {
-	layout (location = 0) in vec3 vertexPosition;
-	layout (location = 1) in vec3 vertexNormal;
+	//layout (location = 0) in vec3 vertexPosition;
+	//layout (location = 1) in vec3 vertexNormal;
 
 	layout (location = 0) out vec3 fragmentNormal;
-	layout (location = 1) out flat int fragmentDrawID;
+	//layout (location = 1) out flat int fragmentDrawID;
 
 	void main()
 	{
-		gl_Position = objects[0].modelViewProjection[gl_DrawID] * vec4(vertexPosition, 1.0);
-		fragmentDrawID = gl_DrawID;
+		uint i = drawData[gl_DrawID].indexBuffer.i[gl_VertexID];
+		Vertex v = drawData[gl_DrawID].vertexBuffer.v[i];
+		mat4 mvp = drawData[gl_DrawID].mesh.modelViewProjection;
+		gl_Position = mvp * vec4(v.position, 1.0);
 		//if (materials[0].shadingModel == PhongShadingModel)
 		if (true)
 		{
-			fragmentNormal = vertexNormal;
+			fragmentNormal = v.normal;
 		}
 	}
 }
@@ -28,10 +27,10 @@ Stage: Vertex
 Stage: Fragment
 {
 	layout (location = 0) in vec3 fragmentNormal;
-	layout (location = 1) in flat int fragmentDrawID;
 
 	layout (location = 0) out vec4 outputColor;
 
+	//vec3 color = vec3(materials[materialIndices[materialDrawIndex]].color);
 	vec3 color = vec3(1.0, 0.0, 0.0);
 
 	vec3 ambient(vec3 intensity)

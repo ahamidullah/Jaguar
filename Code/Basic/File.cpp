@@ -2,7 +2,7 @@
 #include "String.h"
 #include "Time.h"
 
-void ReadEntireFileIn(Array<u8> *a, String path, bool *err)
+void ReadEntireFileIn(Array<u8> *buf, String path, bool *err)
 {
 	auto f = OpenFile(path, OpenFileReadOnly, err);
 	if (*err)
@@ -10,13 +10,13 @@ void ReadEntireFileIn(Array<u8> *a, String path, bool *err)
 		return;
 	}
 	Defer(f.Close());
-	auto flen = f.Length(err);
+	auto fLen = f.Length(err);
 	if (*err)
 	{
 		return;
 	}
-	a->Resize(a->count + flen);
-	if (!f.Read(*a))
+	buf->Resize(buf->count + fLen);
+	if (!f.Read(*buf))
 	{
 		*err = true;
 		return;
@@ -25,7 +25,7 @@ void ReadEntireFileIn(Array<u8> *a, String path, bool *err)
 
 Array<u8> ReadEntireFile(String path, bool *err)
 {
-	auto a = Array<u8>{};
-	ReadEntireFileIn(&a, path, err);
-	return a;
+	auto buf = Array<u8>{};
+	ReadEntireFileIn(&buf, path, err);
+	return buf;
 }

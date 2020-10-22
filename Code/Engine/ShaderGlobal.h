@@ -1,8 +1,9 @@
 #define ShaderGlobalDescriptorSet 0
-#define ShaderViewDescriptorSet 1
-#define ShaderMaterialDescriptorSet 2
-#define ShaderObjectDescriptorSet 3
-#define ShaderDescriptorSetCount 4
+#define ShaderObjectDescriptorSet 1
+#define ShaderObjectIndicesDescriptorSet 2
+#define ShaderMaterialDescriptorSet 3
+#define ShaderMaterialIndicesDescriptorSet 4
+#define ShaderDescriptorSetCount 5
 
 #define FlatShadingModel 0
 #define PhongShadingModel 1

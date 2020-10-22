@@ -79,14 +79,14 @@ struct RunThreadParameters
 {
 	s64 threadIndex;
 	ThreadProcedure procedure;
-	void *param;
+	void *parameter;
 };
 
 void *RunThread(void *param)
 {
 	auto p = (RunThreadParameters *)param;
 	threadIndex = p->threadIndex;
-	return p->procedure(p->param);
+	return p->procedure(p->parameter);
 }
 
 Thread NewThread(ThreadProcedure proc, void *param)
@@ -96,11 +96,10 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
-	auto i = AtomicFetchAndAdd64(&threadCount, 1);
 	auto p = (RunThreadParameters *)GlobalAllocator()->Allocate(sizeof(RunThreadParameters));
-	p->threadIndex = i;
+	p->threadIndex = AtomicFetchAndAdd64(&threadCount, 1);
 	p->procedure = proc;
-	p->param = param;
+	p->parameter = param;
 	auto t = Thread{};
 	if (pthread_create(&t, &attrs, RunThread, p))
 	{
@@ -137,12 +136,13 @@ void SetThreadName(String n)
 
 String ThreadName()
 {
-	auto buf = (char *)AllocateMemory(MaxThreadNameLength);
-	if (prctl(PR_GET_NAME, buf, 0, 0, 0) != 0)
+	auto buf = NewArrayWithCapacity<u8>(MaxThreadNameLength);
+	if (prctl(PR_GET_NAME, (char *)buf.elements, 0, 0, 0) != 0)
 	{
 		LogError("Thread", "Failed to get thread name: %k.\n", PlatformError());
 	}
-	return String{buf};
+	buf.count = CStringLength((char *)buf.elements);
+	return NewStringFromBuffer(buf);
 }
 
 Thread CurrentThread()
@@ -155,15 +155,9 @@ s64 ThreadID()
 	return syscall(__NR_gettid);
 }
 
-#include <assert.h>
-#include <stdio.h>
 s64 ThreadIndex()
 {
-	auto i = threadIndex;
-	assert(i >= 0 && i < 4);
-	//printf("%d\n", i);
-	assert(i == threadIndex);
-	return i;
+	return threadIndex;
 }
 
 s64 ThreadCount()

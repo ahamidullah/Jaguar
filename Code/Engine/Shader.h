@@ -2,12 +2,10 @@
 
 #include "Basic/String.h"
 
-struct VulkanSPIRVInfo
+struct VulkanSPIRV
 {
-	String name;
-	Array<String> filepaths;
+	Array<Array<u8>> stageByteCode;
 	Array<VkShaderStageFlagBits> stages;
 };
 
-Array<String> GPUShaderFilepaths();
-VulkanSPIRVInfo GenerateVulkanSPIRV(String filepath, bool *err);
+VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err);

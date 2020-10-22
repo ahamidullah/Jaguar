@@ -52,7 +52,7 @@ Array<String> Stacktrace()
 		if (!trace)
 		{
 			LogError("Memory", "Failed to get stack trace function names.\n");
-			return {};
+			return Array<String>{};
 		}
 		auto st = NewArrayWithCapacity<String>(numAddrs);
 		for (auto i = 0; i < numAddrs; i += 1)
@@ -62,6 +62,6 @@ Array<String> Stacktrace()
 		free(trace);
 		return st;
 	#else
-		return {};
+		return Array<String>{};
 	#endif
 }

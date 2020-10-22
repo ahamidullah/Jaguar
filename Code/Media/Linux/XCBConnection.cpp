@@ -3,6 +3,7 @@
 
 xcb_connection_t *XCBConnection()
 {
+	// @TODO: Move this into a regular initialization function.
 	static auto xcbConnection = (xcb_connection_t *){};
 	if (!xcbConnection)
 	{

@@ -12,7 +12,7 @@ DLL OpenDLL(String path, bool *err)
 	{
 		LogError("DLL", "Failed to open DLL %k: %s.\n", path, dlerror());
 		*err = true;
-		return {};
+		return DLL{};
 	}
 	return dll;
 }
@@ -27,7 +27,7 @@ bool DLL::Close()
 	return true;
 }
 
-void *DLL::Lookup(String sym, bool *err)
+void *DLL::Symbol(String name, bool *err)
 {
 	// According to https://linux.die.net/man/3/dlsym:
 	//     "If the symbol is not found, in the specified library or any of the libraries that were
@@ -37,12 +37,12 @@ void *DLL::Lookup(String sym, bool *err)
 	//     old error conditions, then call dlsym(), and then call dlerror() again, saving its return
 	//     value into a variable, and check whether this saved value is not NULL."
 	dlerror();
-	auto s = dlsym(this->handle, sym.CString());
-	if (auto e = dlerror(); e)
+	auto ptr = dlsym(this->handle, name.CString());
+	if (auto errStr = dlerror(); errStr)
 	{
-		LogError("DLL", "Failed to load DLL function %k from file %k: %s.\n", sym, this->path, e);
+		LogError("DLL", "Failed to find DLL symbol %k in file %k: %s.\n", name, this->path, errStr);
 		*err = true;
-		return {};
+		return (void *){};
 	}
-	return s;
+	return ptr;
 }

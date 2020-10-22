@@ -41,7 +41,7 @@ struct String
 	bool literal;
 
 	String();
-	String(char *s);
+	String(char *s); // @TODO: Get rid of this?
 	String(const char *s);
 	const u8 &operator[](s64 i);
 	bool operator==(String s);

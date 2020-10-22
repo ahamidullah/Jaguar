@@ -18,18 +18,16 @@ s64 RenderHeight()
 	return 1000;
 }
 
-// @TODO @DELTEME
-extern Array<GPUMesh> meshes;
-
 auto renderDepthImage = GPUImage{};
 auto renderDepthImageView = GPUImageView{};
 auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(GlobalAllocator(), 0);
 auto renderAspectRatio = 0;
 
-auto globalUniform = GPUUniform{};
-auto viewUniform = GPUUniform{};
-auto materialUniform = GPUUniform{};
-auto objectUniforms = Array<GPUUniform>{};
+//auto globalUniform = GPUUniform{};
+auto objectPos = Array<V3>{};
+
+auto shaders = NewHashTableIn<String, GPUShader>(GlobalAllocator(), 32, HashString);
+auto modelShader = GPUShader{};
 
 void InitializeRenderer(void *jobParam)
 {
@@ -38,9 +36,24 @@ void InitializeRenderer(void *jobParam)
 	LogGPUMemoryInfo();
 	if (DevelopmentBuild)
 	{
-		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader");
-		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Code");
-		CreateDirectoryIfItDoesNotExist("Build/Linux/Shader/Binary");
+		auto err = false;
+		modelShader = CompileGPUShader("Model.glsl", &err);
+		#if 0
+		auto ps = GPUShaderFilepaths();
+		for (auto p : ps)
+		{
+			auto err = false;
+			auto n = FilepathFilenameNoExt(p);
+			ConsolePrint("Loading shader %k\n", n);
+			auto s = CompileGPUShaderFromFile(n, p, &err);
+			if (err)
+			{
+				LogError("Render", "Failed to compile shader %k.", p);
+			}
+			shaders.Insert(n, s);
+		}
+		#endif
+		#if 0
 		auto BuildShader = [](GPUShaderID id, String filename)
 		{
 			// @TODO: Watch the shader file and recompile if it changes.
@@ -67,18 +80,36 @@ void InitializeRenderer(void *jobParam)
 			} break;
 			}
 		}
+		#endif
 	}
 	else
 	{
 		Abort("Vulkan", "@TODO: Load shaders in release build.");
 	}
 	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
-	globalUniform = NewGPUUniform(ShaderGlobalDescriptorSet);
-	viewUniform = NewGPUUniform(ShaderViewDescriptorSet);
-	materialUniform = NewGPUUniform(ShaderMaterialDescriptorSet);
+	//globalUniform = NewGPUUniform("", ShaderGlobalDescriptorSet);
+	#if 0
+	terrainUniforms = NewGPUUniform("", TerrainUniforms, NumberOfTerrainDraws); // per frame
+	struct TerrainUniforms
+	{
+		u32 treeIndex;
+	}
+	treeUniforms = NewGPUUniform("", TreeUniforms, NumberOfTreeDraws);
+	struct TreeUniforms
+	{
+		V4 colorTint;
+		... windStuff;
+	};
+	meshIndex = ?;
+	materialIndex = glDrawID + ?;
+	#endif
 	for (auto i = 0; i < MeshCount; i += 1)
 	{
-		objectUniforms.Append(NewGPUUniform(ShaderObjectDescriptorSet));
+		const auto range = 50.0f;
+		objectPos.Append(V3{((f32)rand() / (f32)RAND_MAX) * range, ((f32)rand() / (f32)RAND_MAX) * range, ((f32)rand() / (f32)RAND_MAX) * range});
+		objectPos[i].x -= range / 2;
+		objectPos[i].y -= range / 2;
+		objectPos[i].z -= range / 2;
 	}
 }
 
@@ -130,18 +161,26 @@ void UpdateRenderUniforms(Camera *c)
 	{
 		auto m = IdentityMatrix;
 		m.SetRotation(rots[i].Matrix());
-		m.SetTranslation(V3{i * 5.0f, 0.0f, 0.0f});
+		m.SetTranslation(objectPos[i]);
 		pvms.Append(
 			{
 				.modelViewProjection = pv * m,
 			});
-		//PrintM4(pvms.Last()->modelViewProjection);
 		buffers.Append(
 			{
-				.uniform = objectUniforms[i],
+				.uniform = &meshes[i].uniform,
 				.data = pvms.Last(),
 			});
 	}
+	//auto mat = GPUMaterialUniforms
+	//{
+		//.color = V4{1.0f, 0.0f, 0.0f, 1.0f},
+	//};
+	//buffers.Append(
+		//{
+			//.uniform = &materials.uniform,
+			//.data = &mat,
+		//});
 	UpdateGPUUniforms(buffers, {});
 #if 0
 	auto cb = NewGPUFrameTransferCommandBuffer();
@@ -265,13 +304,13 @@ void Render()
 	}
 	UpdateRenderUniforms(c);
 	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
-	auto mg = NewGPUFrameMeshGroup(culledMeshes);
+	auto rb = NewGPUFrameRenderBatch(renderPackets, {});
 	GPUSubmitFrameTransferCommandBuffers();
 	{
 		auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
-		cb.BeginRenderPass(GPUModelShaderID, GPUDefaultFramebuffer());
+		cb.BeginRenderPass(modelShader, GPUDefaultFramebuffer());
 		//cb.DrawMeshes(meshes);
 		// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
 		// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
@@ -279,7 +318,7 @@ void Render()
 		// 24.5ms
 		//for (auto i = 0; i < meshes.Count(); i += 1)
 		//{
-			cb.DrawMeshes(mg, culledMeshes);
+			cb.DrawRenderBatch(rb);
 			//mg.Free();
 			//cb.BindIndexBuffer(meshes[0].indexBuffer, GPUIndexTypeUint16);
 			//cb.BindVertexBuffer(meshes[0].vertexBuffer, 0);

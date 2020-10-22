@@ -21,31 +21,30 @@ String LogFileDirectory()
 	return "Data/Log/";
 }
 
-LogLevel *LogLevelPointer()
-{
-	static auto logLevel = InfoLog;
-	return &logLevel;
-}
+auto logLevel = InfoLog;
 
 LogLevel CurrentLogLevel()
 {
-	return *LogLevelPointer();
+	return logLevel;
 }
 
 void SetLogLevel(LogLevel l)
 {
-	*LogLevelPointer() = l;
+	logLevel = l;
 }
 
 File *LogFile()
 {
+	static auto initLock = Spinlock{};
 	static auto init = false;
 	static auto f = File{};
+	initLock.Lock();
 	if (!init)
 	{
 		// @TODO
 		init = true;
 	}
+	initLock.Unlock();
 	return &f;
 }
 
@@ -107,7 +106,7 @@ String LogLevelToString(LogLevel l)
 	} break;
 	default:
 	{
-		Abort("Log", "Unknown log level %d.", l);
+		LogError("Log", "Unknown log level %d.", l);
 	} break;
 	}
 	return "Unknown";
@@ -127,16 +126,17 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 			ConsoleWrite(msg);
 			ConsoleWrite("\n");
 		}
-		if (LogFile()->IsOpen())
+		auto lf = LogFile();
+		if (lf->IsOpen())
 		{
-			LogFile()->WriteString("[");
-			LogFile()->WriteString(category);
-			LogFile()->WriteString("] ");
-			LogFile()->WriteString(LogLevelToString(l));
+			lf->WriteString("[");
+			lf->WriteString(category);
+			lf->WriteString("] ");
+			lf->WriteString(LogLevelToString(l));
 			//sb.FormatTime();
-			LogFile()->WriteString(FormatString("%k:%d %k  |  ", file, line, func));
-			LogFile()->WriteString(msg);
-			LogFile()->WriteString("\n");
+			lf->WriteString(FormatString("%k:%d %k  |  ", file, line, func));
+			lf->WriteString(msg);
+			lf->WriteString("\n");
 		}
 	#endif
 }
@@ -175,6 +175,7 @@ File NewCrashLogFile()
 
 void DoAbortActual(String file, String func, s64 line, String category, String fmt, va_list args)
 {
+	// In the case of a recursive abort, just ignore the recursion.
 	static auto aborting = s64{0};
 	if (AtomicCompareAndSwap64(&aborting, 0, 1) != 0)
 	{
@@ -185,13 +186,15 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	// not to overflow the stack allocator.
 	// This is pretty ugly and I kind of hate it.
 	auto st = Stacktrace();
+	// @TODO
 	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, GlobalAllocator(), GlobalAllocator());
-	SetContextAllocator(&pool);
+	//SetContextAllocator(&pool);
+	//contextAllocator = &pool; // @TODO
 	LogFatal(category, "###########################################################################");
 	LogFatal(category, "[ABORT]");
 	LogPrintVarArgs(file, func, line, FatalLog, category, fmt, args);
 	LogFatal(category, "###########################################################################");
-	pool.Clear();
+	//pool.Clear();
 	auto crashLog = NewCrashLogFile();
 	if (crashLog.IsOpen())
 	{
@@ -214,7 +217,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 			crashLog.WriteString("\n");
 		}
 	}
-	pool.Clear();
+	//pool.Clear();
 	if (IsDebuggerAttached())
 	{
 		SignalDebugBreakpoint();

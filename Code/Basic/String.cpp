@@ -2,7 +2,7 @@
 #include "Memory.h"
 #include "Log.h"
 #define STB_SPRINTF_IMPLEMENTATION
-#include "stb_sprintf.h"
+	#include "stb_sprintf.h"
 #undef STB_SPRINTF_IMPLEMENTATION
 
 bool CStringsEqual(const char *a, const char *b)

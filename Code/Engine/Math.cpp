@@ -586,7 +586,7 @@ M4 InfinitePerspectiveProjectionMatrix(f32 near, f32 verticalFOV, f32 aspectRati
 		};
 	#else
 		Abort("Math", "Unknown render API.");
-		return {};
+		return M4{};
 	#endif
 }
 
@@ -700,7 +700,7 @@ Quaternion NewQuaternion(V3 forward)
 
 Quaternion NewQuaternionFromEuler(EulerAngles ea)
 {
-	return {};
+	return Quaternion{};
 }
 
 Quaternion NewQuaternionFromAxisAngle(AxisAngle aa)

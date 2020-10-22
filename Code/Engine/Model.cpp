@@ -39,37 +39,37 @@ void InitializeModelAssets()
 	}
 }
 
-//auto meshes = StaticArray<MeshAsset, 10000>{};
-//auto meshes = StaticArray<GPUMesh, 10000>{};
-//auto meshes = NewGPUMeshes(10000);
-//const auto MeshCount = 10000;
+const auto MeshAssetCount = 1;
 const auto MeshCount = 1;
+auto meshAssets = NewArray<GPUMeshAsset>(MeshAssetCount);
 auto meshes = NewArray<GPUMesh>(MeshCount);
+auto materials = GPUMaterial{};
+auto renderPackets = NewArray<GPURenderPacket>(MeshCount);
 
 ModelAsset LoadModelAssetFromFile(String name)
 {
-	auto gltfPath = modelFilepaths.Lookup(name, "");
-	if (gltfPath == "")
+	auto gltfPath = modelFilepaths.Lookup(name);
+	if (!gltfPath)
 	{
 		LogError("Model", "Failed to find a registered file path for %k, skipping load.", name);
-		return {};
+		return ModelAsset{};
 	}
 	auto err = false;
-	auto gltf = GLTFParseFile(gltfPath, &err);
+	auto gltf = ParseGLTFFile(*gltfPath, &err);
 	if (err)
 	{
-		LogError("Model", "Failed to parse glTF file for %k, skipping load.", gltfPath);
-		return {};
+		LogError("Model", "Failed to parse glTF file for %k, skipping load.", *gltfPath);
+		return ModelAsset{};
 	}
 	auto buffers = Array<Array<u8>>{};
 	for (auto b : gltf.buffers)
 	{
-		auto p = JoinFilepaths(FilepathDirectory(gltfPath), b.uri);
+		auto p = JoinFilepaths(FilepathDirectory(*gltfPath), b.uri);
 		auto f = ReadEntireFile(p, &err);
 		if (err)
 		{
 			LogError("Model", "Failed to read glTF URI file %k.", p);
-			return {};
+			return ModelAsset{};
 		}
 		buffers.Append(f);
 	}
@@ -77,12 +77,16 @@ ModelAsset LoadModelAssetFromFile(String name)
 	auto vertexCount = 0;
 	for (auto m : gltf.meshes)
 	{
-		for (auto i = 0; i < MeshCount; i += 1)
-		{
+		auto submeshes = NewArrayWithCapacity<u32>(m.primitives.count);
 		for (auto p : m.primitives)
 		{
-			meshes[i] = NewGPUMesh(sizeof(Vertex1P1N) * 24, sizeof(u16) * 36);
-			auto m = &meshes[i];
+			auto acc = &gltf.accessors[p.indices];
+			submeshes.Append(acc->count);
+		}
+		meshAssets[0] = NewGPUMeshAsset(GlobalAllocator(), 24, sizeof(Vertex1P1N), 36, sizeof(u16), submeshes);
+		for (auto p : m.primitives)
+		{
+			auto m = &meshAssets[0];
 			// Indices.
 			{
 				auto acc = &gltf.accessors[p.indices];
@@ -110,7 +114,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//meshes[i].indexCount = acc->count;
 				//meshes[i].indexBuffer = NewGPUIndexBuffer(indicesSize);
 				//meshes[i].firstIndex = i * 36;// + padding;
-				auto s = NewGPUFrameStagingBufferX(m->IndexBuffer(), indicesSize, 0);
+				auto s = NewGPUFrameStagingBufferX(m->indexBuffer, indicesSize, 0);
 				auto bv = &gltf.bufferViews[acc->bufferView];
 				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
 				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)s.Map(), indicesSize));
@@ -142,8 +146,8 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//auto iv = m->MapVertexBuffer();
 				//meshes[i].vertexBuffer = NewGPUVertexBuffer(verticesSize);
 				//meshes[i].vertexOffset = i * 24;// + padding;
-				auto s = NewGPUFrameStagingBufferX(m->VertexBuffer(), verticesSize, 0);
-				auto CopyVertexAttributes = [&gltf, &buffers, &s, &i](s64 accIndex, s64 offset)
+				auto s = NewGPUFrameStagingBufferX(m->vertexBuffer, verticesSize, 0);
+				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset)
 				{
 					auto acc = &gltf.accessors[accIndex];
 					auto bv = &gltf.bufferViews[acc->bufferView];
@@ -154,9 +158,9 @@ ModelAsset LoadModelAssetFromFile(String name)
 					{
 						//auto r = (f32)MeshCount / 10;
 						auto r = (f32)1;
-						ofs.x = i * 10.0f;
-						ofs.y = i * 0.0f;
-						ofs.z = i * 0.0f;
+						//ofs.x = i * 10.0f;
+						//ofs.y = i * 0.0f;
+						//ofs.z = i * 0.0f;
 						//ofs.x = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
 						//ofs.y = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
 						//ofs.z = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
@@ -165,9 +169,9 @@ ModelAsset LoadModelAssetFromFile(String name)
 					for (auto i = 0; i < acc->count; i += 1)
 					{
 						auto v = *b;
-						v.x += ofs.x;
-						v.y += ofs.y;
-						v.z += ofs.z;
+						//v.x += ofs.x;
+						//v.y += ofs.y;
+						//v.z += ofs.z;
 						*dst = v;
 						dst += 2;
 						b += 1;
@@ -179,10 +183,15 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//m->FlushVertexBuffer();
 			}
 		}
-		}
 	}
 	cb.Queue();
-	return {};
+	materials = NewGPUMaterial();
+	for (auto i = 0; i < MeshCount; i += 1)
+	{
+		meshes[i] = NewGPUMesh(&meshAssets[0]);
+		renderPackets[i] = NewGPURenderPacket(&meshes[i], &materials);
+	}
+	return ModelAsset{};
 }
 
 ModelAsset LoadModelAsset(String name)
@@ -195,7 +204,7 @@ ModelAsset LoadModelAsset(String name)
 	{
 		Abort("Model", "@TODO: Load model assets in release mode.");
 	}
-	return {};
+	return ModelAsset{};
 }
 
 #if 0

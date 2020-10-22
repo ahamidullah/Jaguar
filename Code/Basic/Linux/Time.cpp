@@ -21,22 +21,22 @@ Duration Duration::operator-(Duration d)
 
 s64 Duration::Hour()
 {
-	return NanosecondsToHours(this->nanoseconds);
+	return this->nanoseconds / TimeHour;
 }
 
 s64 Duration::Minute()
 {
-	return NanosecondsToMinutes(this->nanoseconds);
+	return this->nanoseconds / TimeMinute;
 }
 
 s64 Duration::Second()
 {
-	return NanosecondsToSeconds(this->nanoseconds);
+	return this->nanoseconds / TimeSecond;
 }
 
 s64 Duration::Millisecond()
 {
-	return NanosecondsToMilliseconds(this->nanoseconds);
+	return this->nanoseconds / TimeMillisecond;
 }
 
 s64 Duration::Nanosecond()
@@ -91,13 +91,14 @@ Duration Time::operator-(Time t)
 	Assert(this->ts.tv_sec > t.ts.tv_sec || (this->ts.tv_sec == t.ts.tv_sec && this->ts.tv_nsec >= t.ts.tv_nsec));
 	return
 	{
-		.nanoseconds = SecondsToNanoseconds(this->ts.tv_sec - t.ts.tv_sec) + (this->ts.tv_nsec - t.ts.tv_nsec),
+		.nanoseconds = ((this->ts.tv_sec - t.ts.tv_sec) * TimeSecond) + (this->ts.tv_nsec - t.ts.tv_nsec),
 	};
 }
 
 Date Time::Date()
 {
 	auto tm = localtime(&this->ts.tv_sec);
+	// @TODO: Get rid of these constants?
 	auto ms = this->ts.tv_nsec / 1000000;
 	auto ns = this->ts.tv_nsec - (ms * 1000000);
 	return
@@ -152,12 +153,13 @@ s64 Time::Second()
 s64 Time::Millisecond()
 {
 	auto tm = localtime(&this->ts.tv_sec);
-	return this->ts.tv_nsec / 1000000;
+	return this->ts.tv_nsec / TimeMillisecond;
 }
 
 s64 Time::Nanosecond()
 {
 	auto tm = localtime(&this->ts.tv_sec);
+	// @TODO: Get rid of these constants?
 	auto ms = this->ts.tv_nsec / 1000000;
 	return this->ts.tv_nsec - (ms * 1000000);
 }
@@ -171,6 +173,7 @@ Time CurrentTime()
 
 void Sleep(s64 msec)
 {
+	// @TODO: Get rid of these constants?
 	auto ts = (struct timespec)
 	{
 		.tv_sec = msec / 1000,

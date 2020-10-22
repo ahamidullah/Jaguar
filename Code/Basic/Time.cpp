@@ -23,23 +23,23 @@ void Timer::Print(s64 scale)
 	auto unit = String{};
 	switch (scale)
 	{
-	case NanosecondScale:
+	case TimeNanosecond:
 	{
 		unit = "ns";
 	} break;
-	case MillisecondScale:
+	case TimeMillisecond:
 	{
 		unit = "ms";
 	} break;
-	case SecondScale:
+	case TimeSecond:
 	{
 		unit = "s";
 	} break;
-	case MinuteScale:
+	case TimeMinute:
 	{
 		unit = "m";
 	} break;
-	case HourScale:
+	case TimeHour:
 	{
 		unit = "m";
 	} break;
@@ -63,29 +63,4 @@ void Timer::Clear()
 	this->start = CurrentTime();
 	this->runningSum = 0;
 	this->iteration = 1;
-}
-
-s64 SecondsToNanoseconds(s64 s)
-{
-	return 1000000000 * s;
-}
-
-s64 NanosecondsToMilliseconds(s64 n)
-{
-	return n / 1000000;
-}
-
-s64 NanosecondsToSeconds(s64 n)
-{
-	return NanosecondsToMilliseconds(n) / 1000;
-}
-
-s64 NanosecondsToMinutes(s64 n)
-{
-	return NanosecondsToSeconds(n) / 60;
-}
-
-s64 NanosecondsToHours(s64 n)
-{
-	return NanosecondsToMinutes(n) / 60;
 }

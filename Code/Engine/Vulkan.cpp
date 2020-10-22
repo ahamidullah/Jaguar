@@ -19,8 +19,16 @@
 #include "Basic/File.h"
 #include "Common.h"
 
-// @TODO @DELTEME
-extern Array<GPUMesh> meshes;
+// @TODO: Use layout (buffer_reference).
+// @TODO: Use layout (scalar).
+// @TODO: Combine draw calls by binding multiple binding groups at the same time (must respect maxBoundDescriptorSets).
+// @TODO: Make sure that all failable Vulkan calls are VkCheck'd.
+// @TODO: Experiment with HOST_CACHED memory?
+// @TODO: Gfx memory defragmenting.
+// @TODO: Debug clear freed memory?
+// @TODO: Debug memory protection?
+
+// @TODO: CrashHandler log device features and limits if initialization is done.
 
 #define VulkanExportedFunction(name) PFN_##name name = NULL;
 #define VulkanGlobalFunction(name) PFN_##name name = NULL;
@@ -126,39 +134,6 @@ String VkResultToString(VkResult r)
 		if (_r != VK_SUCCESS) Abort("Vulkan", "VkCheck failed on %s: %k", #x, VkResultToString(_r)); \
 	} while (0)
 
-// @TODO: Make sure that all failable Vulkan calls are VkCheck'd.
-// @TODO: Do eg.
-//        typedef VImageLayout GFX_Image_Layout;
-//        #define GFX_IMAGE_LAYOUT_1 VK_IMAGE_LAYOUT_1
-//        etc... That will save us from having to convert between the two values.
-// @TODO: Some kind of memory protection for the Gfx buffer!
-// @TODO: Better texture descriptor set update scheme.
-// @TODO: Move any uniform data that's updated per-frame to shared memory.
-// @TODO: Scene stuff should be pbr?
-// @TODO: Shouldn't per-swapchain resources actually be per-frame?
-// @TODO: Query available VRAM and allocate based on that.
-// @TODO: Switch to dynamic memory segments for vulkan Gfx memory.
-//        If more VRAM becomes available while the game is running, the game should use it!
-// @TODO: Change 'model' to local? E.g. 'model_to_world_space' -> 'local_to_world_space'.
-// @TODO: Avoid VK_SHARING_MODE_CONCURRENT? "Go for VK_SHARING_MODE_EXCLUSIVE and do explicit queue family ownership barriers."
-// @TODO: Dedicated transfer queue.
-// @TODO: Experiment with HOST_CACHED memory?
-// @TODO: Keep memory mapped persistently.
-// @TODO: Use a single allocation and sub-allocations for image memory.
-// @TODO: Different memory management system for shared allocations.
-//        Main vertex, index, image = dynamic allocator, device memory
-//        Uniforms = fixed size with offsets, device memory
-//        Staging = stack allocator, shared memory, per-stage lifetime
-//        Per-frame memory (debug/gui vertices/indices/uvs) = stack allocator, shared memory, per-frame lifetime
-//        (Pool of blocks for shared memory)
-// @TODO: Gfx memory defragmenting.
-// @TODO: Debug clear freed memory?
-// @TODO: Debug memory protection?
-// @TODO: Read image pixels and mesh verices/indices directly into Gfx accessable staging memory.
-// @TODO: What happens if MAX_FRAMES_IN_FLIGHT is less than or greater than the number of swapchain images?
-
-// @TODO: CrashHandler log device features and limits if initialization is done.
-
 enum VulkanQueueType
 {
 	VulkanGraphicsQueue,
@@ -175,12 +150,6 @@ enum VulkanMemoryType
 	VulkanCPUToGPUMemory,
 	VulkanGPUToCPUMemory,
 	VulkanMemoryTypeCount
-};
-
-struct VulkanShader
-{
-	Array<VkShaderStageFlagBits> vkStages;
-	Array<VkShaderModule> vkModules;
 };
 
 const auto VulkanMaxFramesInFlight = 2;
@@ -259,25 +228,21 @@ struct VulkanThreadLocal
 
 struct VulkanFramebufferKey
 {
-	VkRenderPass renderPass;
+	VkRenderPass vkRenderPass;
 	u64 framebufferID;
 
 	bool operator==(VulkanFramebufferKey v)
 	{
-		return this->renderPass == v.renderPass && this->framebufferID == v.framebufferID;
+		return this->vkRenderPass == v.vkRenderPass && this->framebufferID == v.framebufferID;
 	}
 };
 
 u64 HashVulkanFramebufferKey(VulkanFramebufferKey k)
 {
-	return HashPointer(k.renderPass) ^ Hash64(k.framebufferID);
+	return HashPointer(k.vkRenderPass) ^ Hash64(k.framebufferID);
 }
 
 auto vkFramebufferCache = NewHashTable<VulkanFramebufferKey, VkFramebuffer>(0, HashVulkanFramebufferKey);
-
-struct VulkanImageDescriptorAllocator
-{
-};
 
 auto vkThreadLocal = Array<VulkanThreadLocal>{};
 auto vkDebugMessenger = VkDebugUtilsMessengerEXT{};
@@ -319,11 +284,10 @@ auto vkCommandGroupFreeIndex = u64{1}; // Extended frame resources are freed fro
 auto vkFrameMemoryUseIndex = u64{};
 auto vkFrameMemoryFreeIndex = u64{1};
 auto vkFrameFences = StaticArray<VkFence, VulkanMaxFramesInFlight>{};
-auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderIDCount>{};
-auto vkPipelines = StaticArray<VkPipeline, GPUShaderIDCount>{};
+//auto vkRenderPasses = StaticArray<VkRenderPass, GPUShaderIDCount>{};
+//auto vkPipelines = StaticArray<VkPipeline, GPUShaderIDCount>{};
 auto vkPipelineCache = VkPipelineCache{};
-auto vkShaders = StaticArray<VulkanShader, GPUShaderIDCount>{};
-auto vkDefaultFramebufferAttachments = Array<Array<GPUImageView>>{};
+auto vkDefaultFramebufferAttachments = Array<Array<VkImageView>>{};
 auto vkDefaultDepthImage = VkImage{};
 auto vkDefaultDepthImageView = VkImageView{};
 
@@ -333,130 +297,91 @@ auto vkFrameCommandPools = StaticArray<StaticArray<Array<VkCommandPool>, VulkanM
 auto vkFrameQueuedCommandBuffers = StaticArray<StaticArray<Array<Array<VkCommandBuffer>>, VulkanMainQueueTypeCount>, VulkanCommandGroupCount>{};
 auto vkFrameCommandBufferPools = StaticArray<StaticArray<Array<Array<VkCommandBuffer>>, VulkanMainQueueTypeCount>, VulkanCommandGroupCount>{}; // @TODO: Initialize the pool with some command buffers on startup.
 
-struct VulkanBufferDescriptorAllocator
+auto vkMinStorageBufferOffsetAlignment = s64{};
+
+struct VulkanBufferUniformAllocator
 {
 	Spinlock lock;
 	s64 set;
-	Array<Array<GPUBuffer>> buffers;
-	Array<Array<VkDescriptorSet>> vkDescriptorSets;
+	Array<GPUBuffer> buffers;
 	s64 bufferCapacity;
 	s64 elementCapacity;
 	s64 elementIndex;
 	s64 elementSize;
 
-	GPUUniform Allocate();
+	VulkanUniformInstance AllocateInstance();
 	void AddBuffer();
 };
 
-VulkanBufferDescriptorAllocator NewVulkanBufferDescriptorAllocator(s64 set, s64 elementCapacity, s64 elementSize)
+VulkanBufferUniformAllocator NewVulkanBufferUniformAllocator(s64 set, s64 elementCapacity, s64 elementSize)
 {
-	auto a = VulkanBufferDescriptorAllocator
+	return
 	{
 		.set = set,
-		.buffers = NewArray<Array<GPUBuffer>>(vkSwapchainImages.count),
-		.vkDescriptorSets = NewArray<Array<VkDescriptorSet>>(vkSwapchainImages.count),
+		.buffers = NewArrayIn<GPUBuffer>(GlobalAllocator(), 0),
 		.bufferCapacity = elementCapacity * elementSize,
 		.elementCapacity = elementCapacity,
 		.elementSize = elementSize,
 	};
-	a.AddBuffer();
-	return a;
 }
 
-GPUUniform VulkanBufferDescriptorAllocator::Allocate()
+VulkanUniformInstance VulkanBufferUniformAllocator::AllocateInstance()
 {
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
-	if (this->elementIndex >= this->elementCapacity)
+	if (this->buffers.count == 0)
 	{
-		this->AddBuffer();
+		this->buffers.Append(vkGPUStorageBlockAllocator.AllocateBuffer(this->bufferCapacity, vkMinStorageBufferOffsetAlignment, NULL));
+	}
+	else if (this->elementIndex >= this->elementCapacity)
+	{
+		this->buffers.Append(vkGPUStorageBlockAllocator.AllocateBuffer(this->bufferCapacity, vkMinStorageBufferOffsetAlignment, NULL));
 		this->elementIndex = 0;
 	}
-	auto u = GPUUniform
+	auto u = VulkanUniformInstance
 	{
-		.set = set,
-		.blockIndex = this->buffers[vkSwapchainImageIndex].count - 1,
+		.buffer = *this->buffers.Last(),
+		.blockIndex = this->buffers.count - 1,
 		.elementIndex = this->elementIndex,
 	};
 	this->elementIndex += 1;
 	return u;
 }
 
-auto vkMinStorageBufferOffsetAlignment = s64{};
-
+#if 0
 void VulkanBufferDescriptorAllocator::AddBuffer()
 {
-	auto layouts = NewArray<VkDescriptorSetLayout>(vkSwapchainImages.count);
-   	for (auto i = 0; i < vkSwapchainImages.count; i += 1)
-   	{
-    	layouts[i] = vkDescriptorSetLayouts[set];
-   	}
 	auto ai = VkDescriptorSetAllocateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 		.descriptorPool = vkDescriptorPool,
-		.descriptorSetCount = (u32)vkSwapchainImages.count,
-		.pSetLayouts = layouts.elements,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &vkDescriptorSetLayouts[set],
 	};
-	auto sets = NewArray<VkDescriptorSet>(vkSwapchainImages.count);
-	VkCheck(vkAllocateDescriptorSets(vkDevice, &ai, sets.elements));
-	for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+	auto set = VkDescriptorSet{};
+	VkCheck(vkAllocateDescriptorSets(vkDevice, &ai, &set));
+	this->vkDescriptorSets.Append(set);
+	auto bi = VkDescriptorBufferInfo
 	{
-		this->vkDescriptorSets[i].Append(sets[i]);
-	}
-	auto bis = NewArrayWithCapacity<VkDescriptorBufferInfo>(vkSwapchainImages.count);
-	auto writes = NewArrayWithCapacity<VkWriteDescriptorSet>(vkSwapchainImages.count);
-	for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+		.buffer = *this->buffers.Last(),
+		.offset = (VkDeviceSize)this->buffers.Last()->offset,
+		.range = (VkDeviceSize)this->bufferCapacity,
+	};
+	auto write = VkWriteDescriptorSet
 	{
-		auto buf = vkGPUStorageBlockAllocator.AllocateBuffer(this->bufferCapacity, vkMinStorageBufferOffsetAlignment, NULL);
-		this->buffers[i].Append(buf);
-		bis.Append(
-			{
-				.buffer = buf.vkBuffer,
-				.offset = (VkDeviceSize)buf.offset,
-				.range = (VkDeviceSize)this->bufferCapacity,
-			});
-		writes.Append(
-			{
-				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = sets[i],
-				.dstBinding = 0,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.pBufferInfo = bis.Last(),
-			});
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = set,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &bi,
 	}
-	vkUpdateDescriptorSets(vkDevice, writes.count, writes.elements, 0, NULL); // No return.
+	vkUpdateDescriptorSets(vkDevice, 1, &write, 0, NULL); // No return.
 }
+#endif
 
-auto vkBufferDescriptorAllocators = StaticArray<VulkanBufferDescriptorAllocator, ShaderDescriptorSetCount>{};
-
-struct VulkanMeshInfo
-{
-	u32 indexCount;
-	u32 instanceCount;
-	u32 firstIndex;
-	s32 vertexOffset;
-};
-
-auto vkMeshInfos = Array<VulkanMeshInfo>{};
-
-struct VulkanMeshBuffers
-{
-	VkBuffer vkIndexBuffer;
-	VkBuffer vkVertexBuffer;
-};
-
-struct VulkanMeshBufferOffsets
-{
-	s64 indexBufferOffset;
-	s64 vertexBufferOffset;
-};
-
-auto vkMeshBuffers = Array<VulkanMeshBuffers>{};
-auto vkMeshBufferOffsets = Array<VulkanMeshBufferOffsets>{};
-
+#if 0
 GPUMesh NewGPUMesh(s64 vertSize, s64 indSize)
 {
 	// @TODO: Locking.
@@ -494,20 +419,389 @@ bool MeshRenderGroupData::operator==(MeshRenderGroupData d)
 {
 	return this->vkVertexBuffer == d.vkVertexBuffer && this->vkIndexBuffer == d.vkIndexBuffer;
 }
+#endif
 
-		auto xcmds = ArrayView<VkDrawIndexedIndirectCommand>{};
-GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
+auto vkBufferUniformAllocators = StaticArray<VulkanBufferUniformAllocator, ShaderDescriptorSetCount>{};
+
+void NewGPUMeshAssetBlock(Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out)
 {
-	struct MergePartitionParameter
+	for (auto i = 0; i < cis.count; i += 1)
+	{
+		// @TODO: Locking.
+		auto vb = NewGPUVertexBuffer(cis[i].vertexCount * cis[i].vertexSize);
+		auto ib = NewGPUIndexBuffer(cis[i].indexCount * cis[i].indexSize);
+		*out[i] = GPUMeshAsset
+		{
+			.firstIndex = (u32)(ib.offset / cis[i].indexSize),
+			.vertexOffset = (s32)(vb.offset / cis[i].vertexSize),
+			.submeshes = NewArrayIn<GPUSubmesh>(a, cis[i].submeshIndices.count),
+			.vertexBuffer = vb,
+			.indexBuffer = ib,
+		};
+		for (auto j = 0; j < cis[i].submeshIndices.count; j += 1)
+		{
+			out[i]->submeshes[j] = GPUSubmesh
+			{
+				.indexCount = cis[i].submeshIndices[j],
+			};
+		}
+	}
+};
+
+GPUMeshAsset NewGPUMeshAsset(Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds)
+{
+	auto ci = GPUMeshAssetCreateInfo
+	{
+		.vertexCount = vertCount,
+		.vertexSize = vertSize,
+		.indexCount = indCount,
+		.indexSize = indSize,
+		.submeshIndices = submeshInds,
+	};
+	auto m = GPUMeshAsset{};
+	auto p = &m;
+	NewGPUMeshAssetBlock(a, NewArrayView(&ci, 1), NewArrayView(&p, 1));
+	return m;
+}
+
+bool VulkanDrawCallBindingGroup::operator==(VulkanDrawCallBindingGroup data)
+{
+	if (this->vkVertexBuffer != data.vkVertexBuffer)
+	{
+		return false;
+	}
+	if (this->vkIndexBuffer != data.vkIndexBuffer)
+	{
+		return false;
+	}
+	if (this->vkObjectDescriptorSet[0] != data.vkObjectDescriptorSet[0])
+	{
+		return false;
+	}
+	if (this->vkMaterialDescriptorSet != data.vkMaterialDescriptorSet)
+	{
+		return false;
+	}
+	return true;
+}
+
+u64 HashVulkanDrawCallBindingGroup(VulkanDrawCallBindingGroup data)
+{
+	return
+		HashPointer(data.vkVertexBuffer)
+		^ HashPointer(data.vkIndexBuffer)
+		^ HashPointer(data.vkObjectDescriptorSet[0])
+		^ HashPointer(data.vkMaterialDescriptorSet);
+}
+
+auto vkBindingGroupLock = Spinlock{};
+auto vkBindingGroupToIndex = NewHashTableIn<VulkanDrawCallBindingGroup, s64>(GlobalAllocator(), 128, HashVulkanDrawCallBindingGroup);
+auto vkBindingGroups = NewArrayWithCapacityIn<VulkanDrawCallBindingGroup>(GlobalAllocator(), 128);
+
+void NewGPUMeshBlock(ArrayView<GPUMeshAsset *> as, ArrayView<GPUMesh *> out)
+{
+	//auto uniforms = vkBufferDescriptorAllocators[ShaderObjectDescriptorSet].Allocate();
+	for (auto i = 0; i < as.count; i += 1)
+	{
+		*out[i] = GPUMesh
+		{
+			.asset = as[i],
+			.uniform = NewGPUUniform("", ShaderObjectDescriptorSet), // @TODO: These should all be done at once!
+		};
+	}
+}
+
+GPUMesh NewGPUMesh(GPUMeshAsset *asset)
+{
+	auto m = GPUMesh{};
+	auto p = &m;
+	NewGPUMeshBlock(NewArrayView(&asset, 1), NewArrayView(&p, 1));
+	return m;
+}
+
+GPUMaterial NewGPUMaterial()
+{
+	return
+	{
+		.uniform = NewGPUUniform("", ShaderMaterialDescriptorSet),
+	};
+}
+
+GPURenderPacket NewGPURenderPacket(GPUMesh *mesh, GPUMaterial *mat)
+{
+	return
+	{
+		.mesh = mesh,
+		.material = mat,
+	};
+}
+
+// @TODO: Persistent mesh group.
+
+#if 0
+void MakeVulkanDrawCommands(s64 meshIndOffset, ArrayView<GPURenderPacket> ps, ArrayView<s64> pktInds, ArrayView<VkDrawIndexedIndirectCommand> cmds)
+{
+	auto ci = 0;
+	auto meshInd = meshIndOffset;
+	for (auto i : pktInds)
+	{
+		for (auto j = 0; j < ps[i].mesh->asset->submeshes.count; j += 1)
+		{
+			auto nInsts = 1;
+			cmds[ci] = VkDrawIndexedIndirectCommand
+			{
+				.indexCount = ps[i].mesh->asset->submeshes[j].indexCount,
+				.instanceCount = nInsts,
+				.firstIndex = ps[i].mesh->asset->firstIndex,
+				.vertexOffset = ps[i].mesh->asset->vertexOffset,
+				.firstInstance = meshInd,
+			};
+			ci += 1;
+		}
+		meshInd += nInsts;
+	}
+}
+#endif
+
+struct VulkanDrawData
+{
+	u64 vertexBuffer;
+	u64 indexBuffer;
+	u64 mesh;
+	//u64 material;
+};
+
+auto vkDrawBuffer = GPUBuffer{};
+
+VkDeviceAddress VulkanBufferAddress(GPUBuffer b)
+{
+	auto i = VkBufferDeviceAddressInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = b.vkBuffer,
+	};
+	auto a = vkGetBufferDeviceAddress(vkDevice, &i);
+	Assert(a);
+	a += b.offset;
+	return a;
+};
+
+GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<Array<GPUUniform>> lateBindings)
+{
+	auto nDraws = 0;
+	for (auto p : ps)
+	{
+		nDraws += p.mesh->asset->submeshes.count;
+	}
+	auto ib = NewGPUFrameIndirectBuffer(nDraws * sizeof(VkDrawIndexedIndirectCommand));
+	auto sb = NewGPUFrameStagingBufferX(ib, nDraws * sizeof(VkDrawIndexedIndirectCommand), 0);
+	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), nDraws);
+	vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), vkMinStorageBufferOffsetAlignment, NULL);
+	auto dsb = NewGPUFrameStagingBufferX(vkDrawBuffer, nDraws * sizeof(VulkanDrawData), 0);
+	auto dd = NewArrayView((VulkanDrawData *)dsb.Map(), nDraws);
+	auto di = 0;
+	for (auto p : ps)
+	{
+		for (auto sm : p.mesh->asset->submeshes)
+		{
+			dd[di] = VulkanDrawData
+			{
+				.vertexBuffer = VulkanBufferAddress(p.mesh->asset->vertexBuffer),
+				.indexBuffer = VulkanBufferAddress(p.mesh->asset->indexBuffer),
+				.mesh = VulkanBufferAddress(p.mesh->uniform.instances[p.mesh->uniform.index].buffer),
+			};
+			cmds[di] = VkDrawIndexedIndirectCommand
+			{
+				.indexCount = sm.indexCount,
+				.instanceCount = 1,
+				.firstIndex = p.mesh->asset->firstIndex,
+				.vertexOffset = p.mesh->asset->vertexOffset,
+			};
+			di += 1;
+		}
+	}
+	return
+	{
+		.drawBufferPointer = VulkanBufferAddress(vkDrawBuffer),
+		.indirectCommands = ib,
+		.indirectCommandCount = nDraws,
+	};
+#if 0
+	// The work array is sized to support the maximum possible binding group index.
+	auto work = NewArray<Array<s64>>(vkBindingGroups.count);
+	for (auto &w : work)
+	{
+		w = NewArrayWithCapacity<s64>(ps.count);
+	}
+	auto groupCount = 0;
+	for (auto i = 0; i < ps.count; i += 1)
+	{
+		if (work[ps[i].bindingGroupIndex].count == 0)
+		{
+			groupCount += 1;
+		}
+		work[ps[i].bindingGroupIndex].Append(i);
+	}
+	// Threre are two code paths depending on the number of binding groups.
+	// T = number of worker threads
+	// If the number of groups >= T, then we run one job per group.
+	// Else the number of groups < T, and we partition the work for a each group into T jobs.
+	auto drawCalls = NewArray<VulkanDrawCall>(groupCount);
+	if (groupCount >= WorkerThreadCount())
+	{
+		struct MakeDrawCallParameter
+		{
+			ArrayView<GPURenderPacket> packets;
+			ArrayView<s64> packetIndices;
+			VulkanDrawCallBindingGroup *bindingGroup;
+			VulkanDrawCall *drawCall;
+			s64 meshIndexOffset;
+		};
+		auto MakeDrawCall = [](void *param)
+		{
+			auto p = (MakeDrawCallParameter *)param;
+			auto submeshCount = 0;
+			for (auto pi : p->packetIndices)
+			{
+				submeshCount += p->packets[pi].mesh->asset->submeshes.count;
+			}
+			auto ib = NewGPUFrameIndirectBuffer(submeshCount * sizeof(VkDrawIndexedIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, submeshCount * sizeof(VkDrawIndexedIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), submeshCount);
+			MakeVulkanDrawCommands(p->meshIndexOffset, p->packets, p->packetIndices, cmds);
+			sb.Flush();
+			*p->drawCall = VulkanDrawCall
+			{
+				.bindingGroup = p->bindingGroup,
+				.indirectCommands = ib,
+				.indirectCommandCount = submeshCount,
+			};
+		};
+		auto jobParams = NewArrayWithCapacity<MakeDrawCallParameter>(groupCount);
+		auto jobs = NewArrayWithCapacity<JobDeclaration>(groupCount);
+		auto meshIndexOffset = 0;
+		for (auto i = 0; i < work.count; i += 1)
+		{
+			if (work[i].count == 0)
+			{
+				continue;
+			}
+			jobParams.Append(
+				{
+					.packets = ps,
+					.packetIndices = work[i],
+					.bindingGroup = &vkBindingGroups[i],
+					.drawCall = &drawCalls[i],
+					.meshIndexOffset = meshIndexOffset,
+				});
+			meshIndexOffset += work[i].count;
+			jobs.Append(NewJobDeclaration(MakeDrawCall, &jobParams[i]));
+		}
+		auto c = (JobCounter *){};
+		RunJobs(jobs, NormalJobPriority, &c);
+		c->Wait();
+	}
+	else
+	{
+		struct MakeDrawCallParameter
+		{
+			ArrayView<GPURenderPacket> packets;
+			ArrayView<s64> packetIndices;
+			ArrayView<VkDrawIndexedIndirectCommand> commands;
+			s64 meshIndexOffset;
+		};
+		auto MakeDrawCall = [](void *param)
+		{
+			auto p = (MakeDrawCallParameter *)param;
+			MakeVulkanDrawCommands(p->meshIndexOffset, p->packets, p->packetIndices, p->commands);
+		};
+		auto jobParams = NewArrayWithCapacity<MakeDrawCallParameter>(groupCount * WorkerThreadCount());
+		auto jobs = NewArrayWithCapacity<JobDeclaration>(groupCount * WorkerThreadCount());
+		auto sbs = NewArrayWithCapacity<GPUFrameStagingBuffer>(groupCount);
+		auto meshIndexOffset = 0;
+		for (auto i = 0; i < work.count; i += 1)
+		{
+			if (work[i].count == 0)
+			{
+				continue;
+			}
+			auto ib = NewGPUFrameIndirectBuffer(work[i].count * sizeof(VkDrawIndexedIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, work[i].count * sizeof(VkDrawIndexedIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), work[i].count);
+			auto workSize = DivideAndRoundUp(work[i].count, WorkerThreadCount());
+			for (auto j = 0; j < WorkerThreadCount(); j += 1)
+			{
+				auto workStart = j * workSize;
+				if (workStart > work[i].count)
+				{
+					workStart -= workStart - work[i].count;
+				}
+				auto workEnd = (j + 1) * workSize;
+				if (workEnd > work[i].count)
+				{
+					workEnd -= workEnd - work[i].count;
+				}
+				jobParams.Append(
+					{
+						.packets = ps,
+						.packetIndices = work[i].View(workStart, workEnd),
+						.commands = cmds.View(workStart, workEnd),
+						.meshIndexOffset = meshIndexOffset,
+					});
+				meshIndexOffset += workEnd - workStart;
+				jobs.Append(NewJobDeclaration(MakeDrawCall, jobParams.Last()));
+			}
+			drawCalls[i] = VulkanDrawCall
+			{
+				.bindingGroup = &vkBindingGroups[i],
+				.indirectCommands = ib,
+				.indirectCommandCount = work[i].count,
+			};
+			sbs.Append(sb);
+		}
+		auto c = (JobCounter *){};
+		RunJobs(jobs, NormalJobPriority, &c);
+		c->Wait();
+		for (auto sb : sbs)
+		{
+			sb.Flush();
+		}
+	}
+	for (auto w : work)
+	{
+		if (w.count == 0)
+		{
+			continue;
+		}
+		auto oi = ;
+		auto mi = ;
+		auto cb = NewGPUFrameTransferCommandBuffer();
+		auto sb = NewGPUFrameStagingBufferX(a->buffers[b.uniform.blockIndex][vkSwapchainImageIndex], a->elementSize, b.uniform.elementIndex * a->elementSize);
+		for (auto pi : w)
+		{
+			auto a = &vkBufferDescriptorAllocators[b.uniform.set];
+			CopyArray(NewArrayView((u8 *)b.data, a->elementSize), NewArrayView((u8 *)sb.Map(), a->elementSize));
+			sb.FlushIn(cb);
+		}
+		cb.Queue();
+	}
+	// @TODO: Sort the bindings to minimize state changes.
+	return
+	{
+		.drawCalls = drawCalls,
+	};
+#endif
+#if 0
+	struct DeduplicatePartitionParameter
 	{
 		HashTable<MeshRenderGroupData, Array<s64>> *hashTable;
 		ArrayView<GPUMesh> meshes;
 		s64 startIndex;
 		s64 endIndex;
 	};
-	auto MergePartition = [](void *param)
+	auto DeduplicatePartition = [](void *param)
 	{
-		auto p = (MergePartitionParameter *)param;
+		auto p = (DeduplicatePartitionParameter *)param;
 		for (auto i = p->startIndex; i < p->endIndex; i += 1)
 		{
 			auto d = MeshRenderGroupData
@@ -528,50 +822,47 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 		}
 	};
 	const auto InitialGroupSize = 64;
-	auto hts = NewArray<HashTable<MeshRenderGroupData, Array<s64>>>(WorkerThreadCount());
-	for (auto &ht : hts)
+	auto partitionHTs = NewArray<HashTable<MeshRenderGroupData, Array<s64>>>(WorkerThreadCount());
+	for (auto &ht : partitionHTs)
 	{
 		ht = NewHashTable<MeshRenderGroupData, Array<s64>>(InitialGroupSize, HashMeshRenderGroupData);
 	}
 	// A FrameMeshGroup contains multiple render groups, which are a grouping of meshes sharing the same GPU buffer bindings.
-	// First: Merge the meshes with the same buffer bindings together.
-	// This is multithreaded, where each job merges a partition of the input meshes, and once all jobs are finished, the main
-	// thread does a final merge of each thread result.
-	// The result is a hash table with each entry containing the indices of all input meshes sharing the same buffer bindings.
+	// First: Deduplicate the meshes with identical buffer bindings.
+	// This is multithreaded. Each job merges a partition of the input meshes. When all jobs are finished, the main thread merges all threads' results into the final output.
+	// The result is a hash table with each entry containing the indices of all input meshes sharing the same set of bindings.
 	{
-		auto params = NewArrayWithCapacity<MergePartitionParameter>(WorkerThreadCount());
-		auto js = NewArrayWithCapacity<JobDeclaration>(WorkerThreadCount());
-		auto workSize = DivideAndRoundUp(ms.count, WorkerThreadCount());
+		auto params = NewArrayWithCapacity<DeduplicatePartitionParameter>(WorkerThreadCount());
+		auto jobs = NewArrayWithCapacity<JobDeclaration>(WorkerThreadCount());
+		auto workSize = DivideAndRoundUp(meshes.count, WorkerThreadCount());
 		for (auto i = 0; i < WorkerThreadCount(); i += 1)
 		{
 			auto workStart = i * workSize;
-			if (workStart > ms.count)
+			if (workStart > meshes.count)
 			{
-				workStart -= workStart - ms.count;
+				workStart -= workStart - meshes.count;
 			}
 			auto workEnd = (i + 1) * workSize;
-			if (workEnd > ms.count)
+			if (workEnd > meshes.count)
 			{
-				workEnd -= workEnd - ms.count;
+				workEnd -= workEnd - meshes.count;
 			}
 			params.Append(
 				{
-					.hashTable = &hts[i],
-					.meshes = ms,
+					.hashTable = &partitionHTs[i],
+					.meshes = meshes,
 					.startIndex = workStart,
 					.endIndex = workEnd,
 				});
-			js.Append(NewJobDeclaration(MergePartition, params.Last()));
-			//if (i == 0)
-				//MergePartition(params.Last());
+			jobs.Append(NewJobDeclaration(DeduplicatePartition, params.Last()));
 		}
-		auto c = (JobCounter *){};
-		RunJobs(js, NormalJobPriority, &c);
-		c->Wait();
+		auto ctr = (JobCounter *){};
+		RunJobs(jobs, NormalJobPriority, &ctr);
+		ctr->Wait();
 	}
-	// Each thread is finished with its partial merge, now merge them all together.
+	// Each thread is finished deduplicating its partition, now merge the results together.
 	auto mergeHT = NewHashTable<MeshRenderGroupData, Array<s64>>(InitialGroupSize, HashMeshRenderGroupData);
-	for (auto ht : hts)
+	for (auto ht : partitionHTs)
 	{
 		for (auto e : ht)
 		{
@@ -637,7 +928,7 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 			params[i] = MakeGroupParameter
 			{
 				.meshIndices = e.value,
-				.meshes = ms,
+				.meshes = meshes,
 				.data = e.key,
 				.group = &gs[i],
 			};
@@ -661,33 +952,27 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 		auto MakeGroup = [](void *param)
 		{
 			auto p = (MakeGroupParameter *)param;
-			for (auto i = p->start; i < p->end; i += 1)
+			for (auto i = 0; i < p->meshIndices.count; i += 1)
 			{
-				auto mi = p->meshIndices[0];
-				Assert(mi == 0);
-				p->commands[0] = VkDrawIndexedIndirectCommand
+				auto mi = p->meshIndices[i];
+				p->commands[i] = VkDrawIndexedIndirectCommand
 				{
-					.indexCount = p->meshes[0].indexCount,
-					.instanceCount = p->meshes[0].instanceCount,
-					.firstIndex = p->meshes[0].firstIndex,
-					.vertexOffset = p->meshes[0].vertexOffset,
+					.indexCount = p->meshes[mi].indexCount,
+					.instanceCount = p->meshes[mi].instanceCount,
+					.firstIndex = p->meshes[mi].firstIndex,
+					.vertexOffset = p->meshes[mi].vertexOffset,
 				};
 			}
 		};
 		auto params = NewArrayWithCapacity<MakeGroupParameter>(mergeHT.count * WorkerThreadCount());
 		auto js = NewArrayWithCapacity<JobDeclaration>(mergeHT.count * WorkerThreadCount());
 		auto sbs = NewArrayWithCapacity<GPUFrameStagingBuffer>(mergeHT.count);
-		//auto cmds = ArrayView<VkDrawIndexedIndirectCommand>{};
-			auto ib = NewGPUFrameIndirectBuffer(1 * sizeof(VkDrawIndexedIndirectCommand));
-			auto sb = NewGPUFrameStagingBufferX(ib, 1 * sizeof(VkDrawIndexedIndirectCommand), 0);
 		for (auto e : mergeHT)
 		{
-			Assert(e.value.count == 1);
-			//auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
-			//auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndexedIndirectCommand), 0);
-			xcmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
+			auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndexedIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
 			auto workSize = DivideAndRoundUp(e.value.count, WorkerThreadCount());
-			Assert(workSize == 1);
 			for (auto i = 0; i < WorkerThreadCount(); i += 1)
 			{
 				auto workStart = i * workSize;
@@ -700,31 +985,13 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 				{
 					workEnd -= workEnd - e.value.count;
 				}
-				Assert(workStart == 0 && workEnd == 1 || workStart == 1 && workEnd == 1);
 				params.Append(
 					{
 						.meshIndices = e.value.View(workStart, workEnd),
-						.meshes = ms,
-						.commands = xcmds.View(workStart, workEnd),
-						.start = workStart,
-						.end = workEnd,
+						.meshes = meshes,
+						.commands = cmds.View(workStart, workEnd),
 					});
-				//Assert(params[0].meshIndices.count == 1);
-				Assert(params[0].meshIndices.elements[0] == 0);
-				Assert(params[0].meshes.count == 1);
-				if (i == 0)
-				{
-					Assert(params[i].meshIndices.count == 1);
-					Assert(params[i].commands.count == 1);
-				}
-				else
-				{
-					Assert(params[i].meshIndices.count == 0);
-					Assert(params[i].commands.count == 0);
-				}
 				js.Append(NewJobDeclaration(MakeGroup, params.Last()));
-			//if (i == 0)
-				//MakeGroup(params.Last());
 			}
 			gs.Append(
 				{
@@ -737,46 +1004,32 @@ GPUMeshGroup NewGPUFrameMeshGroup(ArrayView<GPUMesh> ms)
 		auto c = (JobCounter *){};
 		RunJobs(js, NormalJobPriority, &c);
 		c->Wait();
-		Assert(xcmds.count == 1);
-		Assert(meshes[0].indexCount == xcmds[0].indexCount);
-		Assert(meshes[0].instanceCount == xcmds[0].instanceCount);
-		Assert(meshes[0].firstIndex == xcmds[0].firstIndex);
-		Assert(meshes[0].vertexOffset == xcmds[0].vertexOffset);
 		for (auto sb : sbs)
 		{
 			sb.Flush();
 		}
 	}
-	Assert(gs.count == 1);
-	Assert(gs[0].data.vkVertexBuffer == meshes[0].vertexBuffer.vkBuffer);
-	Assert(gs[0].data.vkIndexBuffer == meshes[0].indexBuffer.vkBuffer);
 	// @TODO: Sort the MeshRenderGroups to minimize state changes.
 	return
 	{
 		.renderGroups = gs,
 	};
+#endif
 }
 
-void GPUCommandBuffer::DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms)
+void GPUCommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 {
-	Assert(mg.renderGroups.count == 1);
-	for (auto rg : mg.renderGroups)
-	{
-		Assert(meshes[0].indexCount == xcmds[0].indexCount);
-		Assert(meshes[0].instanceCount == xcmds[0].instanceCount);
-		Assert(meshes[0].firstIndex == xcmds[0].firstIndex);
-		Assert(meshes[0].vertexOffset == xcmds[0].vertexOffset);
-		Assert(rg.commandCount == 1);
-		Assert(rg.data.vkIndexBuffer == meshes[0].indexBuffer.vkBuffer);
-		Assert(rg.data.vkVertexBuffer == meshes[0].vertexBuffer.vkBuffer);
-		ConsolePrint("start: %ld, end: %ld, ofs: %ld\n", vkGPUIndirectFrameAllocator.start, vkGPUIndirectFrameAllocator.end, rg.commands.offset);
-		//Assert((vkGPUIndirectFrameAllocator.start < vkGPUIndirectFrameAllocator.end && rg.command.offset < vkGPUIndirectFrameAllocator.end && rg.command.offset > vkGPUIndirectFrameAllocator.start) || (vkGPUIndirectFrameAllocator.start > vkGPUIndirectFrameAllocator.end && ();
-		vkCmdBindIndexBuffer(this->vkCommandBuffer, rg.data.vkIndexBuffer, 0, GPUIndexTypeUint16);
-		auto offset = (VkDeviceSize)0;
-		vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &rg.data.vkVertexBuffer, &offset);
-		//this->DrawIndexed(meshes[0].indexCount, meshes[0].firstIndex, meshes[0].vertexOffset);
-		this->DrawIndexedIndirect(rg.commands, rg.commandCount);
-	}
+	//ConsolePrint("Draw call count: %d\n", rb.drawCalls.count);
+	//for (auto dc : rb.drawCalls)
+	//{
+		//vkCmdBindDescriptorSets(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, ShaderObjectDescriptorSet, 1, &dc.bindingGroup->vkObjectDescriptorSet[vkSwapchainImageIndex], 0, NULL);
+		//vkCmdBindDescriptorSets(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, ShaderMaterialDescriptorSet, 1, &dc.bindingGroup->vkMaterialDescriptorSet[vkSwapchainImageIndex], 0, NULL);
+		//auto offset = (VkDeviceSize)0;
+		//vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &dc.bindingGroup->vkVertexBuffer, &offset);
+		//vkCmdBindIndexBuffer(this->vkCommandBuffer, dc.bindingGroup->vkIndexBuffer, 0, GPUIndexTypeUint16);
+		vkCmdPushConstants(this->vkCommandBuffer, vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, &rb.drawBufferPointer);
+		this->DrawIndexedIndirect(rb.indirectCommands, rb.indirectCommandCount);
+	//}
 }
 
 #if DebugBuild
@@ -785,24 +1038,6 @@ void GPUCommandBuffer::DrawMeshes(GPUMeshGroup mg, ArrayView<GPUMesh> ms)
 	auto vkNumberOfCommandBuffersUsedThisFrame = 0;
 	auto vkNumberOfQueueSubmitsThisFrame = 0;
 #endif
-
-String GPUShaderName(GPUShaderID id)
-{
-	switch (id)
-	{
-	case GPUModelShaderID:
-	{
-		return "Model";
-	} break;
-	case GPUShaderIDCount:
-	default:
-	{
-		LogError("Vulkan", "Invalid shader id %d.", id);
-		return "";
-	};
-	}
-	return "";
-}
 
 u32 VulkanDebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *data, void *userData)
 {
@@ -1094,15 +1329,17 @@ const auto VulkanDepthBufferInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 const auto VulkanDepthBufferImageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 const auto VulkanDepthBufferSampleCount = VK_SAMPLE_COUNT_1_BIT;
 // @TODO: Log the actual number of blocks used somehow to guide number tweaking.
+//const auto VulkanBigBlockSize = 128 * Megabyte;
+//const auto VulkanSmallBlockSize = 
 const auto VulkanVertexBlockSize = 128 * Megabyte;
 const auto VulkanIndexBlockSize = 128 * Megabyte;
 const auto VulkanUniformBlockSize = 128 * Megabyte;
 const auto VulkanStagingBlockSize = 128 * Megabyte;
 const auto VulkanStagingFrameSize = 1024 * Megabyte;
 const auto VulkanIndirectFrameSize = 128 * Megabyte;
-const auto VulkanViewUniformsPerSet = 128;
-const auto VulkanMaterialUniformsPerSet = 128;
-const auto VulkanObjectUniformsPerSet = 128;
+const auto VulkanMaterialUniformsPerSet = 128; // @TODO
+const auto VulkanObjectUniformsPerSet = 128; // @TODO
+// @TODO: Handle allocations bigger than the block size.
 
 void InitializeGPU(Window *w)
 {
@@ -1116,11 +1353,11 @@ void InitializeGPU(Window *w)
 		Abort("Vulkan", "Could not open Vulkan DLL libvulkan.so.");
 	}
 	#define VulkanExportedFunction(name) \
-		name = (PFN_##name)lib.Lookup(#name, &err); \
-		if (err) Abort("Vulkan", "Failed to load Vulkan function %s: Vulkan version 1.1 required.", #name);
+		name = (PFN_##name)lib.Symbol(#name, &err); \
+		if (err) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
 	#define VulkanGlobalFunction(name) \
 		name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
-		if (!name) Abort("Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+		if (!name) Abort("Failed to load Vulkan function %s.", #name);
 	#define VulkanInstanceFunction(name)
 	#define VulkanDeviceFunction(name)
 		#include "VulkanFunction.h"
@@ -1148,11 +1385,11 @@ void InitializeGPU(Window *w)
 	{
 		auto version = u32{};
 		vkEnumerateInstanceVersion(&version);
-		if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 1))
+		if (VK_VERSION_MAJOR(version) < 1 || (VK_VERSION_MAJOR(version) == 1 && VK_VERSION_MINOR(version) < 2))
 		{
-			Abort("Vulkan", "Vulkan version 1.1.0 or greater required: version %d.%d.%d is installed", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+			Abort("Vulkan", "Vulkan version 1.2.0 or greater required, but version %d.%d.%d is installed.", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 		}
-		LogInfo("Vulkan", "Using Vulkan version %d.%d.%d", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
+		LogInfo("Vulkan", "Using Vulkan version %d.%d.%d.", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version), VK_VERSION_PATCH(version));
 	}
 	auto dbgInfo = VkDebugUtilsMessengerCreateInfoEXT
 	{
@@ -1216,7 +1453,7 @@ void InitializeGPU(Window *w)
 	#define VulkanGlobalFunction(name)
 	#define VulkanInstanceFunction(name) \
 		name = (PFN_##name)vkGetInstanceProcAddr(vkInstance, (const char *)#name); \
-		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s: Vulkan version 1.1 required", #name);
+		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
 	#define VulkanDeviceFunction(name)
 		#include "VulkanFunction.h"
 	#undef VulkanExportedFunction
@@ -1349,7 +1586,6 @@ void InitializeGPU(Window *w)
 				}
 				// @TODO: If not vsync... first of VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
 			}
-			presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 			auto numQueueFams = u32{};
 			vkGetPhysicalDeviceQueueFamilyProperties(pd, &numQueueFams, NULL);
 			auto queueFams = NewArray<VkQueueFamilyProperties>(numQueueFams);
@@ -1533,7 +1769,7 @@ void InitializeGPU(Window *w)
 	#define VulkanInstanceFunction(name)
 	#define VulkanDeviceFunction(name) \
 		name = (PFN_##name)vkGetDeviceProcAddr(vkDevice, (const char *)#name); \
-		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s: Vulkan version 1.1 is required.", #name);
+		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
 		#include "VulkanFunction.h"
 	#undef VulkanExportedFunction
 	#undef VulkanGlobalFunction
@@ -1725,13 +1961,13 @@ void InitializeGPU(Window *w)
 			VkDescriptorPoolSize
 			{
 				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.descriptorCount = 16, // @TODO
+				.descriptorCount = 1600, // @TODO
 			});
 		auto ci = VkDescriptorPoolCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
-			.maxSets = 16, // @TODO
+			.maxSets = 1600, // @TODO
 			.poolSizeCount = (u32)ps.Count(),
 			.pPoolSizes = ps.elements,
 		};
@@ -1739,6 +1975,7 @@ void InitializeGPU(Window *w)
 	}
 	// Descriptors.
 	{
+#if 0
 		PushContextAllocator(GlobalAllocator());
 		Defer(PopContextAllocator());
 		auto MakeDescriptorSetLayout = [](s64 set, ArrayView<VkDescriptorSetLayoutBinding> bindings)
@@ -1760,22 +1997,6 @@ void InitializeGPU(Window *w)
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			});
 		MakeDescriptorSetLayout(ShaderGlobalDescriptorSet, global);
-		auto view = MakeStaticArray<VkDescriptorSetLayoutBinding>(
-			{
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-			});
-		MakeDescriptorSetLayout(ShaderViewDescriptorSet, view);
-		auto material = MakeStaticArray<VkDescriptorSetLayoutBinding>(
-			{
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-			});
-		MakeDescriptorSetLayout(ShaderMaterialDescriptorSet, material);
 		auto object = MakeStaticArray<VkDescriptorSetLayoutBinding>(
 			{
 				.binding = 0,
@@ -1784,49 +2005,38 @@ void InitializeGPU(Window *w)
 				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 			});
 		MakeDescriptorSetLayout(ShaderObjectDescriptorSet, object);
-		vkBufferDescriptorAllocators[ShaderGlobalDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderGlobalDescriptorSet, 1, sizeof(GPUGlobalUniforms));
-		vkBufferDescriptorAllocators[ShaderViewDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderViewDescriptorSet, VulkanViewUniformsPerSet, sizeof(GPUViewUniforms));
-		vkBufferDescriptorAllocators[ShaderMaterialDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderMaterialDescriptorSet, VulkanMaterialUniformsPerSet, sizeof(GPUMaterialUniforms));
-		vkBufferDescriptorAllocators[ShaderObjectDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderObjectDescriptorSet, VulkanObjectUniformsPerSet, sizeof(GPUObjectUniforms));
-		#if 0
-		// Update.
-		{
-			auto bis = Array<VkDescriptorBufferInfo>{};
-			auto writes = Array<VkWriteDescriptorSet>{};
-			for (auto i = 0; i < vkSwapchainImages.count; i += 1)
+		auto material = MakeStaticArray<VkDescriptorSetLayoutBinding>(
 			{
-				for (auto j = 0; j < ShaderDescriptorSetCount; j += 1)
-				{
-					bis.Append(
-						{
-							.buffer = vkDescriptorGroups[i][j].buffers[0].vkBuffer,
-							.offset = (VkDeviceSize)vkDescriptorGroups[i][j].buffers[0].offset,
-							.range = (VkDeviceSize)vkDescriptorGroups[i][j].bufferCapacity,
-						});
-					writes.Append(
-						{
-							.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-							.dstSet = vkDescriptorSets[i][j],
-							.dstBinding = 0,
-							.dstArrayElement = 0,
-							.descriptorCount = 1,
-							.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-							.pBufferInfo = bis.Last(),
-						});
-				}
-				vkUpdateDescriptorSets(vkDevice, (u32)writes.count, writes.elements, 0, NULL); // No return.
-			}
-		}
-		#endif
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+			});
+		MakeDescriptorSetLayout(ShaderMaterialDescriptorSet, material);
+		vkBufferDescriptorAllocators[ShaderGlobalDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderGlobalDescriptorSet, 1, sizeof(GPUGlobalUniforms));
+		vkBufferDescriptorAllocators[ShaderObjectDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderObjectDescriptorSet, VulkanObjectUniformsPerSet, sizeof(GPUObjectUniforms));
+		vkBufferDescriptorAllocators[ShaderMaterialDescriptorSet] = NewVulkanBufferDescriptorAllocator(ShaderMaterialDescriptorSet, VulkanMaterialUniformsPerSet, sizeof(GPUMaterialUniforms));
+#endif
+		vkBufferUniformAllocators[ShaderObjectDescriptorSet] = NewVulkanBufferUniformAllocator(ShaderObjectDescriptorSet, VulkanObjectUniformsPerSet, sizeof(GPUObjectUniforms));
+		vkBufferUniformAllocators[ShaderMaterialDescriptorSet] = NewVulkanBufferUniformAllocator(ShaderMaterialDescriptorSet, VulkanMaterialUniformsPerSet, sizeof(GPUMaterialUniforms));
 	}
 	// Pipeline layout.
 	{
+		auto pcs = MakeStaticArray<VkPushConstantRange>(
+			{
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+				.offset = 0,
+				.size = 8,
+			}
+		);
 		auto ci = VkPipelineLayoutCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = (u32)vkDescriptorSetLayouts.Count(),
-			.pSetLayouts = vkDescriptorSetLayouts.elements,
-			.pushConstantRangeCount = 0,
+			//.setLayoutCount = (u32)vkDescriptorSetLayouts.Count(),
+			//.pSetLayouts = vkDescriptorSetLayouts.elements,
+			.setLayoutCount = 0,
+			.pushConstantRangeCount = (u32)pcs.Count(),
+			.pPushConstantRanges = pcs.elements,
 		};
 		VkCheck(vkCreatePipelineLayout(vkDevice, &ci, NULL, &vkPipelineLayout));
 	}
@@ -1900,8 +2110,8 @@ void InitializeGPU(Window *w)
 	for (auto i = 0; i < vkDefaultFramebufferAttachments.count; i += 1)
 	{
 		vkDefaultFramebufferAttachments[i].SetAllocator(GlobalAllocator());
-		vkDefaultFramebufferAttachments[i].Append({vkSwapchainImageViews[i]});
-		vkDefaultFramebufferAttachments[i].Append({vkDefaultDepthImageView});
+		vkDefaultFramebufferAttachments[i].Append(vkSwapchainImageViews[i]);
+		vkDefaultFramebufferAttachments[i].Append(vkDefaultDepthImageView);
 	}
 	{
 		vkChangeImageOwnershipFromGraphicsToPresentQueueCommands.Resize(vkSwapchainImages.count);
@@ -1940,11 +2150,9 @@ void InitializeGPU(Window *w)
 
 const auto VulkanVertexBufferBindID = 0;
 
-VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
+VkPipeline MakeVulkanPipeline(String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp)
 {
-	switch (id)
-	{
-	case GPUModelShaderID:
+	if (shaderFilename == "Model.glsl")
 	{
 		auto assemblyCI = VkPipelineInputAssemblyStateCreateInfo
 		{
@@ -2020,34 +2228,15 @@ VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
 			.pAttachments = blendStates.elements,
 			.blendConstants = {},
 		};
-		auto vertAttrs = MakeStaticArray(
-			VkVertexInputAttributeDescription
-			{
-				.location = 0,
-				.binding = VulkanVertexBufferBindID,
-				.format = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset = offsetof(Vertex1P1N, position),
-			},
-			VkVertexInputAttributeDescription
-			{
-				.location = 1,
-				.binding = VulkanVertexBufferBindID,
-				.format = VK_FORMAT_R32G32B32_SFLOAT,
-				.offset = offsetof(Vertex1P1N, normal),
-			});
-		auto vertBindings = MakeStaticArray<VkVertexInputBindingDescription>(
-			{
-				.binding = VulkanVertexBufferBindID,
-				.stride = sizeof(Vertex1P1N),
-				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-			});
 		auto vertexCI = VkPipelineVertexInputStateCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = (u32)vertBindings.Count(),
-			.pVertexBindingDescriptions = vertBindings.elements,
-			.vertexAttributeDescriptionCount = (u32)vertAttrs.Count(),
-			.pVertexAttributeDescriptions = vertAttrs.elements,
+			.vertexBindingDescriptionCount = 0,
+			.vertexAttributeDescriptionCount = 0,
+			//.vertexBindingDescriptionCount = (u32)vertBindings.Count(),
+			//.pVertexBindingDescriptions = vertBindings.elements,
+			//.vertexAttributeDescriptionCount = (u32)vertAttrs.Count(),
+			//.pVertexAttributeDescriptions = vertAttrs.elements,
 		};
 		auto dynStates = MakeStaticArray<VkDynamicState>(
 			VK_DYNAMIC_STATE_VIEWPORT,
@@ -2058,14 +2247,14 @@ VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
 			.dynamicStateCount = (u32)dynStates.Count(),
 			.pDynamicStates = dynStates.elements,
 		};
-		auto stages = Array<VkPipelineShaderStageCreateInfo>{};
-		for (auto i = 0; i < s.vkModules.count; i += 1)
+		auto stageCIs = Array<VkPipelineShaderStageCreateInfo>{};
+		for (auto i = 0; i < modules.count; i += 1)
 		{
-			stages.Append(
+			stageCIs.Append(
 				{
 					.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-					.stage = s.vkStages[i],
-					.module = s.vkModules[i],
+					.stage = stages[i],
+					.module = modules[i],
 					.pName = "main",
 				}
 			);
@@ -2073,8 +2262,8 @@ VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
 		auto ci = VkGraphicsPipelineCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-			.stageCount = (u32)stages.count,
-			.pStages = stages.elements,
+			.stageCount = (u32)stageCIs.count,
+			.pStages = stageCIs.elements,
 			.pVertexInputState = &vertexCI,
 			.pInputAssemblyState = &assemblyCI,
 			.pViewportState = &viewportCI,
@@ -2092,14 +2281,12 @@ VkPipeline MakeVulkanPipeline(GPUShaderID id, VulkanShader s, VkRenderPass rp)
 		auto p = VkPipeline{};
 		VkCheck(vkCreateGraphicsPipelines(vkDevice, vkPipelineCache, 1, &ci, NULL, &p));
 		return p;
-	} break;
-	case GPUShaderIDCount:
-	default:
-	{
-		LogError("Vulkan", "Failed to find pipeline creation code for shader %k.", GPUShaderName(id));
-	} break;
 	}
-	return {};
+	else
+	{
+		LogError("Vulkan", "Failed to make pipeline: unknown shader %k.", shaderFilename);
+	}
+	return VkPipeline{};
 }
 
 VkCommandBuffer NewVulkanCommandBuffer(Array<VkCommandBuffer> *recycle, VkCommandPool p)
@@ -2226,10 +2413,24 @@ void GPUAsyncComputeCommandBuffer::Queue(bool *signalOnCompletion)
 
 VkFramebuffer MakeVulkanFramebuffer(VkRenderPass rp, GPUFramebuffer fb)
 {
-	auto vkFB = vkFramebufferCache.Lookup({rp, fb.id}, 0);
-	if (vkFB)
+	if (fb.id == 0)
 	{
-		return vkFB;
+		fb = GPUFramebuffer
+		{
+			.id = vkSwapchainImageIndex,
+			.width = (u32)RenderWidth(),
+			.height = (u32)RenderHeight(),
+			.attachments = vkDefaultFramebufferAttachments[vkSwapchainImageIndex],
+		};
+	}
+	auto key = VulkanFramebufferKey
+	{
+		.vkRenderPass = rp,
+		.framebufferID = fb.id,
+	};
+	if (auto vkFB = vkFramebufferCache.Lookup(key); vkFB)
+	{
+		return *vkFB;
 	}
 	auto ci = VkFramebufferCreateInfo
 	{
@@ -2237,32 +2438,22 @@ VkFramebuffer MakeVulkanFramebuffer(VkRenderPass rp, GPUFramebuffer fb)
 		.renderPass = rp,
 		.attachmentCount = (u32)fb.attachments.count,
 		.pAttachments = (VkImageView *)fb.attachments.elements, // @TODO: ... not thrilled about this
-		.width = (u32)fb.w,
-		.height = (u32)fb.h,
+		.width = fb.width,
+		.height = fb.height,
 		.layers = 1,
 	};
+	auto vkFB = VkFramebuffer{};
 	VkCheck(vkCreateFramebuffer(vkDevice, &ci, NULL, &vkFB));
-	vkFramebufferCache.Insert({rp, fb.id}, vkFB);
+	vkFramebufferCache.Insert(key, vkFB);
 	return vkFB;
 }
 
-void GPUCommandBuffer::BeginRenderPass(GPUShaderID sid, GPUFramebuffer fb)
+void GPUCommandBuffer::BeginRenderPass(GPUShader s, GPUFramebuffer fb)
 {
-	Assert(fb.id > vkSwapchainImages.count || fb.id == vkSwapchainImageIndex);
-	auto rp = vkRenderPasses[sid];
-	if (!rp)
-	{
-		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader renderpass.");
-		return;
-	}
-	auto vkFB = MakeVulkanFramebuffer(rp, fb);
-	auto p = vkPipelines[sid];
-	if (!p)
-	{
-		LogError("Vulkan", "Failed command buffer BeginRendering: could not find shader pipeline.");
-		return;
-	}
-	vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+	Assert(s.vkRenderPass);
+	Assert(s.vkPipeline);
+	auto vkFB = MakeVulkanFramebuffer(s.vkRenderPass, fb);
+	vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s.vkPipeline);
 	auto clearColor = VkClearValue
 	{
 		.color.float32 = {0.04f, 0.19f, 0.34f, 1.0f},
@@ -2276,7 +2467,7 @@ void GPUCommandBuffer::BeginRenderPass(GPUShaderID sid, GPUFramebuffer fb)
 	auto bi = VkRenderPassBeginInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = rp,
+		.renderPass = s.vkRenderPass,
 		.framebuffer = vkFB,
 		.renderArea =
 		{
@@ -2286,15 +2477,6 @@ void GPUCommandBuffer::BeginRenderPass(GPUShaderID sid, GPUFramebuffer fb)
 		.clearValueCount = (u32)clearValues.Count(),
 		.pClearValues = clearValues.elements,
 	};
-	// @TODO:
-	auto sets = Array<VkDescriptorSet>{};
-	for (auto i = 0; i < ShaderDescriptorSetCount; i += 1)
-	{
-		sets.Append(vkBufferDescriptorAllocators[i].vkDescriptorSets[vkSwapchainImageIndex][0]);
-	}
-	//for (auto i = 0; i < 
-	for (auto i = 0; i < ShaderDescriptorSetCount; i += 1)
-	vkCmdBindDescriptorSets(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, i, 1, &vkBufferDescriptorAllocators[i].vkDescriptorSets[vkSwapchainImageIndex][0], 0, NULL);
 	vkCmdBeginRenderPass(this->vkCommandBuffer, &bi, VK_SUBPASS_CONTENTS_INLINE);
 }
 
@@ -2695,7 +2877,7 @@ void FreeGPUFences(ArrayView<GPUFence> fs)
 	}
 }
 
-const auto VulkanAcquireImageTimeout = SecondsToNanoseconds(2);
+const auto VulkanAcquireImageTimeout = 2 * TimeSecond;
 
 void GPUBeginFrame()
 {
@@ -2811,11 +2993,9 @@ void GPUEndFrame()
 	vkFrameIndex = (vkFrameIndex + 1) % VulkanMaxFramesInFlight;
 }
 
-VkRenderPass MakeVulkanRenderPass(GPUShaderID sid)
+VkRenderPass MakeVulkanRenderPass(String shaderFilename)
 {
-	switch (sid)
-	{
-	case GPUModelShaderID:
+	if (shaderFilename == "Model.glsl")
 	{
 		VkAttachmentDescription attachments[] =
 		{
@@ -2886,73 +3066,50 @@ VkRenderPass MakeVulkanRenderPass(GPUShaderID sid)
 		VkRenderPass renderPass;
 		VkCheck(vkCreateRenderPass(vkDevice, &renderPassCreateInfo, NULL, &renderPass));
 		return renderPass;
-	} break;
-	case GPUShaderIDCount:
-	default:
-	{
-		LogError("Vulkan", "Unknown shader id %d.", sid);
-	} break;
 	}
-	return {};
+	else
+	{
+		LogError("Vulkan", "Failed to make render pass: unknown shader %k.", shaderFilename);
+	}
+	return VkRenderPass{};
 }
 
-void GPUCompileShaderFromFile(GPUShaderID id, String path, bool *err)
+GPUShader CompileGPUShader(String filename, bool *err)
 {
-	auto spirv = GenerateVulkanSPIRV(path, err);
+	auto spirv = CompileGPUShaderToSPIRV(filename, err);
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to generate SPIRV for file %k.", path);
-		return;
+		LogError("Vulkan", "Failed to generate SPIRV for file %k.", filename);
+		return {};
 	}
-	auto s = VulkanShader
+	auto s = GPUShader
 	{
 		.vkStages = spirv.stages,
 	};
-	for (auto fp : spirv.filepaths)
+	for (auto bc : spirv.stageByteCode)
 	{
-		auto spirv = ReadEntireFile(fp, err);
-		if (*err)
-		{
-			LogError("Vulkan", "Failed to read SPIRV file %k from shader %k.", fp, path);
-			return;
-		}
 		auto ci = VkShaderModuleCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = (u32)spirv.count,
-			.pCode = (u32 *)spirv.elements,
+			.codeSize = (u32)bc.count,
+			.pCode = (u32 *)bc.elements,
 		};
 		auto m = VkShaderModule{};
 		VkCheck(vkCreateShaderModule(vkDevice, &ci, NULL, &m));
 		s.vkModules.Append(m);
 	}
-	vkShaders[id] = s;
-	auto rp = MakeVulkanRenderPass(id);
-	vkRenderPasses[id] = rp;
-	vkPipelines[id] = MakeVulkanPipeline(id, s, rp);
+	s.vkRenderPass = MakeVulkanRenderPass(filename);
+	s.vkPipeline = MakeVulkanPipeline(filename, s.vkStages, s.vkModules, s.vkRenderPass);
+	return s;
 }
 
-GPUUniform NewGPUUniform(s64 set)
+GPUUniform NewGPUUniform(String s, s64 set)
 {
-	return vkBufferDescriptorAllocators[set].Allocate();
-#if 0
-	// @TODO: What if we run out of space in the storage buffer?
-	auto g = &vkDescriptorGroups[vkSwapchainImageIndex][set];
-	if (g->elementIndex >= g->elementCapacity)
-	{
-		Assert(0);
-		g->buffers.Append(vkGPUStorageBlockAllocator.AllocateBuffer(g->bufferCapacity, 0x100, NULL));
-		g->elementIndex = 0;
-	}
-	auto u = GPUUniform
+	return
 	{
 		.set = set,
-		.bufferIndex = g->buffers.count - 1,
-		.elementIndex = g->elementIndex,
+		.instances = MakeArrayIn<VulkanUniformInstance>(GlobalAllocator(), vkBufferUniformAllocators[set].AllocateInstance()),
 	};
-	g->elementIndex += 1;
-	return u;
-#endif
 }
 
 void UpdateGPUUniforms(ArrayView<GPUUniformBufferWriteDescription> bs, ArrayView<GPUUniformImageWriteDescription> is)
@@ -2961,39 +3118,59 @@ void UpdateGPUUniforms(ArrayView<GPUUniformBufferWriteDescription> bs, ArrayView
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	for (auto b : bs)
 	{
-		auto a = &vkBufferDescriptorAllocators[b.uniform.set];
-		auto sb = NewGPUFrameStagingBufferX(a->buffers[vkSwapchainImageIndex][b.uniform.blockIndex], a->elementSize, b.uniform.elementIndex * a->elementSize);
+		auto a = &vkBufferUniformAllocators[b.uniform->set];
+		auto allInUse = true;
+		for (auto i = 0; i < b.uniform->instances.count; i += 1)
+		{
+			if (!b.uniform->instances[i].inUse)
+			{
+				allInUse = false;
+				b.uniform->index = i;
+				break;
+			}
+		}
+		if (allInUse)
+		{
+			b.uniform->instances.Append(a->AllocateInstance());
+			b.uniform->index = b.uniform->instances.count - 1;
+		}
+		Assert(b.uniform->instances.count <= vkSwapchainImages.count);
+		auto inst = b.uniform->instances.Last();
+		auto sb = NewGPUFrameStagingBufferX(inst->buffer, a->elementSize, inst->elementIndex * a->elementSize);
 		CopyArray(NewArrayView((u8 *)b.data, a->elementSize), NewArrayView((u8 *)sb.Map(), a->elementSize));
 		sb.FlushIn(cb);
 	}
 	cb.Queue();
 }
 
-GPUFramebuffer NewGPUFramebuffer(s64 w, s64 h, ArrayView<GPUImageView> attachments)
+GPUFramebuffer NewGPUFramebuffer(u32 w, u32 h, ArrayView<GPUImageView> attachments)
 {
-	static auto idGenerator = (u64)vkSwapchainImages.count;
+	static auto idGenerator = u64{0};
 	auto id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, 1);
+	// The first few identifiers are reserved for the default swapchain framebuffer.
 	if (id < vkSwapchainImages.count)
 	{
-		id = AtomicFetchAndAdd64((s64 *)&idGenerator, vkSwapchainImages.count);
+		id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, vkSwapchainImages.count);
 	}
-	return
+	auto fb = GPUFramebuffer
 	{
 		.id = id,
-		.w = w,
-		.h = h,
-		.attachments = attachments.CopyIn(GlobalAllocator()),
+		.width = w,
+		.height = h,
+		.attachments = NewArrayWithCapacityIn<VkImageView>(GlobalAllocator(), attachments.count),
 	};
+	for (auto a : attachments)
+	{
+		fb.attachments.Append(a.vkImageView);
+	}
+	return fb;
 }
 
 GPUFramebuffer GPUDefaultFramebuffer()
 {
 	return
 	{
-		.id = vkSwapchainImageIndex,
-		.w = RenderWidth(),
-		.h = RenderHeight(),
-		.attachments = vkDefaultFramebufferAttachments[vkSwapchainImageIndex],
+		.id = 0,
 	};
 }
 

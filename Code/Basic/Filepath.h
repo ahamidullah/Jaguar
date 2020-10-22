@@ -10,6 +10,8 @@ void FilepathExtensionIn(StringBuilder *sb, String path);
 String FilepathExtension(String path);
 void SetFilepathExtensionIn(StringBuilder *path, String ext);
 String SetFilepathExtension(String path, String ext);
+void FilepathFilenameNoExtIn(StringBuilder *sb, String path);
+String FilepathFilenameNoExt(String path);
 
 template <typename... StringPack>
 String JoinFilepaths(StringPack... sp)

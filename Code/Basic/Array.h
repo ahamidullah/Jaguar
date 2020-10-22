@@ -10,11 +10,11 @@ template <typename T> struct Array;
 template <typename T> struct ArrayView;
 
 template <typename T>
-s64 ArrayFindFirst(ArrayView<T> *a, T e)
+s64 ArrayFindFirst(ArrayView<T> a, T e)
 {
-	for (auto i = 0; i < a->count; i += 1)
+	for (auto i = 0; i < a.count; i += 1)
 	{
-		if ((*a)[i] == e)
+		if (a[i] == e)
 		{
 			return i;
 		}
@@ -23,12 +23,12 @@ s64 ArrayFindFirst(ArrayView<T> *a, T e)
 }
 
 template <typename T>
-s64 ArrayFindLast(ArrayView<T> *a, T e)
+s64 ArrayFindLast(ArrayView<T> a, T e)
 {
 	auto last = -1;
-	for (auto i = 0; i < a->count; i += 1)
+	for (auto i = 0; i < a.count; i += 1)
 	{
-		if ((*a)[i] == e)
+		if (a[i] == e)
 		{
 			last = i;
 		}
@@ -166,25 +166,24 @@ template <typename T>
 Array<T> ArrayView<T>::CopyRangeIn(Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
-	auto r = NewArrayIn<T>(a, end - start);
-	CopyArray(this->View(start, end), r);
-	return r;
+	auto ar = NewArrayIn<T>(a, end - start);
+	CopyArray(this->View(start, end), ar);
+	return ar;
 }
 
 template <typename T>
 s64 ArrayView<T>::FindFirst(T e)
 {
-	return ArrayFindFirst<T>(this, e);
+	return ArrayFindFirst<T>(*this, e);
 }
 
 template <typename T>
 s64 ArrayView<T>::FindLast(T e)
 {
-	return ArrayFindLast<T>(this, e);
+	return ArrayFindLast<T>(*this, e);
 }
 
-// Implicit type conversion does not work with template functions, so we'll have to create overloads
-// of CopyArray for each combination of Array, StaticArray, and ArrayView.
+// Implicit type conversion does not work with template functions, so we'll have to create overloads of CopyArray for each combination of Array, StaticArray, and ArrayView.
 // C++ sucks!
 
 template <typename T>
@@ -242,6 +241,7 @@ struct Array
 	bool operator!=(Array<T> a);
 	T *begin();
 	T *end();
+	void Free();
 	void SetAllocator(Allocator *a);
 	void Reserve(s64 reserve);
 	void Resize(s64 count);
@@ -249,8 +249,8 @@ struct Array
 	void AppendAll(ArrayView<T> a);
 	void OrderedRemove(s64 index);
 	void UnorderedRemove(s64 index);
-	typedef bool (*SiftProcedure)(T t);
-	ArrayView<T> Sift(SiftProcedure s);
+	typedef bool (*SiftProcedure)(T e);
+	ArrayView<T> Sift(SiftProcedure p);
 	Array<T> Copy();
 	Array<T> CopyIn(Allocator *a);
 	Array<T> CopyRange(s64 start, s64 end);
@@ -296,20 +296,20 @@ Array<T> NewArray(s64 count)
 }
 
 template <typename T>
-Array<T> NewArrayWithCapacityIn(Allocator *a, s64 capacity)
+Array<T> NewArrayWithCapacityIn(Allocator *a, s64 cap)
 {
 	return
 	{
 		.allocator = a,
-		.elements = (T *)a->Allocate(capacity * sizeof(T)),
-		.capacity = capacity,
+		.elements = (T *)a->Allocate(cap * sizeof(T)),
+		.capacity = cap,
 	};
 }
 
 template <typename T>
-Array<T> NewArrayWithCapacity(s64 capacity)
+Array<T> NewArrayWithCapacity(s64 cap)
 {
-	return NewArrayWithCapacityIn<T>(ContextAllocator(), capacity);
+	return NewArrayWithCapacityIn<T>(ContextAllocator(), cap);
 }
 
 template <typename T>
@@ -426,15 +426,13 @@ ArrayView<T> Array<T>::View(s64 start, s64 end)
 template <typename T>
 s64 Array<T>::FindFirst(T e)
 {
-	auto v = this->View(0, this->count);
-	return ArrayFindFirst<T>(&v, e);
+	return ArrayFindFirst<T>(*this, e);
 }
 
 template <typename T>
 s64 Array<T>::FindLast(T e)
 {
-	auto v = this->View(0, this->count);
-	return ArrayFindLast<T>(&v, e);
+	return ArrayFindLast<T>(*this, e);
 }
 
 template <typename T>
@@ -514,14 +512,14 @@ void Array<T>::UnorderedRemove(s64 i)
 }
 
 template <typename T>
-ArrayView<T> Array<T>::Sift(SiftProcedure s)
+ArrayView<T> Array<T>::Sift(SiftProcedure p)
 {
 	auto numValid = 0, numInvalid = 0;
 	auto i = 0;
 	auto count = this->count;
 	while (count > 0)
 	{
-		if (!s((*this)[i]))
+		if (!p((*this)[i]))
 		{
 			(*this)[i] = (*this)[this->count - 1 - numInvalid];
 			numInvalid += 1;
@@ -540,7 +538,6 @@ ArrayView<T> Array<T>::Sift(SiftProcedure s)
 	};
 }
 
-#if 0
 template <typename T>
 void Array<T>::Free()
 {
@@ -553,7 +550,6 @@ void Array<T>::Free()
 	this->capacity = 0;
 	this->elements = NULL;
 }
-#endif
 
 template <typename T>
 T Array<T>::Pop()
@@ -621,7 +617,7 @@ StaticArray<T, N>::operator ArrayView<T>()
 {
 	return ArrayView<T>
 	{
-		.elements = elements,
+		.elements = this->elements,
 		.count = N,
 	};
 }
@@ -630,14 +626,14 @@ template <typename T, s64 N>
 T &StaticArray<T, N>::operator[](s64 i)
 {
 	Assert(i >= 0 && i < N);
-	return elements[i];
+	return this->elements[i];
 }
 
 template <typename T, s64 N>
 const T &StaticArray<T, N>::operator[](s64 i) const
 {
 	Assert(i >= 0 && i < N);
-	return elements[i];
+	return this->elements[i];
 }
 
 template <typename T, s64 N>
@@ -707,13 +703,11 @@ ArrayView<u8> StaticArray<T, N>::Bytes()
 template <typename T, s64 N>
 s64 StaticArray<T, N>::FindFirst(T e)
 {
-	auto v = this->View(0, N);
-	return ArrayFindFirst(&v, e);
+	return ArrayFindFirst(*this, e);
 }
 
 template <typename T, s64 N>
 s64 StaticArray<T, N>::FindLast(T e)
 {
-	auto v = this->View(0, N);
-	return ArrayFindLast<T>(&v, e);
+	return ArrayFindLast<T>(*this, e);
 }

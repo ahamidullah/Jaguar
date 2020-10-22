@@ -134,7 +134,6 @@ void RunGame(void *)
 		RunJobs(j, NormalJobPriority, NULL);
 		//c->Wait();
 	}
-	#else
 		for (auto i = 0; i < 100000; i += 1)
 		{
 			for (auto k = 0; k < 1; k += 1)
@@ -165,8 +164,7 @@ void RunGame(void *)
 	#endif
 	while (true)
 	{
-		//c->Wait();
-		t.Print(MillisecondScale);
+		t.Print(TimeMillisecond);
 		t.Reset();
 		auto winEvents = ProcessInput(&win);
 		if (winEvents.quit)

@@ -9,8 +9,6 @@
 #include "Thread.h"
 #include "Array.h"
 
-void InitializeMemory();
-
 struct AllocatorBlocks
 {
 	s64 blockSize;
@@ -80,6 +78,8 @@ struct SlotAllocator : Allocator
 
 SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlignment, s64 slotCount, s64 slotsPerBlock, Allocator *blockAlloc, Allocator *arrayAlloc);
 
+// @TODO: Get rid of the NullAllocator...
+
 struct NullAllocator : Allocator
 {
 	void *Allocate(s64 size);
@@ -136,4 +136,3 @@ void *AlignPointer(void *addr, s64 align);
 void PushContextAllocator(Allocator *a);
 void PopContextAllocator();
 Allocator *ContextAllocator();
-void SetContextAllocator(Allocator *a);

@@ -7,6 +7,12 @@
 #endif
 #include "String.h"
 
+const auto TimeNanosecond = 1LL;
+const auto TimeMillisecond = 1000000LL;
+const auto TimeSecond = 1000000000LL;
+const auto TimeMinute = 60000000000LL;
+const auto TimeHour = 1200000000000LL;
+
 struct Timer
 {
 	String name;
@@ -21,15 +27,3 @@ struct Timer
 };
 
 Timer NewTimer(String name);
-
-s64 SecondsToNanoseconds(s64 s);
-s64 NanosecondsToMilliseconds(s64 n);
-s64 NanosecondsToSeconds(s64 n);
-s64 NanosecondsToMinutes(s64 n);
-s64 NanosecondsToHours(s64 n);
-
-const auto NanosecondScale = 1LL;
-const auto MillisecondScale = 1000000LL;
-const auto SecondScale = 1000000000LL;
-const auto MinuteScale = 60000000000LL;
-const auto HourScale = 1200000000000LL;

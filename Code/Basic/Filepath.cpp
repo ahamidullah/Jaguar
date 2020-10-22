@@ -38,6 +38,34 @@ String FilepathFilename(String path)
 	return NewStringFromBuffer(sb.buffer);
 }
 
+void FilepathFilenameNoExtIn(StringBuilder *sb, String path)
+{
+	auto start = 0;
+	auto slash = path.FindLast('/');
+	if (slash < 0)
+	{
+		start = 0;
+	}
+	else
+	{
+		start = slash + 1;
+	}
+	auto dot = path.FindLast('.');
+	if (dot <= start)
+	{
+		return;
+	}
+	Assert(dot > 0);
+	sb->Append(path.View(start, dot));
+}
+
+String FilepathFilenameNoExt(String path)
+{
+	auto sb = StringBuilder{};
+	FilepathFilenameNoExtIn(&sb, path);
+	return NewStringFromBuffer(sb.buffer);
+}
+
 // FilepathExtension returns the file extension including the dot.
 void FilepathExtensionIn(StringBuilder *sb, String path)
 {

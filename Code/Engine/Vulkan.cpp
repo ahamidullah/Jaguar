@@ -539,7 +539,7 @@ GPURenderPacket NewGPURenderPacket(GPUMesh *mesh, GPUMaterial *mat)
 // @TODO: Persistent mesh group.
 
 #if 0
-void MakeVulkanDrawCommands(s64 meshIndOffset, ArrayView<GPURenderPacket> ps, ArrayView<s64> pktInds, ArrayView<VkDrawIndexedIndirectCommand> cmds)
+void MakeVulkanDrawCommands(s64 meshIndOffset, ArrayView<GPURenderPacket> ps, ArrayView<s64> pktInds, ArrayView<VkDrawIndirectCommand> cmds)
 {
 	auto ci = 0;
 	auto meshInd = meshIndOffset;
@@ -548,7 +548,7 @@ void MakeVulkanDrawCommands(s64 meshIndOffset, ArrayView<GPURenderPacket> ps, Ar
 		for (auto j = 0; j < ps[i].mesh->asset->submeshes.count; j += 1)
 		{
 			auto nInsts = 1;
-			cmds[ci] = VkDrawIndexedIndirectCommand
+			cmds[ci] = VkDrawIndirectCommand
 			{
 				.indexCount = ps[i].mesh->asset->submeshes[j].indexCount,
 				.instanceCount = nInsts,
@@ -565,27 +565,31 @@ void MakeVulkanDrawCommands(s64 meshIndOffset, ArrayView<GPURenderPacket> ps, Ar
 
 struct VulkanDrawData
 {
+	V4 p1;
+	V4 p2;
+	V4 p3;
 	u64 vertexBuffer;
-	u64 indexBuffer;
+	//u64 indexBuffer;
 	u64 mesh;
 	//u64 material;
 };
 
-auto vkDrawBuffer = GPUBuffer{};
+////////auto vkDrawBuffer = GPUBuffer{};
+//auto vkDrawBuffer = VkBuffer{};
 
-VkDeviceAddress VulkanBufferAddress(GPUBuffer b)
+VkDeviceAddress VulkanBufferAddress(VkBuffer b)
 {
 	auto i = VkBufferDeviceAddressInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-		.buffer = b.vkBuffer,
+		.buffer = b,
 	};
 	auto a = vkGetBufferDeviceAddress(vkDevice, &i);
 	Assert(a);
-	a += b.offset;
 	return a;
 };
 
+VkBuffer NewVulkanBuffer(VkBufferUsageFlags u, s64 size);
 GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<Array<GPUUniform>> lateBindings)
 {
 	auto nDraws = 0;
@@ -596,7 +600,34 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 	auto ib = NewGPUFrameIndirectBuffer(nDraws * sizeof(VkDrawIndexedIndirectCommand));
 	auto sb = NewGPUFrameStagingBufferX(ib, nDraws * sizeof(VkDrawIndexedIndirectCommand), 0);
 	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), nDraws);
-	vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), vkMinStorageBufferOffsetAlignment, NULL);
+	auto vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), 1, NULL);
+	/*
+		auto vkDrawBuffer = NewVulkanBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, nDraws * sizeof(VulkanDrawData));
+		auto mr = VkMemoryRequirements{};
+		vkGetBufferMemoryRequirements(vkDevice, vkDrawBuffer, &mr);
+		auto fi = VkMemoryAllocateFlagsInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+		};
+		auto ai = VkMemoryAllocateInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+			.allocationSize = (VkDeviceSize)mr.size,
+			.memoryTypeIndex = vkMemoryTypeToMemoryIndex[VulkanGPUMemory],
+		};
+		fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+		fi.deviceMask = 1;
+		ai.pNext = &fi;
+		auto mem = VkDeviceMemory{};
+		auto rc = vkAllocateMemory(vkDevice, &ai, NULL, &mem);
+		VkCheck(rc);
+		if (rc == VK_ERROR_OUT_OF_DEVICE_MEMORY || rc == VK_ERROR_OUT_OF_HOST_MEMORY)
+		{
+			Abort("Vulkan", "Failed to allocate memory for block allocator."); // @TODO
+		}
+		VkCheck(vkBindBufferMemory(vkDevice, vkDrawBuffer, mem, 0));
+	*/
+	//auto dsb = NewGPUFrameStagingBufferX(GPUBuffer{vkDrawBuffer, 0}, nDraws * sizeof(VulkanDrawData), 0);
 	auto dsb = NewGPUFrameStagingBufferX(vkDrawBuffer, nDraws * sizeof(VulkanDrawData), 0);
 	auto dd = NewArrayView((VulkanDrawData *)dsb.Map(), nDraws);
 	auto di = 0;
@@ -606,12 +637,17 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 		{
 			dd[di] = VulkanDrawData
 			{
-				.vertexBuffer = VulkanBufferAddress(p.mesh->asset->vertexBuffer),
-				.indexBuffer = VulkanBufferAddress(p.mesh->asset->indexBuffer),
-				.mesh = VulkanBufferAddress(p.mesh->uniform.instances[p.mesh->uniform.index].buffer),
+				.p1 = V4{0.0f, 0.0f, 0.0f, 1.0f},
+				.p2 = V4{1.0f, 1.0f, 0.0f, 1.0f},
+				.p3 = V4{0.5f, -0.5f, 0.0f, 1.0f},
+				.vertexBuffer = VulkanBufferAddress(p.mesh->asset->vertexBuffer.vkBuffer),
+				//.indexBuffer = VulkanBufferAddress(p.mesh->asset->indexBuffer),
+				.mesh = VulkanBufferAddress(p.mesh->uniform.instances[p.mesh->uniform.index].buffer.vkBuffer) + p.mesh->uniform.instances[p.mesh->uniform.index].buffer.offset,
 			};
 			cmds[di] = VkDrawIndexedIndirectCommand
 			{
+				//.vertexCount = sm.indexCount,
+				//.instanceCount = 1,
 				.indexCount = sm.indexCount,
 				.instanceCount = 1,
 				.firstIndex = p.mesh->asset->firstIndex,
@@ -620,11 +656,14 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 			di += 1;
 		}
 	}
+	sb.Flush();
+	dsb.Flush();
 	return
 	{
-		.drawBufferPointer = VulkanBufferAddress(vkDrawBuffer),
+		.drawBufferPointer = VulkanBufferAddress(vkDrawBuffer.vkBuffer) + vkDrawBuffer.offset,
 		.indirectCommands = ib,
 		.indirectCommandCount = nDraws,
+		.vkIndexBuffer = ps[0].mesh->asset->indexBuffer.vkBuffer,
 	};
 #if 0
 	// The work array is sized to support the maximum possible binding group index.
@@ -665,9 +704,9 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 			{
 				submeshCount += p->packets[pi].mesh->asset->submeshes.count;
 			}
-			auto ib = NewGPUFrameIndirectBuffer(submeshCount * sizeof(VkDrawIndexedIndirectCommand));
-			auto sb = NewGPUFrameStagingBufferX(ib, submeshCount * sizeof(VkDrawIndexedIndirectCommand), 0);
-			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), submeshCount);
+			auto ib = NewGPUFrameIndirectBuffer(submeshCount * sizeof(VkDrawIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, submeshCount * sizeof(VkDrawIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndirectCommand *)sb.Map(), submeshCount);
 			MakeVulkanDrawCommands(p->meshIndexOffset, p->packets, p->packetIndices, cmds);
 			sb.Flush();
 			*p->drawCall = VulkanDrawCall
@@ -707,7 +746,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 		{
 			ArrayView<GPURenderPacket> packets;
 			ArrayView<s64> packetIndices;
-			ArrayView<VkDrawIndexedIndirectCommand> commands;
+			ArrayView<VkDrawIndirectCommand> commands;
 			s64 meshIndexOffset;
 		};
 		auto MakeDrawCall = [](void *param)
@@ -725,9 +764,9 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 			{
 				continue;
 			}
-			auto ib = NewGPUFrameIndirectBuffer(work[i].count * sizeof(VkDrawIndexedIndirectCommand));
-			auto sb = NewGPUFrameStagingBufferX(ib, work[i].count * sizeof(VkDrawIndexedIndirectCommand), 0);
-			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), work[i].count);
+			auto ib = NewGPUFrameIndirectBuffer(work[i].count * sizeof(VkDrawIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, work[i].count * sizeof(VkDrawIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndirectCommand *)sb.Map(), work[i].count);
 			auto workSize = DivideAndRoundUp(work[i].count, WorkerThreadCount());
 			for (auto j = 0; j < WorkerThreadCount(); j += 1)
 			{
@@ -898,13 +937,13 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 		auto MakeGroup = [](void *param)
 		{
 			auto p = (MakeGroupParameter *)param;
-			auto cmds = NewGPUFrameIndirectBuffer(p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand));
-			auto s = NewGPUFrameStagingBufferX(cmds, p->meshIndices.count * sizeof(VkDrawIndexedIndirectCommand), 0);
-			auto b = NewArrayView((VkDrawIndexedIndirectCommand *)s.Map(), p->meshIndices.count);
+			auto cmds = NewGPUFrameIndirectBuffer(p->meshIndices.count * sizeof(VkDrawIndirectCommand));
+			auto s = NewGPUFrameStagingBufferX(cmds, p->meshIndices.count * sizeof(VkDrawIndirectCommand), 0);
+			auto b = NewArrayView((VkDrawIndirectCommand *)s.Map(), p->meshIndices.count);
 			for (auto i = 0; i < p->meshIndices.count; i += 1)
 			{
 				auto mi = p->meshIndices[i];
-				b[i] = VkDrawIndexedIndirectCommand
+				b[i] = VkDrawIndirectCommand
 				{
 					.indexCount = p->meshes[mi].indexCount,
 					.instanceCount = p->meshes[mi].instanceCount,
@@ -945,7 +984,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 		{
 			ArrayView<s64> meshIndices;
 			ArrayView<GPUMesh> meshes;
-			ArrayView<VkDrawIndexedIndirectCommand> commands;
+			ArrayView<VkDrawIndirectCommand> commands;
 			s64 start;
 			s64 end;
 		};
@@ -955,7 +994,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 			for (auto i = 0; i < p->meshIndices.count; i += 1)
 			{
 				auto mi = p->meshIndices[i];
-				p->commands[i] = VkDrawIndexedIndirectCommand
+				p->commands[i] = VkDrawIndirectCommand
 				{
 					.indexCount = p->meshes[mi].indexCount,
 					.instanceCount = p->meshes[mi].instanceCount,
@@ -969,9 +1008,9 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<A
 		auto sbs = NewArrayWithCapacity<GPUFrameStagingBuffer>(mergeHT.count);
 		for (auto e : mergeHT)
 		{
-			auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndexedIndirectCommand));
-			auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndexedIndirectCommand), 0);
-			auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), e.value.count);
+			auto ib = NewGPUFrameIndirectBuffer(e.value.count * sizeof(VkDrawIndirectCommand));
+			auto sb = NewGPUFrameStagingBufferX(ib, e.value.count * sizeof(VkDrawIndirectCommand), 0);
+			auto cmds = NewArrayView((VkDrawIndirectCommand *)sb.Map(), e.value.count);
 			auto workSize = DivideAndRoundUp(e.value.count, WorkerThreadCount());
 			for (auto i = 0; i < WorkerThreadCount(); i += 1)
 			{
@@ -1026,9 +1065,10 @@ void GPUCommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 		//vkCmdBindDescriptorSets(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipelineLayout, ShaderMaterialDescriptorSet, 1, &dc.bindingGroup->vkMaterialDescriptorSet[vkSwapchainImageIndex], 0, NULL);
 		//auto offset = (VkDeviceSize)0;
 		//vkCmdBindVertexBuffers(this->vkCommandBuffer, 0, 1, &dc.bindingGroup->vkVertexBuffer, &offset);
-		//vkCmdBindIndexBuffer(this->vkCommandBuffer, dc.bindingGroup->vkIndexBuffer, 0, GPUIndexTypeUint16);
-		vkCmdPushConstants(this->vkCommandBuffer, vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, &rb.drawBufferPointer);
+		vkCmdPushConstants(this->vkCommandBuffer, vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress), &rb.drawBufferPointer);
+		vkCmdBindIndexBuffer(this->vkCommandBuffer, rb.vkIndexBuffer, 0, GPUIndexTypeUint16);
 		this->DrawIndexedIndirect(rb.indirectCommands, rb.indirectCommandCount);
+		//vkCmdDrawIndirect(this->vkCommandBuffer, rb.indirectCommands.vkBuffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
 	//}
 }
 
@@ -1253,6 +1293,44 @@ VulkanMemoryBlockAllocator NewVulkanMemoryBlockAllocator(VulkanMemoryType mt, Vk
 
 GPUBuffer VulkanMemoryBlockAllocator::AllocateBuffer(s64 size, s64 align, void **map)
 {
+#if 0
+	auto mr = VkMemoryRequirements{};
+	auto buf = NewVulkanBuffer(this->bufferUsage, size);
+	vkGetBufferMemoryRequirements(vkDevice, buf, &mr);
+	auto fi = VkMemoryAllocateFlagsInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+	};
+	auto ai = VkMemoryAllocateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = (VkDeviceSize)mr.size,
+		.memoryTypeIndex = vkMemoryTypeToMemoryIndex[this->memoryType],
+	};
+	if (this->bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+	{
+		fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+		fi.deviceMask = 1;
+		ai.pNext = &fi;
+	}
+	auto mem = VkDeviceMemory{};
+	auto rc = vkAllocateMemory(vkDevice, &ai, NULL, &mem);
+	if (rc == VK_ERROR_OUT_OF_DEVICE_MEMORY || rc == VK_ERROR_OUT_OF_HOST_MEMORY)
+	{
+		Abort("Vulkan", "Failed to allocate memory for block allocator."); // @TODO
+	}
+	VkCheck(rc);
+	VkCheck(vkBindBufferMemory(vkDevice, buf, mem, 0));
+	if (this->mappable)
+	{
+		//VkCheck(vkMapMemory(vkDevice, newBlk.vkMemory, 0, this->blockSize, 0, &newBlk.map));
+	}
+	return
+	{
+		.vkBuffer = buf,
+		.offset = 0,
+	};
+#else
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
 	Assert(size < this->blockSize);
@@ -1260,12 +1338,22 @@ GPUBuffer VulkanMemoryBlockAllocator::AllocateBuffer(s64 size, s64 align, void *
 	{
 		auto newBlk = VulkanMemoryBlock{};
 		newBlk.vkBuffer = NewVulkanBuffer(this->bufferUsage, this->blockSize);
+		auto fi = VkMemoryAllocateFlagsInfo
+		{
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+		};
 		auto ai = VkMemoryAllocateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 			.allocationSize = (VkDeviceSize)this->bufferMemorySize,
 			.memoryTypeIndex = vkMemoryTypeToMemoryIndex[this->memoryType],
 		};
+		if (this->bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+		{
+			fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+			//fi.deviceMask = 2;
+			ai.pNext = &fi;
+		}
 		auto rc = vkAllocateMemory(vkDevice, &ai, NULL, &newBlk.vkMemory);
 		if (rc == VK_ERROR_OUT_OF_DEVICE_MEMORY || rc == VK_ERROR_OUT_OF_HOST_MEMORY)
 		{
@@ -1302,6 +1390,7 @@ GPUBuffer VulkanMemoryBlockAllocator::AllocateBuffer(s64 size, s64 align, void *
 	}
 	Assert(blk->frontier <= this->blockSize);
 	return b;
+#endif
 }
 
 #ifdef __linux__
@@ -1367,7 +1456,6 @@ void InitializeGPU(Window *w)
 	#undef VulkanDeviceFunction
 	auto reqDevExts = MakeStaticArray<const char *>(
 		"VK_KHR_swapchain",
-		"VK_EXT_descriptor_indexing",
 		"VK_EXT_memory_budget");
 	auto reqInstLayers = Array<const char *>{};
 	if (DebugBuild)
@@ -1493,22 +1581,50 @@ void InitializeGPU(Window *w)
 				vkGetPhysicalDeviceProperties(pd, &dp);
 				LogVerbose("Vulkan", "Considering graphics device %s.", dp.deviceName);
 			}
-			auto df = VkPhysicalDeviceFeatures{};
-			vkGetPhysicalDeviceFeatures(pd, &df);
-			if (!df.samplerAnisotropy)
+			auto df12 = VkPhysicalDeviceVulkan12Features
 			{
-				LogVerbose("Vulkan", "Skipping graphics device: missing device feature samplerAnisotropy.");
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+			};
+			auto df = VkPhysicalDeviceFeatures2
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+				.pNext = &df12,
+			};
+			vkGetPhysicalDeviceFeatures2(pd, &df);
+			if (!df.features.samplerAnisotropy)
+			{
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceFeatures2.features.samplerAnisotropy.");
 				continue;
 			}
-			if (!df.shaderSampledImageArrayDynamicIndexing)
+			if (!df.features.shaderSampledImageArrayDynamicIndexing)
 			{
-				LogVerbose("Vulkan", "Skipping graphics device: missing device feature shaderSampledImageArrayDynamicIndexing.");
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceFeatures2.features.shaderSampledImageArrayDynamicIndexing.");
 				continue;
 			}
-			if (!df.multiDrawIndirect)
+			if (!df.features.multiDrawIndirect)
 			{
-				LogVerbose("Vulkan", "Skipping graphics device: missing device feature multiDrawIndirect.");
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceFeatures2.features.multiDrawIndirect.");
 				continue;
+			}
+			if (!df.features.shaderInt64)
+			{
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceFeatures2.features.shaderInt64.");
+				continue;
+			}
+			if (!df12.shaderUniformBufferArrayNonUniformIndexing)
+			{
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceVulkan12Features.shaderUniformBufferArrayNonUniformIndexing");
+				continue;
+			}
+			if (!df12.runtimeDescriptorArray)
+			{
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceVulkan12Features.runtimeDescriptorArray");
+				continue;
+			}
+			if (!df12.bufferDeviceAddress)
+			{
+				LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceVulkan12Features.bufferDeviceAddress.");
+				//continue;
 			}
 			auto numDevExts = u32{};
 			VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &numDevExts, NULL));
@@ -1741,19 +1857,21 @@ void InitializeGPU(Window *w)
 		}
 		auto pdf = VkPhysicalDeviceFeatures
 		{
-			.multiDrawIndirect = VK_TRUE,
-			.samplerAnisotropy = VK_TRUE,
+			.multiDrawIndirect = true,
+			.samplerAnisotropy = true,
+			.shaderInt64 = true,
 		};
-		auto pddif = VkPhysicalDeviceDescriptorIndexingFeaturesEXT
+		auto pdf12 = VkPhysicalDeviceVulkan12Features
 		{
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-			.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
-			.runtimeDescriptorArray = VK_TRUE,
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+			.shaderUniformBufferArrayNonUniformIndexing = true,
+			.runtimeDescriptorArray = true,
+			.bufferDeviceAddress = true,
 		};
 		auto dci = VkDeviceCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-			.pNext = &pddif,
+			.pNext = &pdf12,
 			.queueCreateInfoCount = (u32)qcis.count,
 			.pQueueCreateInfos = qcis.elements,
 			.enabledLayerCount = (u32)reqInstLayers.count,
@@ -1802,9 +1920,9 @@ void InitializeGPU(Window *w)
 		}
 	}
 	// Initialize memory allocators.
-	vkGPUVertexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanVertexBlockSize);
-	vkGPUIndexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanIndexBlockSize);
-	vkGPUStorageBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanUniformBlockSize);
+	vkGPUVertexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VulkanVertexBlockSize);
+	vkGPUIndexBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VulkanIndexBlockSize);
+	vkGPUStorageBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VulkanUniformBlockSize);
 	vkCPUStagingBlockAllocator = NewVulkanMemoryBlockAllocator(VulkanCPUToGPUMemory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VulkanStagingBlockSize);
 	vkCPUStagingFrameAllocator = NewVulkanMemoryFrameAllocator(VulkanCPUToGPUMemory, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VulkanStagingFrameSize);
 	vkGPUIndirectFrameAllocator = NewVulkanMemoryFrameAllocator(VulkanGPUMemory, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanIndirectFrameSize);

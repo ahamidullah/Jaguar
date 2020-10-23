@@ -315,9 +315,10 @@ struct VulkanDrawCall
 struct GPURenderBatch
 {
 	//Array<VulkanDrawCall> drawCalls;
-	u64 drawBufferPointer;
+	VkDeviceAddress drawBufferPointer;
 	VulkanSubBuffer indirectCommands;
 	s64 indirectCommandCount;
+	VkBuffer vkIndexBuffer;
 };
 
 GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps, ArrayView<Array<GPUUniform>> lateBindings);

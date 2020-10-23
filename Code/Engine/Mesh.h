@@ -28,6 +28,7 @@ struct Vertex1P
 struct Vertex1P1N
 {
 	V3 position;
+	//int padding[1];
 	V3 normal;
 };
 

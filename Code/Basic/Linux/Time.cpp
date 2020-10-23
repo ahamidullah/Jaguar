@@ -171,9 +171,10 @@ Time CurrentTime()
 	return t;
 }
 
-void Sleep(s64 msec)
+void Sleep(s64 nsec)
 {
 	// @TODO: Get rid of these constants?
+	auto msec = nsec / 1000000LL;
 	auto ts = (struct timespec)
 	{
 		.tv_sec = msec / 1000,

@@ -48,4 +48,4 @@ struct Time
 };
 
 Time CurrentTime();
-void Sleep(s64 msec);
+void Sleep(s64 nsec);

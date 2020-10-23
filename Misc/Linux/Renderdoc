@@ -1,2 +1,2 @@
 #!/bin/bash
-prime-run ~/Local/renderdoc_1.10/bin/qrenderdoc &
+~/Local/renderdoc_1.10/bin/qrenderdoc &

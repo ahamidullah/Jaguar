@@ -147,38 +147,23 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//meshes[i].vertexBuffer = NewGPUVertexBuffer(verticesSize);
 				//meshes[i].vertexOffset = i * 24;// + padding;
 				auto s = NewGPUFrameStagingBufferX(m->vertexBuffer, verticesSize, 0);
-				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset)
+				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset, s64 stride)
 				{
 					auto acc = &gltf.accessors[accIndex];
 					auto bv = &gltf.bufferViews[acc->bufferView];
 					auto b = (V3 *)(buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset);
-					auto dst = (V3 *)(((u8 *)s.Map()) + offset);
+					auto dst = ((u8 *)s.Map()) + offset;
 					auto ofs = V3{};
-					if (offset == 0)
-					{
-						//auto r = (f32)MeshCount / 10;
-						auto r = (f32)1;
-						//ofs.x = i * 10.0f;
-						//ofs.y = i * 0.0f;
-						//ofs.z = i * 0.0f;
-						//ofs.x = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
-						//ofs.y = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
-						//ofs.z = ((float)rand() * 2/(float)((f32)RAND_MAX/r)) - ((float)r / 2);
-					}
-					PrintV3(ofs);
 					for (auto i = 0; i < acc->count; i += 1)
 					{
 						auto v = *b;
-						//v.x += ofs.x;
-						//v.y += ofs.y;
-						//v.z += ofs.z;
-						*dst = v;
-						dst += 2;
+						*(V3 *)dst = v;
+						dst += stride;
 						b += 1;
 					}
 				};
-				CopyVertexAttributes(posAccessIndex, 0);
-				CopyVertexAttributes(normAccessIndex, sizeof(V3));
+				CopyVertexAttributes(posAccessIndex, offsetof(Vertex1P1N, position), sizeof(Vertex1P1N));
+				CopyVertexAttributes(normAccessIndex, offsetof(Vertex1P1N, normal), sizeof(Vertex1P1N));
 				s.FlushIn(cb);
 				//m->FlushVertexBuffer();
 			}

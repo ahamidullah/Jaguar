@@ -12,14 +12,35 @@ Stage: Vertex
 
 	void main()
 	{
-		uint i = drawData[gl_DrawID].indexBuffer.i[gl_VertexID];
-		Vertex v = drawData[gl_DrawID].vertexBuffer.v[i];
-		mat4 mvp = drawData[gl_DrawID].mesh.modelViewProjection;
+		DrawData dd = drawDataArray;
+		//uint i = dd.indexBuffer.i[gl_VertexIndex];
+		VertexData v = dd.vertexBuffer.v[gl_VertexIndex];
+		/*
+		vec4 p;
+		if (gl_VertexIndex == 0)
+		{
+			p = dd.p1;
+		}
+		if (gl_VertexIndex == 1)
+		{
+			p = dd.p2;
+		}
+		if (gl_VertexIndex == 2)
+		{
+			p = dd.p3;
+		}
+		gl_Position = p;
+		*/
+		//gl_Position = vec4(v.position, 1.0);
+		mat4 mvp = dd.meshUniforms.modelViewProjection;
+		//vec3 pp = v.position;
+			//gl_Position = drawDataArray.p;
+			//fragmentNormal = vec3(drawDataArray.p);
 		gl_Position = mvp * vec4(v.position, 1.0);
 		//if (materials[0].shadingModel == PhongShadingModel)
 		if (true)
 		{
-			fragmentNormal = v.normal;
+			//fragmentNormal = v.normal;
 		}
 	}
 }
@@ -46,6 +67,8 @@ Stage: Fragment
 
 	void main()
 	{
+		outputColor = vec4(1.0, 0.0, 0.0, 1.0);
+	/*
 		//if (materials[0].shadingModel == PhongShadingModel)
 		if (true)
 		{
@@ -64,5 +87,6 @@ Stage: Fragment
 		{
 			outputColor = vec4(1.0, 0.0, 0.0, 1.0);
 		}
+	*/
 	}
 }

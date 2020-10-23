@@ -161,7 +161,7 @@ void UpdateRenderUniforms(Camera *c)
 	{
 		auto m = IdentityMatrix;
 		m.SetRotation(rots[i].Matrix());
-		m.SetTranslation(objectPos[i]);
+		//m.SetTranslation(objectPos[i]);
 		pvms.Append(
 			{
 				.modelViewProjection = pv * m,

@@ -8,7 +8,7 @@ struct ModelAsset
 	MeshAsset *mesh;
 	//Skeleton *skeleton;
 
-	#if DebugBuild
+	#ifdef DebugBuild
 		String name;
 	#endif
 };

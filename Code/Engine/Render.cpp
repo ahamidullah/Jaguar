@@ -23,11 +23,11 @@ auto renderDepthImageView = GPUImageView{};
 auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(GlobalAllocator(), 0);
 auto renderAspectRatio = 0;
 
-//auto globalUniform = GPUUniform{};
 auto objectPos = Array<V3>{};
 
-auto shaders = NewHashTableIn<String, GPUShader>(GlobalAllocator(), 32, HashString);
-auto modelShader = GPUShader{};
+#include "Vulkan/Shader.h"
+
+auto modelShader = GPU::Shader{};
 
 void InitializeRenderer(void *jobParam)
 {
@@ -37,82 +37,24 @@ void InitializeRenderer(void *jobParam)
 	if (DevelopmentBuild)
 	{
 		auto err = false;
-		modelShader = CompileGPUShader("Model.glsl", &err);
-		#if 0
-		auto ps = GPUShaderFilepaths();
-		for (auto p : ps)
-		{
-			auto err = false;
-			auto n = FilepathFilenameNoExt(p);
-			ConsolePrint("Loading shader %k\n", n);
-			auto s = CompileGPUShaderFromFile(n, p, &err);
-			if (err)
-			{
-				LogError("Render", "Failed to compile shader %k.", p);
-			}
-			shaders.Insert(n, s);
-		}
-		#endif
-		#if 0
-		auto BuildShader = [](GPUShaderID id, String filename)
-		{
-			// @TODO: Watch the shader file and recompile if it changes.
-			auto err = false;
-			auto path = JoinFilepaths("Code/Shader", filename);
-			GPUCompileShaderFromFile(id, path, &err);
-			if (err)
-			{
-				LogError("Render", "Failed to compile shader %k.", path);
-			}
-		};
-		for (auto i = 0; i < GPUShaderIDCount; i += 1)
-		{
-			switch ((GPUShaderID)i)
-			{
-			case GPUModelShaderID:
-			{
-				BuildShader(GPUModelShaderID, "Model.glsl");
-			} break;
-			case GPUShaderIDCount:
-			default:
-			{
-				Abort("Render", "Unknown shader ID %d.", i);
-			} break;
-			}
-		}
-		#endif
+		modelShader = GPU::CompileShader("Model.glsl", &err);
 	}
 	else
 	{
 		Abort("Vulkan", "@TODO: Load shaders in release build.");
 	}
 	renderAspectRatio = (f32)RenderWidth() / (f32)RenderHeight();
-	//globalUniform = NewGPUUniform("", ShaderGlobalDescriptorSet);
-	#if 0
-	terrainUniforms = NewGPUUniform("", TerrainUniforms, NumberOfTerrainDraws); // per frame
-	struct TerrainUniforms
-	{
-		u32 treeIndex;
-	}
-	treeUniforms = NewGPUUniform("", TreeUniforms, NumberOfTreeDraws);
-	struct TreeUniforms
-	{
-		V4 colorTint;
-		... windStuff;
-	};
-	meshIndex = ?;
-	materialIndex = glDrawID + ?;
-	#endif
 	for (auto i = 0; i < MeshCount; i += 1)
 	{
 		const auto range = 50.0f;
 		objectPos.Append(V3{((f32)rand() / (f32)RAND_MAX) * range, ((f32)rand() / (f32)RAND_MAX) * range, ((f32)rand() / (f32)RAND_MAX) * range});
-		objectPos[i].x -= range / 2;
-		objectPos[i].y -= range / 2;
-		objectPos[i].z -= range / 2;
+		objectPos[i].x = i * 2;
+		objectPos[i].y = 0;
+		objectPos[i].z = 0;
 	}
 }
 
+	#include "Vulkan/StagingBuffer.h"
 void UpdateRenderUniforms(Camera *c)
 {
 /*
@@ -137,10 +79,8 @@ void UpdateRenderUniforms(Camera *c)
 			.data = &temp,
 		});
 		*/
-	auto buffers = Array<GPUUniformBufferWriteDescription>{};
 	auto p = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
 	auto v = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
-	auto pvms = NewArrayWithCapacity<GPUObjectUniforms>(meshes.count);
 	auto pv = p * v;
 	static auto rots = Array<Quaternion>{};
 	if (rots.count == 0)
@@ -157,21 +97,16 @@ void UpdateRenderUniforms(Camera *c)
 			rots[i] = NewQuaternion(V3{(f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX});
 		}
 	}
+	auto sb = GPU::StagingBuffer{};
 	for (auto i = 0; i < MeshCount; i += 1)
 	{
 		auto m = IdentityMatrix;
 		m.SetRotation(rots[i].Matrix());
-		//m.SetTranslation(objectPos[i]);
-		pvms.Append(
-			{
-				.modelViewProjection = pv * m,
-			});
-		buffers.Append(
-			{
-				.uniform = &meshes[i].uniform,
-				.data = pvms.Last(),
-			});
+		m.SetTranslation(objectPos[i]);
+		sb.MapBuffer(meshes[i].uniform, 0);
+		*(M4 *)sb.Map() = pv * m;
 	}
+	sb.Flush();
 	//auto mat = GPUMaterialUniforms
 	//{
 		//.color = V4{1.0f, 0.0f, 0.0f, 1.0f},
@@ -181,7 +116,7 @@ void UpdateRenderUniforms(Camera *c)
 			//.uniform = &materials.uniform,
 			//.data = &mat,
 		//});
-	UpdateGPUUniforms(buffers, {});
+	//UpdateGPUUniforms(buffers, {});
 #if 0
 	auto cb = NewGPUFrameTransferCommandBuffer();
 	auto u = 1;
@@ -266,6 +201,9 @@ struct SystemAllocator : Allocator
 	}
 };
 
+#include "Vulkan/Frame.h"
+#include "Vulkan/Queue.h"
+
 void Render()
 {
 /*
@@ -285,7 +223,7 @@ void Render()
 		}
 	});
 	*/
-	GPUBeginFrame();
+	GPU::BeginFrame();
 	auto culledMeshes = meshes;
 	//auto culledMeshes = Array<GPUMesh>{};
 	//for (auto m : meshes)
@@ -304,17 +242,18 @@ void Render()
 	}
 	UpdateRenderUniforms(c);
 	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
-	auto rb = NewGPUFrameRenderBatch(renderPackets, {});
-	GPUSubmitFrameTransferCommandBuffers();
+	auto rb = NewGPUFrameRenderBatch(renderPackets);
+	GPU::SubmitTransferCommands();
+	//GPUSubmitFrameTransferCommandBuffers();
 	{
-		auto cb = NewGPUFrameGraphicsCommandBuffer();
+		auto cb = GPU::NewCommandBuffer(GPU::QueueType::Graphics);
+		//auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
-		cb.BeginRenderPass(modelShader, GPUDefaultFramebuffer());
+		cb.BeginRenderPass(modelShader, GPU::DefaultFramebuffer());
 		//cb.DrawMeshes(meshes);
 		// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
 		// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
-		// @TODO: no need to actually update the command buffers that contain the actual drawing functions
 		// 24.5ms
 		//for (auto i = 0; i < meshes.Count(); i += 1)
 		//{
@@ -328,9 +267,10 @@ void Render()
 		cb.EndRenderPass();
 		cb.Queue();
 	}
-	GPUSubmitFrameGraphicsCommandBuffers();
+	//GPUSubmitFrameGraphicsCommandBuffers();
+	GPU::SubmitGraphicsCommands();
 	//rt.Print(NanosecondScale);
-	GPUEndFrame();
+	GPU::EndFrame();
 }
 
 #if 0

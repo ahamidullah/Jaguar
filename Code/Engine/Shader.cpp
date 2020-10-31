@@ -7,17 +7,20 @@
 #include "Basic/Log.h"
 #include "Basic/Process.h"
 
-const auto ShaderSourceDirectory = String{"Code/Shader"};
+namespace ShaderCompiler
+{
 
-VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
+const auto SourceDirectory = String{"Code/Shader"};
+
+SPIRV VulkanGLSL(String filename, bool *err)
 {
 	CreateDirectoryIfItDoesNotExist("Build/GLSL");
 	CreateDirectoryIfItDoesNotExist("Build/GLSL/Code");
 	CreateDirectoryIfItDoesNotExist("Build/GLSL/Binary");
-	auto shaderPath = JoinFilepaths(ShaderSourceDirectory, filename);
+	auto shaderPath = JoinFilepaths(SourceDirectory, filename);
 	if (!FileExists(shaderPath))
 	{
-		LogError("Vulkan", "File %k does not exist.", shaderPath);
+		LogError("Shader", "File %k does not exist.", shaderPath);
 		*err = true;
 		return {};
 	}
@@ -26,7 +29,7 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 	auto procFile = OpenFile(procPath, OpenFileWriteOnly | OpenFileCreate, err);
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to open processed shader output file %k.", procPath);
+		LogError("Shader", "Failed to open processed shader output file %k.", procPath);
 		return {};
 	}
 	Defer(procFile.Close());
@@ -36,7 +39,7 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 	auto fileParser = NewParser(shaderPath, "", err);
 	if (*err)
 	{
-		LogError("Vulkan", "Failed to create parser for shader %k.", shaderPath);
+		LogError("Shader", "Failed to create parser for shader %k.", shaderPath);
 		return {};
 	}
 	auto depth = 0;
@@ -78,7 +81,7 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 			}
 			else
 			{
-				LogError("Vulkan", "Unknown Stage: %k.", s);
+				LogError("Shader", "Unknown Stage: %k.", s);
 				return {};
 			}
 			procFile.WriteString("#ifdef ");
@@ -87,7 +90,7 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 			t = fileParser.Token();
 			if (t != "{")
 			{
-				LogError("Vulkan", "Failed to parse %k, expected '{' on line %ld after Stage.", shaderPath, fileParser.line);
+				LogError("Shader", "Failed to parse %k, expected '{' on line %ld after Stage.", shaderPath, fileParser.line);
 				*err = true;
 				return {};
 			}
@@ -101,21 +104,21 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 		{
 			if (lineParser.Token() != "\"")
 			{
-				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.", shaderPath, fileParser.line, fileParser.column);
+				LogError("Shader", "Expected '\"' at %k:%ld:%ld.", shaderPath, fileParser.line, fileParser.column);
 				*err = true;
 				return {};
 			}
 			auto includePath = JoinFilepaths("Code/Shader", lineParser.Token());
 			if (lineParser.Token() != "\"")
 			{
-				LogError("Vulkan", "Expected '\"' at %k:%ld:%ld.", shaderPath, fileParser.line, fileParser.column);
+				LogError("Shader", "Expected '\"' at %k:%ld:%ld.", shaderPath, fileParser.line, fileParser.column);
 				*err = true;
 				return {};
 			}
 			auto includeFile = ReadEntireFile(includePath, err);
 			if (*err)
 			{
-				LogError("Vulkan", "Failed to read include file %k at %k:%ld.", includePath, shaderPath, fileParser.line);
+				LogError("Shader", "Failed to read include file %k at %k:%ld.", includePath, shaderPath, fileParser.line);
 				*err = true;
 				return {};
 			}
@@ -127,7 +130,7 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 			procFile.WriteString(line);
 		}
 	}
-	auto spirv = VulkanSPIRV
+	auto spirv = SPIRV
 	{
 		.stages = stageFlags,
 	};
@@ -138,19 +141,21 @@ VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err)
 		auto cmd = FormatString("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].View(1, stageExts[i].Length()), procPath, spirvPath);
 		if (RunProcess(cmd) != 0)
 		{
-			LogError("Vulkan", "Shader compilation command failed: %k.", cmd);
+			LogError("Shader", "Shader compilation command failed: %k.", cmd);
 			*err = true;
 			return {};
 		}
 		auto bc = ReadEntireFile(spirvPath, err);
 		if (*err)
 		{
-			LogError("Vulkan", "Failed to read SPIRV file %k compiled from shader %k.", spirvPath, filename);
+			LogError("Shader", "Failed to read SPIRV file %k compiled from shader %k.", spirvPath, filename);
 			return {};
 		}
 		spirv.stageByteCode.Append(bc);
 	}
 	return spirv;
+}
+
 }
 
 #endif

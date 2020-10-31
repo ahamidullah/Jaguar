@@ -12,7 +12,7 @@ Stage: Vertex
 
 	void main()
 	{
-		DrawData dd = drawDataArray;
+		DrawData dd = DrawData(drawDataArray + (gl_DrawID * 64));
 		//uint i = dd.indexBuffer.i[gl_VertexIndex];
 		VertexData v = dd.vertexBuffer.v[gl_VertexIndex];
 		/*

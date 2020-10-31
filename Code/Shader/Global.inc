@@ -47,5 +47,5 @@ layout (buffer_reference, buffer_reference_align = 16, std430) buffer DrawData
 
 layout (push_constant) uniform PushConstants
 {
-	DrawData drawDataArray;
+	uint64_t drawDataArray;
 };

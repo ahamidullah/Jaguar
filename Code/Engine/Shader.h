@@ -2,10 +2,19 @@
 
 #include "Basic/String.h"
 
-struct VulkanSPIRV
+namespace ShaderCompiler
+{
+
+#ifdef VulkanBuild
+
+struct SPIRV
 {
 	Array<Array<u8>> stageByteCode;
 	Array<VkShaderStageFlagBits> stages;
 };
 
-VulkanSPIRV CompileGPUShaderToSPIRV(String filename, bool *err);
+SPIRV VulkanGLSL(String filename, bool *err);
+
+#endif
+
+}

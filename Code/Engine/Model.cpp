@@ -46,6 +46,8 @@ auto meshes = NewArray<GPUMesh>(MeshCount);
 auto materials = GPUMaterial{};
 auto renderPackets = NewArray<GPURenderPacket>(MeshCount);
 
+#include "Vulkan/StagingBuffer.h"
+
 ModelAsset LoadModelAssetFromFile(String name)
 {
 	auto gltfPath = modelFilepaths.Lookup(name);
@@ -73,7 +75,8 @@ ModelAsset LoadModelAssetFromFile(String name)
 		}
 		buffers.Append(f);
 	}
-	auto cb = NewGPUFrameTransferCommandBuffer();
+	//auto cb = NewGPUFrameTransferCommandBuffer();
+	auto sb = GPU::StagingBuffer{};
 	auto vertexCount = 0;
 	for (auto m : gltf.meshes)
 	{
@@ -114,11 +117,11 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//meshes[i].indexCount = acc->count;
 				//meshes[i].indexBuffer = NewGPUIndexBuffer(indicesSize);
 				//meshes[i].firstIndex = i * 36;// + padding;
-				auto s = NewGPUFrameStagingBufferX(m->indexBuffer, indicesSize, 0);
+				//auto s = NewGPUFrameStagingBufferX(m->indexBuffer, indicesSize, 0);
 				auto bv = &gltf.bufferViews[acc->bufferView];
 				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
-				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)s.Map(), indicesSize));
-				s.FlushIn(cb);
+				sb.MapBuffer(m->indexBuffer, 0);
+				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)sb.Map(), indicesSize));
 			}
 			// Vertices.
 			{
@@ -146,13 +149,13 @@ ModelAsset LoadModelAssetFromFile(String name)
 				//auto iv = m->MapVertexBuffer();
 				//meshes[i].vertexBuffer = NewGPUVertexBuffer(verticesSize);
 				//meshes[i].vertexOffset = i * 24;// + padding;
-				auto s = NewGPUFrameStagingBufferX(m->vertexBuffer, verticesSize, 0);
-				auto CopyVertexAttributes = [&gltf, &buffers, &s](s64 accIndex, s64 offset, s64 stride)
+				//auto s = NewGPUFrameStagingBufferX(m->vertexBuffer, verticesSize, 0);
+				auto CopyVertexAttributes = [&gltf, &buffers, &sb](s64 accIndex, s64 offset, s64 stride)
 				{
 					auto acc = &gltf.accessors[accIndex];
 					auto bv = &gltf.bufferViews[acc->bufferView];
 					auto b = (V3 *)(buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset);
-					auto dst = ((u8 *)s.Map()) + offset;
+					auto dst = (u8 *)sb.Map() + offset;
 					auto ofs = V3{};
 					for (auto i = 0; i < acc->count; i += 1)
 					{
@@ -162,20 +165,23 @@ ModelAsset LoadModelAssetFromFile(String name)
 						b += 1;
 					}
 				};
+				sb.MapBuffer(m->vertexBuffer, 0);
 				CopyVertexAttributes(posAccessIndex, offsetof(Vertex1P1N, position), sizeof(Vertex1P1N));
 				CopyVertexAttributes(normAccessIndex, offsetof(Vertex1P1N, normal), sizeof(Vertex1P1N));
-				s.FlushIn(cb);
+				//s.FlushIn(cb);
 				//m->FlushVertexBuffer();
 			}
 		}
 	}
-	cb.Queue();
+	sb.Flush();
 	materials = NewGPUMaterial();
 	for (auto i = 0; i < MeshCount; i += 1)
 	{
 		meshes[i] = NewGPUMesh(&meshAssets[0]);
 		renderPackets[i] = NewGPURenderPacket(&meshes[i], &materials);
 	}
+//void UpdateRenderUniforms(Camera *c);
+	//UpdateRenderUniforms(cam);
 	return ModelAsset{};
 }
 

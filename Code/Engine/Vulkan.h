@@ -195,8 +195,8 @@ struct GPUMeshAssetCreateInfo
 	ArrayView<u32> submeshIndices;
 };
 
-void NewGPUMeshAssetBlock(Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out);
-GPUMeshAsset NewGPUMeshAsset(Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds);
+void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out);
+GPUMeshAsset NewGPUMeshAsset(Memory::Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds);
 
 struct GPUUniform_
 {

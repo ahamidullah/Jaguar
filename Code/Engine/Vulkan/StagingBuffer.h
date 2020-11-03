@@ -14,12 +14,13 @@ struct StagingBuffer
 	Buffer source;
 	Buffer destination;
 	s64 offset;
-	bool mapped;
+	void *map;
 
 	void MapBuffer(Buffer dst, s64 offset);
-	void *Map();
-	void Transfer();
 	void Flush();
+
+	private:
+	void Upload();
 };
 
 }

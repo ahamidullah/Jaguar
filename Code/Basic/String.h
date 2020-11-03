@@ -12,28 +12,38 @@ char LowercaseChar(char c);
 
 struct String;
 
-#if 0
-struct StringView
+// @TODO: Make this utf-8 by default?
+struct StringBuilder
 {
-	ArrayView<u8> buffer;
+	Array<u8> buffer;
 
-	StringView(const char *s, s64 len);
-	StringView(const char *s);
-	StringView(ArrayView<u8> a);
+	u8 &operator[](s64 i);
+	const u8 &operator[](s64 i) const;
+	bool operator==(StringBuilder sb);
+	bool operator!=(StringBuilder sb);
+	u8 *begin();
+	u8 *end();
 	s64 Length();
-	const char *CString();
-	String ToCopy(s64 start, s64 end);
-	StringView ToView(s64 start, s64 end);
+	struct String String();
+	struct String StringIn(Memory::Allocator *a);
+	struct String View(s64 start, s64 end);
+	void Resize(s64 len);
+	void Reserve(s64 reserve);
+	void Append(struct String s);
+	void AppendAll(ArrayView<struct String> ss);
+	void Format(struct String fmt, ...);
+	void FormatVarArgs(struct String fmt, va_list args);
+	void FormatTime();
+	void Uppercase();
+	void Lowercase();
 	s64 FindFirst(u8 c);
 	s64 FindLast(u8 c);
-	// @TODO:
-	// operator[]
-	// operator==
-	// operator!=
-	// begin
-	// end
 };
-#endif
+
+StringBuilder NewStringBuilder(s64 len);
+StringBuilder NewStringBuilderIn(Memory::Allocator *a, s64 len);
+StringBuilder NewStringBuilderWithCapacity(s64 cap);
+StringBuilder NewStringBuilderWithCapacityIn(Memory::Allocator *a, s64 cap);
 
 struct String
 {
@@ -50,9 +60,9 @@ struct String
 	const u8 *end();
 	s64 Length();
 	String Copy();
-	String CopyIn(Allocator *a);
+	String CopyIn(Memory::Allocator *a);
 	String CopyRange(s64 start, s64 end);
-	String CopyRangeIn(Allocator *a, s64 start, s64 end);
+	String CopyRangeIn(Memory::Allocator *a, s64 start, s64 end);
 	char *CString();
 	String View(s64 start, s64 end);
 	s64 FindFirst(u8 c);
@@ -70,7 +80,7 @@ String FormatString(String fmt, ...);
 String FormatStringVarArgs(String fmt, va_list args);
 
 template <typename... StringPack>
-String JoinStringsIn(Allocator *a, StringPack... sp)
+String JoinStringsIn(Memory::Allocator *a, StringPack... sp)
 {
 	auto n = sizeof...(sp);
 	if (n == 0)
@@ -86,38 +96,5 @@ String JoinStringsIn(Allocator *a, StringPack... sp)
 template <typename... StringPack>
 String JoinStrings(StringPack... sp)
 {
-	return JoinStringsIn(ContextAllocator(), sp...);
+	return JoinStringsIn(Memory::ContextAllocator(), sp...);
 }
-
-// @TODO: Make this utf-8 by default?
-struct StringBuilder
-{
-	Array<u8> buffer;
-
-	u8 &operator[](s64 i);
-	const u8 &operator[](s64 i) const;
-	bool operator==(StringBuilder sb);
-	bool operator!=(StringBuilder sb);
-	u8 *begin();
-	u8 *end();
-	s64 Length();
-	struct String String();
-	struct String StringIn(Allocator *a);
-	struct String View(s64 start, s64 end);
-	void Resize(s64 len);
-	void Reserve(s64 reserve);
-	void Append(struct String s);
-	void AppendAll(ArrayView<struct String> ss);
-	void Format(struct String fmt, ...);
-	void FormatVarArgs(struct String fmt, va_list args);
-	void FormatTime();
-	void Uppercase();
-	void Lowercase();
-	s64 FindFirst(u8 c);
-	s64 FindLast(u8 c);
-};
-
-StringBuilder NewStringBuilder(s64 len);
-StringBuilder NewStringBuilderIn(Allocator *a, s64 len);
-StringBuilder NewStringBuilderWithCapacity(s64 cap);
-StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 cap);

@@ -8,14 +8,14 @@ struct Pool
 	Array<T> elements;
 	Array<T *> freeList;
 
-	void SetAllocator(Allocator *a);
+	void SetAllocator(Memory::Allocator *a);
 	T *Get();
 	void Release(T *e);
 	void GrowIfNecessary(s64 n);
 };
 
 template <typename T>
-Pool<T> NewPoolIn(Allocator *a, s64 cap)
+Pool<T> NewPoolIn(Memory::Allocator *a, s64 cap)
 {
 	auto p = Pool<T>
 	{
@@ -36,11 +36,11 @@ Pool<T> NewPoolIn(Allocator *a, s64 cap)
 template <typename T>
 Pool<T> NewPool(s64 size)
 {
-	return NewPoolIn<T>(ContextAllocator(), size);
+	return NewPoolIn<T>(Memory::ContextAllocator(), size);
 }
 
 template <typename T>
-void Pool<T>::SetAllocator(Allocator *a)
+void Pool<T>::SetAllocator(Memory::Allocator *a)
 {
 	this->elements.SetAllocator(a);
 	this->freeList.SetAllocator(a);

@@ -5,7 +5,6 @@
 #include "Media/Input.h"
 #include "Basic/File.h"
 #include "Basic/Filepath.h"
-#include "Basic/Memory.h"
 #include "Basic/Log.h"
 
 s64 RenderWidth()
@@ -20,7 +19,7 @@ s64 RenderHeight()
 
 auto renderDepthImage = GPUImage{};
 auto renderDepthImageView = GPUImageView{};
-auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(GlobalAllocator(), 0);
+auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(Memory::GlobalHeap(), 0);
 auto renderAspectRatio = 0;
 
 auto objectPos = Array<V3>{};
@@ -104,7 +103,7 @@ void UpdateRenderUniforms(Camera *c)
 		m.SetRotation(rots[i].Matrix());
 		m.SetTranslation(objectPos[i]);
 		sb.MapBuffer(meshes[i].uniform, 0);
-		*(M4 *)sb.Map() = pv * m;
+		*(M4 *)sb.map = pv * m;
 	}
 	sb.Flush();
 	//auto mat = GPUMaterialUniforms
@@ -173,34 +172,6 @@ void UpdateRenderUniforms(Camera *c)
 #endif
 }
 
-auto rt = NewTimer("Render");
-
-struct SystemAllocator : Allocator
-{
-	void *Allocate(s64 size)
-	{
-		return malloc(size);
-	}
-	void *AllocateAligned(s64 size, s64 align)
-	{
-		return aligned_alloc(size, align);
-	}
-	void *Resize(void *mem, s64 newSize)
-	{
-		return realloc(mem, newSize);
-	}
-	void Deallocate(void *mem)
-	{
-		free(mem);
-	}
-	void Clear()
-	{
-	}
-	void Free()
-	{
-	}
-};
-
 #include "Vulkan/Frame.h"
 #include "Vulkan/Queue.h"
 
@@ -233,7 +204,6 @@ void Render()
 			//culledMeshes.Append(m);
 		//}
 	//}
-	rt.Reset();
 	auto c = LookupCamera("Main");
 	if (!c)
 	{
@@ -269,7 +239,6 @@ void Render()
 	}
 	//GPUSubmitFrameGraphicsCommandBuffers();
 	GPU::SubmitGraphicsCommands();
-	//rt.Print(NanosecondScale);
 	GPU::EndFrame();
 }
 

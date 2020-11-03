@@ -27,7 +27,7 @@ DoubleBuffer<T> NewDoubleBufferIn(Allocator *a)
 template <typename T>
 DoubleBuffer<T> NewDoubleBuffer()
 {
-	return NewDoubleBufferIn<T>(ContextAllocator());
+	return NewDoubleBufferIn<T>(Memory::ContextAllocator());
 }
 
 template <typename T>

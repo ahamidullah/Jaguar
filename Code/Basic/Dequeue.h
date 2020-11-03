@@ -8,7 +8,7 @@ s64 DivideAndRoundUp(s64 x, s64 y); // @TODO
 template <typename T>
 struct Dequeue
 {
-	Allocator *allocator;
+	Memory::Allocator *allocator;
 	s64 blockSize;
 	Array<Array<T>> useBlocks;
 	Array<Array<T>> blockPool;
@@ -26,7 +26,7 @@ struct Dequeue
 const auto DefaultDequeueBlockSize = 256;
 
 template <typename T>
-Dequeue<T> NewDequeueWithBlockSizeIn(Allocator *a, s64 bs, s64 cap)
+Dequeue<T> NewDequeueWithBlockSizeIn(Memory::Allocator *a, s64 bs, s64 cap)
 {
 	Assert(bs > 0);
 	Assert(cap >= 0);
@@ -48,11 +48,11 @@ Dequeue<T> NewDequeueWithBlockSizeIn(Allocator *a, s64 bs, s64 cap)
 template <typename T>
 Dequeue<T> NewDequeueWithBlockSize(s64 bs, s64 cap)
 {
-	return NewDequeueWithBlockSizeIn<T>(ContextAllocator(), bs, cap);
+	return NewDequeueWithBlockSizeIn<T>(Memory::ContextAllocator(), bs, cap);
 }
 
 template <typename T>
-Dequeue<T> NewDequeueIn(Allocator *a, s64 cap)
+Dequeue<T> NewDequeueIn(Memory::Allocator *a, s64 cap)
 {
 	return NewDequeueWithBlockSizeIn<T>(a, DefaultDequeueBlockSize, cap);
 }
@@ -60,7 +60,7 @@ Dequeue<T> NewDequeueIn(Allocator *a, s64 cap)
 template <typename T>
 Dequeue<T> NewDequeue(s64 cap)
 {
-	return NewDequeueIn<T>(ContextAllocator(), cap);
+	return NewDequeueIn<T>(Memory::ContextAllocator(), cap);
 }
 
 template <typename T>
@@ -69,8 +69,8 @@ void Dequeue<T>::PushBack(T e)
 	if (this->blockSize == 0)
 	{
 		this->blockSize = DefaultDequeueBlockSize;
-		this->useBlocks.SetAllocator(ContextAllocator());
-		this->blockPool.SetAllocator(ContextAllocator());
+		this->useBlocks.SetAllocator(Memory::ContextAllocator());
+		this->blockPool.SetAllocator(Memory::ContextAllocator());
 	}
 	if (this->useBlocks.count == 0)
 	{
@@ -107,8 +107,8 @@ void Dequeue<T>::PushFront(T e)
 	if (this->blockSize == 0)
 	{
 		this->blockSize = DefaultDequeueBlockSize;
-		this->useBlocks.SetAllocator(ContextAllocator());
-		this->blockPool.SetAllocator(ContextAllocator());
+		this->useBlocks.SetAllocator(Memory::ContextAllocator());
+		this->blockPool.SetAllocator(Memory::ContextAllocator());
 	}
 	if (this->useBlocks.count == 0)
 	{

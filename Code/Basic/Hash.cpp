@@ -34,8 +34,8 @@ u64 Hash64(u64 x)
 
 u64 HashPointer(void *p)
 {
-	Assert(sizeof(IntegerPointer) == 8);
-	auto x = (IntegerPointer)p;
+	Assert(sizeof(PointerInt) == 8);
+	auto x = (PointerInt)p;
 	return Hash64(x);
 }
 

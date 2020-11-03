@@ -6,7 +6,7 @@
 #include "Media/Input.h"
 #include "Basic/Process.h"
 #include "Basic/Log.h"
-#include "Basic/Time.h"
+#include "Basic/Time/Timer.h"
 
 s64 windowWidth, windowHeight;
 
@@ -71,38 +71,6 @@ void Update()
 	GameLoop(0.0f);
 }
 
-void Test2(void *x)
-{
-	//LogInfo("Engine", "NUMBER2");
-}
-
-void Test(void *x)
-{
-	LogInfo("Engine", "HELLLLOOOOOO");
-	{
-		auto j = Array<JobDeclaration>{};
-		for (auto i = 0; i < 1000; i += 1)
-		{
-			j.Append(NewJobDeclaration(Test2, NULL));
-		}
-		auto c = (JobCounter *){};
-		RunJobs(j, NormalJobPriority, &c);
-		c->Wait();
-	}
-	{
-		auto j = Array<JobDeclaration>{};
-		for (auto i = 0; i < 1000; i += 1)
-		{
-			j.Append(NewJobDeclaration(Test2, NULL));
-		}
-		auto c = (JobCounter *){};
-		RunJobs(j, NormalJobPriority, &c);
-		c->Wait();
-	}
-}
-
-#include <stdio.h>
-
 void RunGame(void *)
 {
 	windowWidth = RenderWidth();
@@ -113,58 +81,10 @@ void RunGame(void *)
 	InitializeAssets(NULL);
 	InitializeEntities(); // @TODO
 	InitializeGameLoop();
-	#if 0
-	auto j = Array<JobDeclaration>{};
-	for (auto i = 0; i < 150; i += 1)
-	{
-		j.Append(NewJobDeclaration(Test, NULL));
-	}
-	auto c = (JobCounter *){};
-	RunJobs(j, NormalJobPriority, &c);
-	c->Wait();
-	ExitProcess(ProcessSuccess);
-	#endif
-	auto t = NewTimer("Frame");
-	#if 0
-	for (auto i = 0; i < 1000; i += 1)
-	{
-		auto j = Array<JobDeclaration>{};
-		j.Append(NewJobDeclaration(Test2, NULL));
-		auto c = (JobCounter *){};
-		RunJobs(j, NormalJobPriority, NULL);
-		//c->Wait();
-	}
-		for (auto i = 0; i < 100000; i += 1)
-		{
-			for (auto k = 0; k < 1; k += 1)
-			{
-				//printf("doing %d\n", i);
-				auto c = (JobCounter *){};
-				auto j = Array<JobDeclaration>{};
-				j.Append(NewJobDeclaration(Test2, NULL));
-				RunJobs(j, NormalJobPriority, &c);
-				c->Wait();
-				//Assert(c->waitingFibers.count == 1);
-				if (c->waitingFibers.count != 1)
-				{
-					//printf("missing %ld\n", c->waitingFibers.count);
-				}
-			}
-			/*
-			for (auto k = 0; k < 1; k += 1)
-			{
-				auto c = (JobCounter *){};
-				auto j = Array<JobDeclaration>{};
-				j.Append(NewJobDeclaration(Test2, NULL));
-				RunJobs(j, NormalJobPriority, &c);
-				c->Wait();
-			}
-			*/
-		}
-	#endif
+	auto t = Time::NewTimer("Frame");
 	while (true)
 	{
-		t.Print(TimeMillisecond);
+		t.Print(Time::Millisecond);
 		t.Reset();
 		auto winEvents = ProcessInput(&win);
 		if (winEvents.quit)

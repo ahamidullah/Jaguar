@@ -1,5 +1,6 @@
 #include "String.h"
-#include "Memory.h"
+#include "Memory/Memory.h"
+#include "Memory/NullAllocator.h"
 #include "Log.h"
 #define STB_SPRINTF_IMPLEMENTATION
 	#include "stb_sprintf.h"
@@ -147,7 +148,7 @@ String::String(const char *s)
 	auto len = CStringLength(s);
 	this->buffer = Array<u8>
 	{
-		.allocator = NullAllocator(),
+		.allocator = Memory::NullAllocator(),
 		.elements = (u8 *)s,
 		.count = len,
 		.capacity = len,
@@ -212,20 +213,20 @@ s64 String::Length()
 
 String String::Copy()
 {
-	return this->CopyIn(ContextAllocator());
+	return this->CopyIn(Memory::ContextAllocator());
 }
 
-String String::CopyIn(Allocator *a)
+String String::CopyIn(Memory::Allocator *a)
 {
 	return NewStringFromBuffer(this->buffer.CopyIn(a));
 }
 
 String String::CopyRange(s64 start, s64 end)
 {
-	return this->CopyRangeIn(ContextAllocator(), start, end);
+	return this->CopyRangeIn(Memory::ContextAllocator(), start, end);
 }
 
-String String::CopyRangeIn(Allocator *a, s64 start, s64 end)
+String String::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
 {
 	return NewStringFromBuffer(this->buffer.CopyRangeIn(a, start, end));
 }
@@ -236,7 +237,7 @@ char *String::CString()
 	{
 		return (char *)this->buffer.elements;
 	}
-	auto s = (u8 *)AllocateMemory(this->Length() + 1);
+	auto s = (u8 *)Memory::Allocate(this->Length() + 1);
 	CopyArray(this->buffer, NewArrayView(s, this->Length()));
 	s[this->Length()] = '\0';
 	return (char *)s;
@@ -247,7 +248,7 @@ String String::View(s64 start, s64 end)
 	Assert(start <= end);
 	auto buf = Array<u8>
 	{
-		.allocator = NullAllocator(),
+		.allocator = Memory::NullAllocator(),
 		.elements = &this->buffer[start],
 		.count = end - start,
 	};
@@ -361,7 +362,7 @@ f32 ParseFloatAbort(String s)
 	return f;
 }
 
-StringBuilder NewStringBuilderIn(Allocator *a, s64 len)
+StringBuilder NewStringBuilderIn(Memory::Allocator *a, s64 len)
 {
 	auto sb = StringBuilder
 	{
@@ -372,10 +373,10 @@ StringBuilder NewStringBuilderIn(Allocator *a, s64 len)
 
 StringBuilder NewStringBuilder(s64 len)
 {
-	return NewStringBuilderIn(ContextAllocator(), len);
+	return NewStringBuilderIn(Memory::ContextAllocator(), len);
 }
 
-StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 cap)
+StringBuilder NewStringBuilderWithCapacityIn(Memory::Allocator *a, s64 cap)
 {
 	auto sb = StringBuilder
 	{
@@ -386,7 +387,7 @@ StringBuilder NewStringBuilderWithCapacityIn(Allocator *a, s64 cap)
 
 StringBuilder NewStringBuilderWithCapacity(s64 cap)
 {
-	return NewStringBuilderWithCapacityIn(ContextAllocator(), cap);
+	return NewStringBuilderWithCapacityIn(Memory::ContextAllocator(), cap);
 }
 
 u8 &StringBuilder::operator[](s64 i)
@@ -428,7 +429,7 @@ s64 StringBuilder::Length()
 
 String StringBuilder::String()
 {
-	return this->StringIn(ContextAllocator());
+	return this->StringIn(Memory::ContextAllocator());
 }
 
 struct String StringBuilder::View(s64 start, s64 end)
@@ -437,14 +438,14 @@ struct String StringBuilder::View(s64 start, s64 end)
 	Assert(end <= this->buffer.count);
 	auto b = Array<u8>
 	{
-		.allocator = NullAllocator(),
+		.allocator = Memory::NullAllocator(),
 		.elements = &this->buffer.elements[start],
 		.count = end - start,
 	};
 	return NewStringFromBuffer(b);
 }
 
-struct String StringBuilder::StringIn(Allocator *a)
+struct String StringBuilder::StringIn(Memory::Allocator *a)
 {
 	auto buf = NewArrayIn<u8>(a, this->Length());
 	CopyArray(this->buffer, buf);

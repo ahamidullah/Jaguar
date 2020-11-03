@@ -4,9 +4,8 @@
 #include "../Thread.h"
 #include "../Log.h"
 #include "../Atomic.h"
-#include "../Memory.h"
+#include "../Memory/Memory.h"
 #include "../Process.h"
-#include "../Time.h"
 #include "../Pool.h"
 #ifdef ThreadSanitizerBuild
 	#include <sanitizer/tsan_interface.h>
@@ -490,11 +489,11 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 {
 #if !NEW_FIBER
 	auto f = Fiber{};
-	f.contextAllocatorStack.SetAllocator(GlobalAllocator());
-	f.contextAllocator = GlobalAllocator();
+	f.contextAllocatorStack.SetAllocator(Memory::GlobalHeap());
+	f.contextAllocator = Memory::GlobalHeap();
 	getcontext(&f.context);
-	auto stack = (u8 *)AllocatePlatformMemory(FiberStackSize + (FiberStackGuardPageCount * CPUPageSize()));
-	Assert(AlignPointer(stack, CPUPageSize()) == stack);
+	auto stack = (u8 *)Memory::PlatformAllocate(FiberStackSize + (FiberStackGuardPageCount * CPUPageSize()));
+	Assert(Memory::AlignPointer(stack, CPUPageSize()) == stack);
 	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
@@ -519,11 +518,11 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 #else
 	auto f = Fiber
 	{
-		.contextAllocator = GlobalAllocator(),
-		.contextAllocatorStack = NewArrayIn<Allocator *>(GlobalAllocator(), 0),
+		.contextAllocator = Memory::GlobalHeap(),
+		.contextAllocatorStack = NewArrayIn<Memory::Allocator *>(Memory::GlobalHeap(), 0),
 	};
-	auto stack = (u8 *)AllocatePlatformMemory(FiberStackPlusGuardSize);
-	Assert(AlignPointer(stack, CPUPageSize()) == stack);
+	auto stack = (u8 *)Memory::PlatformAllocate(FiberStackPlusGuardSize);
+	Assert(Memory::AlignPointer(stack, CPUPageSize()) == stack);
 	if (mprotect(stack, (FiberStackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
@@ -547,8 +546,8 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 
 void ConvertThreadToFiber(Fiber *f)
 {
-	f->contextAllocatorStack.SetAllocator(GlobalAllocator());
-	f->contextAllocator = GlobalAllocator();
+	f->contextAllocatorStack.SetAllocator(Memory::GlobalHeap());
+	f->contextAllocator = Memory::GlobalHeap();
 	SetRunningFiber(f);
 	#ifdef ThreadSanitizerBuild
 		f->tsan = __tsan_create_fiber(0);

@@ -8,9 +8,9 @@
 #include "Basic/Atomic.h"
 #include "Basic/Array.h"
 #include "Basic/CPU.h"
-#include "Basic/Memory.h"
 #include "Basic/Pool.h"
 #include "Basic/Dequeue.h"
+#include "Basic/Memory/GlobalHeap.h"
 
 struct WorkerThreadParameter
 {
@@ -43,7 +43,7 @@ auto jobQueues = []() -> StaticArray<Dequeue<QueuedJob>, JobPriorityCount>
 	auto a = StaticArray<Dequeue<QueuedJob>, JobPriorityCount>{};
 	for (auto &s : a)
 	{
-		s = NewDequeueWithBlockSizeIn<QueuedJob>(GlobalAllocator(), 1024, 1024);
+		s = NewDequeueWithBlockSizeIn<QueuedJob>(Memory::GlobalHeap(), 1024, 1024);
 	}
 	return a;
 }();
@@ -52,11 +52,11 @@ auto resumableJobFiberQueues = []() -> StaticArray<Array<JobFiber *>, JobPriorit
 	auto a = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
 	for (auto &q : a)
 	{
-		q = NewArrayWithCapacityIn<JobFiber *>(GlobalAllocator(), 100);
+		q = NewArrayWithCapacityIn<JobFiber *>(Memory::GlobalHeap(), 100);
 	}
 	return a;
 }();
-auto jobCounterPool = NewPoolIn<JobCounter>(GlobalAllocator(), 0);
+auto jobCounterPool = NewPoolIn<JobCounter>(Memory::GlobalHeap(), 0);
 auto runningJobFibers = NewArray<JobFiber *>(WorkerThreadCount());
 //ThreadLocal auto runningJobFiber = (JobFiber *){};
 //ThreadLocal auto workerThreadFiber = Fiber{};
@@ -202,7 +202,7 @@ void *WorkerThreadProcedure(void *param)
 
 void InitializeJobs(JobProcedure initProc, void *initParam)
 {
-	workerThreads = NewArrayIn<WorkerThread>(GlobalAllocator(), WorkerThreadCount());
+	workerThreads = NewArrayIn<WorkerThread>(Memory::GlobalHeap(), WorkerThreadCount());
 	workerThreads[0].platformThread = CurrentThread();
 	//workerThreads.Last()->platformThread = CurrentThread();
 	for (auto i = 1; i < workerThreads.count; i += 1)
@@ -241,7 +241,7 @@ void RunJobs(ArrayView<JobDeclaration> js, JobPriority p, JobCounter **c)
 		counter = jobCounterPool.Get();
 		counter->jobCount = js.count;
 		counter->unfinishedJobCount = js.count;
-		counter->waitingFibers.SetAllocator(GlobalAllocator());
+		counter->waitingFibers.SetAllocator(Memory::GlobalHeap());
 		Assert(counter->waitingFibers.capacity == 0 && counter->waitingFibers.count == 0);
 		*c = counter;
 	/*

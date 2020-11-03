@@ -7,9 +7,9 @@ namespace GPU
 
 struct BufferBlockList
 {
-	VkBufferUsageFlags bufferUsage;
 	MemoryAllocator memoryAllocator;
-	HashTable<VkDeviceMemory, VkBuffer> vkBuffers;
+	VkBufferUsageFlags bufferUsage;
+	HashTable<VkDeviceMemory, VkBuffer> buffers;
 };
 
 struct BufferAllocator
@@ -20,9 +20,12 @@ struct BufferAllocator
 	Buffer Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size);
 };
 
-u64 HashVkDeviceMemory(VkDeviceMemory m)
+BufferAllocator NewBufferAllocator()
 {
-	return HashPointer(m);
+	return
+	{
+		.blockLists = NewArrayIn<BufferBlockList>(Memory::GlobalHeap(), 12),
+	};
 }
 
 Buffer BufferAllocator::Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size)
@@ -40,10 +43,14 @@ Buffer BufferAllocator::Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp
 	}
 	if (!list)
 	{
+		auto HashVkDeviceMemory = [](VkDeviceMemory m)
+		{
+			return HashPointer(m);
+		};
 		this->blockLists.Append(
 			{
 				.bufferUsage = bu,
-				.vkBuffers = NewHashTableIn<VkDeviceMemory, VkBuffer>(GlobalAllocator(), 32, HashVkDeviceMemory),
+				.buffers = NewHashTableIn<VkDeviceMemory, VkBuffer>(Memory::GlobalHeap(), 32, HashVkDeviceMemory),
 			});
 		list = this->blockLists.Last();
 	}
@@ -56,7 +63,7 @@ Buffer BufferAllocator::Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp
 	auto mem = list->memoryAllocator.Allocate(mp, af, size, 1, &fail);
 	Assert(!fail); // @TODO
 	auto buf = VkBuffer{};
-	if (auto b = list->vkBuffers.Lookup(mem.vkMemory); b)
+	if (auto b = list->buffers.Lookup(mem.memory); b)
 	{
 		buf = *b;
 	}
@@ -70,26 +77,19 @@ Buffer BufferAllocator::Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp
 			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		};
 		VkCheck(vkCreateBuffer(vkDevice, &ci, NULL, &buf));
-		VkCheck(vkBindBufferMemory(vkDevice, buf, mem.vkMemory, 0));
-		list->vkBuffers.Insert(mem.vkMemory, buf);
+		VkCheck(vkBindBufferMemory(vkDevice, buf, mem.memory, 0));
+		list->buffers.Insert(mem.memory, buf);
 	}
-	ConsolePrint("MEM oFFSET: %ld.\n", mem.offset);
 	return
 	{
-		.vkBuffer = buf,
+		.buffer = buf,
 		.size = size,
 		.offset = mem.offset,
 		.map = mem.map,
 	};
 }
 
-auto bufferAllocator = []() -> BufferAllocator
-{
-	return
-	{
-		.blockLists = NewArrayIn<BufferBlockList>(GlobalAllocator(), 12),
-	};
-}();
+auto bufferAllocator = NewBufferAllocator();
 
 Buffer NewBuffer(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size)
 {

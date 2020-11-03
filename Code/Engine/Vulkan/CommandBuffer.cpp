@@ -108,14 +108,14 @@ void CommandBuffer::CopyBuffer(Buffer src, Buffer dst, s64 srcOffset, s64 dstOff
 		.dstOffset = (VkDeviceSize)dst.offset + dstOffset,
 		.size = (VkDeviceSize)src.size,
 	};
-	vkCmdCopyBuffer(this->vkCommandBuffer, src.vkBuffer, dst.vkBuffer, 1, &c);
+	vkCmdCopyBuffer(this->vkCommandBuffer, src.buffer, dst.buffer, 1, &c);
 }
 
 void CommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 {
 	vkCmdPushConstants(this->vkCommandBuffer, rb.vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress), &rb.drawBufferPointer);
 	vkCmdBindIndexBuffer(this->vkCommandBuffer, rb.vkIndexBuffer, 0, GPUIndexTypeUint16);
-	vkCmdDrawIndexedIndirect(this->vkCommandBuffer, rb.indirectCommands.vkBuffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
+	vkCmdDrawIndexedIndirect(this->vkCommandBuffer, rb.indirectCommands.buffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
 }
 
 void CommandBuffer::Queue()

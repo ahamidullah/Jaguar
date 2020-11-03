@@ -12,11 +12,11 @@
 #include "Basic/Hash.h"
 #include "Basic/HashTable.h"
 #include "Basic/Log.h"
-#include "Basic/Memory.h"
 #include "Basic/Atomic.h"
 #include "Basic/Pool.h"
-#include "Basic/Time.h"
+#include "Basic/Time/Time.h"
 #include "Basic/File.h"
+#include "Basic/Memory/Memory.h"
 #include "Common.h"
 
 #define VulkanExportedFunction(name) PFN_##name name = NULL;
@@ -370,7 +370,7 @@ VulkanUniformInstance VulkanBufferUniformAllocator::AllocateInstance()
 auto vkBufferUniformAllocators = StaticArray<VulkanBufferUniformAllocator, ShaderDescriptorSetCount>{};
 #endif
 
-void NewGPUMeshAssetBlock(Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out)
+void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out)
 {
 	for (auto i = 0; i < cis.count; i += 1)
 	{
@@ -401,7 +401,7 @@ void NewGPUMeshAssetBlock(Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, A
 	}
 };
 
-GPUMeshAsset NewGPUMeshAsset(Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds)
+GPUMeshAsset NewGPUMeshAsset(Memory::Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds)
 {
 	auto ci = GPUMeshAssetCreateInfo
 	{
@@ -448,8 +448,8 @@ u64 HashVulkanDrawCallBindingGroup(VulkanDrawCallBindingGroup data)
 }
 
 auto vkBindingGroupLock = Spinlock{};
-auto vkBindingGroupToIndex = NewHashTableIn<VulkanDrawCallBindingGroup, s64>(GlobalAllocator(), 128, HashVulkanDrawCallBindingGroup);
-auto vkBindingGroups = NewArrayWithCapacityIn<VulkanDrawCallBindingGroup>(GlobalAllocator(), 128);
+auto vkBindingGroupToIndex = NewHashTableIn<VulkanDrawCallBindingGroup, s64>(Memory::GlobalHeap(), 128, HashVulkanDrawCallBindingGroup);
+auto vkBindingGroups = NewArrayWithCapacityIn<VulkanDrawCallBindingGroup>(Memory::GlobalHeap(), 128);
 
 #if 0
 void NewGPUMeshBlock(ArrayView<GPUMeshAsset *> as, ArrayView<GPUMesh *> out)
@@ -549,7 +549,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	//auto sb = NewGPUFrameStagingBufferX(ib, nDraws * sizeof(VkDrawIndexedIndirectCommand), 0);
 	auto sb = GPU::StagingBuffer{};
 	sb.MapBuffer(ib, 0);
-	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.Map(), nDraws);
+	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.map, nDraws);
 	//auto vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), 1, NULL);
 	auto drawBuffer = GPU::NewBuffer(
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -585,7 +585,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	//auto dsb = NewGPUFrameStagingBufferX(vkDrawBuffer, nDraws * sizeof(VulkanDrawData), 0);
 	auto dsb = GPU::StagingBuffer{};
 	dsb.MapBuffer(drawBuffer, 0);
-	auto dd = NewArrayView((VulkanDrawData *)dsb.Map(), nDraws);
+	auto dd = NewArrayView((VulkanDrawData *)dsb.map, nDraws);
 	auto di = 0;
 	for (auto p : ps)
 	{
@@ -596,10 +596,10 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 				.p1 = V4{0.0f, 0.0f, 0.0f, 1.0f},
 				.p2 = V4{1.0f, 1.0f, 0.0f, 1.0f},
 				.p3 = V4{0.5f, -0.5f, 0.0f, 1.0f},
-				.vertexBuffer = VulkanBufferAddress(p.mesh->asset->vertexBuffer.vkBuffer),
+				.vertexBuffer = VulkanBufferAddress(p.mesh->asset->vertexBuffer.buffer),
 				//.indexBuffer = VulkanBufferAddress(p.mesh->asset->indexBuffer),
 				//.mesh = VulkanBufferAddress(p.mesh->uniform.instances[p.mesh->uniform.index].buffer.vkBuffer) + p.mesh->uniform.instances[p.mesh->uniform.index].buffer.offset + (di * 64),
-				.mesh = VulkanBufferAddress(p.mesh->uniform.vkBuffer) + p.mesh->uniform.offset,
+				.mesh = VulkanBufferAddress(p.mesh->uniform.buffer) + p.mesh->uniform.offset,
 				//.mesh = VulkanBufferAddress(p.mesh->uniform.instances[p.mesh->uniform.index].buffer.vkBuffer) + p.mesh->uniform.instances[p.mesh->uniform.index].buffer.offset + (p.mesh->uniform.instances[p.mesh->uniform.index].elementIndex * sizeof(GPUObjectUniforms)),
 			};
 			cmds[di] = VkDrawIndexedIndirectCommand
@@ -618,10 +618,10 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	dsb.Flush();
 	return
 	{
-		.drawBufferPointer = VulkanBufferAddress(drawBuffer.vkBuffer) + drawBuffer.offset,
+		.drawBufferPointer = VulkanBufferAddress(drawBuffer.buffer) + drawBuffer.offset,
 		.indirectCommands = ib,
 		.indirectCommandCount = nDraws,
-		.vkIndexBuffer = ps[0].mesh->asset->indexBuffer.vkBuffer,
+		.vkIndexBuffer = ps[0].mesh->asset->indexBuffer.buffer,
 		.vkPipelineLayout = vkPipelineLayout,
 	};
 #if 0
@@ -1137,8 +1137,8 @@ void LogGPUMemoryInfo()
 			"Vulkan",
 			"	Heap: %d, Usage: %fmb, Total: %fmb",
 			i,
-			BytesToMegabytes(bp.heapUsage[i]),
-			BytesToMegabytes(bp.heapBudget[i]));
+			bp.heapUsage[i] / Megabyte,
+			bp.heapBudget[i] / Megabyte);
 	}
 }
 
@@ -1242,7 +1242,7 @@ VulkanMemoryBlockAllocator NewVulkanMemoryBlockAllocator(VulkanMemoryType mt, Vk
 	return
 	{
 		.blockSize = blockSize,
-		.blocks = NewArrayIn<VulkanMemoryBlock>(GlobalAllocator(), 0),
+		.blocks = NewArrayIn<VulkanMemoryBlock>(Memory::GlobalHeap(), 0),
 		.memoryType = mt,
 		.bufferMemorySize = mr.size,
 		.bufferUsage = bu,
@@ -1293,7 +1293,7 @@ GPUBuffer VulkanMemoryBlockAllocator::AllocateBuffer(s64 size, s64 align, void *
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
 	Assert(size < this->blockSize);
-	if (this->blocks.count == 0 || AlignAddress(this->blocks.Last()->frontier, align) + size > this->blockSize)
+	if (this->blocks.count == 0 || Memory::AlignAddress(this->blocks.Last()->frontier, align) + size > this->blockSize)
 	{
 		auto newBlk = VulkanMemoryBlock{};
 		newBlk.vkBuffer = NewVulkanBuffer(this->bufferUsage, this->blockSize);
@@ -1331,7 +1331,7 @@ GPUBuffer VulkanMemoryBlockAllocator::AllocateBuffer(s64 size, s64 align, void *
 		}
 		this->blocks.Append(newBlk);
 	}
-	this->blocks.Last()->frontier = AlignAddress(this->blocks.Last()->frontier, align);
+	this->blocks.Last()->frontier = Memory::AlignAddress(this->blocks.Last()->frontier, align);
 	if (this->blocks.count > 1)
 	{
 		Abort("Vulkan", "Ran out of memory?");
@@ -1405,7 +1405,7 @@ void InitializeGPU(Window *w)
 		Abort("Vulkan", "Could not open Vulkan DLL libvulkan.so.");
 	}
 	#define VulkanExportedFunction(name) \
-		name = (PFN_##name)lib.Symbol(#name, &err); \
+		name = (PFN_##name)lib.LookupProcedure(#name, &err); \
 		if (err) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
 	#define VulkanGlobalFunction(name) \
 		name = (PFN_##name)vkGetInstanceProcAddr(NULL, (const char *)#name); \
@@ -1928,8 +1928,8 @@ void InitializeGPU(Window *w)
 				{
 					fci.queueFamilyIndex = vkQueueFamilies[j];
 					VkCheck(vkCreateCommandPool(vkDevice, &fci, NULL, &vkFrameCommandPools[i][j][k]));
-					vkFrameQueuedCommandBuffers[i][j][k].SetAllocator(GlobalAllocator());
-					vkFrameCommandBufferPools[i][j][k].SetAllocator(GlobalAllocator());
+					vkFrameQueuedCommandBuffers[i][j][k].SetAllocator(Memory::GlobalHeap());
+					vkFrameCommandBufferPools[i][j][k].SetAllocator(Memory::GlobalHeap());
 				}
 			}
 		}
@@ -2190,7 +2190,7 @@ void InitializeGPU(Window *w)
 	vkDefaultFramebufferAttachments.Resize(vkSwapchainImages.count);
 	for (auto i = 0; i < vkDefaultFramebufferAttachments.count; i += 1)
 	{
-		vkDefaultFramebufferAttachments[i].SetAllocator(GlobalAllocator());
+		vkDefaultFramebufferAttachments[i].SetAllocator(Memory::GlobalHeap());
 		vkDefaultFramebufferAttachments[i].Append(vkSwapchainImageViews[i]);
 		vkDefaultFramebufferAttachments[i].Append(vkDefaultDepthImageView);
 	}
@@ -2961,7 +2961,7 @@ void FreeGPUFences(ArrayView<GPUFence> fs)
 	}
 }
 
-const auto VulkanAcquireImageTimeout = 2 * TimeSecond;
+const auto VulkanAcquireImageTimeout = 2 * Time::Second;
 
 void GPUBeginFrame()
 {
@@ -3256,7 +3256,7 @@ GPUFramebuffer NewGPUFramebuffer(u32 w, u32 h, ArrayView<GPUImageView> attachmen
 		.id = id,
 		.width = w,
 		.height = h,
-		.attachments = NewArrayWithCapacityIn<VkImageView>(GlobalAllocator(), attachments.count),
+		.attachments = NewArrayWithCapacityIn<VkImageView>(Memory::GlobalHeap(), attachments.count),
 	};
 	for (auto a : attachments)
 	{

@@ -2,6 +2,9 @@
 
 #include "Common.h"
 
+namespace Memory
+{
+
 struct Allocator
 {
 	virtual void *Allocate(s64 size) = 0;
@@ -11,3 +14,7 @@ struct Allocator
 	virtual void Clear() = 0;
 	virtual void Free() = 0;
 };
+
+const auto DefaultAlignment = 16;
+
+}

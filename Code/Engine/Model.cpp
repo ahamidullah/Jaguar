@@ -5,13 +5,12 @@
 #include "Basic/HashTable.h"
 #include "Basic/Hash.h"
 #include "Basic/Parser.h"
-#include "Basic/Memory.h"
 #include "Basic/Log.h"
 
 #ifdef DevelopmentBuild
 	const auto ModelDirectory = NewString("Data/Model");
 
-	auto modelFilepaths = NewHashTableIn<String, String>(GlobalAllocator(), 0, HashString);
+	auto modelFilepaths = NewHashTableIn<String, String>(Memory::GlobalHeap(), 0, HashString);
 #endif
 
 void InitializeModelAssets()
@@ -33,14 +32,14 @@ void InitializeModelAssets()
 				LogVerbose("Model", "%k does not exist in directory %k, skipping.", JoinStrings(name, ".gltf"), JoinFilepaths(ModelDirectory, itr.filename, "glTF"));
 				continue;
 			}
-			modelFilepaths.Insert(name.CopyIn(GlobalAllocator()), path.CopyIn(GlobalAllocator()));
+			modelFilepaths.Insert(name.CopyIn(Memory::GlobalHeap()), path.CopyIn(Memory::GlobalHeap()));
 			LogVerbose("Model", "Registered %k to filepath %k.", name, path);
 		}
 	}
 }
 
 const auto MeshAssetCount = 1;
-const auto MeshCount = 1;
+const auto MeshCount = 2;
 auto meshAssets = NewArray<GPUMeshAsset>(MeshAssetCount);
 auto meshes = NewArray<GPUMesh>(MeshCount);
 auto materials = GPUMaterial{};
@@ -86,7 +85,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 			auto acc = &gltf.accessors[p.indices];
 			submeshes.Append(acc->count);
 		}
-		meshAssets[0] = NewGPUMeshAsset(GlobalAllocator(), 24, sizeof(Vertex1P1N), 36, sizeof(u16), submeshes);
+		meshAssets[0] = NewGPUMeshAsset(Memory::GlobalHeap(), 24, sizeof(Vertex1P1N), 36, sizeof(u16), submeshes);
 		for (auto p : m.primitives)
 		{
 			auto m = &meshAssets[0];
@@ -121,7 +120,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 				auto bv = &gltf.bufferViews[acc->bufferView];
 				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
 				sb.MapBuffer(m->indexBuffer, 0);
-				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)sb.Map(), indicesSize));
+				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)sb.map, indicesSize));
 			}
 			// Vertices.
 			{
@@ -155,7 +154,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 					auto acc = &gltf.accessors[accIndex];
 					auto bv = &gltf.bufferViews[acc->bufferView];
 					auto b = (V3 *)(buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset);
-					auto dst = (u8 *)sb.Map() + offset;
+					auto dst = (u8 *)sb.map + offset;
 					auto ofs = V3{};
 					for (auto i = 0; i < acc->count; i += 1)
 					{

@@ -19,7 +19,7 @@ Framebuffer NewFramebuffer(u32 w, u32 h, ArrayView<ImageView> attachments)
 		.id = id,
 		.width = w,
 		.height = h,
-		.attachments = NewArrayWithCapacityIn<VkImageView>(GlobalAllocator(), attachments.count),
+		.attachments = NewArrayWithCapacityIn<VkImageView>(Memory::GlobalHeap(), attachments.count),
 	};
 	for (auto a : attachments)
 	{

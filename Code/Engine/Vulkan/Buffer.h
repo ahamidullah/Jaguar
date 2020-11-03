@@ -7,7 +7,7 @@ namespace GPU
 
 struct Buffer
 {
-	VkBuffer vkBuffer;
+	VkBuffer buffer;
 	s64 size;
 	s64 offset;
 	void *map;

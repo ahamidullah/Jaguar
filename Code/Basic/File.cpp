@@ -1,6 +1,5 @@
 #include "File.h"
 #include "String.h"
-#include "Time.h"
 
 void ReadEntireFileIn(Array<u8> *buf, String path, bool *err)
 {

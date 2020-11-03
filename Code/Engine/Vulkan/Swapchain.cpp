@@ -2,6 +2,7 @@
 
 #include "PhysicalDevice.h"
 #include "Queue.h"
+#include "Basic/Time/Time.h"
 
 namespace GPU
 {
@@ -245,7 +246,7 @@ void Swapchain::AcquireNextImage()
 {
 	VkCheck(vkWaitForFences(vkDevice, 1, &this->frameFences[this->frameIndex], true, U32Max));
 	VkCheck(vkResetFences(vkDevice, 1, &this->frameFences[this->frameIndex]));
-	const auto AcquireImageTimeout = 2 * TimeSecond;
+	const auto AcquireImageTimeout = 2 * Time::Second;
 	VkCheck(vkAcquireNextImageKHR(vkDevice, this->swapchain, AcquireImageTimeout, this->imageAcquiredSemaphores[this->frameIndex], VK_NULL_HANDLE, &this->imageIndex));
 }
 

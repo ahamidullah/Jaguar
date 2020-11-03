@@ -9,7 +9,7 @@ const auto MaxFramesInFlight = 2;
 
 struct MemoryAllocation
 {
-	VkDeviceMemory vkMemory;
+	VkDeviceMemory memory;
 	s64 blockSize;
 	s64 offset;
 	void *map;
@@ -17,7 +17,7 @@ struct MemoryAllocation
 
 struct MemoryBlock
 {
-	VkDeviceMemory vkMemory;
+	VkDeviceMemory memory;
 	s64 frontier;
 	void *map;
 };

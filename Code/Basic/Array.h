@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Allocator.h"
+#include "Memory/ContextAllocator.h"
 #include "Assert.h"
 #include "Common.h"
-
-Allocator *ContextAllocator();
 
 template <typename T> struct Array;
 template <typename T> struct ArrayView;
@@ -51,9 +49,9 @@ struct ArrayView
 	ArrayView<u8> Bytes();
 	ArrayView<T> View(s64 start, s64 end);
 	Array<T> Copy();
-	Array<T> CopyIn(Allocator *a);
+	Array<T> CopyIn(Memory::Allocator *a);
 	Array<T> CopyRange(s64 start, s64 end);
-	Array<T> CopyRangeIn(Allocator *a, s64 start, s64 end);
+	Array<T> CopyRangeIn(Memory::Allocator *a, s64 start, s64 end);
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -145,11 +143,11 @@ template <typename T> Array<T> NewArray(s64 count);
 template <typename T>
 Array<T> ArrayView<T>::Copy()
 {
-	return this->CopyIn(ContextAllocator());
+	return this->CopyIn(Memory::ContextAllocator());
 }
 
 template <typename T>
-Array<T> ArrayView<T>::CopyIn(Allocator *a)
+Array<T> ArrayView<T>::CopyIn(Memory::Allocator *a)
 {
 	auto r = NewArrayIn<T>(a, this->count);
 	CopyArray(*this, r);
@@ -159,11 +157,11 @@ Array<T> ArrayView<T>::CopyIn(Allocator *a)
 template <typename T>
 Array<T> ArrayView<T>::CopyRange(s64 start, s64 end)
 {
-	this->CopyRangeIn(ContextAllocator(), start, end);
+	this->CopyRangeIn(Memory::ContextAllocator(), start, end);
 }
 
 template <typename T>
-Array<T> ArrayView<T>::CopyRangeIn(Allocator *a, s64 start, s64 end)
+Array<T> ArrayView<T>::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto ar = NewArrayIn<T>(a, end - start);
@@ -229,7 +227,7 @@ void CopyArray(ArrayView<T> src, ArrayView<T> dst)
 template <typename T>
 struct Array
 {
-	Allocator *allocator;
+	Memory::Allocator *allocator;
 	T *elements;
 	s64 count;
 	s64 capacity;
@@ -242,7 +240,7 @@ struct Array
 	T *begin();
 	T *end();
 	void Free();
-	void SetAllocator(Allocator *a);
+	void SetAllocator(Memory::Allocator *a);
 	void Reserve(s64 reserve);
 	void Resize(s64 count);
 	void Append(T e);
@@ -252,9 +250,9 @@ struct Array
 	typedef bool (*SiftProcedure)(T e);
 	ArrayView<T> Sift(SiftProcedure p);
 	Array<T> Copy();
-	Array<T> CopyIn(Allocator *a);
+	Array<T> CopyIn(Memory::Allocator *a);
 	Array<T> CopyRange(s64 start, s64 end);
-	Array<T> CopyRangeIn(Allocator *a, s64 start, s64 end);
+	Array<T> CopyRangeIn(Memory::Allocator *a, s64 start, s64 end);
 	ArrayView<T> View(s64 start, s64 end);
 	ArrayView<u8> Bytes();
 	s64 FindFirst(T e);
@@ -263,8 +261,10 @@ struct Array
 	T *Last();
 };
 
+template <typename T> Array<T> NewArrayWithCapacityIn(Memory::Allocator *a, s64 cap);
+
 template <typename T, typename... Ts>
-Array<T> MakeArrayIn(Allocator *a, Ts... ts)
+Array<T> MakeArrayIn(Memory::Allocator *a, Ts... ts)
 {
 	auto r = NewArrayWithCapacityIn<T>(a, sizeof...(ts));
 	(r.Append(ts), ...);
@@ -274,11 +274,11 @@ Array<T> MakeArrayIn(Allocator *a, Ts... ts)
 template <typename T, typename... Ts>
 Array<T> MakeArray(Ts... ts)
 {
-	return MakeArrayIn<T>(ContextAllocator(), ts...);
+	return MakeArrayIn<T>(Memory::ContextAllocator(), ts...);
 }
 
 template <typename T>
-Array<T> NewArrayIn(Allocator *a, s64 count)
+Array<T> NewArrayIn(Memory::Allocator *a, s64 count)
 {
 	return
 	{
@@ -292,11 +292,11 @@ Array<T> NewArrayIn(Allocator *a, s64 count)
 template <typename T>
 Array<T> NewArray(s64 count)
 {
-	return NewArrayIn<T>(ContextAllocator(), count);
+	return NewArrayIn<T>(Memory::ContextAllocator(), count);
 }
 
 template <typename T>
-Array<T> NewArrayWithCapacityIn(Allocator *a, s64 cap)
+Array<T> NewArrayWithCapacityIn(Memory::Allocator *a, s64 cap)
 {
 	return
 	{
@@ -309,7 +309,7 @@ Array<T> NewArrayWithCapacityIn(Allocator *a, s64 cap)
 template <typename T>
 Array<T> NewArrayWithCapacity(s64 cap)
 {
-	return NewArrayWithCapacityIn<T>(ContextAllocator(), cap);
+	return NewArrayWithCapacityIn<T>(Memory::ContextAllocator(), cap);
 }
 
 template <typename T>
@@ -374,11 +374,11 @@ T *Array<T>::end()
 template <typename T>
 Array<T> Array<T>::Copy()
 {
-	return this->CopyIn(ContextAllocator());
+	return this->CopyIn(Memory::ContextAllocator());
 }
 
 template <typename T>
-Array<T> Array<T>::CopyIn(Allocator *a)
+Array<T> Array<T>::CopyIn(Memory::Allocator *a)
 {
 	auto r = NewArrayIn<T>(a, this->count);
 	CopyArray(*this, r);
@@ -388,11 +388,11 @@ Array<T> Array<T>::CopyIn(Allocator *a)
 template <typename T>
 Array<T> Array<T>::CopyRange(s64 start, s64 end)
 {
-	return this->CopyRangeIn(ContextAllocator(), start, end);
+	return this->CopyRangeIn(Memory::ContextAllocator(), start, end);
 }
 
 template <typename T>
-Array<T> Array<T>::CopyRangeIn(Allocator *a, s64 start, s64 end)
+Array<T> Array<T>::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto r = NewArrayIn<T>(a, end - start);
@@ -436,7 +436,7 @@ s64 Array<T>::FindLast(T e)
 }
 
 template <typename T>
-void Array<T>::SetAllocator(Allocator *a)
+void Array<T>::SetAllocator(Memory::Allocator *a)
 {
 	this->allocator = a;
 }
@@ -446,7 +446,7 @@ void Array<T>::Reserve(s64 n)
 {
 	if (!this->allocator)
 	{
-		this->allocator = ContextAllocator();
+		this->allocator = Memory::ContextAllocator();
 	}
 	if (!this->elements)
 	{

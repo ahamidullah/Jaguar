@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../String.h"
-#include "../Time.h"
+#include "Basic/Time/Time.h"
 
 enum FileSeekRelative
 {
@@ -22,7 +22,7 @@ struct File
 	bool Read(ArrayView<u8> out);
 	s64 Length(bool *err);
 	s64 Seek(s64 seek, FileSeekRelative rel, bool *err);
-	Time LastModifiedTime(bool *err);
+	Time::Time LastModifiedTime(bool *err);
 };
 
 struct DirectoryIteration

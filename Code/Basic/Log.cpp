@@ -1,10 +1,11 @@
 #include "Log.h"
 #include "String.h"
 #include "File.h"
-#include "Memory.h"
 #include "Process.h"
 #include "Thread.h"
 #include "Atomic.h"
+#include "Memory/GlobalHeap.h"
+#include "Memory/PoolAllocator.h"
 
 // We want to allow global variable initialization to use these function, so we have to be a bit
 // careful about how we do things.
@@ -14,7 +15,7 @@
 
 typedef void (*CrashHandler)(File crashLog);
 
-auto crashHandlers = NewArrayIn<CrashHandler>(GlobalAllocator(), 0);
+auto crashHandlers = NewArrayIn<CrashHandler>(Memory::GlobalHeap(), 0);
 
 String LogFileDirectory()
 {
@@ -187,7 +188,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	// This is pretty ugly and I kind of hate it.
 	auto st = Stacktrace();
 	// @TODO
-	auto pool = NewPoolAllocator(KilobytesToBytes(8), 1, GlobalAllocator(), GlobalAllocator());
+	auto pool = Memory::NewPoolAllocator(8 * Kilobyte, 1, Memory::GlobalHeap(), Memory::GlobalHeap());
 	//SetContextAllocator(&pool);
 	//contextAllocator = &pool; // @TODO
 	LogFatal(category, "###########################################################################");

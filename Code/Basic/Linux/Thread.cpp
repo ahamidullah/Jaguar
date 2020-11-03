@@ -2,7 +2,6 @@
 #include "../Log.h"
 #include "../Process.h"
 #include "../String.h"
-#include "../Memory.h"
 #include "../CPU.h"
 #include "../Atomic.h"
 
@@ -96,7 +95,7 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
-	auto p = (RunThreadParameters *)GlobalAllocator()->Allocate(sizeof(RunThreadParameters));
+	auto p = (RunThreadParameters *)Memory::GlobalHeap()->Allocate(sizeof(RunThreadParameters));
 	p->threadIndex = AtomicFetchAndAdd64(&threadCount, 1);
 	p->procedure = proc;
 	p->parameter = param;

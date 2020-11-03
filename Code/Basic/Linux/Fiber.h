@@ -2,6 +2,7 @@
 
 #include "../Array.h"
 #include "../PCH.h"
+#include "Basic/Memory/Allocator.h"
 #include "Common.h"
 
 	struct SystemContext
@@ -23,12 +24,12 @@ struct Fiber
 #if !NEW_FIBER
 	ucontext_t context;
 	jmp_buf jumpBuffer;
-	Allocator *contextAllocator;
-	Array<Allocator *> contextAllocatorStack;
+	Memory::Allocator *contextAllocator;
+	Array<Memory::Allocator *> contextAllocatorStack;
 #else
 	SystemContext context;
-	Allocator *contextAllocator;
-	Array<Allocator *> contextAllocatorStack;
+	Memory::Allocator *contextAllocator;
+	Array<Memory::Allocator *> contextAllocatorStack;
 #endif
 	#ifdef ThreadSanitizerBuild
 		void *tsan;

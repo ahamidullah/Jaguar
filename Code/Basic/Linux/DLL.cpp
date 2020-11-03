@@ -27,7 +27,7 @@ bool DLL::Close()
 	return true;
 }
 
-void *DLL::Symbol(String name, bool *err)
+void *DLL::LookupProcedure(String name, bool *err)
 {
 	// According to https://linux.die.net/man/3/dlsym:
 	//     "If the symbol is not found, in the specified library or any of the libraries that were

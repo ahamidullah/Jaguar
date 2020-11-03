@@ -9,11 +9,10 @@ namespace GPU
 
 void StagingBuffer::MapBuffer(Buffer dst, s64 offset)
 {
-	if (this->mapped)
+	if (this->map)
 	{
-		this->Transfer();
+		this->Upload();
 	}
-	this->mapped = true;
 	if (!this->commandBuffer.vkCommandBuffer)
 	{
 		this->commandBuffer = NewCommandBuffer(QueueType::Transfer);
@@ -25,23 +24,16 @@ void StagingBuffer::MapBuffer(Buffer dst, s64 offset)
 	{
 		// Destination buffer is allocated from CPU accessible memory which is already mapped, so the staging buffer will write directly to
 		// mapped memory, no source buffer needed.
+		this->map = (u8 *)this->destination.map + offset;
 		return;
 	}
 	this->source = NewBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, dst.size);
+	this->map = this->source.map;
 }
 
-void *StagingBuffer::Map()
+void StagingBuffer::Upload()
 {
-	if (this->destination.map)
-	{
-		return (u8 *)this->destination.map + offset;
-	}
-	return this->source.map;
-}
-
-void StagingBuffer::Transfer()
-{
-	this->mapped = false;
+	this->map = NULL;
 	if (this->destination.map)
 	{
 		return;
@@ -51,9 +43,9 @@ void StagingBuffer::Transfer()
 
 void StagingBuffer::Flush()
 {
-	if (this->mapped)
+	if (this->map)
 	{
-		this->Transfer();
+		this->Upload();
 	}
 	this->commandBuffer.Queue();
 }

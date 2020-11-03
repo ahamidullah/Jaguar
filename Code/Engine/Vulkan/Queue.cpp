@@ -53,19 +53,11 @@ void SubmitGraphicsCommands()
 		VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	auto signalSems = MakeStaticArray<VkSemaphore>(queues[(s64)QueueType::Graphics].frameSemaphores[swapchain.frameIndex]);
-	for (auto a : vkFrameQueuedCommandBuffers[vkCommandGroupUseIndex][(s64)QueueType::Graphics])
-	{
-		ConsolePrint("GRAPHICS %ld\n", a.count);
-	}
 	SubmitCommands(QueueType::Graphics, waitSems, waitStages, signalSems, swapchain.frameFences[swapchain.frameIndex]);
 }
 
 void SubmitTransferCommands()
 {
-	for (auto a : vkFrameQueuedCommandBuffers[vkCommandGroupUseIndex][(s64)QueueType::Transfer])
-	{
-		ConsolePrint("TRANSFER %ld\n", a.count);
-	}
 	auto signalSems = MakeStaticArray<VkSemaphore>(queues[(s64)QueueType::Transfer].frameSemaphores[swapchain.frameIndex]);
 	SubmitCommands(QueueType::Transfer, {}, {}, signalSems, NULL);
 }

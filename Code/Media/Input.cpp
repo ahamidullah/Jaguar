@@ -1,14 +1,14 @@
 #include "Input.h"
 #include "Event.h"
-#include "Basic/Memory.h"
+#include "Basic/Memory/GlobalHeap.h"
 
 InputButtons NewInputButtons(s64 size)
 {
 	auto b = InputButtons
 	{
-		.down = NewArrayIn<bool>(GlobalAllocator(), size),
-		.pressed = NewArrayIn<bool>(GlobalAllocator(), size),
-		.released = NewArrayIn<bool>(GlobalAllocator(), size),
+		.down = NewArrayIn<bool>(Memory::GlobalHeap(), size),
+		.pressed = NewArrayIn<bool>(Memory::GlobalHeap(), size),
+		.released = NewArrayIn<bool>(Memory::GlobalHeap(), size),
 	};
 	for (auto &p : b.pressed)
 	{

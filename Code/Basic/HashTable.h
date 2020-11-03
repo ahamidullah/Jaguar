@@ -39,7 +39,7 @@ struct HashTable
 };
 
 template <typename K, typename V>
-HashTable<K, V> NewHashTableIn(Allocator *a, s64 cap, typename HashTable<K, V>::HashProcedure hp)
+HashTable<K, V> NewHashTableIn(Memory::Allocator *a, s64 cap, typename HashTable<K, V>::HashProcedure hp)
 {
 	auto ht = HashTable<K, V>
 	{
@@ -57,7 +57,7 @@ HashTable<K, V> NewHashTableIn(Allocator *a, s64 cap, typename HashTable<K, V>::
 template <typename K, typename V>
 HashTable<K, V> NewHashTable(s64 cap, typename HashTable<K, V>::HashProcedure hp)
 {
-	return NewHashTableIn<K, V>(ContextAllocator(), cap, hp);
+	return NewHashTableIn<K, V>(Memory::ContextAllocator(), cap, hp);
 }
 
 template <typename K, typename V>

@@ -8,7 +8,7 @@ struct DLL
 	String path;
 
 	bool Close();
-	void *Symbol(String name, bool *err);
+	void *LookupProcedure(String name, bool *err);
 };
 
 DLL OpenDLL(String path, bool *err);

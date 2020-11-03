@@ -1,48 +1,8 @@
-#include "../Time.h"
-#include "../Log.h"
+#include "Time.h"
+#include "Basic/Log.h"
 
-bool Duration::operator>(Duration d)
+namespace Time
 {
-	return this->nanoseconds > d.nanoseconds;
-}
-
-bool Duration::operator<(Duration d)
-{
-	return this->nanoseconds < d.nanoseconds;
-}
-
-Duration Duration::operator-(Duration d)
-{
-	return
-	{
-		.nanoseconds = this->nanoseconds - d.nanoseconds,
-	};
-}
-
-s64 Duration::Hour()
-{
-	return this->nanoseconds / TimeHour;
-}
-
-s64 Duration::Minute()
-{
-	return this->nanoseconds / TimeMinute;
-}
-
-s64 Duration::Second()
-{
-	return this->nanoseconds / TimeSecond;
-}
-
-s64 Duration::Millisecond()
-{
-	return this->nanoseconds / TimeMillisecond;
-}
-
-s64 Duration::Nanosecond()
-{
-	return this->nanoseconds;
-}
 
 bool Time::operator>(Time t)
 {
@@ -89,18 +49,16 @@ bool Time::operator<(Time t)
 Duration Time::operator-(Time t)
 {
 	Assert(this->ts.tv_sec > t.ts.tv_sec || (this->ts.tv_sec == t.ts.tv_sec && this->ts.tv_nsec >= t.ts.tv_nsec));
+	const auto NanosecondsPerSecond = 1000000000LL;
 	return
 	{
-		.nanoseconds = ((this->ts.tv_sec - t.ts.tv_sec) * TimeSecond) + (this->ts.tv_nsec - t.ts.tv_nsec),
+		.nanoseconds = ((this->ts.tv_sec - t.ts.tv_sec) * NanosecondsPerSecond) + (this->ts.tv_nsec - t.ts.tv_nsec),
 	};
 }
 
 Date Time::Date()
 {
 	auto tm = localtime(&this->ts.tv_sec);
-	// @TODO: Get rid of these constants?
-	auto ms = this->ts.tv_nsec / 1000000;
-	auto ns = this->ts.tv_nsec - (ms * 1000000);
 	return
 	{
 		tm->tm_year,
@@ -109,8 +67,7 @@ Date Time::Date()
 		tm->tm_hour,
 		tm->tm_min,
 		tm->tm_sec,
-		ms,
-		ns,
+		this->ts.tv_nsec,
 	};
 }
 
@@ -150,38 +107,30 @@ s64 Time::Second()
 	return tm->tm_sec;
 }
 
-s64 Time::Millisecond()
-{
-	auto tm = localtime(&this->ts.tv_sec);
-	return this->ts.tv_nsec / TimeMillisecond;
-}
-
 s64 Time::Nanosecond()
 {
-	auto tm = localtime(&this->ts.tv_sec);
-	// @TODO: Get rid of these constants?
-	auto ms = this->ts.tv_nsec / 1000000;
-	return this->ts.tv_nsec - (ms * 1000000);
+	return this->ts.tv_nsec;
 }
 
-Time CurrentTime()
+Time Now()
 {
 	auto t = Time{};
 	clock_gettime(CLOCK_MONOTONIC_RAW, &t.ts);
 	return t;
 }
 
-void Sleep(s64 nsec)
+void Sleep(s64 ns)
 {
-	// @TODO: Get rid of these constants?
-	auto msec = nsec / 1000000LL;
+	auto s = s64(ns / Second);
 	auto ts = (struct timespec)
 	{
-		.tv_sec = msec / 1000,
-		.tv_nsec = (msec % 1000) * 1000000,
+		.tv_sec = s,
+		.tv_nsec = ns - (s * Second),
 	};
 	if (nanosleep(&ts, NULL))
 	{
 		LogError("Time", "nanosleep() ended early: %k.\n", PlatformError());
 	}
+}
+
 }

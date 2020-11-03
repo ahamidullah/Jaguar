@@ -107,7 +107,7 @@ s64 File::Seek(s64 seek, FileSeekRelative rel, bool *err)
 	return off;
 }
 
-Time File::LastModifiedTime(bool *err)
+Time::Time File::LastModifiedTime(bool *err)
 {
 	auto stat = (struct stat){};
 	if (fstat(this->handle, &stat) == -1)

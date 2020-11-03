@@ -1,45 +1,48 @@
-#include "Time.h"
-#include "Log.h"
+#include "Timer.h"
+#include "Basic/String.h"
+
+namespace Time
+{
 
 Timer NewTimer(String name)
 {
 	return
 	{
 		.name = name,
-		.start = CurrentTime(),
+		.start = Now(),
 		.iteration = 1,
 	};
 }
 
 Duration Timer::Elapsed()
 {
-	return CurrentTime() - this->start;
+	return Now() - this->start;
 }
 
 void Timer::Print(s64 scale)
 {
-	auto delta = CurrentTime() - this->start;
-	this->runningSum += delta.Nanosecond();
+	auto delta = Now() - this->start;
+	this->runningSum += delta.Nanoseconds();
 	auto unit = String{};
 	switch (scale)
 	{
-	case TimeNanosecond:
+	case Nanosecond:
 	{
 		unit = "ns";
 	} break;
-	case TimeMillisecond:
+	case Millisecond:
 	{
 		unit = "ms";
 	} break;
-	case TimeSecond:
+	case Second:
 	{
 		unit = "s";
 	} break;
-	case TimeMinute:
+	case Minute:
 	{
 		unit = "m";
 	} break;
-	case TimeHour:
+	case Hour:
 	{
 		unit = "m";
 	} break;
@@ -49,18 +52,20 @@ void Timer::Print(s64 scale)
 		unit = "?";
 	};
 	};
-	ConsolePrint("%k: %ld%k, avg: %f%k\n", this->name, delta.Nanosecond() / scale, unit, (f32)(this->runningSum / scale) / (f32)this->iteration, unit);
+	ConsolePrint("%k: %ld%k, avg: %f%k\n", this->name, delta.Nanoseconds() / scale, unit, (f32)(this->runningSum / scale) / (f32)this->iteration, unit);
 	this->iteration += 1;
 }
 
 void Timer::Reset()
 {
-	this->start = CurrentTime();
+	this->start = Now();
 }
 
 void Timer::Clear()
 {
-	this->start = CurrentTime();
+	this->start = Now();
 	this->runningSum = 0;
 	this->iteration = 1;
+}
+
 }

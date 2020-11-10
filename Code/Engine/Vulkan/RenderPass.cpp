@@ -2,17 +2,17 @@
 
 #include "RenderPass.h"
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-VkRenderPass NewRenderPass(String shaderFilename)
+VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilename)
 {
 	if (shaderFilename == "Model.glsl")
 	{
 		auto attachments = MakeStaticArray(
 			VkAttachmentDescription
 			{
-				.format = vkSurfaceFormat.format,
+				.format = sf.format,
 				.samples = VK_SAMPLE_COUNT_1_BIT,
 				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -47,7 +47,7 @@ VkRenderPass NewRenderPass(String shaderFilename)
 			VkSubpassDescription
 			{
 				.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-				.colorAttachmentCount = (u32)colorAttachments.Count(),
+				.colorAttachmentCount = u32(colorAttachments.Count()),
 				.pColorAttachments = colorAttachments.elements,
 				.pDepthStencilAttachment = &stencilAttachment,
 			});
@@ -64,15 +64,15 @@ VkRenderPass NewRenderPass(String shaderFilename)
 		auto ci = VkRenderPassCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-			.attachmentCount = (u32)attachments.Count(),
+			.attachmentCount = u32(attachments.Count()),
 			.pAttachments = attachments.elements,
-			.subpassCount = (u32)subpassDescs.Count(),
+			.subpassCount = u32(subpassDescs.Count()),
 			.pSubpasses = subpassDescs.elements,
-			.dependencyCount = (u32)subpassDeps.Count(),
+			.dependencyCount = u32(subpassDeps.Count()),
 			.pDependencies = subpassDeps.elements,
 		};
 		auto rp = VkRenderPass{};
-		VkCheck(vkCreateRenderPass(vkDevice, &ci, NULL, &rp));
+		VkCheck(vkCreateRenderPass(d.device, &ci, NULL, &rp));
 		return rp;
 	}
 	else

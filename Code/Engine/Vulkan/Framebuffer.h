@@ -2,7 +2,9 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+#include "Swapchain.h"
+
+namespace GPU::Vulkan
 {
 
 struct Framebuffer
@@ -11,6 +13,8 @@ struct Framebuffer
 	u32 width;
 	u32 height;
 	Array<VkImageView> attachments;
+	Swapchain *swapchain;
+	Device *device;
 };
 
 // @TODO
@@ -19,8 +23,8 @@ struct ImageView
 	VkImageView vkImageView;
 };
 
-Framebuffer NewFramebuffer(u32 w, u32 h, ArrayView<ImageView> attachments);
-Framebuffer DefaultFramebuffer();
+Framebuffer NewFramebuffer(Swapchain *sc, Device *d, u32 w, u32 h, ArrayView<ImageView> attachments);
+Framebuffer DefaultFramebuffer(Swapchain *sc, Device *d);
 
 VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb);
 

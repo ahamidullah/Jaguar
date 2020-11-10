@@ -2,10 +2,10 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-VkRenderPass NewRenderPass(String shaderFilename);
+VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilename);
 
 }
 

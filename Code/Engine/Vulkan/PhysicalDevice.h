@@ -2,8 +2,12 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+#include "Queue.h"
+
+namespace GPU::Vulkan
 {
+
+struct Instance;
 
 struct PhysicalDevice
 {
@@ -14,11 +18,9 @@ struct PhysicalDevice
 	VkSurfaceCapabilitiesKHR surfaceCapabilities;
 	VkPresentModeKHR presentMode;
 	VkPhysicalDeviceMemoryProperties memoryProperties;
-
-	void Initialize(Window *w);
 };
 
-extern PhysicalDevice physicalDevice;
+PhysicalDevice NewPhysicalDevice(Instance inst, Window *w);
 
 }
 

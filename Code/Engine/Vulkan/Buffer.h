@@ -2,7 +2,11 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+#include "Memory.h"
+#include "Basic/HashTable.h"
+#include "Basic/Thread.h"
+
+namespace GPU::Vulkan
 {
 
 struct Buffer
@@ -15,7 +19,22 @@ struct Buffer
 	void Free();
 };
 
-Buffer NewBuffer(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size);
+struct BufferBlockList
+{
+	MemoryAllocator memoryAllocator;
+	VkBufferUsageFlags bufferUsage;
+	HashTable<VkDeviceMemory, VkBuffer> buffers;
+};
+
+struct BufferAllocator
+{
+	Spinlock lock;
+	Array<BufferBlockList> blockLists;
+
+	Buffer Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size);
+};
+
+BufferAllocator NewBufferAllocator(PhysicalDevice pd, Device d);
 
 }
 

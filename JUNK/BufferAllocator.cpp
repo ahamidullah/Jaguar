@@ -5,11 +5,22 @@
 namespace GPU::Vulkan
 {
 
-void Buffer::Free()
+struct BufferBlockList
 {
-}
+	MemoryAllocator memoryAllocator;
+	VkBufferUsageFlags bufferUsage;
+	HashTable<VkDeviceMemory, VkBuffer> buffers;
+};
 
-BufferAllocator NewBufferAllocator(PhysicalDevice pd, Device d)
+struct BufferAllocator
+{
+	Spinlock lock;
+	Array<BufferBlockList> blockLists;
+
+	Buffer Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size);
+};
+
+BufferAllocator NewBufferAllocator()
 {
 	return
 	{
@@ -17,7 +28,7 @@ BufferAllocator NewBufferAllocator(PhysicalDevice pd, Device d)
 	};
 }
 
-Buffer BufferAllocator::Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size)
+Buffer BufferAllocator::Allocate(VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size)
 {
 	this->lock.Lock();
 	Defer(this->lock.Unlock());
@@ -49,7 +60,7 @@ Buffer BufferAllocator::Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags
 		af |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
 	}
 	auto fail = false;
-	auto mem = list->memoryAllocator.Allocate(pd, d, mp, af, size, 1, &fail);
+	auto mem = list->memoryAllocator.Allocate(mp, af, size, 1, &fail);
 	Assert(!fail); // @TODO
 	auto buf = VkBuffer{};
 	if (auto b = list->buffers.Lookup(mem.memory); b)
@@ -61,12 +72,12 @@ Buffer BufferAllocator::Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags
 		auto ci = VkBufferCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-			.size = VkDeviceSize(mem.blockSize),
+			.size = (VkDeviceSize)mem.blockSize,
 			.usage = list->bufferUsage,
 			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		};
-		VkCheck(vkCreateBuffer(d.device, &ci, NULL, &buf));
-		VkCheck(vkBindBufferMemory(d.device, buf, mem.memory, 0));
+		VkCheck(vkCreateBuffer(vkDevice, &ci, NULL, &buf));
+		VkCheck(vkBindBufferMemory(vkDevice, buf, mem.memory, 0));
 		list->buffers.Insert(mem.memory, buf);
 	}
 	return

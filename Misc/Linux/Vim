@@ -1,2 +1,2 @@
 #!/bin/bash
-xterm -fullscreen -e "cd $PROJECT_DIRECTORY/Code; nvim" >& /dev/null &
+xterm -e "cd $PROJECT_DIRECTORY/Code; nvim" >& /dev/null &

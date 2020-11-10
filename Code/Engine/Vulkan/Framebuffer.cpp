@@ -1,18 +1,16 @@
 #ifdef VulkanBuild
 
-#include "Swapchain.h"
-
-namespace GPU
+namespace GPU::Vulkan
 {
 
-Framebuffer NewFramebuffer(u32 w, u32 h, ArrayView<ImageView> attachments)
+Framebuffer NewFramebuffer(Swapchain *sc, Device *d, u32 w, u32 h, ArrayView<ImageView> attachments)
 {
 	static auto idGenerator = u64{0};
 	auto id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, 1);
-	// The first few identifiers are reserved for the default swapchain framebuffer.
-	if (id < swapchain.images.count)
+	// The first few ids are reserved for the default swapchain framebuffer.
+	if (id < sc->images.count)
 	{
-		id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, swapchain.images.count);
+		id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, sc->images.count);
 	}
 	auto fb = Framebuffer
 	{
@@ -20,6 +18,8 @@ Framebuffer NewFramebuffer(u32 w, u32 h, ArrayView<ImageView> attachments)
 		.width = w,
 		.height = h,
 		.attachments = NewArrayWithCapacityIn<VkImageView>(Memory::GlobalHeap(), attachments.count),
+		.swapchain = sc,
+		.device = d,
 	};
 	for (auto a : attachments)
 	{
@@ -28,30 +28,32 @@ Framebuffer NewFramebuffer(u32 w, u32 h, ArrayView<ImageView> attachments)
 	return fb;
 }
 
-Framebuffer DefaultFramebuffer()
+Framebuffer DefaultFramebuffer(Swapchain *sc, Device *d)
 {
 	return
 	{
 		.id = 0,
+		.swapchain = sc,
+		.device = d,
 	};
 }
 
 struct FramebufferKey
 {
-	VkRenderPass vkRenderPass;
+	VkRenderPass renderPass;
 	u64 framebufferID;
 
-	bool operator==(FramebufferKey k);
+	bool operator==(FramebufferKey v);
 };
 
 bool FramebufferKey::operator==(FramebufferKey k)
 {
-	return this->vkRenderPass == k.vkRenderPass && this->framebufferID == k.framebufferID;
+	return this->renderPass == k.renderPass && this->framebufferID == k.framebufferID;
 }
 
 u64 HashFramebufferKey(FramebufferKey k)
 {
-	return HashPointer(k.vkRenderPass) ^ Hash64(k.framebufferID);
+	return HashPointer(k.renderPass) ^ Hash64(k.framebufferID);
 }
 
 auto framebufferCache = NewHashTable<FramebufferKey, VkFramebuffer>(0, HashFramebufferKey);
@@ -61,17 +63,14 @@ VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb)
 	if (fb.id == 0)
 	{
 		// Default framebuffer.
-		fb = Framebuffer
-		{
-			.id = swapchain.imageIndex,
-			.width = (u32)RenderWidth(),
-			.height = (u32)RenderHeight(),
-			.attachments = MakeArray<VkImageView>(swapchain.imageViews[swapchain.imageIndex], swapchain.defaultDepthImageView), // @TODO: Make in FrameAllocator.
-		};
+		fb.id = fb.swapchain->imageIndex;
+		fb.width = u32(RenderWidth());
+		fb.height = u32(RenderHeight());
+		fb.attachments = MakeArray<VkImageView>(fb.swapchain->imageViews[fb.swapchain->imageIndex], fb.swapchain->defaultDepthImageView);
 	}
 	auto key = FramebufferKey
 	{
-		.vkRenderPass = rp,
+		.renderPass = rp,
 		.framebufferID = fb.id,
 	};
 	if (auto vkFB = framebufferCache.Lookup(key); vkFB)
@@ -82,14 +81,14 @@ VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb)
 	{
 		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 		.renderPass = rp,
-		.attachmentCount = (u32)fb.attachments.count,
+		.attachmentCount = u32(fb.attachments.count),
 		.pAttachments = fb.attachments.elements,
 		.width = fb.width,
 		.height = fb.height,
 		.layers = 1,
 	};
 	auto vkFB = VkFramebuffer{};
-	VkCheck(vkCreateFramebuffer(vkDevice, &ci, NULL, &vkFB));
+	VkCheck(vkCreateFramebuffer(fb.device->device, &ci, NULL, &vkFB));
 	framebufferCache.Insert(key, vkFB);
 	return vkFB;
 }

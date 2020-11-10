@@ -2,7 +2,7 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
 const auto MaxFramesInFlight = 2;
@@ -35,10 +35,8 @@ struct MemoryAllocator
 {
 	Array<MemoryBlockList> blockLists;
 
-	MemoryAllocation Allocate(VkMemoryPropertyFlags mp, VkMemoryAllocateFlags ma, s64 size, s64 align, bool *fail);
+	MemoryAllocation Allocate(PhysicalDevice pd, Device d, VkMemoryPropertyFlags mp, VkMemoryAllocateFlags ma, s64 size, s64 align, bool *fail);
 };
-
-void InitializeMemory();
 
 }
 

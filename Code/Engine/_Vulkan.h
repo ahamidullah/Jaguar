@@ -174,7 +174,7 @@ struct GPUSubmesh
 	u32 indexCount;
 };
 
-#include "Vulkan/Buffer.h"
+#include "Vulkan/GPU.h"
 
 struct GPUMeshAsset
 {

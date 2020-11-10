@@ -2,7 +2,7 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
 struct Shader
@@ -13,7 +13,7 @@ struct Shader
 	VkPipeline vkPipeline;
 };
 
-Shader CompileShader(String filename, bool *err);
+Shader CompileShader(Device d, VkSurfaceFormatKHR sf, VkPipelineLayout l, String filename, bool *err);
 
 }
 

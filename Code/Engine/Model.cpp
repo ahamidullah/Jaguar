@@ -75,7 +75,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 		buffers.Append(f);
 	}
 	//auto cb = NewGPUFrameTransferCommandBuffer();
-	auto sb = GPU::StagingBuffer{};
+	auto sb = gpu.NewStagingBuffer();
 	auto vertexCount = 0;
 	for (auto m : gltf.meshes)
 	{

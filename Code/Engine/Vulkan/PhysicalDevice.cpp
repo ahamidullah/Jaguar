@@ -5,41 +5,37 @@
 #include "PhysicalDevice.h"
 
 #ifdef __linux__
+	xcb_connection_t *XCBConnection();
 
-xcb_connection_t *XCBConnection();
-
-VkResult NewSurface(Window *w, VkInstance inst, VkSurfaceKHR *s)
-{
-	auto ci = VkXcbSurfaceCreateInfoKHR
+	VkResult NewSurface(Window *w, VkInstance inst, VkSurfaceKHR *s)
 	{
-		.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
-		.connection = XCBConnection(),
-		.window = w->xcbWindow,
-	};
-	return vkCreateXcbSurfaceKHR(inst, &ci, NULL, s);
-}
-
+		auto ci = VkXcbSurfaceCreateInfoKHR
+		{
+			.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+			.connection = XCBConnection(),
+			.window = w->xcbWindow,
+		};
+		return vkCreateXcbSurfaceKHR(inst, &ci, NULL, s);
+	}
 #endif
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-auto physicalDevice = PhysicalDevice{};
-
-void PhysicalDevice::Initialize(Window *w)
+PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 {
-	VkCheck(NewSurface(w, Instance(), &this->surface));
-	// Select physical device.
+	auto pd = PhysicalDevice{};
+	VkCheck(NewSurface(w, inst.instance, &pd.surface));
 	auto foundSuitablePhysDev = false;
 	auto nPhysDevs = u32{};
-	VkCheck(vkEnumeratePhysicalDevices(Instance(), &nPhysDevs, NULL));
+	VkCheck(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, NULL));
 	if (nPhysDevs == 0)
 	{
 		Abort("Vulkan", "Could not find any graphics devices.");
 	}
 	LogVerbose("Vulkan", "Available graphics device count: %d.", nPhysDevs);
 	auto physDevs = NewArray<VkPhysicalDevice>(nPhysDevs);
-	VkCheck(vkEnumeratePhysicalDevices(Instance(), &nPhysDevs, physDevs.elements));
+	VkCheck(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, physDevs.elements));
 	if (DebugBuild)
 	{
 		LogVerbose("Vulkan", "Available graphics devices:");
@@ -50,12 +46,13 @@ void PhysicalDevice::Initialize(Window *w)
 			LogVerbose("Vulkan", "\t%s", dp.deviceName);
 		}
 	}
-	for (auto pd : physDevs)
+	for (auto i = 0; i < physDevs.count; i += 1)
 	{
+		pd.physicalDevice = physDevs[i];
 		if (DebugBuild)
 		{
 			auto dp = VkPhysicalDeviceProperties{};
-			vkGetPhysicalDeviceProperties(pd, &dp);
+			vkGetPhysicalDeviceProperties(pd.physicalDevice, &dp);
 			LogVerbose("Vulkan", "Considering graphics device %s.", dp.deviceName);
 		}
 		auto df12 = VkPhysicalDeviceVulkan12Features
@@ -65,9 +62,9 @@ void PhysicalDevice::Initialize(Window *w)
 		auto df = VkPhysicalDeviceFeatures2
 		{
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-				.pNext = &df12,
+			.pNext = &df12,
 		};
-		vkGetPhysicalDeviceFeatures2(pd, &df);
+		vkGetPhysicalDeviceFeatures2(pd.physicalDevice, &df);
 		if (!df.features.samplerAnisotropy)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: missing VkPhysicalDeviceFeatures2.features.samplerAnisotropy.");
@@ -104,9 +101,9 @@ void PhysicalDevice::Initialize(Window *w)
 			continue;
 		}
 		auto nDevExts = u32{};
-		VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &nDevExts, NULL));
+		VkCheck(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, NULL));
 		auto devExts = NewArray<VkExtensionProperties>(nDevExts);
-		VkCheck(vkEnumerateDeviceExtensionProperties(pd, NULL, &nDevExts, devExts.elements));
+		VkCheck(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, devExts.elements));
 		auto missingDevExt = (const char *){};
 		auto reqDevExts = MakeStaticArray<const char *>(
 			"VK_KHR_swapchain",
@@ -135,7 +132,7 @@ void PhysicalDevice::Initialize(Window *w)
 		// Make sure the swap chain is compatible with our window surface.
 		// If we have at least one supported surface format and present mode, we will consider the device.
 		auto nSurfFmts = u32{};
-		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd, this->surface, &nSurfFmts, NULL));
+		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, NULL));
 		if (nSurfFmts == 0)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: no surface formats.");
@@ -143,12 +140,12 @@ void PhysicalDevice::Initialize(Window *w)
 		}
 		// Select the best swap chain settings.
 		auto surfFmts = NewArray<VkSurfaceFormatKHR>(nSurfFmts);
-		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd, this->surface, &nSurfFmts, &surfFmts[0]));
-		this->surfaceFormat = surfFmts[0];
+		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, &surfFmts[0]));
+		pd.surfaceFormat = surfFmts[0];
 		if (nSurfFmts == 1 && surfFmts[0].format == VK_FORMAT_UNDEFINED)
 		{
 			// No preferred format, so we get to pick our own.
-			this->surfaceFormat = VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+			pd.surfaceFormat = VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 		}
 		else
 		{
@@ -156,7 +153,7 @@ void PhysicalDevice::Initialize(Window *w)
 			{
 				if (sf.format == VK_FORMAT_B8G8R8A8_UNORM && sf.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 				{
-					this->surfaceFormat = sf;
+					pd.surfaceFormat = sf;
 					break;
 				}
 			}
@@ -176,32 +173,32 @@ void PhysicalDevice::Initialize(Window *w)
 		// occasionally late.  In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be
 		// immediately displayed, even though that may mean some tearing.
 		auto nPresentModes = u32{};
-		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd, this->surface, &nPresentModes, NULL));
+		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, NULL));
 		if (nPresentModes == 0)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: no present modes.");
 			continue;
 		}
-		this->presentMode = VK_PRESENT_MODE_FIFO_KHR;
+		pd.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 		auto presentModes = NewArray<VkPresentModeKHR>(nPresentModes);
-		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd, this->surface, &nPresentModes, presentModes.elements));
+		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, presentModes.elements));
 		for (auto pm : presentModes)
 		{
 			// @TODO: If vsync...
 			if (pm == VK_PRESENT_MODE_MAILBOX_KHR)
 			{
-				this->presentMode = pm;
+				pd.presentMode = pm;
 				break;
 			}
 			// @TODO: If not vsync... first of VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
 		}
 		auto nQueueFams = u32{};
-		vkGetPhysicalDeviceQueueFamilyProperties(pd, &nQueueFams, NULL);
+		vkGetPhysicalDeviceQueueFamilyProperties(pd.physicalDevice, &nQueueFams, NULL);
 		auto queueFams = NewArray<VkQueueFamilyProperties>(nQueueFams);
-		vkGetPhysicalDeviceQueueFamilyProperties(pd, &nQueueFams, queueFams.elements);
-		this->queueFamilies[(s64)QueueType::Graphics] = -1;
-		this->queueFamilies[(s64)QueueType::Compute] = -1;
-		this->queueFamilies[(s64)QueueType::Present] = -1;
+		vkGetPhysicalDeviceQueueFamilyProperties(pd.physicalDevice, &nQueueFams, queueFams.elements);
+		pd.queueFamilies[(s64)QueueType::Graphics] = -1;
+		pd.queueFamilies[(s64)QueueType::Compute] = -1;
+		pd.queueFamilies[(s64)QueueType::Present] = -1;
 		for (auto i = 0; i < nQueueFams; i++)
 		{
 			if (queueFams[i].queueCount == 0)
@@ -210,48 +207,47 @@ void PhysicalDevice::Initialize(Window *w)
 			}
 			if (queueFams[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
-				this->queueFamilies[(s64)QueueType::Graphics] = i;
+				pd.queueFamilies[(s64)QueueType::Graphics] = i;
 			}
 			if (queueFams[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
 			{
-				this->queueFamilies[(s64)QueueType::Compute] = i;
+				pd.queueFamilies[(s64)QueueType::Compute] = i;
 			}
 			// The graphics queue family can always be used as the transfer queue family, but if we can find a dedicated transfer queue
 			// family, use that instead.
 			if ((queueFams[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFams[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
 			{
-				this->queueFamilies[(s64)QueueType::Transfer] = i;
+				pd.queueFamilies[(s64)QueueType::Transfer] = i;
 			}
-			else if (this->queueFamilies[(s64)QueueType::Transfer] == -1 && (queueFams[i].queueFlags & VK_QUEUE_TRANSFER_BIT))
+			else if (pd.queueFamilies[(s64)QueueType::Transfer] == -1 && (queueFams[i].queueFlags & VK_QUEUE_TRANSFER_BIT))
 			{
-				this->queueFamilies[(s64)QueueType::Transfer] = i;
+				pd.queueFamilies[(s64)QueueType::Transfer] = i;
 			}
 			auto surfSupported = u32{};
-			VkCheck(vkGetPhysicalDeviceSurfaceSupportKHR(pd, i, this->surface, &surfSupported));
+			VkCheck(vkGetPhysicalDeviceSurfaceSupportKHR(pd.physicalDevice, i, pd.surface, &surfSupported));
 			if (surfSupported)
 			{
-				this->queueFamilies[(s64)QueueType::Present] = i;
+				pd.queueFamilies[(s64)QueueType::Present] = i;
 			}
 		}
-		if (this->queueFamilies[(s64)QueueType::Graphics] == -1)
+		if (pd.queueFamilies[(s64)QueueType::Graphics] == -1)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: missing graphics queue family.");
 			continue;
 		}
-		if (this->queueFamilies[(s64)QueueType::Compute] == -1)
+		if (pd.queueFamilies[(s64)QueueType::Compute] == -1)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: missing compute queue family.");
 			continue;
 		}
-		if (this->queueFamilies[(s64)QueueType::Present] == -1)
+		if (pd.queueFamilies[(s64)QueueType::Present] == -1)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: missing present queue family.");
 			continue;
 		}
 		// Ok, the physical device is suitable!
-		this->physicalDevice = pd;
-		VkCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, this->surface, &this->surfaceCapabilities));
-		vkGetPhysicalDeviceMemoryProperties(pd, &this->memoryProperties); // No return.
+		VkCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd.physicalDevice, pd.surface, &pd.surfaceCapabilities));
+		vkGetPhysicalDeviceMemoryProperties(pd.physicalDevice, &pd.memoryProperties); // No return.
 		foundSuitablePhysDev = true;
 		LogVerbose("Vulkan", "Vulkan device extensions:");
 		for (auto de : devExts)
@@ -264,6 +260,7 @@ void PhysicalDevice::Initialize(Window *w)
 	{
 		Abort("Vulkan", "Could not find suitable graphics device.");
 	}
+	return pd;
 }
 
 }

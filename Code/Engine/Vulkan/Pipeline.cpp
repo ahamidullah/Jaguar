@@ -1,11 +1,31 @@
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
 // @TODO: Pipeline cache.
 
-VkPipeline NewPipeline(String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp)
+VkPipelineLayout NewPipelineLayout(Device d)
+{
+	auto pcs = MakeStaticArray(
+		VkPushConstantRange
+		{
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+			.offset = 0,
+			.size = 8,
+		});
+	auto ci = VkPipelineLayoutCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.pushConstantRangeCount = (u32)pcs.Count(),
+		.pPushConstantRanges = pcs.elements,
+	};
+	auto l = VkPipelineLayout{};
+	VkCheck(vkCreatePipelineLayout(d.device, &ci, NULL, &l));
+	return l;
+}
+
+VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp)
 {
 	if (shaderFilename == "Model.glsl")
 	{
@@ -121,14 +141,14 @@ VkPipeline NewPipeline(String shaderFilename, ArrayView<VkShaderStageFlagBits> s
 			.pDepthStencilState = &depthCI,
 			.pColorBlendState = &blendCI,
 			.pDynamicState = &dynStateCI,
-			.layout = vkPipelineLayout,
+			.layout = l,
 			.renderPass = rp,
 			.subpass = 0,
 			.basePipelineHandle = VK_NULL_HANDLE,
 			.basePipelineIndex = -1,
 		};
 		auto p = VkPipeline{};
-		VkCheck(vkCreateGraphicsPipelines(vkDevice, vkPipelineCache, 1, &ci, NULL, &p));
+		VkCheck(vkCreateGraphicsPipelines(d.device, NULL, 1, &ci, NULL, &p));
 		return p;
 	}
 	else

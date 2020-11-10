@@ -4,10 +4,10 @@
 #include "Pipeline.h"
 #include "RenderPass.h"
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-Shader CompileShader(String filename, bool *err)
+Shader CompileShader(Device d, VkSurfaceFormatKHR sf, VkPipelineLayout l, String filename, bool *err)
 {
 	auto spirv = ShaderCompiler::VulkanGLSL(filename, err);
 	if (*err)
@@ -15,7 +15,7 @@ Shader CompileShader(String filename, bool *err)
 		LogError("Vulkan", "Failed to generate SPIRV for file %k.", filename);
 		return {};
 	}
-	auto s = GPU::Shader
+	auto s = Shader
 	{
 		.vkStages = spirv.stages,
 	};
@@ -28,15 +28,14 @@ Shader CompileShader(String filename, bool *err)
 			.pCode = (u32 *)bc.elements,
 		};
 		auto m = VkShaderModule{};
-		VkCheck(vkCreateShaderModule(vkDevice, &ci, NULL, &m));
+		VkCheck(vkCreateShaderModule(d.device, &ci, NULL, &m));
 		s.vkModules.Append(m);
 	}
-	s.vkRenderPass = NewRenderPass(filename);
-	s.vkPipeline = NewPipeline(filename, s.vkStages, s.vkModules, s.vkRenderPass);
+	s.vkRenderPass = NewRenderPass(d, sf, filename);
+	s.vkPipeline = NewPipeline(d, l, filename, s.vkStages, s.vkModules, s.vkRenderPass);
 	return s;
 }
 
 }
 
 #endif
-

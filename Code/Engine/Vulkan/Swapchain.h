@@ -2,8 +2,11 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
+
+struct PhysicalDevice;
+struct Device;
 
 const auto _MaxFramesInFlight = 2;
 
@@ -16,17 +19,15 @@ struct Swapchain
 	VkImage defaultDepthImage;
 	VkImageView defaultDepthImageView;
 	StaticArray<VkFence, _MaxFramesInFlight> frameFences;
-	u64 frameIndex;
 	StaticArray<VkSemaphore, _MaxFramesInFlight> imageOwnershipSemaphores;
 	StaticArray<VkSemaphore, _MaxFramesInFlight> imageAcquiredSemaphores;
 	Array<VkCommandBuffer> changeImageOwnershipFromGraphicsToPresentQueueCommands;
 
-	void Initialize();
-	void AcquireNextImage();
-	void Present();
+	void AcquireNextImage(Device d, s64 frameIndex);
+	void Present(PhysicalDevice pd, Queues q, s64 frameIndex);
 };
 
-extern Swapchain swapchain;
+Swapchain NewSwapchain(PhysicalDevice pd, Device d);
 
 }
 

@@ -2,50 +2,15 @@
 
 #include "CommandBuffer.h"
 
-namespace GPU
+namespace GPU::Vulkan
 {
-
-CommandBuffer NewCommandBuffer(QueueType t)
-{
-	auto cb = GPUFrameGraphicsCommandBuffer{};
-	auto qt = 0;
-	switch (t)
-	{
-	case QueueType::Graphics:
-	{
-		cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanGraphicsQueue);
-		qt = VulkanGraphicsQueue;
-	} break;
-	case QueueType::Transfer:
-	{
-		cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanTransferQueue);
-		qt = VulkanTransferQueue;
-	} break;
-	case QueueType::Compute:
-	{
-		cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanComputeQueue);
-		qt = VulkanComputeQueue;
-	} break;
-	case QueueType::Present:
-	{
-		cb.vkCommandBuffer = NewVulkanFrameCommandBuffer(VulkanPresentQueue);
-		qt = VulkanPresentQueue;
-	} break;
-	case QueueType::Count:
-	default:
-	{
-		Abort("Vulkan", "ERROR");
-	} break;
-	}
-	return {cb.vkCommandBuffer, qt};
-}
 
 void CommandBuffer::BeginRenderPass(Shader s, Framebuffer fb)
 {
 	Assert(s.vkRenderPass);
 	Assert(s.vkPipeline);
 	auto vkFB = NewVkFramebuffer(s.vkRenderPass, fb);
-	vkCmdBindPipeline(this->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s.vkPipeline);
+	vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, s.vkPipeline);
 	auto clearColor = VkClearValue
 	{
 		.color.float32 = {0.04f, 0.19f, 0.34f, 1.0f},
@@ -69,12 +34,12 @@ void CommandBuffer::BeginRenderPass(Shader s, Framebuffer fb)
 		.clearValueCount = (u32)cvs.Count(),
 		.pClearValues = cvs.elements,
 	};
-	vkCmdBeginRenderPass(this->vkCommandBuffer, &bi, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(this->commandBuffer, &bi, VK_SUBPASS_CONTENTS_INLINE);
 }
 
 void CommandBuffer::EndRenderPass()
 {
-	vkCmdEndRenderPass(this->vkCommandBuffer);
+	vkCmdEndRenderPass(this->commandBuffer);
 }
 
 void CommandBuffer::SetViewport(s64 w, s64 h)
@@ -88,7 +53,7 @@ void CommandBuffer::SetViewport(s64 w, s64 h)
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f,
 	};
-	vkCmdSetViewport(this->vkCommandBuffer, 0, 1, &v);
+	vkCmdSetViewport(this->commandBuffer, 0, 1, &v);
 }
 
 void CommandBuffer::SetScissor(s64 w, s64 h)
@@ -97,7 +62,7 @@ void CommandBuffer::SetScissor(s64 w, s64 h)
 	{
 		.extent = {(u32)w, (u32)h},
 	};
-	vkCmdSetScissor(this->vkCommandBuffer, 0, 1, &scissor);
+	vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
 }
 
 void CommandBuffer::CopyBuffer(Buffer src, Buffer dst, s64 srcOffset, s64 dstOffset)
@@ -108,20 +73,109 @@ void CommandBuffer::CopyBuffer(Buffer src, Buffer dst, s64 srcOffset, s64 dstOff
 		.dstOffset = (VkDeviceSize)dst.offset + dstOffset,
 		.size = (VkDeviceSize)src.size,
 	};
-	vkCmdCopyBuffer(this->vkCommandBuffer, src.buffer, dst.buffer, 1, &c);
+	vkCmdCopyBuffer(this->commandBuffer, src.buffer, dst.buffer, 1, &c);
 }
 
 void CommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 {
-	vkCmdPushConstants(this->vkCommandBuffer, rb.vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress), &rb.drawBufferPointer);
-	vkCmdBindIndexBuffer(this->vkCommandBuffer, rb.vkIndexBuffer, 0, GPUIndexTypeUint16);
-	vkCmdDrawIndexedIndirect(this->vkCommandBuffer, rb.indirectCommands.buffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
+	vkCmdPushConstants(this->commandBuffer, rb.vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress), &rb.drawBufferPointer);
+	vkCmdBindIndexBuffer(this->commandBuffer, rb.vkIndexBuffer, 0, GPUIndexTypeUint16);
+	vkCmdDrawIndexedIndirect(this->commandBuffer, rb.indirectCommands.buffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
 }
 
-void CommandBuffer::Queue()
+CommandBufferPool NewCommandBufferPool(PhysicalDevice pd, Device d)
 {
-	VkCheck(vkEndCommandBuffer(this->vkCommandBuffer));
-	vkFrameQueuedCommandBuffers[vkCommandGroupUseIndex][this->queueType][ThreadIndex()].Append(this->vkCommandBuffer);
+	auto p = CommandBufferPool{};
+	auto ci = VkCommandPoolCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+	};
+	for (auto i = 0; i < MaxFramesInFlight + 1; i += 1)
+	{
+		for (auto j = 0; j < s64(QueueType::Count); j += 1)
+		{
+			p.commandPools[i][j] = NewArrayIn<VkCommandPool>(Memory::GlobalHeap(), WorkerThreadCount());
+			for (auto k = 0; k < WorkerThreadCount(); k += 1)
+			{
+				ci.queueFamilyIndex = pd.queueFamilies[j];
+				VkCheck(vkCreateCommandPool(d.device, &ci, NULL, &p.commandPools[i][j][k]));
+			}
+		}
+	}
+	for (auto i = 0; i < s64(QueueType::Count); i += 1)
+	{
+		p.active[i] = NewArrayIn<VkCommandBuffer>(Memory::GlobalHeap(), WorkerThreadCount());
+	}
+	for (auto i = 0; i < MaxFramesInFlight + 1; i += 1)
+	{
+		for (auto j = 0; j < s64(QueueType::Count); j += 1)
+		{
+			p.recyclePools[i][j] = NewArrayIn<Array<VkCommandBuffer>>(Memory::GlobalHeap(), WorkerThreadCount());
+			for (auto &rp : p.recyclePools[i][j])
+			{
+				rp = NewArrayIn<VkCommandBuffer>(Memory::GlobalHeap(), 0);
+			}
+		}
+	}
+	return p;
+}
+
+CommandBuffer CommandBufferPool::Get(Device d, QueueType t)
+{
+	auto cb = CommandBuffer{};
+	if (this->active[s64(t)][ThreadIndex()])
+	{
+		cb.commandBuffer = this->active[s64(t)][ThreadIndex()];
+		return cb;
+	}
+	auto bi = VkCommandBufferBeginInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	if (this->recyclePools[vkCommandGroupUseIndex][s64(t)][ThreadIndex()].count > 0)
+	{
+		cb.commandBuffer = this->recyclePools[vkCommandGroupUseIndex][s64(t)][ThreadIndex()].Pop();
+		vkBeginCommandBuffer(cb.commandBuffer, &bi);
+		this->active[s64(t)][ThreadIndex()] = cb.commandBuffer;
+		return cb;
+	}
+    auto ai = VkCommandBufferAllocateInfo
+    {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = this->commandPools[vkCommandGroupUseIndex][s64(t)][ThreadIndex()],
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1,
+    };
+    vkAllocateCommandBuffers(d.device, &ai, &cb.commandBuffer);
+	vkBeginCommandBuffer(cb.commandBuffer, &bi);
+	this->active[s64(t)][ThreadIndex()] = cb.commandBuffer;
+	return cb;
+}
+
+void CommandBufferPool::Release(QueueType t, s64 threadIndex, ArrayView<VkCommandBuffer> cbs)
+{
+	this->recyclePools[vkCommandGroupFreeIndex][s64(t)][threadIndex].AppendAll(cbs);
+}
+
+void CommandBufferPool::ClearActive(QueueType t)
+{
+	for (auto &cb : this->active[s64(t)])
+	{
+		cb = NULL;
+	}
+}
+
+void CommandBufferPool::ResetCommandPools(Device d, s64 frameIndex)
+{
+	for (auto tl : this->commandPools[vkCommandGroupFreeIndex])
+	{
+		for (auto p : tl)
+		{
+			VkCheck(vkResetCommandPool(d.device, p, 0));
+		}
+	}
 }
 
 }

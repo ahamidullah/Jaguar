@@ -2,10 +2,11 @@
 
 #ifdef VulkanBuild
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-VkPipeline NewPipeline(String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp);
+VkPipelineLayout NewPipelineLayout(Device d);
+VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp);
 
 }
 

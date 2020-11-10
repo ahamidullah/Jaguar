@@ -1,11 +1,21 @@
 #ifdef VulkanBuild
 
 #include "StagingBuffer.h"
+#include "CommandBuffer.h"
 
-namespace GPU
+namespace GPU::Vulkan
 {
 
-#include "CommandBuffer.h"
+StagingBuffer NewStagingBuffer(PhysicalDevice *pd, Device *d, CommandBufferPool *p, BufferAllocator *b)
+{
+	return
+	{
+		.physicalDevice = pd,
+		.device = d,
+		.commandBufferPool = p,
+		.bufferAllocator = b,
+	};
+}
 
 void StagingBuffer::MapBuffer(Buffer dst, s64 offset)
 {
@@ -13,9 +23,9 @@ void StagingBuffer::MapBuffer(Buffer dst, s64 offset)
 	{
 		this->Upload();
 	}
-	if (!this->commandBuffer.vkCommandBuffer)
+	if (!this->commandBuffer.commandBuffer)
 	{
-		this->commandBuffer = NewCommandBuffer(QueueType::Transfer);
+		this->commandBuffer = this->commandBufferPool->Get(*this->device, QueueType::Transfer);
 	}
 	this->source.Free();
 	this->offset = offset;
@@ -27,7 +37,7 @@ void StagingBuffer::MapBuffer(Buffer dst, s64 offset)
 		this->map = (u8 *)this->destination.map + offset;
 		return;
 	}
-	this->source = NewBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, dst.size);
+	this->source = this->bufferAllocator->Allocate(*this->physicalDevice, *this->device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, dst.size);
 	this->map = this->source.map;
 }
 
@@ -47,7 +57,6 @@ void StagingBuffer::Flush()
 	{
 		this->Upload();
 	}
-	this->commandBuffer.Queue();
 }
 
 }

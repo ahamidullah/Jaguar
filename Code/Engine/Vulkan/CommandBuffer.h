@@ -6,13 +6,18 @@
 #include "Framebuffer.h"
 #include "Queue.h"
 
-namespace GPU
+struct GPURenderBatch;
+
+namespace GPU::Vulkan
 {
+
+struct Device;
+struct PhysicalDevice;
+struct Buffer;
 
 struct CommandBuffer
 {
-	VkCommandBuffer vkCommandBuffer;
-	s64 queueType;
+	VkCommandBuffer commandBuffer;
 
 	void BeginRenderPass(Shader s, Framebuffer fb);
 	void EndRenderPass();
@@ -20,10 +25,21 @@ struct CommandBuffer
 	void SetScissor(s64 w, s64 h);
 	void CopyBuffer(Buffer src, Buffer dst, s64 srcOffset, s64 dstOffset);
 	void DrawRenderBatch(GPURenderBatch rb);
-	void Queue();
 };
 
-CommandBuffer NewCommandBuffer(QueueType t);
+struct CommandBufferPool
+{
+	StaticArray<StaticArray<Array<VkCommandPool>, s64(QueueType::Count)>, 2 + 1> commandPools;
+	StaticArray<StaticArray<Array<Array<VkCommandBuffer>>, s64(QueueType::Count)>, 2 + 1> recyclePools;
+	StaticArray<Array<VkCommandBuffer>, s64(QueueType::Count)> active;
+
+	CommandBuffer Get(Device d, QueueType t);
+	void Release(QueueType t, s64 threadIndex, ArrayView<VkCommandBuffer> cbs);
+	void ClearActive(QueueType t);
+	void ResetCommandPools(Device d, s64 frameIndex);
+};
+
+CommandBufferPool NewCommandBufferPool(PhysicalDevice pd, Device d);
 
 }
 

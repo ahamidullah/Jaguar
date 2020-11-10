@@ -24,19 +24,20 @@ auto renderAspectRatio = 0;
 
 auto objectPos = Array<V3>{};
 
-#include "Vulkan/Shader.h"
+#include "Vulkan/GPU.h"
 
+auto gpu = GPU::GPU{};
 auto modelShader = GPU::Shader{};
 
 void InitializeRenderer(void *jobParam)
 {
 	// @TODO: Use an allocator.
-	InitializeGPU((Window *)jobParam);
-	LogGPUMemoryInfo();
+	gpu = GPU::New((Window *)jobParam);
+	//LogGPUMemoryInfo(); @TODO
 	if (DevelopmentBuild)
 	{
 		auto err = false;
-		modelShader = GPU::CompileShader("Model.glsl", &err);
+		modelShader = gpu.CompileShader("Model.glsl", &err);
 	}
 	else
 	{
@@ -53,7 +54,6 @@ void InitializeRenderer(void *jobParam)
 	}
 }
 
-	#include "Vulkan/StagingBuffer.h"
 void UpdateRenderUniforms(Camera *c)
 {
 /*
@@ -77,7 +77,7 @@ void UpdateRenderUniforms(Camera *c)
 			.size = sizeof(u32),
 			.data = &temp,
 		});
-		*/
+*/
 	auto p = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
 	auto v = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
 	auto pv = p * v;
@@ -96,7 +96,7 @@ void UpdateRenderUniforms(Camera *c)
 			rots[i] = NewQuaternion(V3{(f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX, (f32)rand() / (f32)RAND_MAX});
 		}
 	}
-	auto sb = GPU::StagingBuffer{};
+	auto sb = gpu.NewStagingBuffer();
 	for (auto i = 0; i < MeshCount; i += 1)
 	{
 		auto m = IdentityMatrix;
@@ -172,8 +172,7 @@ void UpdateRenderUniforms(Camera *c)
 #endif
 }
 
-#include "Vulkan/Frame.h"
-#include "Vulkan/Queue.h"
+#include "_Vulkan.h"
 
 void Render()
 {
@@ -193,17 +192,17 @@ void Render()
 			sys.Deallocate(b);
 		}
 	});
-	*/
-	GPU::BeginFrame();
+*/
+	gpu.BeginFrame();
 	auto culledMeshes = meshes;
-	//auto culledMeshes = Array<GPUMesh>{};
-	//for (auto m : meshes)
-	//{
-		//if (rand() < RAND_MAX / 10)
-		//{
-			//culledMeshes.Append(m);
-		//}
-	//}
+//	auto culledMeshes = Array<GPUMesh>{};
+//	for (auto m : meshes)
+//	{
+//		if (rand() < RAND_MAX / 10)
+//		{
+//			culledMeshes.Append(m);
+//		}
+//	}
 	auto c = LookupCamera("Main");
 	if (!c)
 	{
@@ -213,33 +212,32 @@ void Render()
 	UpdateRenderUniforms(c);
 	// @TODO: Frame buffers, frame fences, frame command buffers, etc. should be automatically freed.
 	auto rb = NewGPUFrameRenderBatch(renderPackets);
-	GPU::SubmitTransferCommands();
+	gpu.SubmitTransferCommands();
 	//GPUSubmitFrameTransferCommandBuffers();
 	{
-		auto cb = GPU::NewCommandBuffer(GPU::QueueType::Graphics);
+		auto cb = gpu.NewCommandBuffer(GPU::QueueType::Graphics);
 		//auto cb = NewGPUFrameGraphicsCommandBuffer();
 		cb.SetViewport(RenderWidth(), RenderHeight());
 		cb.SetScissor(RenderWidth(), RenderHeight());
-		cb.BeginRenderPass(modelShader, GPU::DefaultFramebuffer());
-		//cb.DrawMeshes(meshes);
+		cb.BeginRenderPass(modelShader, gpu.DefaultFramebuffer());
+//		cb.DrawMeshes(meshes);
 		// @TODO: multiDrawIndirect feature is supported, if not fall-back to one draw command per. DeviceFeatures?
 		// @TODO: make sure to stay within the limitations of maxDrawIndirectCount VkPhysicalDeviceLimits
-		// 24.5ms
-		//for (auto i = 0; i < meshes.Count(); i += 1)
-		//{
+//		 24.5ms
+//		for (auto i = 0; i < meshes.Count(); i += 1)
+//		{
 			cb.DrawRenderBatch(rb);
-			//mg.Free();
-			//cb.BindIndexBuffer(meshes[0].indexBuffer, GPUIndexTypeUint16);
-			//cb.BindVertexBuffer(meshes[0].vertexBuffer, 0);
-			//cb.DrawIndexed(meshes[i].indexCount, 0, 0);
-			//cb.DrawIndexedIndirect(ibuf, meshes.Count());
-		//}
+//			mg.Free();
+//			cb.BindIndexBuffer(meshes[0].indexBuffer, GPUIndexTypeUint16);
+//			cb.BindVertexBuffer(meshes[0].vertexBuffer, 0);
+//			cb.DrawIndexed(meshes[i].indexCount, 0, 0);
+//			cb.DrawIndexedIndirect(ibuf, meshes.Count());
+//		}
 		cb.EndRenderPass();
-		cb.Queue();
 	}
-	//GPUSubmitFrameGraphicsCommandBuffers();
-	GPU::SubmitGraphicsCommands();
-	GPU::EndFrame();
+//	GPUSubmitFrameGraphicsCommandBuffers();
+	gpu.SubmitGraphicsCommands();
+	gpu.EndFrame();
 }
 
 #if 0

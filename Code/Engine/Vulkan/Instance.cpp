@@ -4,54 +4,38 @@
 
 #include "PhysicalDevice.h"
 
-extern VkInstance vkInstance;
-
-namespace GPU
+namespace GPU::Vulkan
 {
 
-#ifdef __linux__
-
-const char *RequiredSurfaceInstanceExtension()
+Instance NewInstance(ArrayView<const char *> instLayers, ArrayView<const char *> instExts)
 {
-	return "VK_KHR_xcb_surface";
-}
-
-#endif
-
-auto instance = VkInstance{};
-
-void InitializeInstance()
-{
-	auto reqInstLayers = Array<const char *>{};
-	if (DebugBuild)
-	{
-		reqInstLayers.Append("VK_LAYER_KHRONOS_validation");
-	}
-	auto reqInstExts = MakeArray<const char *>(
-		RequiredSurfaceInstanceExtension(),
-		"VK_KHR_surface",
-		"VK_KHR_get_physical_device_properties2");
-	if (DebugBuild)
-	{
-		reqInstExts.Append("VK_EXT_debug_utils");
-	}
 	auto nInstLayers = u32{};
 	vkEnumerateInstanceLayerProperties(&nInstLayers, NULL);
-	auto instLayers = NewArray<VkLayerProperties>(nInstLayers);
-	vkEnumerateInstanceLayerProperties(&nInstLayers, &instLayers[0]);
-	LogVerbose("Vulkan", "Vulkan layers:");
-	for (auto l : instLayers)
+	auto allInstLayers = NewArray<VkLayerProperties>(nInstLayers);
+	vkEnumerateInstanceLayerProperties(&nInstLayers, &allInstLayers[0]);
+	LogVerbose("Vulkan", "Available Vulkan instance layers:");
+	for (auto l : allInstLayers)
 	{
 		LogVerbose("Vulkan", "\t%s", l.layerName);
 	}
 	auto nInstExts = u32{0};
 	VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &nInstExts, NULL));
-	auto instExts = NewArray<VkExtensionProperties>(nInstExts);
-	VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &nInstExts, instExts.elements));
+	auto allInstExts = NewArray<VkExtensionProperties>(nInstExts);
+	VkCheck(vkEnumerateInstanceExtensionProperties(NULL, &nInstExts, allInstExts.elements));
 	LogVerbose("Vulkan", "Available Vulkan instance extensions:");
-	for (auto e : instExts)
+	for (auto e : allInstExts)
 	{
 		LogVerbose("Vulkan", "\t%s", e.extensionName);
+	}
+	LogVerbose("Vulkan", "Enabled Vulkan instance layers:");
+	for (auto l : instLayers)
+	{
+		LogVerbose("Vulkan", "\t%s", l);
+	}
+	LogVerbose("Vulkan", "Enabled Vulkan instance extensions:");
+	for (auto e : instExts)
+	{
+		LogVerbose("Vulkan", "\t%s", e);
 	}
 	auto ai = VkApplicationInfo
 	{
@@ -67,10 +51,10 @@ void InitializeInstance()
 	{
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 		.pApplicationInfo = &ai,
-		.enabledLayerCount = (u32)reqInstLayers.count,
-		.ppEnabledLayerNames = reqInstLayers.elements,
-		.enabledExtensionCount = (u32)reqInstExts.count,
-		.ppEnabledExtensionNames = reqInstExts.elements,
+		.enabledLayerCount = u32(instLayers.count),
+		.ppEnabledLayerNames = instLayers.elements,
+		.enabledExtensionCount = u32(instExts.count),
+		.ppEnabledExtensionNames = instExts.elements,
 	};
 	auto dbgInfo = VkDebugUtilsMessengerCreateInfoEXT
 	{
@@ -89,13 +73,9 @@ void InitializeInstance()
 	{
 		ci.pNext = &dbgInfo;
 	}
-	VkCheck(vkCreateInstance(&ci, NULL, &instance));
-}
-
-VkInstance Instance()
-{
-	return vkInstance;
-	//return instance;
+	auto i = Instance{};
+	VkCheck(vkCreateInstance(&ci, NULL, &i.instance));
+	return i;
 }
 
 }

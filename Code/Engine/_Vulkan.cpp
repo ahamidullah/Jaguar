@@ -1,6 +1,6 @@
 #ifdef VulkanBuild
 
-#include "Vulkan.h"
+#include "_Vulkan.h"
 #include "ShaderGlobal.h"
 #include "Render.h"
 #include "Mesh.h"
@@ -17,13 +17,14 @@
 #include "Basic/Time/Time.h"
 #include "Basic/File.h"
 #include "Basic/Memory/Memory.h"
+#include "Basic/Memory/GlobalHeap.h"
 #include "Common.h"
 
 #define VulkanExportedFunction(name) PFN_##name name = NULL;
 #define VulkanGlobalFunction(name) PFN_##name name = NULL;
 #define VulkanInstanceFunction(name) PFN_##name name = NULL;
 #define VulkanDeviceFunction(name) PFN_##name name = NULL;
-	#include "VulkanFunction.h"
+	#include "Vulkan/FunctionDefinitions.h"
 #undef VulkanExportedFunction
 #undef VulkanGlobalFunction
 #undef VulkanInstanceFunction
@@ -370,19 +371,22 @@ VulkanUniformInstance VulkanBufferUniformAllocator::AllocateInstance()
 auto vkBufferUniformAllocators = StaticArray<VulkanBufferUniformAllocator, ShaderDescriptorSetCount>{};
 #endif
 
+#include "Vulkan/GPU.h"
+extern GPU::GPU gpu;
+
 void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out)
 {
 	for (auto i = 0; i < cis.count; i += 1)
 	{
 		// @TODO: Get rid of this function.
-		auto vb = GPU::NewBuffer(
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			cis[i].vertexCount * cis[i].vertexSize);
-		auto ib = GPU::NewBuffer(
-			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			cis[i].indexCount * cis[i].indexSize);
+		auto vb = gpu.NewVertexBuffer(cis[i].vertexCount * cis[i].vertexSize);
+			//VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+			//VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			//cis[i].vertexCount * cis[i].vertexSize);
+		auto ib = gpu.NewIndexBuffer(cis[i].indexCount * cis[i].indexSize);
+			//VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+			//VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			//cis[i].indexCount * cis[i].indexSize);
 		*out[i] = GPUMeshAsset
 		{
 			.firstIndex = (u32)(ib.offset / cis[i].indexSize),
@@ -478,7 +482,9 @@ GPUMesh NewGPUMesh(GPUMeshAsset *asset)
 	return
 	{
 		.asset = asset,
-		.uniform = GPU::NewBuffer(
+		.uniform = gpu.bufferAllocator.Allocate(
+			gpu.physicalDevice,
+			gpu.device,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			sizeof(MeshUniform)),
@@ -489,7 +495,9 @@ GPUMaterial NewGPUMaterial()
 {
 	return
 	{
-		.uniform = GPU::NewBuffer(
+		.uniform = gpu.bufferAllocator.Allocate(
+			gpu.physicalDevice,
+			gpu.device,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			sizeof(MaterialUniform)),
@@ -528,7 +536,7 @@ VkDeviceAddress VulkanBufferAddress(VkBuffer b)
 		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 		.buffer = b,
 	};
-	auto a = vkGetBufferDeviceAddress(vkDevice, &i);
+	auto a = vkGetBufferDeviceAddress(gpu.device.device, &i);
 	Assert(a);
 	return a;
 };
@@ -542,16 +550,20 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 		nDraws += p.mesh->asset->submeshes.count;
 	}
 	//auto ib = NewGPUFrameIndirectBuffer(nDraws * sizeof(VkDrawIndexedIndirectCommand));
-	auto ib = GPU::NewBuffer(
+	auto ib = gpu.bufferAllocator.Allocate(
+		gpu.physicalDevice,
+		gpu.device,
 		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		nDraws * sizeof(VkDrawIndexedIndirectCommand));
 	//auto sb = NewGPUFrameStagingBufferX(ib, nDraws * sizeof(VkDrawIndexedIndirectCommand), 0);
-	auto sb = GPU::StagingBuffer{};
+	auto sb = gpu.NewStagingBuffer();
 	sb.MapBuffer(ib, 0);
 	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.map, nDraws);
 	//auto vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), 1, NULL);
-	auto drawBuffer = GPU::NewBuffer(
+	auto drawBuffer = gpu.bufferAllocator.Allocate(
+		gpu.physicalDevice,
+		gpu.device,
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		nDraws * sizeof(VulkanDrawData));
@@ -583,7 +595,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	*/
 	//auto dsb = NewGPUFrameStagingBufferX(GPUBuffer{vkDrawBuffer, 0}, nDraws * sizeof(VulkanDrawData), 0);
 	//auto dsb = NewGPUFrameStagingBufferX(vkDrawBuffer, nDraws * sizeof(VulkanDrawData), 0);
-	auto dsb = GPU::StagingBuffer{};
+	auto dsb = gpu.NewStagingBuffer();
 	dsb.MapBuffer(drawBuffer, 0);
 	auto dd = NewArrayView((VulkanDrawData *)dsb.map, nDraws);
 	auto di = 0;
@@ -622,7 +634,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 		.indirectCommands = ib,
 		.indirectCommandCount = nDraws,
 		.vkIndexBuffer = ps[0].mesh->asset->indexBuffer.buffer,
-		.vkPipelineLayout = vkPipelineLayout,
+		.vkPipelineLayout = gpu.pipelineLayout,
 	};
 #if 0
 	// The work array is sized to support the maximum possible binding group index.
@@ -1389,10 +1401,6 @@ const auto VulkanMaterialUniformsPerSet = 128; // @TODO
 const auto VulkanObjectUniformsPerSet = 128; // @TODO
 // @TODO: Handle allocations bigger than the block size.
 
-#include "Vulkan/Memory.h"
-#include "Vulkan/PhysicalDevice.h"
-#include "Vulkan/Swapchain.h"
-
 void InitializeGPU(Window *w)
 {
 	// @TODO:
@@ -1412,7 +1420,7 @@ void InitializeGPU(Window *w)
 		if (!name) Abort("Failed to load Vulkan function %s.", #name);
 	#define VulkanInstanceFunction(name)
 	#define VulkanDeviceFunction(name)
-		#include "VulkanFunction.h"
+		#include "Vulkan/FunctionDefinitions.h"
 	#undef VulkanExportedFunction
 	#undef VulkanGlobalFunction
 	#undef VulkanInstanceFunction
@@ -1506,7 +1514,7 @@ void InitializeGPU(Window *w)
 		name = (PFN_##name)vkGetInstanceProcAddr(vkInstance, (const char *)#name); \
 		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
 	#define VulkanDeviceFunction(name)
-		#include "VulkanFunction.h"
+		#include "Vulkan/FunctionDefinitions.h"
 	#undef VulkanExportedFunction
 	#undef VulkanGlobalFunction
 	#undef VulkanInstanceFunction
@@ -1851,7 +1859,7 @@ void InitializeGPU(Window *w)
 	#define VulkanDeviceFunction(name) \
 		name = (PFN_##name)vkGetDeviceProcAddr(vkDevice, (const char *)#name); \
 		if (!name) Abort("Vulkan", "Failed to load Vulkan function %s.", #name);
-		#include "VulkanFunction.h"
+		#include "Vulkan/FunctionDefinitions.h"
 	#undef VulkanExportedFunction
 	#undef VulkanGlobalFunction
 	#undef VulkanInstanceFunction
@@ -2227,9 +2235,6 @@ void InitializeGPU(Window *w)
 			VkCheck(vkEndCommandBuffer(vkChangeImageOwnershipFromGraphicsToPresentQueueCommands[i]));
 		}
 	}
-	GPU::physicalDevice.Initialize(w);
-	GPU::swapchain.Initialize();
-	GPU::InitializeQueues();
 }
 
 const auto VulkanVertexBufferBindID = 0;
@@ -2968,6 +2973,7 @@ void GPUBeginFrame()
 	//VkCheck(vkWaitForFences(vkDevice, 1, &vkFrameFences[vkFrameIndex], true, U32Max));
 	//VkCheck(vkResetFences(vkDevice, 1, &vkFrameFences[vkFrameIndex]));
 	//VkCheck(vkAcquireNextImageKHR(vkDevice, vkSwapchain, VulkanAcquireImageTimeout, vkImageAcquiredSemaphores[vkFrameIndex], VK_NULL_HANDLE, &vkSwapchainImageIndex));
+	#if 0
 	for (auto &tl : vkFrameCommandPools[vkCommandGroupFreeIndex])
 	{
 		for (auto i = 0; i < WorkerThreadCount(); i += 1)
@@ -3027,6 +3033,7 @@ void GPUBeginFrame()
 	}
 	vkCPUStagingFrameAllocator.FreeOldestFrame();
 	vkGPUIndirectFrameAllocator.FreeOldestFrame();
+	#endif
 }
 
 void GPUEndFrame()

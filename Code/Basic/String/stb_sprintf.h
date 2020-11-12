@@ -517,7 +517,7 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
       case 'k':
          // get the string
          {
-            auto str = va_arg(va, String);
+            auto str = va_arg(va, string::String);
             s = (char *)&str[0];
             n = str.Length();
             sn = s + n;

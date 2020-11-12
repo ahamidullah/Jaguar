@@ -125,7 +125,7 @@ s32 main(s32 argc, char *argv[])
 {
 	if (argc > 1)
 	{
-		if (CStringsEqual(argv[1], "-lv"))
+		if (string::Equal(argv[1], "-lv"))
 		{
 			SetLogLevel(VerboseLog);
 		}

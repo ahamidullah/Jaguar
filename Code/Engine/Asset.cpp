@@ -18,7 +18,7 @@ void InitializeAssets(void *)
 	InitializeModelAssets();
 }
 
-void LoadAsset(String name)
+void LoadAsset(string::String name)
 {
 	LoadModelAsset(name);
 }

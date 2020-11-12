@@ -14,7 +14,7 @@ struct SPIRV
 	array::Array<VkShaderStageFlagBits> stages;
 };
 
-SPIRV VulkanGLSL(String filename, bool *err);
+SPIRV VulkanGLSL(string::String filename, bool *err);
 
 #endif
 

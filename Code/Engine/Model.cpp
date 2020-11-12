@@ -8,9 +8,9 @@
 #include "Basic/Log.h"
 
 #ifdef DevelopmentBuild
-	const auto ModelDirectory = NewString("Data/Model");
+	const auto ModelDirectory = string::Make("Data/Model");
 
-	auto modelFilepaths = map::New<String, String>(0, HashString);
+	auto modelFilepaths = map::New<string::String, string::String>(0, HashString);
 #endif
 
 void InitializeModelAssets()
@@ -26,10 +26,10 @@ void InitializeModelAssets()
 				continue;
 			}
 			auto name = itr.filename;
-			auto path = JoinFilepaths(ModelDirectory, itr.filename, "glTF", JoinStrings(name, ".gltf"));
+			auto path = JoinFilepaths(ModelDirectory, itr.filename, "glTF", string::Join(name, ".gltf"));
 			if (!FileExists(path))
 			{
-				LogVerbose("Model", "%k does not exist in directory %k, skipping.", JoinStrings(name, ".gltf"), JoinFilepaths(ModelDirectory, itr.filename, "glTF"));
+				LogVerbose("Model", "%k does not exist in directory %k, skipping.", string::Join(name, ".gltf"), JoinFilepaths(ModelDirectory, itr.filename, "glTF"));
 				continue;
 			}
 			modelFilepaths.Insert(name.CopyIn(Memory::GlobalHeap()), path.CopyIn(Memory::GlobalHeap()));
@@ -47,7 +47,7 @@ auto renderPackets = array::New<GPURenderPacket>(MeshCount);
 
 #include "Vulkan/StagingBuffer.h"
 
-ModelAsset LoadModelAssetFromFile(String name)
+ModelAsset LoadModelAssetFromFile(string::String name)
 {
 	auto gltfPath = modelFilepaths.Lookup(name);
 	if (!gltfPath)
@@ -184,7 +184,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 	return ModelAsset{};
 }
 
-ModelAsset LoadModelAsset(String name)
+ModelAsset LoadModelAsset(string::String name)
 {
 	if (DevelopmentBuild)
 	{

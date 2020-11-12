@@ -120,7 +120,7 @@ void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
 
 const auto MaxThreadNameLength = 15;
 
-void SetThreadName(String n)
+void SetThreadName(string::String n)
 {
 	if (n.Length() > MaxThreadNameLength)
 	{
@@ -133,15 +133,15 @@ void SetThreadName(String n)
 	}
 }
 
-String ThreadName()
+string::String ThreadName()
 {
 	auto buf = array::NewWithCapacity<u8>(MaxThreadNameLength);
 	if (prctl(PR_GET_NAME, (char *)buf.elements, 0, 0, 0) != 0)
 	{
 		LogError("Thread", "Failed to get thread name: %k.\n", PlatformError());
 	}
-	buf.count = CStringLength((char *)buf.elements);
-	return NewStringFromBuffer(buf);
+	buf.count = string::Length((char *)buf.elements);
+	return string::NewFromBuffer(buf);
 }
 
 Thread CurrentThread()

@@ -21,7 +21,7 @@ string::String JoinFilepaths(StringPack... sp)
 	{
 		return "";
 	}
-	auto len = (Length(sp) + ...) + (count - 1);
+	auto len = (string::Length(sp) + ...) + (count - 1);
 	auto sb = string::NewBuilderWithCapacity(len);
 	auto AddPathComponent = [](string::Builder *sb, string::String c)
 	{

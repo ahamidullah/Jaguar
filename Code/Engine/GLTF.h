@@ -41,7 +41,7 @@ struct GLTFPrimitive
 struct GLTFMesh
 {
 	array::Array<GLTFPrimitive> primitives;
-	String name;
+	string::String name;
 };
 
 enum GLTFAccessorComponentType
@@ -84,7 +84,7 @@ struct GLTFMaterialPBRMetallicRoughness
 struct GLTFMaterial
 {
 	GLTFMaterialPBRMetallicRoughness pbrMetallicRoughness;
-	String name;
+	string::String name;
 };
 
 enum GLTFBufferViewTarget
@@ -105,7 +105,7 @@ struct GLTFBufferView
 struct GLTFBuffer
 {
 	s64 byteLength;
-	String uri;
+	string::String uri;
 	//File uriFile;
 };
 
@@ -118,7 +118,7 @@ struct GLTF
 	array::Array<GLTFBuffer> buffers;
 };
 
-GLTF ParseGLTFFile(String path, bool *err);
+GLTF ParseGLTFFile(string::String path, bool *err);
 s64 GLTFComponentTypeToSize(GLTFAccessorComponentType t);
 
 #endif

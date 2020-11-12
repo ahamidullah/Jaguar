@@ -2,104 +2,91 @@
 #include "Basic/Memory.h"
 #include "../Log.h"
 #define STB_SPRINTF_IMPLEMENTATION
-	#include "stb_sprintf.h"
+#include "stb_sprintf.h"
 #undef STB_SPRINTF_IMPLEMENTATION
 
 namespace string
 {
 
-bool Equal(const char *a, const char *b)
+String::String()
 {
-	while (*a && *b)
-	{
-		if (*a != *b)
-		{
-			return false;
-		}
-		a += 1;
-		b += 1;
-	}
-	if (*a || *b)
-	{
-		return false;
-	}
-	return true;
+	this->buffer = {};
+	this->literal = false;
 }
 
-s64 Length(const char *s)
+String::String(const char *s)
 {
-	auto len = 0;
-	while (s[len])
-	{
-		len += 1;
-	}
-	return len;
+	*this = Make(s);
 }
 
-s64 Length(String s)
+String::String(char *s)
 {
-	return s.length;
+	*this = Make(s);
 }
 
 String New(s64 len)
 {
-	return
-	{
-		.buffer = array::New<u8>(len),
-		.literal = false,
-	};
+	auto s = String{};
+	s.buffer = array::New<u8>(len);
+	s.literal = false;
+	return s;
 }
 
 String NewIn(Memory::Allocator *a, s64 len)
 {
-	return
-	{
-		.buffer = array::NewIn<u8>(a, len),
-		.literal = false,
-	};
+	auto s = String{};
+	s.buffer = array::NewIn<u8>(a, len);
+	s.literal = false;
+	return s;
 }
 
 String NewWithCapacity(s64 cap)
 {
-	return
-	{
-		.buffer = array::NewWithCapacity<u8>(cap),
-		.literal = false,
-	};
+	auto s = String{};
+	s.buffer = array::NewWithCapacity<u8>(cap);
+	s.literal = false;
+	return s;
 }
 
 String NewWithCapacityIn(Memory::Allocator *a, s64 cap)
 {
-	return
-	{
-		.buffer = array::NewWithCapacityIn<u8>(a, cap),
-		.literal = false,
-	};
+	auto s = String{};
+	s.buffer = array::NewWithCapacityIn<u8>(a, cap);
+	s.literal = false;
+	return s;
 }
 
 String NewFromBuffer(array::Array<u8> b)
 {
-	return
-	{
-		.buffer = b,
-		.literal = false,
-	};
+	auto s = String{};
+	s.buffer = b;
+	s.literal = false;
+	return s;
 }
 
-String Make(const char *s)
+String Make(const char *cs)
 {
-	auto len = Length(s);
-	return
+	auto len = Length(cs);
+	auto s = String{};
+	s.buffer = array::Array<u8>
 	{
-		.buffer = array::Array<u8>
-		{
-			.allocator = Memory::NullAllocator(),
-			.elements = (u8 *)s,
-			.count = len,
-			.capacity = len,
-		},
-		.literal = true,
+		.allocator = Memory::NullAllocator(),
+		.elements = (u8 *)cs,
+		.count = len,
+		.capacity = len,
 	};
+	s.literal = true;
+	return s;
+}
+
+String Make(char *cs)
+{
+	auto len = Length(cs);
+	auto s = String{};
+	s.buffer = array::New<u8>(len);
+	array::Copy(array::NewView((u8 *)cs, len), s.buffer);
+	s.literal = false;
+	return s;
 }
 
 const u8 &String::operator[](s64 i)
@@ -110,13 +97,13 @@ const u8 &String::operator[](s64 i)
 
 bool String::operator==(String s)
 {
-	if (s.Length() != this->Length())
+	if (this->Length() != s.Length())
 	{
 		return false;
 	}
-	for (auto i = 0; i < s.Length(); i += 1)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
-		if (s.buffer[i] != this->buffer[i])
+		if (this->buffer[i] != s.buffer[i])
 		{
 			return false;
 		}
@@ -131,14 +118,13 @@ bool String::operator!=(String s)
 
 bool String::operator==(const char *s)
 {
-	auto len = Length(s);
-	if (len != this->Length())
+	if (this->Length() != string::Length(s))
 	{
 		return false;
 	}
-	for (auto i = 0; i < s.Length(); i += 1)
+	for (auto i = 0; i < this->Length(); i += 1)
 	{
-		if (s[i] != this->buffer[i])
+		if (this->buffer[i] != s[i])
 		{
 			return false;
 		}
@@ -183,7 +169,7 @@ String String::CopyRange(s64 start, s64 end)
 
 String String::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
 {
-	return return NewFromBuffer(this->buffer.CopyRangeIn(a, start, end));
+	return NewFromBuffer(this->buffer.CopyRangeIn(a, start, end));
 }
 
 char *String::ToCString()
@@ -268,7 +254,7 @@ String FormatVarArgs(String fmt, va_list args)
 	return NewFromBuffer(sb.buffer);
 }
 
-s64 ParseInteger(String s, bool *err)
+s64 ParseInt(String s, bool *err)
 {
     auto n = 0;
     for (auto c : s)
@@ -293,6 +279,39 @@ f32 ParseFloat(String s, bool *err)
 		*err = true;
 	}
 	return f;
+}
+
+s64 Length(String s)
+{
+	return s.Length();
+}
+
+s64 Length(const char *s)
+{
+	auto len = 0;
+	while (s[len])
+	{
+		len += 1;
+	}
+	return len;
+}
+
+bool Equal(const char *a, const char *b)
+{
+	while (*a && *b)
+	{
+		if (*a != *b)
+		{
+			return false;
+		}
+		a += 1;
+		b += 1;
+	}
+	if (*a || *b)
+	{
+		return false;
+	}
+	return true;
 }
 
 }

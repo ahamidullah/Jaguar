@@ -10,7 +10,7 @@ namespace GPU::Vulkan
 u32 DebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT *data, void *userData)
 {
 	auto log = LogLevel{};
-	auto sevStr = String{};
+	auto sevStr = string::String{};
 	switch (sev)
 	{
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
@@ -40,7 +40,7 @@ u32 DebugMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtil
 		sevStr = "Unknown";
 	};
 	}
-	auto typeStr = String{};
+	auto typeStr = string::String{};
 	switch (type)
 	{
 	case VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT:

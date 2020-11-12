@@ -5,7 +5,7 @@
 namespace GPU::Vulkan
 {
 
-VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilename)
+VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, string::String shaderFilename)
 {
 	if (shaderFilename == "Model.glsl")
 	{

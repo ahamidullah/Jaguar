@@ -7,7 +7,7 @@ namespace Time
 
 struct Timer
 {
-	String name;
+	string::String name;
 	Time start;
 	s64 iteration;
 	s64 runningSum;
@@ -18,6 +18,6 @@ struct Timer
 	void Clear();
 };
 
-Timer NewTimer(String name);
+Timer NewTimer(string::String name);
 
 }

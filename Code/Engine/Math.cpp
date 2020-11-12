@@ -8,7 +8,7 @@
 #include "Math.h"
 #include "Basic/Log.h"
 
-void PrintM4Actual(String name, M4 m)
+void PrintM4Actual(string::String name, M4 m)
 {
 	ConsolePrint("%k:\n", name);
 	for (auto i = 0; i < 4; i += 1)
@@ -17,17 +17,17 @@ void PrintM4Actual(String name, M4 m)
 	}
 }
 
-void PrintV3Actual(String name, V3 v)
+void PrintV3Actual(string::String name, V3 v)
 {
 	ConsolePrint("%k: %f %f %f\n", name, v.x, v.y, v.z);
 }
 
-void PrintQuaternionActual(String name, Quaternion q)
+void PrintQuaternionActual(string::String name, Quaternion q)
 {
 	ConsolePrint("%k: %f %f %f %f\n", name, q.x, q.y, q.z, q.w);
 }
 
-void PrintF32Actual(String name, f32 number)
+void PrintF32Actual(string::String name, f32 number)
 {
 	ConsolePrint("%k: %f\n", name, number);
 }

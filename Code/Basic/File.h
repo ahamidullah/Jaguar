@@ -6,5 +6,5 @@
 	#error Unsupported platform.
 #endif
 
-void ReadEntireFileIn(array::Array<u8> *a, String path, bool *err);
-array::Array<u8> ReadEntireFile(String path, bool *err);
+void ReadEntireFileIn(array::Array<u8> *a, string::String path, bool *err);
+array::Array<u8> ReadEntireFile(string::String path, bool *err);

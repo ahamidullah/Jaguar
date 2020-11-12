@@ -1,4 +1,5 @@
 #include "Builder.h"
+#include "stb_sprintf.h"
 
 namespace string
 {

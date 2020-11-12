@@ -2,12 +2,12 @@
 #include "../File.h"
 #include "../Process.h"
 
-void ConsoleWrite(String s)
+void ConsoleWrite(string::String s)
 {
 	File{1}.WriteString(s);
 }
 
-String PlatformError()
+string::String PlatformError()
 {
 	return strerror(errno);
 }

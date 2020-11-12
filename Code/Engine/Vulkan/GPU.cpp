@@ -154,7 +154,7 @@ Framebuffer GPU::DefaultFramebuffer()
 	//return this->framebufferAllocator.Default();
 }
 
-Shader GPU::CompileShader(String filename, bool *err)
+Shader GPU::CompileShader(string::String filename, bool *err)
 {
 	return Vulkan::CompileShader(this->device, this->physicalDevice.surfaceFormat, this->pipelineLayout, filename, err);
 }

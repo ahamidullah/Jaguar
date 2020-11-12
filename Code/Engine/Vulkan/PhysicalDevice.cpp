@@ -118,7 +118,7 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 			missingDevExt = rde;
 			for (auto de : devExts)
 			{
-				if (CStringsEqual(de.extensionName, rde))
+				if (string::Equal(de.extensionName, rde))
 				{
 					missingDevExt = NULL;
 					break;

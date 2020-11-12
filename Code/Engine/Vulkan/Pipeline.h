@@ -6,7 +6,7 @@ namespace GPU::Vulkan
 {
 
 VkPipelineLayout NewPipelineLayout(Device d);
-VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, array::View<VkShaderStageFlagBits> stages, array::View<VkShaderModule> modules, VkRenderPass rp);
+VkPipeline NewPipeline(Device d, VkPipelineLayout l, string::String shaderFilename, array::View<VkShaderStageFlagBits> stages, array::View<VkShaderModule> modules, VkRenderPass rp);
 
 }
 

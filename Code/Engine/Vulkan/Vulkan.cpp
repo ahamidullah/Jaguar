@@ -7,7 +7,7 @@
 namespace GPU::Vulkan
 {
 
-String VkResultToString(VkResult r)
+string::String VkResultToString(VkResult r)
 {
 	switch (r)
 	{

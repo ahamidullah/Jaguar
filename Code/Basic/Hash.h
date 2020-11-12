@@ -5,7 +5,7 @@
 u32 Hash32(u32 u);
 u64 Hash64(u64 u);
 u64 HashPointer(void *p);
-u64 HashString(String s);
+u64 HashString(string::String s);
 
 struct Hasher32
 {

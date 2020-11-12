@@ -6,7 +6,7 @@
 
 auto cameras = array::Array<Camera>{};
 
-Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
+Camera *NewCamera(string::String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
 {
 	auto c = Camera
 	{
@@ -32,7 +32,7 @@ array::View<Camera> Cameras()
 	return cameras;
 }
 
-Camera *LookupCamera(String name)
+Camera *LookupCamera(string::String name)
 {
 	for (auto i = 0; i < cameras.count; i += 1)
 	{

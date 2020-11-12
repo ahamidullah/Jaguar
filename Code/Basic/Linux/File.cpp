@@ -1,11 +1,11 @@
 #include "../File.h"
 #include "../Log.h"
 
-File OpenFile(String path, s64 flags, bool *err)
+File OpenFile(string::String path, s64 flags, bool *err)
 {
 	auto f = File
 	{
-		.handle = open(path.CString(), flags, 0666),
+		.handle = open(path.ToCString(), flags, 0666),
 		.path = path.Copy(),
 	};
 	if (f.handle < 0)
@@ -77,7 +77,7 @@ bool File::Write(array::View<u8> a)
 	return true;
 }
 
-bool File::WriteString(String s)
+bool File::WriteString(string::String s)
 {
 	return this->Write(s.buffer);
 }
@@ -122,11 +122,11 @@ Time::Time File::LastModifiedTime(bool *err)
 	};
 }
 
-bool DirectoryIteration::Iterate(String path)
+bool DirectoryIteration::Iterate(string::String path)
 {
 	if (!this->dir)
 	{
-		this->dir = opendir(path.CString());
+		this->dir = opendir(path.ToCString());
 		if (!this->dir)
 		{
 			LogError("File", "Failed to open directory %k: %k.", path, PlatformError());
@@ -135,7 +135,7 @@ bool DirectoryIteration::Iterate(String path)
 	}
 	while ((this->dirent = readdir(this->dir)))
 	{
-		if (CStringsEqual(this->dirent->d_name, ".") || CStringsEqual(this->dirent->d_name, ".."))
+		if (string::Equal(this->dirent->d_name, ".") || string::Equal(this->dirent->d_name, ".."))
 		{
 			continue;
 		}
@@ -146,18 +146,18 @@ bool DirectoryIteration::Iterate(String path)
 	return false;
 }
 
-bool FileExists(String path)
+bool FileExists(string::String path)
 {
-	if (access(path.CString(), F_OK) != -1)
+	if (access(path.ToCString(), F_OK) != -1)
 	{
 		return true;
 	}
 	return false;
 }
 
-bool CreateDirectory(String path)
+bool CreateDirectory(string::String path)
 {
-	if (mkdir(path.CString(), 0700) == -1)
+	if (mkdir(path.ToCString(), 0700) == -1)
 	{
 		LogError("File", "Failed to create directory %k: %k.", path, PlatformError());
 		return false;
@@ -165,7 +165,7 @@ bool CreateDirectory(String path)
 	return true;
 }
 
-bool CreateDirectoryIfItDoesNotExist(String path)
+bool CreateDirectoryIfItDoesNotExist(string::String path)
 {
 	if (FileExists(path))
 	{
@@ -174,9 +174,9 @@ bool CreateDirectoryIfItDoesNotExist(String path)
 	return CreateDirectory(path);
 }
 
-bool DeleteFile(String path)
+bool DeleteFile(string::String path)
 {
-	if (unlink(path.CString()) != 0)
+	if (unlink(path.ToCString()) != 0)
 	{
 		LogError("File", "Failed to delete file %k: %k.", path, PlatformError());
 		return false;

@@ -51,5 +51,5 @@ struct MeshAsset
 
 struct Mesh
 {
-	String meshName;
+	string::String meshName;
 };

@@ -9,7 +9,7 @@ struct ModelAsset
 	//Skeleton *skeleton;
 
 	#ifdef DebugBuild
-		String name;
+		string::String name;
 	#endif
 };
 
@@ -21,4 +21,4 @@ struct Model
 };
 
 void InitializeModelAssets();
-ModelAsset LoadModelAsset(String name);
+ModelAsset LoadModelAsset(string::String name);

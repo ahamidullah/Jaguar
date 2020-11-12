@@ -10,9 +10,9 @@ enum ProcessExitCode
 	ProcessFail = 1,
 };
 
-s32 RunProcess(String cmd);
+s32 RunProcess(string::String cmd);
 void ExitProcess(ProcessExitCode c);
 bool IsDebuggerAttached();
 void SignalDebugBreakpoint();
-String EnvironmentVariable(String name, bool *exists);
-array::Array<String> Stacktrace();
+string::String EnvironmentVariable(string::String name, bool *exists);
+array::Array<string::String> Stacktrace();

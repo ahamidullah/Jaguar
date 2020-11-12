@@ -5,7 +5,7 @@
 namespace parser
 {
 
-Parser File(String path, String delims, bool *err)
+Parser NewFromFile(string::String path, string::String delims, bool *err)
 {
 	auto buf = ReadEntireFile(path, err);
 	if (*err)
@@ -14,14 +14,14 @@ Parser File(String path, String delims, bool *err)
 	}
 	return
 	{
-		.string = NewStringFromBuffer(buf),
+		.string = string::NewFromBuffer(buf),
 		.delimiters = delims,
 		.line = 1,
 		.column = 1,
 	};
 }
 
-Parser XString(String s, String delims)
+Parser NewFromString(string::String s, string::String delims)
 {
 	return
 	{
@@ -59,7 +59,7 @@ void Parser::Advance()
 	this->column += 1;
 }
 
-String Parser::Line()
+string::String Parser::Line()
 {
 	if (this->index >= this->string.Length())
 	{
@@ -78,9 +78,9 @@ String Parser::Line()
 	return this->string.ToView(start, this->index);
 }
 
-String Parser::Token()
+string::String Parser::Token()
 {
-	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}
@@ -95,7 +95,7 @@ String Parser::Token()
 	}
 	else
 	{
-		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]) && !IsCharWhitespace(this->string[this->index]))
+		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]) && !string::IsCharWhitespace(this->string[this->index]))
 		{
 			this->Advance();
 		}
@@ -118,7 +118,7 @@ void Parser::Eat(char c)
 
 s64 Parser::PeekChar()
 {
-	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}
@@ -131,7 +131,7 @@ s64 Parser::PeekChar()
 
 void Parser::Expect(u8 c)
 {
-	while (this->index < this->string.Length() && IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}

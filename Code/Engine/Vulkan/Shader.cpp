@@ -7,7 +7,7 @@
 namespace GPU::Vulkan
 {
 
-Shader CompileShader(Device d, VkSurfaceFormatKHR sf, VkPipelineLayout l, String filename, bool *err)
+Shader CompileShader(Device d, VkSurfaceFormatKHR sf, VkPipelineLayout l, string::String filename, bool *err)
 {
 	auto spirv = ShaderCompiler::VulkanGLSL(filename, err);
 	if (*err)

@@ -1,5 +1,4 @@
 #include "Log.h"
-#include "Basic/String.h"
 #include "File.h"
 #include "Process.h"
 #include "Thread.h"
@@ -135,7 +134,7 @@ void LogPrintVarArgs(string::String file, string::String func, s64 line, LogLeve
 			lf->WriteString("] ");
 			lf->WriteString(LogLevelToString(l));
 			//sb.FormatTime();
-			lf->WriteString(FormatString("%k:%d %k  |  ", file, line, func));
+			lf->WriteString(string::Format("%k:%d %k  |  ", file, line, func));
 			lf->WriteString(msg);
 			lf->WriteString("\n");
 		}

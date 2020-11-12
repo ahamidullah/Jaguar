@@ -165,10 +165,10 @@ struct EulerAngles
 };
 
 #define PrintF32(f) PrintF32Actual(#f, (f))
-void PrintF32Actual(String name, f32 number);
+void PrintF32Actual(string::String name, f32 number);
 #define PrintV3(v) PrintV3Actual(#v, (v))
-void PrintV3Actual(String name, V3 v);
+void PrintV3Actual(string::String name, V3 v);
 #define PrintQuaternion(q) PrintQuaternionActual(#q, (q))
-void PrintQuaternionActual(String name, Quaternion q);
+void PrintQuaternionActual(string::String name, Quaternion q);
 #define PrintM4(m) PrintM4Actual(#m, (m))
-void PrintM4Actual(String name, M4 m);
+void PrintM4Actual(string::String name, M4 m);

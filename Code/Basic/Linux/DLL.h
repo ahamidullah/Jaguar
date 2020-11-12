@@ -5,10 +5,10 @@
 struct DLL
 {
 	void *handle;
-	String path;
+	string::String path;
 
 	bool Close();
-	void *LookupProcedure(String name, bool *err);
+	void *LookupProcedure(string::String name, bool *err);
 };
 
-DLL OpenDLL(String path, bool *err);
+DLL OpenDLL(string::String path, bool *err);

@@ -25,7 +25,7 @@ VkPipelineLayout NewPipelineLayout(Device d)
 	return l;
 }
 
-VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, array::View<VkShaderStageFlagBits> stages, array::View<VkShaderModule> modules, VkRenderPass rp)
+VkPipeline NewPipeline(Device d, VkPipelineLayout l, string::String shaderFilename, array::View<VkShaderStageFlagBits> stages, array::View<VkShaderModule> modules, VkRenderPass rp)
 {
 	if (shaderFilename == "Model.glsl")
 	{

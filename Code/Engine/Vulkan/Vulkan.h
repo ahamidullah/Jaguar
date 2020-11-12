@@ -21,7 +21,7 @@ namespace GPU::Vulkan
 		if (_r != VK_SUCCESS) Abort("Vulkan", "Check failed on %s: %k", #x, VkResultToString(_r)); \
 	} while (0)
 
-String VkResultToString(VkResult r);
+string::String VkResultToString(VkResult r);
 
 }
 

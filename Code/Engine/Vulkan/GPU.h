@@ -46,7 +46,7 @@ struct GPU
 	CommandBuffer NewCommandBuffer(QueueType t);
 	Framebuffer NewFramebuffer();
 	Framebuffer DefaultFramebuffer();
-	Shader CompileShader(String filename, bool *err);
+	Shader CompileShader(string::String filename, bool *err);
 	void SubmitGraphicsCommands();
 	void SubmitTransferCommands();
 };

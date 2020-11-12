@@ -2,9 +2,9 @@
 #include "../PCH.h"
 #include "../Log.h"
 
-s32 RunProcess(String cmd)
+s32 RunProcess(string::String cmd)
 {
-	return system(cmd.CString());
+	return system(cmd.ToCString());
 }
 
 void ExitProcess(ProcessExitCode c)
@@ -26,9 +26,9 @@ void SignalDebugBreakpoint()
 	raise(SIGTRAP);
 }
 
-String EnvironmentVariable(String name, bool *exists)
+string::String EnvironmentVariable(string::String name, bool *exists)
 {
-	auto result = getenv(name.CString());
+	auto result = getenv(name.ToCString());
 	if (!result)
 	{
 		*exists = false;
@@ -38,7 +38,7 @@ String EnvironmentVariable(String name, bool *exists)
 	return result;
 }
 
-array::Array<String> Stacktrace()
+array::Array<string::String> Stacktrace()
 {
 	#if DebugBuild
 		const auto maxAddrs = 100;
@@ -54,7 +54,7 @@ array::Array<String> Stacktrace()
 			LogError("Memory", "Failed to get stack trace function names.\n");
 			return {};
 		}
-		auto st = array::NewWithCapacity<String>(numAddrs);
+		auto st = array::NewWithCapacity<string::String>(numAddrs);
 		for (auto i = 0; i < numAddrs; i += 1)
 		{
 			st.Append(trace[i]);

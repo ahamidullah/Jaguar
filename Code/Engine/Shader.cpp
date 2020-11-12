@@ -10,9 +10,9 @@
 namespace ShaderCompiler
 {
 
-const auto SourceDirectory = String{"Code/Shader"};
+const auto SourceDirectory = string::Make("Code/Shader");
 
-SPIRV VulkanGLSL(String filename, bool *err)
+SPIRV VulkanGLSL(string::String filename, bool *err)
 {
 	CreateDirectoryIfItDoesNotExist("Build/GLSL");
 	CreateDirectoryIfItDoesNotExist("Build/GLSL/Code");
@@ -25,7 +25,7 @@ SPIRV VulkanGLSL(String filename, bool *err)
 		return {};
 	}
 	// Write out a new version of the shader, inserting the text for the include files.
-	auto procPath = FormatString("Build/GLSL/Code/%k", filename);
+	auto procPath = string::Format("Build/GLSL/Code/%k", filename);
 	auto procFile = OpenFile(procPath, OpenFileWriteOnly | OpenFileCreate, err);
 	if (*err)
 	{
@@ -34,9 +34,9 @@ SPIRV VulkanGLSL(String filename, bool *err)
 	}
 	Defer(procFile.Close());
 	auto stageFlags = array::Array<VkShaderStageFlagBits>{};
-	auto stageDefines = array::Array<String>{};
-	auto stageExts = array::Array<String>{};
-	auto fileParser = parse::File(shaderPath, "", err);
+	auto stageDefines = array::Array<string::String>{};
+	auto stageExts = array::Array<string::String>{};
+	auto fileParser = parser::NewFromFile(shaderPath, "", err);
 	if (*err)
 	{
 		LogError("Shader", "Failed to create parser for shader %k.", shaderPath);
@@ -45,7 +45,7 @@ SPIRV VulkanGLSL(String filename, bool *err)
 	auto depth = 0;
 	for (auto line = fileParser.Line(); line != ""; line = fileParser.Line())
 	{
-		auto lineParser = parse::XString(line, "\"");
+		auto lineParser = parser::NewFromString(line, "\"");
 		auto t = lineParser.Token();
 		if (t == "{")
 		{
@@ -137,8 +137,8 @@ SPIRV VulkanGLSL(String filename, bool *err)
 	auto name = SetFilepathExtension(filename, "");
 	for (auto i = 0; i < stageFlags.count; i += 1) 
 	{
-		auto spirvPath = FormatString("Build/GLSL/Binary/%k%k.spirv", name, stageExts[i]);
-		auto cmd = FormatString("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].ToView(1, stageExts[i].Length()), procPath, spirvPath);
+		auto spirvPath = string::Format("Build/GLSL/Binary/%k%k.spirv", name, stageExts[i]);
+		auto cmd = string::Format("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].ToView(1, stageExts[i].Length()), procPath, spirvPath);
 		if (RunProcess(cmd) != 0)
 		{
 			LogError("Shader", "Shader compilation command failed: %k.", cmd);

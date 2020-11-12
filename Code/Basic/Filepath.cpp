@@ -1,26 +1,26 @@
 #include "Filepath.h"
-#include "String.h"
+#include "Basic/String.h"
 
 // FilepathDirectory returns all but the last component of the path.
-void FilepathDirectoryIn(StringBuilder *sb, String path)
+void FilepathDirectoryIn(string::Builder *sb, string::String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
 	{
 		return;
 	}
-	return sb->Append(path.View(0, slash));
+	return sb->Append(path.ToView(0, slash));
 }
 
-String FilepathDirectory(String path)
+string::String FilepathDirectory(string::String path)
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	FilepathDirectoryIn(&sb, path);
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }
 
 // FilepathFilename returns the last component of the path.
-void FilepathFilenameIn(StringBuilder *sb, String path)
+void FilepathFilenameIn(string::Builder *sb, string::String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
@@ -28,17 +28,17 @@ void FilepathFilenameIn(StringBuilder *sb, String path)
 		sb->Append(path);
 		return;
 	}
-	sb->Append(path.View(slash + 1, path.Length()));
+	sb->Append(path.ToView(slash + 1, path.Length()));
 }
 
-String FilepathFilename(String path)
+string::String FilepathFilename(string::String path)
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	FilepathFilenameIn(&sb, path);
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }
 
-void FilepathFilenameNoExtIn(StringBuilder *sb, String path)
+void FilepathFilenameNoExtIn(string::Builder *sb, string::String path)
 {
 	auto start = 0;
 	auto slash = path.FindLast('/');
@@ -56,37 +56,37 @@ void FilepathFilenameNoExtIn(StringBuilder *sb, String path)
 		return;
 	}
 	Assert(dot > 0);
-	sb->Append(path.View(start, dot));
+	sb->Append(path.ToView(start, dot));
 }
 
-String FilepathFilenameNoExt(String path)
+string::String FilepathFilenameNoExt(string::String path)
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	FilepathFilenameNoExtIn(&sb, path);
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }
 
 // FilepathExtension returns the file extension including the dot.
-void FilepathExtensionIn(StringBuilder *sb, String path)
+void FilepathExtensionIn(string::Builder *sb, string::String path)
 {
 	auto dot = path.FindLast('.');
 	if (dot < 0)
 	{
 		return;
 	}
-	return sb->Append(path.View(dot, path.Length()));
+	return sb->Append(path.ToView(dot, path.Length()));
 }
 
-String FilepathExtension(String path)
+string::String FilepathExtension(string::String path)
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	FilepathExtensionIn(&sb, path);
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }
 
 // SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
 // If no dot character is found, a dot character and the supplied extension are appended to the path.
-void SetFilepathExtensionIn(StringBuilder *path, String ext)
+void SetFilepathExtensionIn(string::Builder *path, string::String ext)
 {
 	auto dot = path->FindLast('.');
 	if (dot < 0)
@@ -96,34 +96,34 @@ void SetFilepathExtensionIn(StringBuilder *path, String ext)
 		return;
 	}
 	path->Resize(dot + ext.Length());
-	CopyArray(ext.buffer, path->View(dot, path->Length()).buffer);
+	array::Copy(ext.buffer, path->ToView(dot, path->Length()).buffer);
 }
 
-String SetFilepathExtension(String path, String ext)
+string::String SetFilepathExtension(string::String path, string::String ext)
 {
-	auto sb = NewStringBuilderWithCapacity(path.Length());
+	auto sb = string::NewBuilderWithCapacity(path.Length());
 	sb.Append(path);
 	SetFilepathExtensionIn(&sb, ext);
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }
 
 #if 0
 // JoinFilepaths concatenates two strings and inserts a '/' between them.
-StringBuilder JoinFilepaths(String a, String b)
+string::Builder JoinFilepaths(string::String a, string::String b)
 {
-	auto sb = NewStringBuilderWithCapacity(a.length + b.length + 1);
-	StringBuilderAppend(a);
-	StringBuilderAppend("/");
-	StringBuilderAppend(b);
+	auto sb = Newstring::BuilderWithCapacity(a.length + b.length + 1);
+	string::BuilderAppend(a);
+	string::BuilderAppend("/");
+	string::BuilderAppend(b);
 	return sb;
 }
 
 // This is probably buggy/full of corner cases, but oh well!
 // @TODO: Do we still use this?
 // Don't remember what this does lol.
-String CleanFilepath(const String &filepath)
+string::String CleanFilepath(const string::String &filepath)
 {
-	auto components = SplitString(filepath, '/');
+	auto components = Splitstring::String(filepath, '/');
 	for (auto i = 0; i < ArrayLength(components); i += 1)
 	{
 		if (components[i] == ".")
@@ -139,17 +139,17 @@ String CleanFilepath(const String &filepath)
 			}
 		}
 	}
-	auto result = CreateString(0, StringLength(filepath));
-	if (StringLength(filepath) > 0 && filepath[0] == '/')
+	auto result = Createstring::String(0, string::StringLength(filepath));
+	if (string::StringLength(filepath) > 0 && filepath[0] == '/')
 	{
-		StringAppend(&result, "/");
+		string::StringAppend(&result, "/");
 	}
 	for (auto i = 0; i < ArrayLength(components); i += 1)
 	{
-		StringAppend(&result, components[i]);
+		string::StringAppend(&result, components[i]);
 		if (i != ArrayLength(components) - 1)
 		{
-			StringAppend(&result, "/");
+			string::StringAppend(&result, "/");
 		}
 	}
 	return result;

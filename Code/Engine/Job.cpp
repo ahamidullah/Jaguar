@@ -6,10 +6,10 @@
 #include "Job.h"
 #include "Basic/Thread.h"
 #include "Basic/Atomic.h"
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
+#include "Basic/Container/Dequeue.h"
 #include "Basic/CPU.h"
 #include "Basic/Pool.h"
-#include "Basic/Dequeue.h"
 #include "Basic/Memory/GlobalHeap.h"
 
 struct WorkerThreadParameter
@@ -28,7 +28,7 @@ void JobFiberProcedure(void *);
 
 // @TODO: More granular locking?
 auto jobLock = Spinlock{};
-auto workerThreads = Array<WorkerThread>{};
+auto workerThreads = array::Array<WorkerThread>{};
 auto idleJobFiberPool = []() -> FixedPool<JobFiber, JobFiberCount>
 {
 	auto p = NewFixedPool<JobFiber, JobFiberCount>();
@@ -38,30 +38,30 @@ auto idleJobFiberPool = []() -> FixedPool<JobFiber, JobFiberCount>
 	}
 	return p;
 }();
-auto jobQueues = []() -> StaticArray<Dequeue<QueuedJob>, JobPriorityCount>
+auto jobQueues = []() -> array::Static<dequeue::Dequeue<QueuedJob>, JobPriorityCount>
 {
-	auto a = StaticArray<Dequeue<QueuedJob>, JobPriorityCount>{};
+	auto a = array::Static<dequeue::Dequeue<QueuedJob>, JobPriorityCount>{};
 	for (auto &s : a)
 	{
-		s = NewDequeueWithBlockSizeIn<QueuedJob>(Memory::GlobalHeap(), 1024, 1024);
+		s = dequeue::NewWithBlockSizeIn<QueuedJob>(Memory::GlobalHeap(), 1024, 1024);
 	}
 	return a;
 }();
-auto resumableJobFiberQueues = []() -> StaticArray<Array<JobFiber *>, JobPriorityCount>
+auto resumableJobFiberQueues = []() -> array::Static<array::Array<JobFiber *>, JobPriorityCount>
 {
-	auto a = StaticArray<Array<JobFiber *>, JobPriorityCount>{};
+	auto a = array::Static<array::Array<JobFiber *>, JobPriorityCount>{};
 	for (auto &q : a)
 	{
-		q = NewArrayWithCapacityIn<JobFiber *>(Memory::GlobalHeap(), 100);
+		q = array::NewWithCapacityIn<JobFiber *>(Memory::GlobalHeap(), 100);
 	}
 	return a;
 }();
 auto jobCounterPool = NewPoolIn<JobCounter>(Memory::GlobalHeap(), 0);
-auto runningJobFibers = NewArray<JobFiber *>(WorkerThreadCount());
+auto runningJobFibers = array::New<JobFiber *>(WorkerThreadCount());
 //ThreadLocal auto runningJobFiber = (JobFiber *){};
 //ThreadLocal auto workerThreadFiber = Fiber{};
-auto wtf = NewArray<bool>(WorkerThreadCount());
-auto workerThreadFibers = NewArray<Fiber>(WorkerThreadCount());
+auto wtf = array::New<bool>(WorkerThreadCount());
+auto workerThreadFibers = array::New<Fiber>(WorkerThreadCount());
 ThreadLocal auto waitingJobCounter = (JobCounter *){};
 
 #include "string.h"
@@ -107,7 +107,7 @@ void *WorkerThreadProcedure(void *param)
 				//Assert(runFiber->parameter.procedure == RunGame);
 				break;
 			}
-			else if (jobQueues[i].Count() > 0)
+			else if (jobQueues[i].count > 0)
 			{
 				if (idleJobFiberPool.Available() == 0)
 				{
@@ -202,7 +202,7 @@ void *WorkerThreadProcedure(void *param)
 
 void InitializeJobs(JobProcedure initProc, void *initParam)
 {
-	workerThreads = NewArrayIn<WorkerThread>(Memory::GlobalHeap(), WorkerThreadCount());
+	workerThreads = array::NewIn<WorkerThread>(Memory::GlobalHeap(), WorkerThreadCount());
 	workerThreads[0].platformThread = CurrentThread();
 	//workerThreads.Last()->platformThread = CurrentThread();
 	for (auto i = 1; i < workerThreads.count; i += 1)
@@ -217,7 +217,7 @@ void InitializeJobs(JobProcedure initProc, void *initParam)
 		SetThreadProcessorAffinity(workerThreads[i].platformThread, i);
 	}
 	auto j = NewJobDeclaration(initProc, initParam);
-	RunJobs(NewArrayView(&j, 1), HighJobPriority, NULL);
+	RunJobs(array::NewView(&j, 1), HighJobPriority, NULL);
 	WorkerThreadProcedure(&workerThreads[0].parameter);
 	//WorkerThreadProcedure(&workerThreads.Last()->parameter);
 }
@@ -231,7 +231,7 @@ JobDeclaration NewJobDeclaration(JobProcedure proc, void *param)
 	};
 }
 
-void RunJobs(ArrayView<JobDeclaration> js, JobPriority p, JobCounter **c)
+void RunJobs(array::View<JobDeclaration> js, JobPriority p, JobCounter **c)
 {
 	jobLock.Lock();
 	Defer(jobLock.Unlock());

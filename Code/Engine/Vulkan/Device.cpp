@@ -3,10 +3,10 @@
 namespace GPU::Vulkan
 {
 
-Device NewDevice(PhysicalDevice pd, ArrayView<const char *> instLayers, ArrayView<const char *> devExts)
+Device NewDevice(PhysicalDevice pd, array::View<const char *> instLayers, array::View<const char *> devExts)
 {
 	auto prio = 1.0f;
-	auto qcis = Array<VkDeviceQueueCreateInfo>{};
+	auto qcis = array::Array<VkDeviceQueueCreateInfo>{};
 	qcis.Append(
 		{
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -60,7 +60,7 @@ Device NewDevice(PhysicalDevice pd, ArrayView<const char *> instLayers, ArrayVie
 		.pEnabledFeatures = &pdf,
 	};
 	auto d = Device{};
-	VkCheck(vkCreateDevice(pd.physicalDevice, &dci, NULL, &d.device));
+	Check(vkCreateDevice(pd.physicalDevice, &dci, NULL, &d.device));
 	return d;
 }
 

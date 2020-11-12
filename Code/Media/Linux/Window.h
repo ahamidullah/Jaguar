@@ -13,7 +13,7 @@ struct Window
 	bool isFullscreen;
 	bool isCursorHidden;
 
-	void SetName(String n);
+	void SetName(string::String n);
 	void SetIcon();
 	void Fullscreen();
 	void Unfullscreen();

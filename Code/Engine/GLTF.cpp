@@ -3,66 +3,88 @@
 #include "GLTF.h"
 #include "Basic/JSON.h"
 
-GLTFBuffer ParseGLTFBuffer(Parser *p)
+f32 ParseFloatAbort(String s)
+{
+	auto err = false;
+	auto f = ParseFloat(s, &err);
+	if (err)
+	{
+		Abort("String", "Failed to parse float %k.", s);
+	}
+	return f;
+}
+
+s64 ParseIntAbort(String s)
+{
+	auto err = false;
+	auto n = ParseInteger(s, &err);
+	if (err)
+	{
+		Abort("String", "Failed parse integer for string %k.", s);
+	}
+	return n;
+}
+
+GLTFBuffer ParseGLTFBuffer(parse::Parser *p)
 {
 	auto b = GLTFBuffer{};
-	JSONParseObject(p, [&b](Parser *p, String name)
+	JSONParseObject(p, [&b](parse::Parser *p, String name)
 	{
 		if (name == "byteLength")
 		{
-			b.byteLength = ParseIntegerAbort(p->Token());
+			b.byteLength = ParseIntAbort(p->Token());
 		}
 		else if (name == "uri")
 		{
 			auto uri = p->Token();
-			b.uri = uri.View(1, uri.Length() - 1);
+			b.uri = uri.ToView(1, uri.Length() - 1);
 		}
 	});
 	return b;
 }
 
-GLTFBufferView ParseGLTFBufferView(Parser *p)
+GLTFBufferView ParseGLTFBufferView(parse::Parser *p)
 {
 	auto v = GLTFBufferView{};
-	JSONParseObject(p, [&v](Parser *p, String name)
+	JSONParseObject(p, [&v](parse::Parser *p, String name)
 	{
 		if (name == "buffer")
 		{
-			v.buffer = ParseIntegerAbort(p->Token());
+			v.buffer = ParseIntAbort(p->Token());
 		}
 		else if (name == "byteOffset")
 		{
-			v.byteOffset = ParseIntegerAbort(p->Token());
+			v.byteOffset = ParseIntAbort(p->Token());
 		}
 		else if (name == "byteLength")
 		{
-			v.byteLength = ParseIntegerAbort(p->Token());
+			v.byteLength = ParseIntAbort(p->Token());
 		}
 		else if (name == "byteStride")
 		{
-			v.byteStride = ParseIntegerAbort(p->Token());
+			v.byteStride = ParseIntAbort(p->Token());
 		}
 		else if (name == "target")
 		{
-			v.target = (GLTFBufferViewTarget)ParseIntegerAbort(p->Token());
+			v.target = (GLTFBufferViewTarget)ParseIntAbort(p->Token());
 		}
 	});
 	return v;
 }
 
-GLTFMaterial ParseGLTFMaterial(Parser *p)
+GLTFMaterial ParseGLTFMaterial(parse::Parser *p)
 {
 	auto m = GLTFMaterial{};
-	JSONParseObject(p, [&m](Parser *p, String name)
+	JSONParseObject(p, [&m](parse::Parser *p, String name)
 	{
 		if (name == "pbrMetallicRoughness")
 		{
-			JSONParseObject(p, [&m](Parser *p, String name)
+			JSONParseObject(p, [&m](parse::Parser *p, String name)
 			{
 				if (name == "baseColorFactor")
 				{
 					auto i = 0;
-					JSONParseList(p, [&m, &i](Parser *p)
+					JSONParseList(p, [&m, &i](parse::Parser *p)
 					{
 						m.pbrMetallicRoughness.baseColorFactor[i] = ParseFloatAbort(p->Token());
 						i += 1;
@@ -82,26 +104,26 @@ GLTFMaterial ParseGLTFMaterial(Parser *p)
 	return m;
 }
 
-GLTFAccessor ParseGLTFAccessor(Parser *p)
+GLTFAccessor ParseGLTFAccessor(parse::Parser *p)
 {
 	auto a = GLTFAccessor{};
-	JSONParseObject(p, [&a](Parser *p, String name)
+	JSONParseObject(p, [&a](parse::Parser *p, String name)
 	{
 		if (name == "bufferView")
 		{
-			a.bufferView = ParseIntegerAbort(p->Token());
+			a.bufferView = ParseIntAbort(p->Token());
 		}
 		else if (name == "byteOffset")
 		{
-			a.byteOffset = ParseIntegerAbort(p->Token());
+			a.byteOffset = ParseIntAbort(p->Token());
 		}
 		else if (name == "componentType")
 		{
-			a.componentType = (GLTFAccessorComponentType)ParseIntegerAbort(p->Token());
+			a.componentType = (GLTFAccessorComponentType)ParseIntAbort(p->Token());
 		}
 		else if (name == "count")
 		{
-			a.count = ParseIntegerAbort(p->Token());
+			a.count = ParseIntAbort(p->Token());
 		}
 		else if (name == "type")
 		{
@@ -139,17 +161,17 @@ GLTFAccessor ParseGLTFAccessor(Parser *p)
 	return a;
 }
 
-Array<GLTFAttribute> ParseGLTFAttributes(Parser *p)
+array::Array<GLTFAttribute> ParseGLTFAttributes(parse::Parser *p)
 {
-	auto as = Array<GLTFAttribute>{};
-	JSONParseObject(p, [&as](Parser *p, String name)
+	auto as = array::Array<GLTFAttribute>{};
+	JSONParseObject(p, [&as](parse::Parser *p, String name)
 	{
 		if (name == "NORMAL")
 		{
 			auto a = GLTFAttribute
 			{
 				.type = GLTFNormalType,
-				.index = ParseIntegerAbort(p->Token()),
+				.index = ParseIntAbort(p->Token()),
 			};
 			as.Append(a);
 		}
@@ -158,7 +180,7 @@ Array<GLTFAttribute> ParseGLTFAttributes(Parser *p)
 			auto a = GLTFAttribute
 			{
 				.type = GLTFPositionType,
-				.index = ParseIntegerAbort(p->Token()),
+				.index = ParseIntAbort(p->Token()),
 			};
 			as.Append(a);
 		}
@@ -166,10 +188,10 @@ Array<GLTFAttribute> ParseGLTFAttributes(Parser *p)
 	return as;
 }
 
-GLTFPrimitive ParseGLTFPrimitive(Parser *p)
+GLTFPrimitive ParseGLTFPrimitive(parse::Parser *p)
 {
 	auto pr = GLTFPrimitive{};
-	JSONParseObject(p, [&pr](Parser *p, String name)
+	JSONParseObject(p, [&pr](parse::Parser *p, String name)
 	{
 		if (name == "attributes")
 		{
@@ -177,28 +199,28 @@ GLTFPrimitive ParseGLTFPrimitive(Parser *p)
 		}
 		else if (name == "indices")
 		{
-			pr.indices = ParseIntegerAbort(p->Token());
+			pr.indices = ParseIntAbort(p->Token());
 		}
 		else if (name == "mode")
 		{
-			pr.mode = (GLTFPrimitiveMode)ParseIntegerAbort(p->Token());
+			pr.mode = (GLTFPrimitiveMode)ParseIntAbort(p->Token());
 		}
 		else if (name == "material")
 		{
-			pr.material = ParseIntegerAbort(p->Token());
+			pr.material = ParseIntAbort(p->Token());
 		}
 	});
 	return pr;
 }
 
-GLTFMesh ParseGLTFMesh(Parser *p)
+GLTFMesh ParseGLTFMesh(parse::Parser *p)
 {
 	auto m = GLTFMesh{};
-	JSONParseObject(p, [&m](Parser *p, String name)
+	JSONParseObject(p, [&m](parse::Parser *p, String name)
 	{
 		if (name == "primitives")
 		{
-			JSONParseList(p, [&m](Parser *p)
+			JSONParseList(p, [&m](parse::Parser *p)
 			{
 				m.primitives.Append(ParseGLTFPrimitive(p));
 			});
@@ -206,7 +228,7 @@ GLTFMesh ParseGLTFMesh(Parser *p)
 		else if (name == "name")
 		{
 			m.name = p->Token();
-			m.name = m.name.View(1, m.name.Length() - 1); // Strip quotes.
+			m.name = m.name.ToView(1, m.name.Length() - 1); // Strip quotes.
 		}
 	});
 	return m;
@@ -214,46 +236,46 @@ GLTFMesh ParseGLTFMesh(Parser *p)
 
 GLTF ParseGLTFFile(String path, bool *err)
 {
-	auto p = NewParser(path, "[],{}", err);
+	auto p = parse::File(path, "[],{}", err);
 	if (*err)
 	{
 		LogError("GLTF", "Failed creating parser for file %k.", path);
 		return GLTF{};
 	}
 	auto gltf = GLTF{};
-	JSONParseObject(&p, [&gltf](Parser *p, String name)
+	JSONParseObject(&p, [&gltf](parse::Parser *p, String name)
 	{
 		if (name == "meshes")
 		{
-			JSONParseList(p, [&gltf](Parser *p)
+			JSONParseList(p, [&gltf](parse::Parser *p)
 			{
 				gltf.meshes.Append(ParseGLTFMesh(p));
 			});
 		}
 		else if (name == "accessors")
 		{
-			JSONParseList(p, [&gltf](Parser *p)
+			JSONParseList(p, [&gltf](parse::Parser *p)
 			{
 				gltf.accessors.Append(ParseGLTFAccessor(p));
 			});
 		}
 		else if (name == "materials")
 		{
-			JSONParseList(p, [&gltf](Parser *p)
+			JSONParseList(p, [&gltf](parse::Parser *p)
 			{
 				gltf.materials.Append(ParseGLTFMaterial(p));
 			});
 		}
 		else if (name == "bufferViews")
 		{
-			JSONParseList(p, [&gltf](Parser *p)
+			JSONParseList(p, [&gltf](parse::Parser *p)
 			{
 				gltf.bufferViews.Append(ParseGLTFBufferView(p));
 			});
 		}
 		else if (name == "buffers")
 		{
-			JSONParseList(p, [&gltf](Parser *p)
+			JSONParseList(p, [&gltf](parse::Parser *p)
 			{
 				gltf.buffers.Append(ParseGLTFBuffer(p));
 			});

@@ -7,7 +7,7 @@ mkdir -p $ProjectDirectory/Build
 pushd . >& /dev/null
 cd $ProjectDirectory
 
-fbuild -cache -fastcancel -config Misc/Linux/fbuild.bff $@
+fbuild -cache -config Misc/Linux/fbuild.bff $@
 
 popd >& /dev/null
 

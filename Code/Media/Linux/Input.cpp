@@ -1,6 +1,5 @@
 #include "../Input.h"
 #include "XCBConnection.h"
-#include "Basic/HashTable.h"
 #include "Basic/Assert.h"
 #include "Basic/Log.h"
 

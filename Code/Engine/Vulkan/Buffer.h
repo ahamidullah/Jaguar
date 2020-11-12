@@ -3,7 +3,7 @@
 #ifdef VulkanBuild
 
 #include "Memory.h"
-#include "Basic/HashTable.h"
+#include "Basic/Container/Map.h"
 #include "Basic/Thread.h"
 
 namespace GPU::Vulkan
@@ -23,13 +23,13 @@ struct BufferBlockList
 {
 	MemoryAllocator memoryAllocator;
 	VkBufferUsageFlags bufferUsage;
-	HashTable<VkDeviceMemory, VkBuffer> buffers;
+	map::Map<VkDeviceMemory, VkBuffer> buffers;
 };
 
 struct BufferAllocator
 {
 	Spinlock lock;
-	Array<BufferBlockList> blockLists;
+	array::Array<BufferBlockList> blockLists;
 
 	Buffer Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags bu, VkMemoryPropertyFlags mp, s64 size);
 };

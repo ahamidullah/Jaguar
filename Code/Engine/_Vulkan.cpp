@@ -1,5 +1,66 @@
 #ifdef VulkanBuild
 
+#include "Math.h"
+#include "Vulkan/GPU.h"
+
+auto vkCommandGroupUseIndex = u64{}; // Extended frame resources are allocated to this index every frame.
+auto vkCommandGroupFreeIndex = u64{1}; // Extended frame resources are freed from this index every frame.
+
+struct GPUMaterial
+{
+	VkDescriptorSet vkDescriptorSet;
+	s64 elementIndex;
+	GPU::Buffer uniform;
+};
+
+struct GPUSubmesh
+{
+	//u32 vertexOffset;
+	//u32 indexOffset;
+	u32 indexCount;
+};
+
+struct GPUMeshAsset
+{
+	u32 firstIndex;
+	s32 vertexOffset; // @TODO: Get rid of this field?
+	array::Array<GPUSubmesh> submeshes;
+	// @TODO: Get rid of the offsets?
+	GPU::Buffer vertexBuffer;
+	GPU::Buffer indexBuffer;
+};
+
+struct GPUMeshAssetCreateInfo
+{
+	s64 vertexCount;
+	s64 vertexSize;
+	s64 indexCount;
+	s64 indexSize;
+	array::View<u32> submeshIndices;
+};
+
+struct GPUMesh
+{
+	GPUMeshAsset *asset;
+	GPU::Buffer uniform;
+};
+
+struct GPURenderPacket
+{
+	GPUMesh *mesh;
+	GPUMaterial *material;
+};
+
+struct GPURenderBatch
+{
+	VkDeviceAddress drawBufferPointer;
+	GPU::Buffer indirectCommands;
+	s64 indirectCommandCount;
+	VkBuffer vkIndexBuffer;
+	VkPipelineLayout vkPipelineLayout;
+};
+
+#if 0
 #include "_Vulkan.h"
 #include "ShaderGlobal.h"
 #include "Render.h"
@@ -8,7 +69,7 @@
 #include "Math.h"
 #include "Shader.h"
 #include "Basic/DLL.h"
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 #include "Basic/Hash.h"
 #include "Basic/HashTable.h"
 #include "Basic/Log.h"
@@ -193,7 +254,7 @@ struct VulkanMemoryFrameAllocator
 	Spinlock lock;
 	s64 capacity;
 	s64 available;
-	StaticArray<s64, VulkanMemoryFrameCount> frameSizes;
+	array::Static<s64, VulkanMemoryFrameCount> frameSizes;
 	s64 start, end;
 	VkDeviceMemory vkMemory;
 	VkBuffer vkBuffer;
@@ -220,7 +281,7 @@ struct VulkanMemoryBlockAllocator
 {
 	Spinlock lock;
 	s64 blockSize;
-	Array<VulkanMemoryBlock> blocks;
+	array::Array<VulkanMemoryBlock> blocks;
 	VulkanMemoryType memoryType;
 	VkDeviceSize bufferMemorySize;
 	VkBufferUsageFlags bufferUsage;
@@ -242,6 +303,7 @@ struct VulkanAsyncStagingBufferResources
 // @TODO: Get rid of this?
 struct VulkanThreadLocal
 {
+#if 0
 	// Async resources.
 	// @TODO: Could use double buffers to avoid the locking.
 	Spinlock asyncCommandBufferLock;
@@ -253,6 +315,7 @@ struct VulkanThreadLocal
 	Spinlock asyncStagingBufferLock;
 	Array<bool> asyncStagingSignals;
 	Array<VulkanAsyncStagingBufferResources> asyncPendingStagingBuffers;
+#endif
 };
 
 struct VulkanFramebufferKey
@@ -371,10 +434,12 @@ VulkanUniformInstance VulkanBufferUniformAllocator::AllocateInstance()
 auto vkBufferUniformAllocators = StaticArray<VulkanBufferUniformAllocator, ShaderDescriptorSetCount>{};
 #endif
 
+#endif
+
 #include "Vulkan/GPU.h"
 extern GPU::GPU gpu;
 
-void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo> cis, ArrayView<GPUMeshAsset *> out)
+void NewGPUMeshAssetBlock(Memory::Allocator *a, array::View<GPUMeshAssetCreateInfo> cis, array::View<GPUMeshAsset *> out)
 {
 	for (auto i = 0; i < cis.count; i += 1)
 	{
@@ -391,7 +456,7 @@ void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo
 		{
 			.firstIndex = (u32)(ib.offset / cis[i].indexSize),
 			.vertexOffset = (s32)(vb.offset / cis[i].vertexSize),
-			.submeshes = NewArrayIn<GPUSubmesh>(a, cis[i].submeshIndices.count),
+			.submeshes = array::NewIn<GPUSubmesh>(a, cis[i].submeshIndices.count),
 			.vertexBuffer = vb,
 			.indexBuffer = ib,
 		};
@@ -405,7 +470,7 @@ void NewGPUMeshAssetBlock(Memory::Allocator *a, ArrayView<GPUMeshAssetCreateInfo
 	}
 };
 
-GPUMeshAsset NewGPUMeshAsset(Memory::Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, ArrayView<u32> submeshInds)
+GPUMeshAsset NewGPUMeshAsset(Memory::Allocator *a, s64 vertCount, s64 vertSize, s64 indCount, s64 indSize, array::View<u32> submeshInds)
 {
 	auto ci = GPUMeshAssetCreateInfo
 	{
@@ -417,43 +482,9 @@ GPUMeshAsset NewGPUMeshAsset(Memory::Allocator *a, s64 vertCount, s64 vertSize, 
 	};
 	auto m = GPUMeshAsset{};
 	auto p = &m;
-	NewGPUMeshAssetBlock(a, NewArrayView(&ci, 1), NewArrayView(&p, 1));
+	NewGPUMeshAssetBlock(a, array::NewView(&ci, 1), array::NewView(&p, 1));
 	return m;
 }
-
-bool VulkanDrawCallBindingGroup::operator==(VulkanDrawCallBindingGroup data)
-{
-	if (this->vkVertexBuffer != data.vkVertexBuffer)
-	{
-		return false;
-	}
-	if (this->vkIndexBuffer != data.vkIndexBuffer)
-	{
-		return false;
-	}
-	if (this->vkObjectDescriptorSet[0] != data.vkObjectDescriptorSet[0])
-	{
-		return false;
-	}
-	if (this->vkMaterialDescriptorSet != data.vkMaterialDescriptorSet)
-	{
-		return false;
-	}
-	return true;
-}
-
-u64 HashVulkanDrawCallBindingGroup(VulkanDrawCallBindingGroup data)
-{
-	return
-		HashPointer(data.vkVertexBuffer)
-		^ HashPointer(data.vkIndexBuffer)
-		^ HashPointer(data.vkObjectDescriptorSet[0])
-		^ HashPointer(data.vkMaterialDescriptorSet);
-}
-
-auto vkBindingGroupLock = Spinlock{};
-auto vkBindingGroupToIndex = NewHashTableIn<VulkanDrawCallBindingGroup, s64>(Memory::GlobalHeap(), 128, HashVulkanDrawCallBindingGroup);
-auto vkBindingGroups = NewArrayWithCapacityIn<VulkanDrawCallBindingGroup>(Memory::GlobalHeap(), 128);
 
 #if 0
 void NewGPUMeshBlock(ArrayView<GPUMeshAsset *> as, ArrayView<GPUMesh *> out)
@@ -476,6 +507,8 @@ struct MeshUniform
 };
 
 struct MaterialUniform{};
+
+extern GPU::GPU gpu;
 
 GPUMesh NewGPUMesh(GPUMeshAsset *asset)
 {
@@ -528,7 +561,9 @@ struct VulkanDrawData
 
 ////////auto vkDrawBuffer = GPUBuffer{};
 //auto vkDrawBuffer = VkBuffer{};
+//PFN_vkGetBufferDeviceAddress vkGetBufferDeviceAddress = NULL;
 
+#include "Engine/Vulkan/Vulkan.h"
 VkDeviceAddress VulkanBufferAddress(VkBuffer b)
 {
 	auto i = VkBufferDeviceAddressInfo
@@ -536,13 +571,13 @@ VkDeviceAddress VulkanBufferAddress(VkBuffer b)
 		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 		.buffer = b,
 	};
-	auto a = vkGetBufferDeviceAddress(gpu.device.device, &i);
+	auto a = GPU::Vulkan::vkGetBufferDeviceAddress(gpu.device.device, &i);
 	Assert(a);
 	return a;
 };
 
 VkBuffer NewVulkanBuffer(VkBufferUsageFlags u, s64 size);
-GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
+GPURenderBatch NewGPUFrameRenderBatch(array::View<GPURenderPacket> ps)
 {
 	auto nDraws = 0;
 	for (auto p : ps)
@@ -559,7 +594,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	//auto sb = NewGPUFrameStagingBufferX(ib, nDraws * sizeof(VkDrawIndexedIndirectCommand), 0);
 	auto sb = gpu.NewStagingBuffer();
 	sb.MapBuffer(ib, 0);
-	auto cmds = NewArrayView((VkDrawIndexedIndirectCommand *)sb.map, nDraws);
+	auto cmds = array::NewView((VkDrawIndexedIndirectCommand *)sb.map, nDraws);
 	//auto vkDrawBuffer = vkGPUStorageBlockAllocator.AllocateBuffer(nDraws * sizeof(VulkanDrawData), 1, NULL);
 	auto drawBuffer = gpu.bufferAllocator.Allocate(
 		gpu.physicalDevice,
@@ -597,7 +632,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 	//auto dsb = NewGPUFrameStagingBufferX(vkDrawBuffer, nDraws * sizeof(VulkanDrawData), 0);
 	auto dsb = gpu.NewStagingBuffer();
 	dsb.MapBuffer(drawBuffer, 0);
-	auto dd = NewArrayView((VulkanDrawData *)dsb.map, nDraws);
+	auto dd = array::NewView((VulkanDrawData *)dsb.map, nDraws);
 	auto di = 0;
 	for (auto p : ps)
 	{
@@ -1027,6 +1062,7 @@ GPURenderBatch NewGPUFrameRenderBatch(ArrayView<GPURenderPacket> ps)
 #endif
 }
 
+#if 0
 void GPUCommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 {
 	//ConsolePrint("Draw call count: %d\n", rb.drawCalls.count);
@@ -3280,4 +3316,5 @@ GPUFramebuffer GPUDefaultFramebuffer()
 	};
 }
 
+#endif
 #endif

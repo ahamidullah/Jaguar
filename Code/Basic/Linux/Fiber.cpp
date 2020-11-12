@@ -519,7 +519,7 @@ Fiber NewFiber(FiberProcedure proc, void *param)
 	auto f = Fiber
 	{
 		.contextAllocator = Memory::GlobalHeap(),
-		.contextAllocatorStack = NewArrayIn<Memory::Allocator *>(Memory::GlobalHeap(), 0),
+		.contextAllocatorStack = array::NewIn<Memory::Allocator *>(Memory::GlobalHeap(), 0),
 	};
 	auto stack = (u8 *)Memory::PlatformAllocate(FiberStackPlusGuardSize);
 	Assert(Memory::AlignPointer(stack, CPUPageSize()) == stack);

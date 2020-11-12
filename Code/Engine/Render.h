@@ -1,6 +1,5 @@
 #pragma once
 
-#include "GPU.h"
 #include "Common.h"
 
 void InitializeRenderer(void *params);

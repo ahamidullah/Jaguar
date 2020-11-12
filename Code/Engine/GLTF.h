@@ -2,7 +2,7 @@
 
 #if DevelopmentBuild
 
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 #include "Basic/String.h"
 #include "Basic/Log.h"
 
@@ -32,7 +32,7 @@ enum GLTFPrimitiveMode
 
 struct GLTFPrimitive
 {
-	Array<GLTFAttribute> attributes;
+	array::Array<GLTFAttribute> attributes;
 	s64 indices;
 	GLTFPrimitiveMode mode;
 	s64 material;
@@ -40,7 +40,7 @@ struct GLTFPrimitive
 
 struct GLTFMesh
 {
-	Array<GLTFPrimitive> primitives;
+	array::Array<GLTFPrimitive> primitives;
 	String name;
 };
 
@@ -77,7 +77,7 @@ struct GLTFAccessor
 
 struct GLTFMaterialPBRMetallicRoughness
 {
-	StaticArray<f32, 4> baseColorFactor;
+	array::Static<f32, 4> baseColorFactor;
 	f32 metallicFactor;
 };
 
@@ -111,11 +111,11 @@ struct GLTFBuffer
 
 struct GLTF
 {
-	Array<GLTFMesh> meshes;
-	Array<GLTFAccessor> accessors;
-	Array<GLTFMaterial> materials;
-	Array<GLTFBufferView> bufferViews;
-	Array<GLTFBuffer> buffers;
+	array::Array<GLTFMesh> meshes;
+	array::Array<GLTFAccessor> accessors;
+	array::Array<GLTFMaterial> materials;
+	array::Array<GLTFBufferView> bufferViews;
+	array::Array<GLTFBuffer> buffers;
 };
 
 GLTF ParseGLTFFile(String path, bool *err);

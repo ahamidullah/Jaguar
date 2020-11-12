@@ -7,7 +7,7 @@ namespace GPU::Vulkan
 
 VkPipelineLayout NewPipelineLayout(Device d)
 {
-	auto pcs = MakeStaticArray(
+	auto pcs = array::MakeStatic(
 		VkPushConstantRange
 		{
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -21,11 +21,11 @@ VkPipelineLayout NewPipelineLayout(Device d)
 		.pPushConstantRanges = pcs.elements,
 	};
 	auto l = VkPipelineLayout{};
-	VkCheck(vkCreatePipelineLayout(d.device, &ci, NULL, &l));
+	Check(vkCreatePipelineLayout(d.device, &ci, NULL, &l));
 	return l;
 }
 
-VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, ArrayView<VkShaderStageFlagBits> stages, ArrayView<VkShaderModule> modules, VkRenderPass rp)
+VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, array::View<VkShaderStageFlagBits> stages, array::View<VkShaderModule> modules, VkRenderPass rp)
 {
 	if (shaderFilename == "Model.glsl")
 	{
@@ -83,7 +83,7 @@ VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, Arra
 			.depthBoundsTestEnable = VK_FALSE,
 			.stencilTestEnable = VK_FALSE,
 		};
-		auto blendStates = MakeStaticArray<VkPipelineColorBlendAttachmentState>(
+		auto blendStates = array::MakeStatic<VkPipelineColorBlendAttachmentState>(
 			{
 				.blendEnable = true,
 				.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
@@ -107,7 +107,7 @@ VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, Arra
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		};
-		auto dynStates = MakeStaticArray<VkDynamicState>(
+		auto dynStates = array::MakeStatic<VkDynamicState>(
 			VK_DYNAMIC_STATE_VIEWPORT,
 			VK_DYNAMIC_STATE_SCISSOR);
 		auto dynStateCI = VkPipelineDynamicStateCreateInfo
@@ -116,7 +116,7 @@ VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, Arra
 			.dynamicStateCount = (u32)dynStates.Count(),
 			.pDynamicStates = dynStates.elements,
 		};
-		auto stageCIs = Array<VkPipelineShaderStageCreateInfo>{};
+		auto stageCIs = array::Array<VkPipelineShaderStageCreateInfo>{};
 		for (auto i = 0; i < modules.count; i += 1)
 		{
 			stageCIs.Append(
@@ -148,7 +148,7 @@ VkPipeline NewPipeline(Device d, VkPipelineLayout l, String shaderFilename, Arra
 			.basePipelineIndex = -1,
 		};
 		auto p = VkPipeline{};
-		VkCheck(vkCreateGraphicsPipelines(d.device, NULL, 1, &ci, NULL, &p));
+		Check(vkCreateGraphicsPipelines(d.device, NULL, 1, &ci, NULL, &p));
 		return p;
 	}
 	else

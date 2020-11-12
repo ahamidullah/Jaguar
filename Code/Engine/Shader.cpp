@@ -33,10 +33,10 @@ SPIRV VulkanGLSL(String filename, bool *err)
 		return {};
 	}
 	Defer(procFile.Close());
-	auto stageFlags = Array<VkShaderStageFlagBits>{};
-	auto stageDefines = Array<String>{};
-	auto stageExts = Array<String>{};
-	auto fileParser = NewParser(shaderPath, "", err);
+	auto stageFlags = array::Array<VkShaderStageFlagBits>{};
+	auto stageDefines = array::Array<String>{};
+	auto stageExts = array::Array<String>{};
+	auto fileParser = parse::File(shaderPath, "", err);
 	if (*err)
 	{
 		LogError("Shader", "Failed to create parser for shader %k.", shaderPath);
@@ -45,7 +45,7 @@ SPIRV VulkanGLSL(String filename, bool *err)
 	auto depth = 0;
 	for (auto line = fileParser.Line(); line != ""; line = fileParser.Line())
 	{
-		auto lineParser = NewParserFromString(line, "\"");
+		auto lineParser = parse::XString(line, "\"");
 		auto t = lineParser.Token();
 		if (t == "{")
 		{
@@ -138,7 +138,7 @@ SPIRV VulkanGLSL(String filename, bool *err)
 	for (auto i = 0; i < stageFlags.count; i += 1) 
 	{
 		auto spirvPath = FormatString("Build/GLSL/Binary/%k%k.spirv", name, stageExts[i]);
-		auto cmd = FormatString("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].View(1, stageExts[i].Length()), procPath, spirvPath);
+		auto cmd = FormatString("glslangValidator -D%k -S %k -V %k -o %k", stageDefines[i], stageExts[i].ToView(1, stageExts[i].Length()), procPath, spirvPath);
 		if (RunProcess(cmd) != 0)
 		{
 			LogError("Shader", "Shader compilation command failed: %k.", cmd);

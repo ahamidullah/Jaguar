@@ -6,7 +6,6 @@
 // Cleanup result.
 
 #include "Math.h"
-#include "GPU.h"
 #include "Basic/Log.h"
 
 void PrintM4Actual(String name, M4 m)

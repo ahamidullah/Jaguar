@@ -1,6 +1,8 @@
 #ifdef VulkanBuild
 
+#include "Buffer.h"
 #include "Memory.h"
+#include "Vulkan.h"
 
 namespace GPU::Vulkan
 {
@@ -13,7 +15,7 @@ BufferAllocator NewBufferAllocator(PhysicalDevice pd, Device d)
 {
 	return
 	{
-		.blockLists = NewArrayIn<BufferBlockList>(Memory::GlobalHeap(), 12),
+		.blockLists = array::NewIn<BufferBlockList>(Memory::GlobalHeap(), 12),
 	};
 }
 
@@ -39,7 +41,7 @@ Buffer BufferAllocator::Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags
 		this->blockLists.Append(
 			{
 				.bufferUsage = bu,
-				.buffers = NewHashTableIn<VkDeviceMemory, VkBuffer>(Memory::GlobalHeap(), 32, HashVkDeviceMemory),
+				.buffers = map::New<VkDeviceMemory, VkBuffer>(32, HashVkDeviceMemory),
 			});
 		list = this->blockLists.Last();
 	}
@@ -65,8 +67,8 @@ Buffer BufferAllocator::Allocate(PhysicalDevice pd, Device d, VkBufferUsageFlags
 			.usage = list->bufferUsage,
 			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		};
-		VkCheck(vkCreateBuffer(d.device, &ci, NULL, &buf));
-		VkCheck(vkBindBufferMemory(d.device, buf, mem.memory, 0));
+		Check(vkCreateBuffer(d.device, &ci, NULL, &buf));
+		Check(vkBindBufferMemory(d.device, buf, mem.memory, 0));
 		list->buffers.Insert(mem.memory, buf);
 	}
 	return

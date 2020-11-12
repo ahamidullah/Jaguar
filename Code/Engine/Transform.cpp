@@ -17,7 +17,7 @@ V3 Transform::Up()
 
 void Transform::RotateEulerLocal(EulerAngles ea)
 {
-	RotateTransformsEulerWorld(NewArrayView(&ea, 1), NewArrayView(this, 1));
+	RotateTransformsEulerWorld(array::NewView(&ea, 1), array::NewView(this, 1));
 }
 
 void Transform::RotateEulerWorld(EulerAngles ea)
@@ -35,7 +35,7 @@ void Transform::RotateAxisAngleWorld(AxisAngle aa)
 	// @TODO
 }
 
-void RotateTransformsEulerLocal(ArrayView<EulerAngles> eas, ArrayView<Transform> out)
+void RotateTransformsEulerLocal(array::View<EulerAngles> eas, array::View<Transform> out)
 {
 	Assert(eas.count == out.count);
 	for (auto i = 0; i < out.count; i += 1)
@@ -48,17 +48,17 @@ void RotateTransformsEulerLocal(ArrayView<EulerAngles> eas, ArrayView<Transform>
 	}
 }
 
-void RotateTransformsEulerWorld(ArrayView<EulerAngles> eas, ArrayView<Transform> out)
+void RotateTransformsEulerWorld(array::View<EulerAngles> eas, array::View<Transform> out)
 {
 	// @TODO
 }
 
-void RotateTransformsAxisAngleLocal(ArrayView<AxisAngle> aas, ArrayView<Transform> out)
+void RotateTransformsAxisAngleLocal(array::View<AxisAngle> aas, array::View<Transform> out)
 {
 	// @TODO
 }
 
-void RotateTransformsAxisAngleWorld(ArrayView<AxisAngle> aas, ArrayView<Transform> out)
+void RotateTransformsAxisAngleWorld(array::View<AxisAngle> aas, array::View<Transform> out)
 {
 	// @TODO
 }

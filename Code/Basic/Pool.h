@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Array.h"
+#include "Basic/Container/Array.h"
 
 template <typename T>
 struct Pool
 {
-	Array<T> elements;
-	Array<T *> freeList;
+	array::Array<T> elements;
+	array::Array<T *> freeList;
 
 	void SetAllocator(Memory::Allocator *a);
 	T *Get();
@@ -19,8 +19,8 @@ Pool<T> NewPoolIn(Memory::Allocator *a, s64 cap)
 {
 	auto p = Pool<T>
 	{
-		.elements = NewArrayIn<T>(a, cap),
-		.freeList = NewArrayWithCapacityIn<T *>(a, cap),
+		.elements = array::NewIn<T>(a, cap),
+		.freeList = array::NewWithCapacityIn<T *>(a, cap),
 	};
 	for (auto &e : p.elements)
 	{
@@ -95,8 +95,8 @@ void Pool<T>::Release(T *e)
 template <typename T, s64 N>
 struct FixedPool
 {
-	StaticArray<T, N> elements;
-	StaticArray<T *, N> freeList;
+	array::Static<T, N> elements;
+	array::Static<T *, N> freeList;
 	s64 freeListCount;
 
 	T &operator[](s64 i);
@@ -172,7 +172,7 @@ s64 FixedPool<T, N>::Available()
 template <typename T>
 struct FramePool
 {
-	Array<T> elements;
+	array::Array<T> elements;
 	s64 frontier;
 
 	void GrowIfNecessary();

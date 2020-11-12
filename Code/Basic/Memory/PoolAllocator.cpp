@@ -25,7 +25,7 @@ void *PoolAllocator::Resize(void *mem, s64 newSize)
 {
 	auto h = GetAllocationHeader(mem);
 	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
-	CopyArray(NewArrayView((u8 *)mem, h->size), NewArrayView((u8 *)newMem, h->size));
+	array::Copy(array::NewView((u8 *)mem, h->size), array::NewView((u8 *)newMem, h->size));
 	return newMem;
 }
 

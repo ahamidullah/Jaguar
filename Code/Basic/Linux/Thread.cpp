@@ -1,7 +1,7 @@
 #include "../Thread.h"
 #include "../Log.h"
 #include "../Process.h"
-#include "../String.h"
+#include "Basic/String.h"
 #include "../CPU.h"
 #include "../Atomic.h"
 
@@ -135,7 +135,7 @@ void SetThreadName(String n)
 
 String ThreadName()
 {
-	auto buf = NewArrayWithCapacity<u8>(MaxThreadNameLength);
+	auto buf = array::NewWithCapacity<u8>(MaxThreadNameLength);
 	if (prctl(PR_GET_NAME, (char *)buf.elements, 0, 0, 0) != 0)
 	{
 		LogError("Thread", "Failed to get thread name: %k.\n", PlatformError());

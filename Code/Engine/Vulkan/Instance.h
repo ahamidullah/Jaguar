@@ -10,7 +10,7 @@ struct Instance
 	VkInstance instance;
 };
 
-Instance NewInstance(ArrayView<const char *> instLayers, ArrayView<const char *> instExts);
+Instance NewInstance(array::View<const char *> instLayers, array::View<const char *> instExts);
 
 }
 

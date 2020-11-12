@@ -2,7 +2,7 @@
 #include "GLTF.h"
 #include "Basic/File.h"
 #include "Basic/Filepath.h"
-#include "Basic/HashTable.h"
+#include "Basic/Container/Map.h"
 #include "Basic/Hash.h"
 #include "Basic/Parser.h"
 #include "Basic/Log.h"
@@ -10,7 +10,7 @@
 #ifdef DevelopmentBuild
 	const auto ModelDirectory = NewString("Data/Model");
 
-	auto modelFilepaths = NewHashTableIn<String, String>(Memory::GlobalHeap(), 0, HashString);
+	auto modelFilepaths = map::New<String, String>(0, HashString);
 #endif
 
 void InitializeModelAssets()
@@ -40,10 +40,10 @@ void InitializeModelAssets()
 
 const auto MeshAssetCount = 1;
 const auto MeshCount = 2;
-auto meshAssets = NewArray<GPUMeshAsset>(MeshAssetCount);
-auto meshes = NewArray<GPUMesh>(MeshCount);
+auto meshAssets = array::New<GPUMeshAsset>(MeshAssetCount);
+auto meshes = array::New<GPUMesh>(MeshCount);
 auto materials = GPUMaterial{};
-auto renderPackets = NewArray<GPURenderPacket>(MeshCount);
+auto renderPackets = array::New<GPURenderPacket>(MeshCount);
 
 #include "Vulkan/StagingBuffer.h"
 
@@ -62,7 +62,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 		LogError("Model", "Failed to parse glTF file for %k, skipping load.", *gltfPath);
 		return ModelAsset{};
 	}
-	auto buffers = Array<Array<u8>>{};
+	auto buffers = array::Array<array::Array<u8>>{};
 	for (auto b : gltf.buffers)
 	{
 		auto p = JoinFilepaths(FilepathDirectory(*gltfPath), b.uri);
@@ -79,7 +79,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 	auto vertexCount = 0;
 	for (auto m : gltf.meshes)
 	{
-		auto submeshes = NewArrayWithCapacity<u32>(m.primitives.count);
+		auto submeshes = array::NewWithCapacity<u32>(m.primitives.count);
 		for (auto p : m.primitives)
 		{
 			auto acc = &gltf.accessors[p.indices];
@@ -120,7 +120,7 @@ ModelAsset LoadModelAssetFromFile(String name)
 				auto bv = &gltf.bufferViews[acc->bufferView];
 				auto b = buffers[bv->buffer].elements + bv->byteOffset + acc->byteOffset;
 				sb.MapBuffer(m->indexBuffer, 0);
-				CopyArray(NewArrayView(b, indicesSize), NewArrayView((u8 *)sb.map, indicesSize));
+				array::Copy(array::NewView(b, indicesSize), array::NewView((u8 *)sb.map, indicesSize));
 			}
 			// Vertices.
 			{

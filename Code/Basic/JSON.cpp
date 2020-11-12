@@ -1,6 +1,6 @@
 #include "JSON.h"
 
-void JSONEatFieldValue(Parser *p)
+void JSONEatFieldValue(parser::Parser *p)
 {
 	auto t = p->Token();
 	if (t == "{")

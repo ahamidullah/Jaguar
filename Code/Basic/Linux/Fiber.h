@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Array.h"
+#include "Basic/Container/Array.h"
 #include "../PCH.h"
 #include "Basic/Memory/Allocator.h"
 #include "Common.h"
@@ -25,11 +25,11 @@ struct Fiber
 	ucontext_t context;
 	jmp_buf jumpBuffer;
 	Memory::Allocator *contextAllocator;
-	Array<Memory::Allocator *> contextAllocatorStack;
+	array::Array<Memory::Allocator *> contextAllocatorStack;
 #else
 	SystemContext context;
 	Memory::Allocator *contextAllocator;
-	Array<Memory::Allocator *> contextAllocatorStack;
+	array::Array<Memory::Allocator *> contextAllocatorStack;
 #endif
 	#ifdef ThreadSanitizerBuild
 		void *tsan;

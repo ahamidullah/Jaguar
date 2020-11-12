@@ -28,7 +28,7 @@ Shader CompileShader(Device d, VkSurfaceFormatKHR sf, VkPipelineLayout l, String
 			.pCode = (u32 *)bc.elements,
 		};
 		auto m = VkShaderModule{};
-		VkCheck(vkCreateShaderModule(d.device, &ci, NULL, &m));
+		Check(vkCreateShaderModule(d.device, &ci, NULL, &m));
 		s.vkModules.Append(m);
 	}
 	s.vkRenderPass = NewRenderPass(d, sf, filename);

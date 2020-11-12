@@ -20,7 +20,7 @@ void CommandBuffer::BeginRenderPass(Shader s, Framebuffer fb)
 		.depthStencil.depth = 1.0f,
 		.depthStencil.stencil = 0,
 	};
-	auto cvs = MakeStaticArray<VkClearValue>(clearColor, clearDepth);
+	auto cvs = array::MakeStatic<VkClearValue>(clearColor, clearDepth);
 	auto bi = VkRenderPassBeginInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -79,7 +79,7 @@ void CommandBuffer::CopyBuffer(Buffer src, Buffer dst, s64 srcOffset, s64 dstOff
 void CommandBuffer::DrawRenderBatch(GPURenderBatch rb)
 {
 	vkCmdPushConstants(this->commandBuffer, rb.vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VkDeviceAddress), &rb.drawBufferPointer);
-	vkCmdBindIndexBuffer(this->commandBuffer, rb.vkIndexBuffer, 0, GPUIndexTypeUint16);
+	vkCmdBindIndexBuffer(this->commandBuffer, rb.vkIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdDrawIndexedIndirect(this->commandBuffer, rb.indirectCommands.buffer, rb.indirectCommands.offset, rb.indirectCommandCount, sizeof(VkDrawIndexedIndirectCommand));
 }
 
@@ -95,26 +95,26 @@ CommandBufferPool NewCommandBufferPool(PhysicalDevice pd, Device d)
 	{
 		for (auto j = 0; j < s64(QueueType::Count); j += 1)
 		{
-			p.commandPools[i][j] = NewArrayIn<VkCommandPool>(Memory::GlobalHeap(), WorkerThreadCount());
+			p.commandPools[i][j] = array::NewIn<VkCommandPool>(Memory::GlobalHeap(), WorkerThreadCount());
 			for (auto k = 0; k < WorkerThreadCount(); k += 1)
 			{
 				ci.queueFamilyIndex = pd.queueFamilies[j];
-				VkCheck(vkCreateCommandPool(d.device, &ci, NULL, &p.commandPools[i][j][k]));
+				Check(vkCreateCommandPool(d.device, &ci, NULL, &p.commandPools[i][j][k]));
 			}
 		}
 	}
 	for (auto i = 0; i < s64(QueueType::Count); i += 1)
 	{
-		p.active[i] = NewArrayIn<VkCommandBuffer>(Memory::GlobalHeap(), WorkerThreadCount());
+		p.active[i] = array::NewIn<VkCommandBuffer>(Memory::GlobalHeap(), WorkerThreadCount());
 	}
 	for (auto i = 0; i < MaxFramesInFlight + 1; i += 1)
 	{
 		for (auto j = 0; j < s64(QueueType::Count); j += 1)
 		{
-			p.recyclePools[i][j] = NewArrayIn<Array<VkCommandBuffer>>(Memory::GlobalHeap(), WorkerThreadCount());
+			p.recyclePools[i][j] = array::NewIn<array::Array<VkCommandBuffer>>(Memory::GlobalHeap(), WorkerThreadCount());
 			for (auto &rp : p.recyclePools[i][j])
 			{
-				rp = NewArrayIn<VkCommandBuffer>(Memory::GlobalHeap(), 0);
+				rp = array::NewIn<VkCommandBuffer>(Memory::GlobalHeap(), 0);
 			}
 		}
 	}
@@ -154,7 +154,7 @@ CommandBuffer CommandBufferPool::Get(Device d, QueueType t)
 	return cb;
 }
 
-void CommandBufferPool::Release(QueueType t, s64 threadIndex, ArrayView<VkCommandBuffer> cbs)
+void CommandBufferPool::Release(QueueType t, s64 threadIndex, array::View<VkCommandBuffer> cbs)
 {
 	this->recyclePools[vkCommandGroupFreeIndex][s64(t)][threadIndex].AppendAll(cbs);
 }
@@ -173,7 +173,7 @@ void CommandBufferPool::ResetCommandPools(Device d, s64 frameIndex)
 	{
 		for (auto p : tl)
 		{
-			VkCheck(vkResetCommandPool(d.device, p, 0));
+			Check(vkResetCommandPool(d.device, p, 0));
 		}
 	}
 }

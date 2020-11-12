@@ -7,6 +7,9 @@
 #ifdef __linux__
 	xcb_connection_t *XCBConnection();
 
+	namespace GPU::Vulkan
+	{
+
 	VkResult NewSurface(Window *w, VkInstance inst, VkSurfaceKHR *s)
 	{
 		auto ci = VkXcbSurfaceCreateInfoKHR
@@ -17,6 +20,8 @@
 		};
 		return vkCreateXcbSurfaceKHR(inst, &ci, NULL, s);
 	}
+
+	}
 #endif
 
 namespace GPU::Vulkan
@@ -25,17 +30,17 @@ namespace GPU::Vulkan
 PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 {
 	auto pd = PhysicalDevice{};
-	VkCheck(NewSurface(w, inst.instance, &pd.surface));
+	Check(NewSurface(w, inst.instance, &pd.surface));
 	auto foundSuitablePhysDev = false;
 	auto nPhysDevs = u32{};
-	VkCheck(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, NULL));
+	Check(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, NULL));
 	if (nPhysDevs == 0)
 	{
 		Abort("Vulkan", "Could not find any graphics devices.");
 	}
 	LogVerbose("Vulkan", "Available graphics device count: %d.", nPhysDevs);
-	auto physDevs = NewArray<VkPhysicalDevice>(nPhysDevs);
-	VkCheck(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, physDevs.elements));
+	auto physDevs = array::New<VkPhysicalDevice>(nPhysDevs);
+	Check(vkEnumeratePhysicalDevices(inst.instance, &nPhysDevs, physDevs.elements));
 	if (DebugBuild)
 	{
 		LogVerbose("Vulkan", "Available graphics devices:");
@@ -101,11 +106,11 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 			continue;
 		}
 		auto nDevExts = u32{};
-		VkCheck(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, NULL));
-		auto devExts = NewArray<VkExtensionProperties>(nDevExts);
-		VkCheck(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, devExts.elements));
+		Check(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, NULL));
+		auto devExts = array::New<VkExtensionProperties>(nDevExts);
+		Check(vkEnumerateDeviceExtensionProperties(pd.physicalDevice, NULL, &nDevExts, devExts.elements));
 		auto missingDevExt = (const char *){};
-		auto reqDevExts = MakeStaticArray<const char *>(
+		auto reqDevExts = array::MakeStatic<const char *>(
 			"VK_KHR_swapchain",
 			"VK_EXT_memory_budget");
 		for (auto rde : reqDevExts)
@@ -132,15 +137,15 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 		// Make sure the swap chain is compatible with our window surface.
 		// If we have at least one supported surface format and present mode, we will consider the device.
 		auto nSurfFmts = u32{};
-		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, NULL));
+		Check(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, NULL));
 		if (nSurfFmts == 0)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: no surface formats.");
 			continue;
 		}
 		// Select the best swap chain settings.
-		auto surfFmts = NewArray<VkSurfaceFormatKHR>(nSurfFmts);
-		VkCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, &surfFmts[0]));
+		auto surfFmts = array::New<VkSurfaceFormatKHR>(nSurfFmts);
+		Check(vkGetPhysicalDeviceSurfaceFormatsKHR(pd.physicalDevice, pd.surface, &nSurfFmts, &surfFmts[0]));
 		pd.surfaceFormat = surfFmts[0];
 		if (nSurfFmts == 1 && surfFmts[0].format == VK_FORMAT_UNDEFINED)
 		{
@@ -173,15 +178,15 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 		// occasionally late.  In this case (perhaps because of stuttering/latency concerns), the application wants the late image to be
 		// immediately displayed, even though that may mean some tearing.
 		auto nPresentModes = u32{};
-		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, NULL));
+		Check(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, NULL));
 		if (nPresentModes == 0)
 		{
 			LogVerbose("Vulkan", "Skipping graphics device: no present modes.");
 			continue;
 		}
 		pd.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-		auto presentModes = NewArray<VkPresentModeKHR>(nPresentModes);
-		VkCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, presentModes.elements));
+		auto presentModes = array::New<VkPresentModeKHR>(nPresentModes);
+		Check(vkGetPhysicalDeviceSurfacePresentModesKHR(pd.physicalDevice, pd.surface, &nPresentModes, presentModes.elements));
 		for (auto pm : presentModes)
 		{
 			// @TODO: If vsync...
@@ -194,7 +199,7 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 		}
 		auto nQueueFams = u32{};
 		vkGetPhysicalDeviceQueueFamilyProperties(pd.physicalDevice, &nQueueFams, NULL);
-		auto queueFams = NewArray<VkQueueFamilyProperties>(nQueueFams);
+		auto queueFams = array::New<VkQueueFamilyProperties>(nQueueFams);
 		vkGetPhysicalDeviceQueueFamilyProperties(pd.physicalDevice, &nQueueFams, queueFams.elements);
 		pd.queueFamilies[(s64)QueueType::Graphics] = -1;
 		pd.queueFamilies[(s64)QueueType::Compute] = -1;
@@ -224,7 +229,7 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 				pd.queueFamilies[(s64)QueueType::Transfer] = i;
 			}
 			auto surfSupported = u32{};
-			VkCheck(vkGetPhysicalDeviceSurfaceSupportKHR(pd.physicalDevice, i, pd.surface, &surfSupported));
+			Check(vkGetPhysicalDeviceSurfaceSupportKHR(pd.physicalDevice, i, pd.surface, &surfSupported));
 			if (surfSupported)
 			{
 				pd.queueFamilies[(s64)QueueType::Present] = i;
@@ -246,7 +251,7 @@ PhysicalDevice NewPhysicalDevice(Instance inst, Window *w)
 			continue;
 		}
 		// Ok, the physical device is suitable!
-		VkCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd.physicalDevice, pd.surface, &pd.surfaceCapabilities));
+		Check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd.physicalDevice, pd.surface, &pd.surfaceCapabilities));
 		vkGetPhysicalDeviceMemoryProperties(pd.physicalDevice, &pd.memoryProperties); // No return.
 		foundSuitablePhysDev = true;
 		LogVerbose("Vulkan", "Vulkan device extensions:");

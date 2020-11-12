@@ -9,7 +9,7 @@ VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilenam
 {
 	if (shaderFilename == "Model.glsl")
 	{
-		auto attachments = MakeStaticArray(
+		auto attachments = array::MakeStatic(
 			VkAttachmentDescription
 			{
 				.format = sf.format,
@@ -32,7 +32,7 @@ VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilenam
 				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 			});
-		auto colorAttachments = MakeStaticArray(
+		auto colorAttachments = array::MakeStatic(
 			VkAttachmentReference
 			{
 				.attachment = 0,
@@ -43,7 +43,7 @@ VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilenam
 			.attachment = 1,
 			.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		};
-		auto subpassDescs = MakeStaticArray(
+		auto subpassDescs = array::MakeStatic(
 			VkSubpassDescription
 			{
 				.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -51,7 +51,7 @@ VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilenam
 				.pColorAttachments = colorAttachments.elements,
 				.pDepthStencilAttachment = &stencilAttachment,
 			});
-		auto subpassDeps = MakeStaticArray(
+		auto subpassDeps = array::MakeStatic(
 			VkSubpassDependency
 			{
 				.srcSubpass = VK_SUBPASS_EXTERNAL,
@@ -72,7 +72,7 @@ VkRenderPass NewRenderPass(Device d, VkSurfaceFormatKHR sf, String shaderFilenam
 			.pDependencies = subpassDeps.elements,
 		};
 		auto rp = VkRenderPass{};
-		VkCheck(vkCreateRenderPass(d.device, &ci, NULL, &rp));
+		Check(vkCreateRenderPass(d.device, &ci, NULL, &rp));
 		return rp;
 	}
 	else

@@ -1,7 +1,7 @@
 #include "File.h"
-#include "String.h"
+#include "Basic/String.h"
 
-void ReadEntireFileIn(Array<u8> *buf, String path, bool *err)
+void ReadEntireFileIn(array::Array<u8> *buf, string::String path, bool *err)
 {
 	auto f = OpenFile(path, OpenFileReadOnly, err);
 	if (*err)
@@ -22,9 +22,9 @@ void ReadEntireFileIn(Array<u8> *buf, String path, bool *err)
 	}
 }
 
-Array<u8> ReadEntireFile(String path, bool *err)
+array::Array<u8> ReadEntireFile(string::String path, bool *err)
 {
-	auto buf = Array<u8>{};
+	auto buf = array::Array<u8>{};
 	ReadEntireFileIn(&buf, path, err);
 	return buf;
 }

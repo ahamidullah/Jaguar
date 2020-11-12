@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Math.h"
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 
 struct Transform
 {
@@ -17,7 +17,7 @@ struct Transform
 	void RotateAxisAngleWorld(AxisAngle aa);
 };
 
-void RotateTransformsEulerLocal(ArrayView<EulerAngles> eas, ArrayView<Transform> out);
-void RotateTransformsEulerWorld(ArrayView<EulerAngles> eas, ArrayView<Transform> out);
-void RotateTransformsAxisAngleLocal(ArrayView<AxisAngle> aas, ArrayView<Transform> out);
-void RotateTransformsAxisAngleWorld(ArrayView<AxisAngle> aas, ArrayView<Transform> out);
+void RotateTransformsEulerLocal(array::View<EulerAngles> eas, array::View<Transform> out);
+void RotateTransformsEulerWorld(array::View<EulerAngles> eas, array::View<Transform> out);
+void RotateTransformsAxisAngleLocal(array::View<AxisAngle> aas, array::View<Transform> out);
+void RotateTransformsAxisAngleWorld(array::View<AxisAngle> aas, array::View<Transform> out);

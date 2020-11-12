@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 
 namespace Memory
 {
@@ -9,8 +9,8 @@ struct BlockAllocator
 {
 	s64 blockSize;
 	Allocator *allocator;
-	Array<u8 *> used;
-	Array<u8 *> unused;
+	array::Array<u8 *> used;
+	array::Array<u8 *> unused;
 	u8 *frontier;
 	u8 *end;
 

@@ -1,5 +1,5 @@
 #include "ContextAllocator.h"
-#include "../Array.h"
+#include "Basic/Container/Array.h"
 #include "../Fiber.h"
 
 namespace Memory
@@ -7,7 +7,7 @@ namespace Memory
 
 // We want these variables to have constant initialization so other global variable initializers can use the context allocator.
 ThreadLocal auto contextAllocator = (Allocator *){};
-ThreadLocal auto contextAllocatorStack = Array<Allocator *>{};
+ThreadLocal auto contextAllocatorStack = array::Array<Allocator *>{};
 
 Allocator *ContextAllocator()
 {
@@ -36,7 +36,7 @@ void PushContextAllocator(Allocator *a)
 
 void PopContextAllocator()
 {
-	auto stk = (Array<Allocator *> *){};
+	auto stk = (array::Array<Allocator *> *){};
 	auto ctx = (Allocator **){};
 	if (RunningFiber())
 	{

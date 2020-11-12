@@ -14,5 +14,5 @@ struct Camera
 };
 
 Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov);
-ArrayView<Camera> Cameras();
+array::View<Camera> Cameras();
 Camera *LookupCamera(String name);

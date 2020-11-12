@@ -20,14 +20,14 @@ Queues NewQueues(PhysicalDevice pd, Device d)
 	{
 		for (auto j = 0; j < s64(QueueType::Count); j += 1)
 		{
-			VkCheck(vkCreateSemaphore(d.device, &ci, NULL, &q.submissionSemaphores[i][j]));
+			Check(vkCreateSemaphore(d.device, &ci, NULL, &q.submissionSemaphores[i][j]));
 		}
 	}
 	for (auto i = 0; i < MaxFramesInFlight + 1; i += 1) // @TODO
 	{
 		for (auto j = 0; j < s64(QueueType::Count); j += 1)
 		{
-			q.submissions[i][j] = NewArrayIn<Array<VkCommandBuffer>>(Memory::GlobalHeap(), WorkerThreadCount());
+			q.submissions[i][j] = array::NewIn<array::Array<VkCommandBuffer>>(Memory::GlobalHeap(), WorkerThreadCount());
 			for (auto k = 0; k < WorkerThreadCount(); k += 1)
 			{
 				q.submissions[i][j][k].SetAllocator(Memory::GlobalHeap());
@@ -38,34 +38,34 @@ Queues NewQueues(PhysicalDevice pd, Device d)
 }
 
 // @TODO: This submission code will only work if we do one submission per frame. Fix this!
-void Queues::SubmitGraphicsCommands(ArrayView<VkCommandBuffer> threadCBs, Swapchain sc, s64 frameIndex)
+void Queues::SubmitGraphicsCommands(array::View<VkCommandBuffer> threadCBs, Swapchain sc, s64 frameIndex)
 {
-	auto waitSems = MakeStaticArray<VkSemaphore>(
+	auto waitSems = array::MakeStatic<VkSemaphore>(
 		this->submissionSemaphores[frameIndex][s64(QueueType::Transfer)],
 		sc.imageAcquiredSemaphores[frameIndex]);
-	auto waitStages = MakeStaticArray<VkPipelineStageFlags>(
+	auto waitStages = array::MakeStatic<VkPipelineStageFlags>(
 		VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-	auto signalSems = MakeStaticArray<VkSemaphore>(this->submissionSemaphores[frameIndex][s64(QueueType::Graphics)]);
+	auto signalSems = array::MakeStatic<VkSemaphore>(this->submissionSemaphores[frameIndex][s64(QueueType::Graphics)]);
 	this->SubmitCommands(threadCBs, QueueType::Graphics, waitSems, waitStages, signalSems, sc.frameFences[frameIndex]);
 }
 
-void Queues::SubmitTransferCommands(ArrayView<VkCommandBuffer> threadCBs, s64 frameIndex)
+void Queues::SubmitTransferCommands(array::View<VkCommandBuffer> threadCBs, s64 frameIndex)
 {
-	auto signalSems = MakeStaticArray<VkSemaphore>(this->submissionSemaphores[frameIndex][s64(QueueType::Transfer)]);
+	auto signalSems = array::MakeStatic<VkSemaphore>(this->submissionSemaphores[frameIndex][s64(QueueType::Transfer)]);
 	this->SubmitCommands(threadCBs, QueueType::Transfer, {}, {}, signalSems, NULL);
 }
 
-void Queues::SubmitCommands(ArrayView<VkCommandBuffer> threadCBs, QueueType t, ArrayView<VkSemaphore> waitSems, ArrayView<VkPipelineStageFlags> waitStages, ArrayView<VkSemaphore> signalSems, VkFence f)
+void Queues::SubmitCommands(array::View<VkCommandBuffer> threadCBs, QueueType t, array::View<VkSemaphore> waitSems, array::View<VkPipelineStageFlags> waitStages, array::View<VkSemaphore> signalSems, VkFence f)
 {
-	auto cbs = NewArrayWithCapacity<VkCommandBuffer>(threadCBs.count);
+	auto cbs = array::NewWithCapacity<VkCommandBuffer>(threadCBs.count);
 	for (auto i = 0; i < threadCBs.count; i += 1)
 	{
 		if (!threadCBs[i])
 		{
 			continue;
 		}
-		VkCheck(vkEndCommandBuffer(threadCBs[i]));
+		Check(vkEndCommandBuffer(threadCBs[i]));
 		this->submissions[vkCommandGroupUseIndex][s64(t)][i].Append(threadCBs[i]);
 		cbs.Append(threadCBs[i]);
 	}
@@ -80,7 +80,7 @@ void Queues::SubmitCommands(ArrayView<VkCommandBuffer> threadCBs, QueueType t, A
 		.signalSemaphoreCount = u32(signalSems.count),
 		.pSignalSemaphores = signalSems.elements,
 	};
-	VkCheck(vkQueueSubmit(this->queues[s64(t)], 1, &si, f));
+	Check(vkQueueSubmit(this->queues[s64(t)], 1, &si, f));
 }
 
 void Queues::ClearSubmissions(s64 frameIndex)

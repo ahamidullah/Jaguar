@@ -70,7 +70,7 @@ struct AssetContainer
 
 Spinlock assetSlotsLock;
 SlotAllocator assetSlots[AssetTypeCount];
-StaticArray<AssetContainer, AssetIDCount> assetContainers;
+array::Static<AssetContainer, AssetIDCount> assetContainers;
 
 void InitializeAssets(void *)
 {

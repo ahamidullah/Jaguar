@@ -6,9 +6,9 @@ InputButtons NewInputButtons(s64 size)
 {
 	auto b = InputButtons
 	{
-		.down = NewArrayIn<bool>(Memory::GlobalHeap(), size),
-		.pressed = NewArrayIn<bool>(Memory::GlobalHeap(), size),
-		.released = NewArrayIn<bool>(Memory::GlobalHeap(), size),
+		.down = array::NewIn<bool>(Memory::GlobalHeap(), size),
+		.pressed = array::NewIn<bool>(Memory::GlobalHeap(), size),
+		.released = array::NewIn<bool>(Memory::GlobalHeap(), size),
 	};
 	for (auto &p : b.pressed)
 	{

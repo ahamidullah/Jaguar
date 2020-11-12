@@ -11,7 +11,7 @@ struct SlotAllocator : Allocator
 	BlockAllocator blocks;
 	s64 slotSize;
 	s64 slotAlignment;
-	Array<void *> freeSlots;
+	array::Array<void *> freeSlots;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

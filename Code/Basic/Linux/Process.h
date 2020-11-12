@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../String.h"
-#include "../Array.h"
+#include "Basic/String.h"
+#include "Basic/Container/Array.h"
 #include "Common.h"
 
 enum ProcessExitCode
@@ -15,4 +15,4 @@ void ExitProcess(ProcessExitCode c);
 bool IsDebuggerAttached();
 void SignalDebugBreakpoint();
 String EnvironmentVariable(String name, bool *exists);
-Array<String> Stacktrace();
+array::Array<String> Stacktrace();

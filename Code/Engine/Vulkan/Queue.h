@@ -23,13 +23,13 @@ enum class QueueType
 struct Queues
 {
 	// @TODO: Should be able to store multiple semaphores per frame in case we want to do multiple submits.
-	StaticArray<VkQueue, s64(QueueType::Count)> queues;
-	StaticArray<StaticArray<Array<Array<VkCommandBuffer>>, s64(QueueType::Count)>, 2 + 1> submissions; // @TODO
-	StaticArray<StaticArray<VkSemaphore, s64(QueueType::Count)>, 2> submissionSemaphores; // @TODO
+	array::Static<VkQueue, s64(QueueType::Count)> queues;
+	array::Static<array::Static<array::Array<array::Array<VkCommandBuffer>>, s64(QueueType::Count)>, 2 + 1> submissions; // @TODO
+	array::Static<array::Static<VkSemaphore, s64(QueueType::Count)>, 2> submissionSemaphores; // @TODO
 
-	void SubmitGraphicsCommands(ArrayView<VkCommandBuffer> threadCBs, Swapchain sc, s64 frameIndex);
-	void SubmitTransferCommands(ArrayView<VkCommandBuffer> threadCBs, s64 frameIndex);
-	void SubmitCommands(ArrayView<VkCommandBuffer> threadCBs, QueueType t, ArrayView<VkSemaphore> waitSems, ArrayView<VkPipelineStageFlags> waitStages, ArrayView<VkSemaphore> signalSems, VkFence f);
+	void SubmitGraphicsCommands(array::View<VkCommandBuffer> threadCBs, Swapchain sc, s64 frameIndex);
+	void SubmitTransferCommands(array::View<VkCommandBuffer> threadCBs, s64 frameIndex);
+	void SubmitCommands(array::View<VkCommandBuffer> threadCBs, QueueType t, array::View<VkSemaphore> waitSems, array::View<VkPipelineStageFlags> waitStages, array::View<VkSemaphore> signalSems, VkFence f);
 	void ClearSubmissions(s64 frameIndex);
 };
 

@@ -21,6 +21,7 @@ Settings
 		+ " -ffast-math"
 		+ " -fno-exceptions"
 		+ " -fno-exceptions"
+		+ " -fdiagnostics-absolute-paths"
 		+ " -Wall"
 		+ " -Wextra"
 		+ " -Wfatal-errors"
@@ -73,12 +74,15 @@ Settings
 .BasicConfig =
 [
 	Using(.ClangLibraryConfig)
+	.CompilerOptions + " -I$CodeDirectory$/Basic/Include"
 	.Module = "Basic"
 ]
 
 .MediaConfig =
 [
 	Using(.ClangLibraryConfig)
+	.CompilerOptions + " -I$CodeDirectory$/Basic/Include"
+	//.CompilerOptions + " -I$CodeDirectory$/Media/Include"
 	.Module = "Media"
 ]
 
@@ -90,6 +94,8 @@ Settings
 [
 	Using(.ClangExecutableConfig)
 	.Module = "Engine"
+	.CompilerOptions + " -I$CodeDirectory$/Basic/Include"
+	//.CompilerOptions + " -I$CodeDirectory$/Engine/Include"
 	.CompilerOptions + "$VulkanCompilerOptions$"
 	.PCHOptions + "$VulkanCompilerOptions$"
 	.LinkModules =
@@ -213,7 +219,6 @@ ForEach(.ModuleConfig in .ModuleConfigs)
 			]
 			.FinalConfig = .Config + .BuildConfig
 			^Configs + .FinalConfig
-
 			ForEach(.ExtraConfig in .ClangExtraConfigs)
 			{
 				.Config = .ModuleConfig + .SpeedConfig + .RuntimeConfig + .ExtraConfig
@@ -233,14 +238,12 @@ ForEach(.ModuleConfig in .ModuleConfigs)
 ForEach(.Config in .Configs)
 {
 	Using(.Config)
-
 	Unity("$BuildTag$-Unity")
 	{
 		.UnityInputPath = "$CodeDirectory$/$Module$"
 		.UnityOutputPath = "$BuildDirectory$/Code"
 		.UnityOutputPattern = "$Module$Unity*.cpp"
 	}
-
 	ObjectList("$BuildTag$-Objects")
 	{
 		.PCHInputFile = "$CodeDirectory$/$Module$/PCH.h"
@@ -249,7 +252,6 @@ ForEach(.Config in .Configs)
 		.CompilerOutputPath = "$BuildDirectory$/Objects"
 		.CompilerOptions + " -include-pch $PCHOutputFile$"
 	}
-
 	If(.BinaryType == .BinaryTypeLibrary)
 	{
 		DLL("$BuildTag$-DLL")
@@ -263,7 +265,6 @@ ForEach(.Config in .Configs)
 			.Targets = "$BuildTag$-DLL"
 		}
 	}
-
 	If(.BinaryType == .BinaryTypeExecutable)
 	{
 		ForEach(.LinkModule in .LinkModules)
@@ -275,7 +276,6 @@ ForEach(.Config in .Configs)
 			.LinkerOutput = "$BuildDirectory$/Binary/$Module$"
 			.Libraries = {"$BuildTag$-Objects"}
 		}
-
 		Alias("$BuildTag$")
 		{
 			.Targets = "$BuildTag$-EXE"

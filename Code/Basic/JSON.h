@@ -1,16 +1,16 @@
 #pragma once
 
-#include "Parser.h"
+#include "Basic/Parser.h"
 
-void JSONEatFieldValue(Parser *p);
+void JSONEatFieldValue(parser::Parser *p);
 
 template <typename F>
-void JSONParseObject(Parser *p, F &&proc)
+void JSONParseObject(parser::Parser *p, F &&proc)
 {
 	p->Expect('{');
 	for (auto t = p->Token(); t != "" && t != "}"; t = p->Token())
 	{
-		auto name = t.View(1, t.Length() - 2);
+		auto name = t.ToView(1, t.Length() - 2);
 		auto start = p->index;
 		proc(p, name);
 		if (p->index == start)
@@ -26,7 +26,7 @@ void JSONParseObject(Parser *p, F &&proc)
 }
 
 template <typename F>
-void JSONParseList(Parser *p, F &&proc)
+void JSONParseList(parser::Parser *p, F &&proc)
 {
 	p->Expect('[');
 	auto c = p->PeekChar();

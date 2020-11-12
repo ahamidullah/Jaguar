@@ -9,8 +9,8 @@ BlockAllocator NewBlockAllocator(s64 blockSize, s64 blockCount, Allocator *block
 	{
 		.blockSize = blockSize,
 		.allocator = blockAlloc,
-		.used = NewArrayWithCapacityIn<u8 *>(arrayAlloc, blockCount),
-		.unused = NewArrayWithCapacityIn<u8 *>(arrayAlloc, blockCount),
+		.used = array::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
+		.unused = array::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
 	};
 	for (auto i = 0; i < blockCount; i += 1)
 	{

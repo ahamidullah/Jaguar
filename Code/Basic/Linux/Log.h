@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../String.h"
+#include "Basic/String.h"
 
-void ConsoleWrite(String s);
-String PlatformError();
+void ConsoleWrite(string::String s);
+string::String PlatformError();

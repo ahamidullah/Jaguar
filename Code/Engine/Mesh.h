@@ -1,6 +1,5 @@
 #pragma once
 
-#include "GPU.h"
 #include "Math.h"
 #include "Transform.h"
 
@@ -42,10 +41,10 @@ struct SubmeshAsset
 struct MeshAsset
 {
 	u32 indexCount;
-	GPUIndexType indexType;
+	//GPUIndexType indexType;
 	// @TODO: All of this should probably be 32bit.
-	GPUBuffer vertexBuffer;
-	GPUBuffer indexBuffer;
+	GPU::Buffer vertexBuffer;
+	GPU::Buffer indexBuffer;
 	s64 vertexOffset;
 	s64 firstIndex;
 };

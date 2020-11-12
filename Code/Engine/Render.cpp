@@ -17,12 +17,9 @@ s64 RenderHeight()
 	return 1000;
 }
 
-auto renderDepthImage = GPUImage{};
-auto renderDepthImageView = GPUImageView{};
-auto renderFramebuffers = NewArrayIn<GPUFramebuffer>(Memory::GlobalHeap(), 0);
 auto renderAspectRatio = 0;
 
-auto objectPos = Array<V3>{};
+auto objectPos = array::Array<V3>{};
 
 #include "Vulkan/GPU.h"
 
@@ -58,7 +55,7 @@ void UpdateRenderUniforms(Camera *c)
 {
 /*
 	u32 temp = 1;
-	auto buffers = Array<GPUUniformBufferWriteDescription>{};
+	auto buffers = array::Array<GPUUniformBufferWriteDescription>{};
 	buffers.Append(
 		{
 			.uniform = globalUniform,
@@ -81,7 +78,7 @@ void UpdateRenderUniforms(Camera *c)
 	auto p = InfinitePerspectiveProjectionMatrix(0.01f, c->fov, renderAspectRatio);
 	auto v = ViewMatrix(c->transform.position, c->transform.rotation.Forward());
 	auto pv = p * v;
-	static auto rots = Array<Quaternion>{};
+	static auto rots = array::Array<Quaternion>{};
 	if (rots.count == 0)
 	{
 		for (auto i = 0; i < MeshCount; i += 1)
@@ -171,8 +168,6 @@ void UpdateRenderUniforms(Camera *c)
 	//GfxSubmitCommandBuffers(GFX_GRAPHICS_COMMAND_QUEUE, submitInfo, renderGlobals.descriptorSetUpdateFence);
 #endif
 }
-
-#include "_Vulkan.h"
 
 void Render()
 {

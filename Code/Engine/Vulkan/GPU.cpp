@@ -17,12 +17,12 @@ GPU New(Window *w)
 	}
 	Vulkan::LoadExportedFunctions(dll);
 	Vulkan::LoadGlobalFunctions();
-	auto instLayers = Array<const char *>{};
+	auto instLayers = array::Array<const char *>{};
 	if (DebugBuild)
 	{
 		instLayers.Append("VK_LAYER_KHRONOS_validation");
 	}
-	auto instExts = MakeArray<const char *>(
+	auto instExts = array::Make<const char *>(
 		"VK_KHR_surface",
 		"VK_KHR_get_physical_device_properties2");
 	if (__linux__)
@@ -40,7 +40,7 @@ GPU New(Window *w)
 	gpu.instance = Vulkan::NewInstance(instLayers, instExts);
 	Vulkan::LoadInstanceFunctions(gpu.instance);
 	gpu.physicalDevice = Vulkan::NewPhysicalDevice(gpu.instance, w);
-	auto devExts = MakeArray<const char *>(
+	auto devExts = array::Make<const char *>(
 		"VK_KHR_swapchain",
 		"VK_EXT_memory_budget");
 	gpu.device = Vulkan::NewDevice(gpu.physicalDevice, instLayers, devExts);
@@ -71,7 +71,9 @@ void GPU::EndFrame()
 {
 	this->swapchain.Present(this->physicalDevice, this->queues, this->frameIndex);
 	this->frameIndex = (this->frameIndex + 1) % Vulkan::MaxFramesInFlight;
-	GPUEndFrame(); // @TODO
+	vkCommandGroupUseIndex = (vkCommandGroupUseIndex + 1) % (Vulkan::MaxFramesInFlight + 1);
+	vkCommandGroupFreeIndex = (vkCommandGroupUseIndex + 1) % (Vulkan::MaxFramesInFlight + 1);
+	//GPUEndFrame(); // @TODO
 }
 
 Buffer GPU::NewVertexBuffer(s64 size)

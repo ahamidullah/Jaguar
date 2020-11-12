@@ -1,5 +1,5 @@
 #include "Log.h"
-#include "String.h"
+#include "Basic/String.h"
 #include "File.h"
 #include "Process.h"
 #include "Thread.h"
@@ -15,9 +15,9 @@
 
 typedef void (*CrashHandler)(File crashLog);
 
-auto crashHandlers = NewArrayIn<CrashHandler>(Memory::GlobalHeap(), 0);
+auto crashHandlers = array::NewIn<CrashHandler>(Memory::GlobalHeap(), 0);
 
-String LogFileDirectory()
+string::String LogFileDirectory()
 {
 	return "Data/Log/";
 }
@@ -58,14 +58,14 @@ void LogCrashHandler(File crashLog)
 {
 }
 
-void ConsolePrintVarArgs(String fmt, va_list args)
+void ConsolePrintVarArgs(string::String fmt, va_list args)
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	sb.FormatVarArgs(fmt, args);
-	ConsoleWrite(sb.View(0, sb.Length()));
+	ConsoleWrite(sb.ToView(0, sb.Length()));
 }
 
-void ConsolePrint(String fmt, ...)
+void ConsolePrint(string::String fmt, ...)
 {
 	#if DebugBuild
 		va_list args; // Clang complains if we use 'auto' style declartions with va_list for some reason...
@@ -75,7 +75,7 @@ void ConsolePrint(String fmt, ...)
 	#endif
 }
 
-void ConsolePrintCtx(String fmt, ...)
+void ConsolePrintCtx(string::String fmt, ...)
 {
 	#if DebugBuild
 		va_list args; // Clang complains if we use 'auto' style declartions with va_list for some reason...
@@ -85,7 +85,7 @@ void ConsolePrintCtx(String fmt, ...)
 	#endif
 }
 
-String LogLevelToString(LogLevel l)
+string::String LogLevelToString(LogLevel l)
 {
 	switch (l)
 	{
@@ -113,10 +113,10 @@ String LogLevelToString(LogLevel l)
 	return "Unknown";
 }
 
-void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String category, String fmt, va_list args)
+void LogPrintVarArgs(string::String file, string::String func, s64 line, LogLevel l, string::String category, string::String fmt, va_list args)
 {
 	#if DebugBuild
-		auto msg = FormatStringVarArgs(fmt, args);
+		auto msg = string::FormatVarArgs(fmt, args);
 		// We need to be a bit careful about not allocating memory, because this might be called using
 		// the fixed-size backup allocator.
 		if (l >= CurrentLogLevel())
@@ -142,7 +142,7 @@ void LogPrintVarArgs(String file, String func, s64 line, LogLevel l, String cate
 	#endif
 }
 
-void LogPrintActual(String file, String func, s64 line, LogLevel l, String category, String fmt, ...)
+void LogPrintActual(string::String file, string::String func, s64 line, LogLevel l, string::String category, string::String fmt, ...)
 {
 	#if DebugBuild
 		va_list args;
@@ -164,17 +164,17 @@ void LogPrintActual(const char *file, const char *func, s64 line, LogLevel l, co
 
 File NewCrashLogFile()
 {
-	auto sb = StringBuilder{};
+	auto sb = string::Builder{};
 	sb.Append(LogFileDirectory());
 	sb.Append("Crash/Crash");
 	sb.FormatTime();
 	sb.Append(".txt");
 	auto err = false;
-	auto path = sb.View(0, sb.Length());
+	auto path = sb.ToView(0, sb.Length());
 	return OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 }
 
-void DoAbortActual(String file, String func, s64 line, String category, String fmt, va_list args)
+void DoAbortActual(string::String file, string::String func, s64 line, string::String category, string::String fmt, va_list args)
 {
 	// In the case of a recursive abort, just ignore the recursion.
 	static auto aborting = s64{0};
@@ -199,7 +199,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	auto crashLog = NewCrashLogFile();
 	if (crashLog.IsOpen())
 	{
-		auto msg = StringBuilder{};
+		auto msg = string::Builder{};
 		msg.FormatVarArgs(fmt, args);
 		crashLog.WriteString("###########################################################################\n");
 		crashLog.WriteString("[ABORT]\n");
@@ -231,7 +231,7 @@ void DoAbortActual(String file, String func, s64 line, String category, String f
 	ExitProcess(ProcessFail);
 }
 
-void AbortActual(String file, String func, s64 line, String category, String fmt, ...)
+void AbortActual(string::String file, string::String func, s64 line, string::String category, string::String fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);

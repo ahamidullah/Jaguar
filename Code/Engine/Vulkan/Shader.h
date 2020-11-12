@@ -7,8 +7,8 @@ namespace GPU::Vulkan
 
 struct Shader
 {
-	Array<VkShaderStageFlagBits> vkStages;
-	Array<VkShaderModule> vkModules;
+	array::Array<VkShaderStageFlagBits> vkStages;
+	array::Array<VkShaderModule> vkModules;
 	VkRenderPass vkRenderPass;
 	VkPipeline vkPipeline;
 };

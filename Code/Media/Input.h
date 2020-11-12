@@ -6,16 +6,16 @@
 	#error Unsupported platform.
 #endif
 #include "Event.h"
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 #include "Common.h"
 
 const auto ScancodeCount = u32{256};
 
 struct InputButtons
 {
-	Array<bool> down;
-	Array<bool> pressed;
-	Array<bool> released;
+	array::Array<bool> down;
+	array::Array<bool> pressed;
+	array::Array<bool> released;
 
 	void Press(s64 i);
 	void Release(s64 i);

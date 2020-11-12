@@ -21,7 +21,7 @@ struct StackAllocator : Allocator
 	void Free();
 };
 
-StackAllocator NewStackAllocator(ArrayView<u8> mem);
+StackAllocator NewStackAllocator(array::View<u8> mem);
 
 }
 

@@ -1,5 +1,7 @@
 #ifdef VulkanBuild
 
+#include "Basic/Memory.h"
+
 namespace GPU::Vulkan
 {
 
@@ -72,11 +74,11 @@ MemoryAllocation MemoryAllocator::Allocate(PhysicalDevice pd, Device d, VkMemory
 		{
 			Abort("Vulkan", "Failed to allocate memory for block allocator."); // @TODO
 		}
-		VkCheck(rc);
+		Check(rc);
 		newBlk.frontier = 0;
 		if (list->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
 		{
-			VkCheck(vkMapMemory(d.device, newBlk.memory, 0, list->blockSize, 0, &newBlk.map));
+			Check(vkMapMemory(d.device, newBlk.memory, 0, list->blockSize, 0, &newBlk.map));
 		}
 		list->blocks.Append(newBlk);
 	}

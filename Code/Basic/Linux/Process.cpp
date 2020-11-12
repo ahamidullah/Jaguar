@@ -38,11 +38,11 @@ String EnvironmentVariable(String name, bool *exists)
 	return result;
 }
 
-Array<String> Stacktrace()
+array::Array<String> Stacktrace()
 {
 	#if DebugBuild
 		const auto maxAddrs = 100;
-		auto addrs = StaticArray<void *, maxAddrs>{};
+		auto addrs = array::Static<void *, maxAddrs>{};
 		auto numAddrs = backtrace(&addrs[0], maxAddrs);
 		if (numAddrs == maxAddrs)
 		{
@@ -52,9 +52,9 @@ Array<String> Stacktrace()
 		if (!trace)
 		{
 			LogError("Memory", "Failed to get stack trace function names.\n");
-			return Array<String>{};
+			return {};
 		}
-		auto st = NewArrayWithCapacity<String>(numAddrs);
+		auto st = array::NewWithCapacity<String>(numAddrs);
 		for (auto i = 0; i < numAddrs; i += 1)
 		{
 			st.Append(trace[i]);
@@ -62,6 +62,6 @@ Array<String> Stacktrace()
 		free(trace);
 		return st;
 	#else
-		return Array<String>{};
+		return {};
 	#endif
 }

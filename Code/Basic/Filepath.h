@@ -1,34 +1,34 @@
 #pragma once
 
-#include "String.h"
+#include "Basic/String.h"
 
-void FilepathDirectoryIn(StringBuilder *sb, String path);
-String FilepathDirectory(String path);
-void FilepathFilenameIn(StringBuilder *sb, String path);
-String FilepathFilename(String path);
-void FilepathExtensionIn(StringBuilder *sb, String path);
-String FilepathExtension(String path);
-void SetFilepathExtensionIn(StringBuilder *path, String ext);
-String SetFilepathExtension(String path, String ext);
-void FilepathFilenameNoExtIn(StringBuilder *sb, String path);
-String FilepathFilenameNoExt(String path);
+void FilepathDirectoryIn(string::Builder *sb, string::String path);
+string::String FilepathDirectory(string::String path);
+void FilepathFilenameIn(string::Builder *sb, string::String path);
+string::String FilepathFilename(string::String path);
+void FilepathExtensionIn(string::Builder *sb, string::String path);
+string::String FilepathExtension(string::String path);
+void SetFilepathExtensionIn(string::Builder *path, string::String ext);
+string::String SetFilepathExtension(string::String path, string::String ext);
+void FilepathFilenameNoExtIn(string::Builder *sb, string::String path);
+string::String FilepathFilenameNoExt(string::String path);
 
 template <typename... StringPack>
-String JoinFilepaths(StringPack... sp)
+string::String JoinFilepaths(StringPack... sp)
 {
 	auto count = sizeof...(sp);
 	if (count == 0)
 	{
 		return "";
 	}
-	auto len = (String{sp}.Length() + ...) + (count - 1);
-	auto sb = NewStringBuilderWithCapacity(len);
-	auto AddPathComponent = [](StringBuilder *sb, String c)
+	auto len = (Length(sp) + ...) + (count - 1);
+	auto sb = string::NewBuilderWithCapacity(len);
+	auto AddPathComponent = [](string::Builder *sb, string::String c)
 	{
 		sb->Append(c);
 		sb->Append("/");
 	};
 	(AddPathComponent(&sb, sp), ...);
 	sb.Resize(sb.Length() - 1); // Get rid of the last extraneous '/'.
-	return NewStringFromBuffer(sb.buffer);
+	return string::NewFromBuffer(sb.buffer);
 }

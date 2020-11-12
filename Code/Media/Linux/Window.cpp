@@ -13,7 +13,7 @@ Window NewWindow(s64 w, s64 h)
     auto screen = itr.data;
 	// Initialize XInput2, which we require for raw input.
 	{
-		auto ext = String{"XInputExtension"};
+		auto ext = string::Make("XInputExtension");
 		auto cookie = xcb_query_extension(conn, ext.Length(), (const char *)&ext[0]);
 		auto reply = xcb_query_extension_reply(conn, cookie, NULL);
 		if (!reply->present)
@@ -29,8 +29,8 @@ Window NewWindow(s64 w, s64 h)
 		} mask;
 		mask.head.deviceid = XCB_INPUT_DEVICE_ALL;
 		mask.head.mask_len = sizeof(mask.mask) / sizeof(u32);
-		mask.mask = (xcb_input_xi_event_mask_t)
-			(XCB_INPUT_XI_EVENT_MASK_RAW_MOTION
+		mask.mask = xcb_input_xi_event_mask_t(
+			XCB_INPUT_XI_EVENT_MASK_RAW_MOTION
 			| XCB_INPUT_XI_EVENT_MASK_RAW_BUTTON_PRESS
 			| XCB_INPUT_XI_EVENT_MASK_RAW_BUTTON_RELEASE
 			| XCB_INPUT_XI_EVENT_MASK_RAW_KEY_PRESS
@@ -47,11 +47,9 @@ Window NewWindow(s64 w, s64 h)
     };
 	{
     	auto valMask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-    	auto valList = StaticArray<u32, 2>
-    	{
+    	auto valList = array::MakeStatic<u32>(
     		screen->white_pixel,
-    		XCB_EVENT_MASK_STRUCTURE_NOTIFY,
-    	};
+    		XCB_EVENT_MASK_STRUCTURE_NOTIFY);
     	win.xcbWindow = xcb_generate_id(conn);
     	xcb_create_window(
     		conn,
@@ -85,7 +83,7 @@ Window NewWindow(s64 w, s64 h)
 	return win;
 }
 
-void Window::SetName(String n)
+void Window::SetName(string::String n)
 {
 }
 

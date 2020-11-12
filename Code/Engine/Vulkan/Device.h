@@ -10,7 +10,7 @@ struct Device
 	VkDevice device;
 };
 
-Device NewDevice(PhysicalDevice pd, ArrayView<const char *> instLayers, ArrayView<const char *> devExts);
+Device NewDevice(PhysicalDevice pd, array::View<const char *> instLayers, array::View<const char *> devExts);
 
 }
 

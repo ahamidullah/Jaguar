@@ -10,7 +10,7 @@ namespace Memory
 struct HeapAllocator : Allocator
 {
 	BlockAllocator blocks;
-	Array<AllocationHeader *> free;
+	array::Array<AllocationHeader *> free;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

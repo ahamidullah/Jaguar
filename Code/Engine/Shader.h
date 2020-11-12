@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Basic/String.h"
+#include "Basic/Container/Array.h"
 
 namespace ShaderCompiler
 {
@@ -9,8 +10,8 @@ namespace ShaderCompiler
 
 struct SPIRV
 {
-	Array<Array<u8>> stageByteCode;
-	Array<VkShaderStageFlagBits> stages;
+	array::Array<array::Array<u8>> stageByteCode;
+	array::Array<VkShaderStageFlagBits> stages;
 };
 
 SPIRV VulkanGLSL(String filename, bool *err);

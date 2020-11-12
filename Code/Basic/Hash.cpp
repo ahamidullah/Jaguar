@@ -40,7 +40,7 @@ u64 HashPointer(void *p)
 }
 
 // @TODO: Where did I get this from? Is the Knuth hash better?
-u64 HashString(String s)
+u64 HashString(string::String s)
 {
     auto x = u64{5381};
     for (auto c : s)

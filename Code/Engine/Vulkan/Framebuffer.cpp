@@ -3,7 +3,7 @@
 namespace GPU::Vulkan
 {
 
-Framebuffer NewFramebuffer(Swapchain *sc, Device *d, u32 w, u32 h, ArrayView<ImageView> attachments)
+Framebuffer NewFramebuffer(Swapchain *sc, Device *d, u32 w, u32 h, array::View<ImageView> attachments)
 {
 	static auto idGenerator = u64{0};
 	auto id = (u64)AtomicFetchAndAdd64((s64 *)&idGenerator, 1);
@@ -17,7 +17,7 @@ Framebuffer NewFramebuffer(Swapchain *sc, Device *d, u32 w, u32 h, ArrayView<Ima
 		.id = id,
 		.width = w,
 		.height = h,
-		.attachments = NewArrayWithCapacityIn<VkImageView>(Memory::GlobalHeap(), attachments.count),
+		.attachments = array::NewWithCapacityIn<VkImageView>(Memory::GlobalHeap(), attachments.count),
 		.swapchain = sc,
 		.device = d,
 	};
@@ -56,7 +56,7 @@ u64 HashFramebufferKey(FramebufferKey k)
 	return HashPointer(k.renderPass) ^ Hash64(k.framebufferID);
 }
 
-auto framebufferCache = NewHashTable<FramebufferKey, VkFramebuffer>(0, HashFramebufferKey);
+auto framebufferCache = map::New<FramebufferKey, VkFramebuffer>(0, HashFramebufferKey);
 
 VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb)
 {
@@ -66,7 +66,7 @@ VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb)
 		fb.id = fb.swapchain->imageIndex;
 		fb.width = u32(RenderWidth());
 		fb.height = u32(RenderHeight());
-		fb.attachments = MakeArray<VkImageView>(fb.swapchain->imageViews[fb.swapchain->imageIndex], fb.swapchain->defaultDepthImageView);
+		fb.attachments = array::Make<VkImageView>(fb.swapchain->imageViews[fb.swapchain->imageIndex], fb.swapchain->defaultDepthImageView);
 	}
 	auto key = FramebufferKey
 	{
@@ -88,7 +88,7 @@ VkFramebuffer NewVkFramebuffer(VkRenderPass rp, Framebuffer fb)
 		.layers = 1,
 	};
 	auto vkFB = VkFramebuffer{};
-	VkCheck(vkCreateFramebuffer(fb.device->device, &ci, NULL, &vkFB));
+	Check(vkCreateFramebuffer(fb.device->device, &ci, NULL, &vkFB));
 	framebufferCache.Insert(key, vkFB);
 	return vkFB;
 }

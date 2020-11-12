@@ -28,12 +28,12 @@ struct MemoryBlockList
 	VkMemoryAllocateFlags allocateFlags;
 	u32 heapIndex;
 	s64 blockSize;
-	Array<MemoryBlock> blocks;
+	array::Array<MemoryBlock> blocks;
 };
 
 struct MemoryAllocator
 {
-	Array<MemoryBlockList> blockLists;
+	array::Array<MemoryBlockList> blockLists;
 
 	MemoryAllocation Allocate(PhysicalDevice pd, Device d, VkMemoryPropertyFlags mp, VkMemoryAllocateFlags ma, s64 size, s64 align, bool *fail);
 };

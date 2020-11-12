@@ -1,10 +1,10 @@
 #include "Camera.h"
 #include "Math.h"
-#include "Basic/Array.h"
+#include "Basic/Container/Array.h"
 
 // @TODO: Locking.
 
-auto cameras = Array<Camera>{};
+auto cameras = array::Array<Camera>{};
 
 Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
 {
@@ -27,7 +27,7 @@ Camera *NewCamera(String name, V3 pos, V3 lookAt, f32 speed, f32 fov)
 	return cameras.Last();
 }
 
-ArrayView<Camera> Cameras()
+array::View<Camera> Cameras()
 {
 	return cameras;
 }

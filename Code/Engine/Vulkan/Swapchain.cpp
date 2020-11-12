@@ -64,7 +64,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 		};
 		if (pd.queueFamilies[(s64)QueueType::Present] != pd.queueFamilies[(s64)QueueType::Graphics])
 		{
-			auto fams = MakeStaticArray(
+			auto fams = array::MakeStatic(
 				u32(pd.queueFamilies[s64(QueueType::Graphics)]),
 				u32(pd.queueFamilies[s64(QueueType::Present)]));
 			ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
@@ -75,14 +75,14 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 		{
 			ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		}
-		VkCheck(vkCreateSwapchainKHR(d.device, &ci, NULL, &sc.swapchain));
+		Check(vkCreateSwapchainKHR(d.device, &ci, NULL, &sc.swapchain));
 	}
 	// Get swapchain images.
 	{
 		auto n = u32{};
-		VkCheck(vkGetSwapchainImagesKHR(d.device, sc.swapchain, &n, NULL));
+		Check(vkGetSwapchainImagesKHR(d.device, sc.swapchain, &n, NULL));
 		sc.images.Resize(n);
-		VkCheck(vkGetSwapchainImagesKHR(d.device, sc.swapchain, &n, &sc.images[0]));
+		Check(vkGetSwapchainImagesKHR(d.device, sc.swapchain, &n, &sc.images[0]));
 		sc.imageViews.Resize(n);
 		for (auto i = 0; i < n; i++)
 		{
@@ -110,7 +110,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 				.components = cm,
 				.subresourceRange = isr,
 			};
-			VkCheck(vkCreateImageView(d.device, &ci, NULL, &sc.imageViews[i]));
+			Check(vkCreateImageView(d.device, &ci, NULL, &sc.imageViews[i]));
 		}
 	}
 	// Create default depth image.
@@ -134,7 +134,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 			.initialLayout = DepthBufferInitialLayout,
 		};
-		VkCheck(vkCreateImage(d.device, &ici, NULL, &sc.defaultDepthImage));
+		Check(vkCreateImage(d.device, &ici, NULL, &sc.defaultDepthImage));
 		auto mr = VkMemoryRequirements{};
 		vkGetImageMemoryRequirements(d.device, sc.defaultDepthImage, &mr);
 		// @TODO: Use the image allocator.
@@ -145,8 +145,8 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 			.memoryTypeIndex = MemoryHeapIndex(pd.memoryProperties, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
 		};
 		auto mem = VkDeviceMemory{};
-		VkCheck(vkAllocateMemory(d.device, &ai, NULL, &mem));
-		VkCheck(vkBindImageMemory(d.device, sc.defaultDepthImage, mem, 0));
+		Check(vkAllocateMemory(d.device, &ai, NULL, &mem));
+		Check(vkBindImageMemory(d.device, sc.defaultDepthImage, mem, 0));
 		auto vci = VkImageViewCreateInfo
 		{
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -169,7 +169,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 				.layerCount = 1,
 			},
 		};
-		VkCheck(vkCreateImageView(d.device, &vci, NULL, &sc.defaultDepthImageView));
+		Check(vkCreateImageView(d.device, &vci, NULL, &sc.defaultDepthImageView));
 	}
 	// Create frame fences.
 	{
@@ -180,7 +180,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 		};
 		for (auto i = 0; i < _MaxFramesInFlight; i += 1)
 		{
-			VkCheck(vkCreateFence(d.device, &ci, NULL, &sc.frameFences[i]));
+			Check(vkCreateFence(d.device, &ci, NULL, &sc.frameFences[i]));
 		}
 	}
 	// Image semaphores.
@@ -193,12 +193,12 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 		{
 			for (auto i = 0; i < _MaxFramesInFlight; i++)
 			{
-				VkCheck(vkCreateSemaphore(d.device, &ci, NULL, &sc.imageOwnershipSemaphores[i]));
+				Check(vkCreateSemaphore(d.device, &ci, NULL, &sc.imageOwnershipSemaphores[i]));
 			}
 		}
 		for (auto i = 0; i < _MaxFramesInFlight; i++)
 		{
-			VkCheck(vkCreateSemaphore(d.device, &ci, NULL, &sc.imageAcquiredSemaphores[i]));
+			Check(vkCreateSemaphore(d.device, &ci, NULL, &sc.imageAcquiredSemaphores[i]));
 		}
 	}
 	// Create image ownership transition commands.
@@ -212,7 +212,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = (u32)sc.images.count,
 		};
-		VkCheck(vkAllocateCommandBuffers(d.device, &ai, sc.changeImageOwnershipFromGraphicsToPresentQueueCommands.elements));
+		Check(vkAllocateCommandBuffers(d.device, &ai, sc.changeImageOwnershipFromGraphicsToPresentQueueCommands.elements));
 		for (auto i = 0; i < sc.images.count; i += 1)
 		{
 			auto bi = VkCommandBufferBeginInfo
@@ -220,7 +220,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 				.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
 			};
-			VkCheck(vkBeginCommandBuffer(sc.changeImageOwnershipFromGraphicsToPresentQueueCommands[i], &bi));
+			Check(vkBeginCommandBuffer(sc.changeImageOwnershipFromGraphicsToPresentQueueCommands[i], &bi));
 			auto mb = VkImageMemoryBarrier
 			{
 				.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -233,7 +233,7 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 				.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
 			};
 			vkCmdPipelineBarrier(sc.changeImageOwnershipFromGraphicsToPresentQueueCommands[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &mb);
-			VkCheck(vkEndCommandBuffer(sc.changeImageOwnershipFromGraphicsToPresentQueueCommands[i]));
+			Check(vkEndCommandBuffer(sc.changeImageOwnershipFromGraphicsToPresentQueueCommands[i]));
 		}
 */
 	}
@@ -242,10 +242,10 @@ Swapchain NewSwapchain(PhysicalDevice pd, Device d)
 
 void Swapchain::AcquireNextImage(Device d, s64 frameIndex)
 {
-	VkCheck(vkWaitForFences(d.device, 1, &this->frameFences[frameIndex], true, U32Max));
-	VkCheck(vkResetFences(d.device, 1, &this->frameFences[frameIndex]));
+	Check(vkWaitForFences(d.device, 1, &this->frameFences[frameIndex], true, U32Max));
+	Check(vkResetFences(d.device, 1, &this->frameFences[frameIndex]));
 	const auto AcquireImageTimeout = 2 * Time::Second;
-	VkCheck(vkAcquireNextImageKHR(d.device, this->swapchain, AcquireImageTimeout, this->imageAcquiredSemaphores[frameIndex], VK_NULL_HANDLE, &this->imageIndex));
+	Check(vkAcquireNextImageKHR(d.device, this->swapchain, AcquireImageTimeout, this->imageAcquiredSemaphores[frameIndex], VK_NULL_HANDLE, &this->imageIndex));
 }
 
 void Swapchain::Present(PhysicalDevice pd, Queues q, s64 frameIndex)
@@ -266,7 +266,7 @@ void Swapchain::Present(PhysicalDevice pd, Queues q, s64 frameIndex)
 			.signalSemaphoreCount = 1,
 			.pSignalSemaphores = &this->imageOwnershipSemaphores[frameIndex],
 		};
-		VkCheck(vkQueueSubmit(q.queues[s64(QueueType::Present)], 1, &si, VK_NULL_HANDLE));
+		Check(vkQueueSubmit(q.queues[s64(QueueType::Present)], 1, &si, VK_NULL_HANDLE));
 	}
 	// If we are using separate queues we have to wait for image ownership, otherwise wait for draw complete.
 	auto pi = VkPresentInfoKHR
@@ -286,7 +286,7 @@ void Swapchain::Present(PhysicalDevice pd, Queues q, s64 frameIndex)
 	{
 		pi.pWaitSemaphores = &q.submissionSemaphores[frameIndex][s64(QueueType::Graphics)];
 	}
-	VkCheck(vkQueuePresentKHR(q.queues[s64(QueueType::Present)], &pi));
+	Check(vkQueuePresentKHR(q.queues[s64(QueueType::Present)], &pi));
 }
 
 }

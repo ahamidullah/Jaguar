@@ -42,7 +42,7 @@ void StackAllocator::Free()
 {
 }
 
-StackAllocator NewStackAllocator(ArrayView<u8> mem)
+StackAllocator NewStackAllocator(array::View<u8> mem)
 {
 	auto a = StackAllocator{};
 	a.buffer = mem.elements;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../String.h"
+#include "Basic/String.h"
 #include "Basic/Time/Time.h"
 
 enum FileSeekRelative
@@ -13,13 +13,13 @@ enum FileSeekRelative
 struct File
 {
 	s64 handle;
-	String path;
+	string::String path;
 
 	bool Close();
 	bool IsOpen();
-	bool Write(ArrayView<u8> a);
-	bool WriteString(String s);
-	bool Read(ArrayView<u8> out);
+	bool Write(array::View<u8> a);
+	bool WriteString(string::String s);
+	bool Read(array::View<u8> out);
 	s64 Length(bool *err);
 	s64 Seek(s64 seek, FileSeekRelative rel, bool *err);
 	Time::Time LastModifiedTime(bool *err);
@@ -29,10 +29,10 @@ struct DirectoryIteration
 {
 	DIR *dir;
 	struct dirent *dirent;
-	String filename;
+	string::String filename;
 	bool isDirectory;
 
-	bool Iterate(String path);
+	bool Iterate(string::String path);
 };
 
 enum OpenFileFlags
@@ -43,8 +43,8 @@ enum OpenFileFlags
 	OpenFileCreate = O_CREAT | O_TRUNC,
 };
 
-File OpenFile(String path, s64 flags, bool *err);
-bool FileExists(String path);
-bool CreateDirectory(String path);
-bool CreateDirectoryIfItDoesNotExist(String path);
-bool DeleteFile(String path);
+File OpenFile(string::String path, s64 flags, bool *err);
+bool FileExists(string::String path);
+bool CreateDirectory(string::String path);
+bool CreateDirectoryIfItDoesNotExist(string::String path);
+bool DeleteFile(string::String path);

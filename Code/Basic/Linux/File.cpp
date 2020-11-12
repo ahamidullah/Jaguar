@@ -34,7 +34,7 @@ bool File::Close()
 	return true;
 }
 
-bool File::Read(ArrayView<u8> out)
+bool File::Read(array::View<u8> out)
 {
 	auto totRead = 0;
 	auto curRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
@@ -58,7 +58,7 @@ bool File::Read(ArrayView<u8> out)
 	return true;
 }
 
-bool File::Write(ArrayView<u8> a)
+bool File::Write(array::View<u8> a)
 {
 	auto totWrit = size_t{0};
 	auto curWrit = ssize_t{0}; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)

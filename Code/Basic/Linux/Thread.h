@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../String.h"
+#include "Basic/String.h"
 #include "../PCH.h"
 #include "Common.h"
 
@@ -41,8 +41,8 @@ typedef void *(*ThreadProcedure)(void *);
 
 Thread NewThread(ThreadProcedure proc, void *param);
 void SetThreadProcessorAffinity(Thread t, s64 cpuIndex);
-void SetThreadName(Thread t, String n);
-String ThreadName(Thread t);
+void SetThreadName(Thread t, string::String n);
+string::String ThreadName(Thread t);
 Thread CurrentThread();
 s64 ThreadID();
 s64 ThreadIndex();

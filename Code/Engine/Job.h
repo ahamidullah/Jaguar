@@ -44,7 +44,7 @@ struct JobCounter
 {
 	s64 jobCount;
 	s64 unfinishedJobCount;
-	Array<JobFiber *> waitingFibers;
+	array::Array<JobFiber *> waitingFibers;
 
 	void Wait();
 	void Reset();
@@ -59,5 +59,5 @@ struct JobDeclaration
 
 void InitializeJobs(JobProcedure init, void *param);
 JobDeclaration NewJobDeclaration(JobProcedure proc, void *param);
-void RunJobs(ArrayView<JobDeclaration> d, JobPriority p, JobCounter **c);
+void RunJobs(array::View<JobDeclaration> d, JobPriority p, JobCounter **c);
 s64 WorkerThreadCount();

@@ -1,7 +1,7 @@
 #include "Timer.h"
 #include "Basic/String.h"
 
-namespace Time
+namespace time
 {
 
 Timer NewTimer(string::String name)
@@ -48,11 +48,11 @@ void Timer::Print(s64 scale)
 	} break;
 	default:
 	{
-		LogError("Time", "Unknown time scale %ld.", scale);
+		log::Error("Time", "Unknown time scale %ld.", scale);
 		unit = "?";
 	};
 	};
-	ConsolePrint("%k: %ld%k, avg: %f%k\n", this->name, delta.Nanoseconds() / scale, unit, (f32)(this->runningSum / scale) / (f32)this->iteration, unit);
+	log::Console("%k: %ld%k, avg: %f%k\n", this->name, delta.Nanoseconds() / scale, unit, (f32)(this->runningSum / scale) / (f32)this->iteration, unit);
 	this->iteration += 1;
 }
 

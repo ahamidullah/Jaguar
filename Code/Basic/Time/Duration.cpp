@@ -1,6 +1,6 @@
 #include "Duration.h"
 
-namespace Time
+namespace time
 {
 
 bool Duration::operator>(Duration d)

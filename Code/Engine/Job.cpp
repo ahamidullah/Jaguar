@@ -29,9 +29,9 @@ void JobFiberProcedure(void *);
 // @TODO: More granular locking?
 auto jobLock = Spinlock{};
 auto workerThreads = array::Array<WorkerThread>{};
-auto idleJobFiberPool = []() -> FixedPool<JobFiber, JobFiberCount>
+auto idleJobFiberPool = []() -> pool::Static<JobFiber, JobFiberCount>
 {
-	auto p = NewFixedPool<JobFiber, JobFiberCount>();
+	auto p = pool::NewStatic<JobFiber, JobFiberCount>();
 	for (auto &f : p)
 	{
 		f.platformFiber = NewFiber(JobFiberProcedure, &f.parameter);
@@ -56,7 +56,7 @@ auto resumableJobFiberQueues = []() -> array::Static<array::Array<JobFiber *>, J
 	}
 	return a;
 }();
-auto jobCounterPool = NewPoolIn<JobCounter>(Memory::GlobalHeap(), 0);
+auto jobCounterPool = pool::NewIn<JobCounter>(Memory::GlobalHeap(), 0);
 auto runningJobFibers = array::New<JobFiber *>(WorkerThreadCount());
 //ThreadLocal auto runningJobFiber = (JobFiber *){};
 //ThreadLocal auto workerThreadFiber = Fiber{};

@@ -2,7 +2,7 @@
 
 #include "Time.h"
 
-namespace Time
+namespace time
 {
 
 struct Timer

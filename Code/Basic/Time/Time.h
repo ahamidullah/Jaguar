@@ -6,7 +6,7 @@
 	#error Unsupported platform.
 #endif
 
-namespace Time
+namespace time
 {
 
 const auto Nanosecond = 1LL;

@@ -1,2 +1,2 @@
 #!/bin/bash
-xterm -e "cd $PROJECT_DIRECTORY/Code; nvim" >& /dev/null &
+alacritty -e bash -c "cd $PROJECT_DIRECTORY/Code; nvim" >& /dev/null &

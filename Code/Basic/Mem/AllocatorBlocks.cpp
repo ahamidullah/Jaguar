@@ -1,6 +1,6 @@
 #include "AllocatorBlocks.h"
 
-namespace Memory
+namespace mem
 {
 
 BlockAllocator NewBlockAllocator(s64 blockSize, s64 blockCount, Allocator *blockAlloc, Allocator *arrayAlloc)
@@ -9,8 +9,8 @@ BlockAllocator NewBlockAllocator(s64 blockSize, s64 blockCount, Allocator *block
 	{
 		.blockSize = blockSize,
 		.allocator = blockAlloc,
-		.used = array::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
-		.unused = array::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
+		.used = arr::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
+		.unused = arr::NewWithCapacityIn<u8 *>(arrayAlloc, blockCount),
 	};
 	for (auto i = 0; i < blockCount; i += 1)
 	{

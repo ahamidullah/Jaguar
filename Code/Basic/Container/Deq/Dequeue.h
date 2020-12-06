@@ -9,12 +9,12 @@ namespace deq
 {
 
 template <typename T>
-struct Dequeue
+struct dequeue
 {
-	mem::Allocator *allocator;
+	mem::allocator *allocator;
 	s64 blockSize;
-	arr::Array<arr::Array<T>> useBlocks;
-	arr::Array<arr::Array<T>> blockPool;
+	arr::array<arr::array<T>> useBlocks;
+	arr::array<arr::array<T>> blockPool;
 	s64 start;
 	s64 end;
 	s64 count;
@@ -28,17 +28,17 @@ struct Dequeue
 const auto DefaultBlockSize = 256;
 
 template <typename T>
-Dequeue<T> NewWithBlockSizeIn(mem::Allocator *a, s64 bs, s64 cap)
+dequeue<T> NewWithBlockSizeIn(mem::allocator *a, s64 bs, s64 cap)
 {
 	Assert(bs > 0);
 	Assert(cap >= 0);
 	auto nBlks = DivideAndRoundUp(cap, bs);
-	auto q = Dequeue<T>
+	auto q = dequeue<T>
 	{
 		.allocator = a,
 		.blockSize = bs,
-		.useBlocks = arr::NewWithCapacityIn<arr::Array<T>>(a, nBlks),
-		.blockPool = arr::NewWithCapacityIn<arr::Array<T>>(a, nBlks),
+		.useBlocks = arr::NewWithCapacityIn<arr::array<T>>(a, nBlks),
+		.blockPool = arr::NewWithCapacityIn<arr::array<T>>(a, nBlks),
 	};
 	for (auto i = 0; i < nBlks; i += 1)
 	{
@@ -48,25 +48,25 @@ Dequeue<T> NewWithBlockSizeIn(mem::Allocator *a, s64 bs, s64 cap)
 }
 
 template <typename T>
-Dequeue<T> NewWithBlockSize(s64 bs, s64 cap)
+dequeue<T> NewWithBlockSize(s64 bs, s64 cap)
 {
 	return NewWithBlockSizeIn<T>(mem::ContextAllocator(), bs, cap);
 }
 
 template <typename T>
-Dequeue<T> New(mem::Allocator *a, s64 cap)
+dequeue<T> New(mem::allocator *a, s64 cap)
 {
 	return NewWithBlockSizeIn<T>(a, DefaultBlockSize, cap);
 }
 
 template <typename T>
-Dequeue<T> New(s64 cap)
+dequeue<T> New(s64 cap)
 {
 	return New<T>(mem::ContextAllocator(), cap);
 }
 
 template <typename T>
-void Dequeue<T>::PushBack(T e)
+void dequeue<T>::PushBack(T e)
 {
 	if (this->blockSize == 0)
 	{
@@ -104,7 +104,7 @@ void Dequeue<T>::PushBack(T e)
 }
 
 template <typename T>
-void Dequeue<T>::PushFront(T e)
+void dequeue<T>::PushFront(T e)
 {
 	if (this->blockSize == 0)
 	{
@@ -127,8 +127,8 @@ void Dequeue<T>::PushFront(T e)
 	}
 	else if (this->start == -1)
 	{
-		auto a = arr::NewIn<arr::Array<T>>(this->allocator, this->useBlocks.count + 1);
-		arr::Copy(this->useBlocks.ToView(0, this->useBlocks.count), a.ToView(1, this->useBlocks.count + 1));
+		auto a = arr::NewIn<arr::array<T>>(this->allocator, this->useBlocks.count + 1);
+		arr::Copy(this->useBlocks.View(0, this->useBlocks.count), a.View(1, this->useBlocks.count + 1));
 		this->useBlocks.Free();
 		this->useBlocks = a;
 		if (this->blockPool.count > 0)
@@ -149,7 +149,7 @@ void Dequeue<T>::PushFront(T e)
 
 
 template <typename T>
-T Dequeue<T>::PopFront()
+T dequeue<T>::PopFront()
 {
 	if (this->useBlocks.count == 0 || (this->useBlocks.count == 1 && this->start == this->end))
 	{
@@ -168,7 +168,7 @@ T Dequeue<T>::PopFront()
 }
 
 template <typename T>
-T Dequeue<T>::PopBack()
+T dequeue<T>::PopBack()
 {
 	if (this->useBlocks.count == 0 || (this->useBlocks.count == 1 && this->start == this->end))
 	{

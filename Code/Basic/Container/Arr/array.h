@@ -7,40 +7,40 @@
 #include "../Assert.h"
 #include "Common.h"
 
-namespace array
+namespace arr
 {
 
 template <typename T>
 struct Array
 {
-	Memory::Allocator *allocator;
+	mem::Allocator *allocator;
 	T *elements;
 	s64 count;
 	s64 capacity;
 
-	operator View<T>();
+	operator view<T>();
 	T &operator[](s64 i);
 	const T &operator[](s64 i) const;
-	bool operator==(Array<T> a);
-	bool operator!=(Array<T> a);
+	bool operator==(array<T> a);
+	bool operator!=(array<T> a);
 	T *begin();
 	T *end();
 	void Free();
-	void SetAllocator(Memory::Allocator *a);
+	void SetAllocator(mem::Allocator *a);
 	void Reserve(s64 reserve);
 	void Resize(s64 count);
 	void Append(T e);
 	void AppendAll(View<T> a);
 	void OrderedRemove(s64 index);
 	void UnorderedRemove(s64 index);
-	typedef bool (*SiftProcedure)(T e);
-	View<T> Sift(SiftProcedure p);
-	Array<T> Copy();
-	Array<T> CopyIn(Memory::Allocator *a);
-	Array<T> CopyRange(s64 start, s64 end);
-	Array<T> CopyRangeIn(Memory::Allocator *a, s64 start, s64 end);
-	View<T> ToView(s64 start, s64 end);
-	View<u8> ToBytes();
+	typedef bool (*siftProcedure)(T e);
+	view<T> Sift(siftProcedure p);
+	array<T> Copy();
+	array<T> CopyIn(mem::allocator *a);
+	array<T> CopyRange(s64 start, s64 end);
+	array<T> CopyRangeIn(mem::allocator *a, s64 start, s64 end);
+	view<T> View(s64 start, s64 end);
+	view<u8> Bytes();
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 	T Pop();
@@ -48,7 +48,7 @@ struct Array
 };
 
 template <typename T>
-Array<T> NewIn(Memory::Allocator *a, s64 count)
+array<T> NewIn(mem::allocator *a, s64 count)
 {
 	return
 	{
@@ -60,13 +60,13 @@ Array<T> NewIn(Memory::Allocator *a, s64 count)
 }
 
 template <typename T>
-Array<T> New(s64 count)
+array<T> New(s64 count)
 {
-	return NewIn<T>(Memory::ContextAllocator(), count);
+	return NewIn<T>(mem::ContextAllocator(), count);
 }
 
 template <typename T>
-Array<T> NewWithCapacityIn(Memory::Allocator *a, s64 cap)
+array<T> NewWithCapacityIn(mem::allocator *a, s64 cap)
 {
 	return
 	{
@@ -79,11 +79,11 @@ Array<T> NewWithCapacityIn(Memory::Allocator *a, s64 cap)
 template <typename T>
 Array<T> NewWithCapacity(s64 cap)
 {
-	return NewWithCapacityIn<T>(Memory::ContextAllocator(), cap);
+	return NewWithCapacityIn<T>(mem::ContextAllocator(), cap);
 }
 
 template <typename T, typename... Ts>
-Array<T> MakeIn(Memory::Allocator *a, Ts... ts)
+array<T> MakeIn(mem::allocator *a, Ts... ts)
 {
 	auto r = NewWithCapacityIn<T>(a, sizeof...(ts));
 	(r.Append(ts), ...);
@@ -91,13 +91,13 @@ Array<T> MakeIn(Memory::Allocator *a, Ts... ts)
 }
 
 template <typename T, typename... Ts>
-Array<T> Make(Ts... ts)
+array<T> Make(Ts... ts)
 {
-	return MakeIn<T>(Memory::ContextAllocator(), ts...);
+	return MakeIn<T>(mem::ContextAllocator(), ts...);
 }
 
 template <typename T>
-Array<T>::operator View<T>()
+array<T>::operator view<T>()
 {
 	return View<T>
 	{
@@ -107,21 +107,21 @@ Array<T>::operator View<T>()
 }
 
 template <typename T>
-T &Array<T>::operator[](s64 i)
+T &array<T>::operator[](s64 i)
 {
 	Assert(i >= 0 && i < this->count);
 	return this->elements[i];
 }
 
 template <typename T>
-const T &Array<T>::operator[](s64 i) const
+const T &array<T>::operator[](s64 i) const
 {
 	Assert(i >= 0 && i < this->count);
 	return this->elements[i];
 }
 
 template <typename T>
-bool Array<T>::operator==(Array<T> a)
+bool array<T>::operator==(array<T> a)
 {
 	if (this->count != a.count)
 	{
@@ -138,54 +138,54 @@ bool Array<T>::operator==(Array<T> a)
 }
 
 template <typename T>
-bool Array<T>::operator!=(Array<T> a)
+bool array<T>::operator!=(array<T> a)
 {
 	return !(*this == a);
 }
 
 template <typename T>
-T *Array<T>::begin()
+T *array<T>::begin()
 {
 	return &this->elements[0];
 }
 
 template <typename T>
-T *Array<T>::end()
+T *array<T>::end()
 {
 	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T>
-Array<T> Array<T>::Copy()
+array<T> array<T>::Copy()
 {
-	return this->CopyIn(Memory::ContextAllocator());
+	return this->CopyIn(mem::ContextAllocator());
 }
 
 template <typename T>
-Array<T> Array<T>::CopyIn(Memory::Allocator *a)
+array<T> array<T>::CopyIn(mem::allocator *a)
 {
 	auto r = NewIn<T>(a, this->count);
-	array::Copy(*this, r);
+	Copy(*this, r);
 	return r;
 }
 
 template <typename T>
-Array<T> Array<T>::CopyRange(s64 start, s64 end)
+array<T> array<T>::CopyRange(s64 start, s64 end)
 {
-	return this->CopyRangeIn(Memory::ContextAllocator(), start, end);
+	return this->CopyRangeIn(mem::ContextAllocator(), start, end);
 }
 
 template <typename T>
-Array<T> Array<T>::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
+array<T> array<T>::CopyRangeIn(mem::allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto r = NewIn<T>(a, end - start);
-	array::Copy(this->ToView(start, end), r);
+	Copy(this->View(start, end), r);
 	return r;
 }
 
 template <typename T>
-View<u8> Array<T>::ToBytes()
+view<u8> array<T>::Bytes()
 {
 	return
 	{
@@ -195,7 +195,7 @@ View<u8> Array<T>::ToBytes()
 }
 
 template <typename T>
-View<T> Array<T>::ToView(s64 start, s64 end)
+view<T> array<T>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -208,29 +208,29 @@ View<T> Array<T>::ToView(s64 start, s64 end)
 }
 
 template <typename T>
-s64 Array<T>::FindFirst(T e)
+s64 array<T>::FindFirst(T e)
 {
 	return FindFirst<T>(*this, e);
 }
 
 template <typename T>
-s64 Array<T>::FindLast(T e)
+s64 array<T>::FindLast(T e)
 {
 	return FindLast<T>(*this, e);
 }
 
 template <typename T>
-void Array<T>::SetAllocator(Memory::Allocator *a)
+void array<T>::SetAllocator(mem::allocator *a)
 {
 	this->allocator = a;
 }
 
 template <typename T>
-void Array<T>::Reserve(s64 n)
+void array<T>::Reserve(s64 n)
 {
 	if (!this->allocator)
 	{
-		this->allocator = Memory::ContextAllocator();
+		this->allocator = mem::ContextAllocator();
 	}
 	if (!this->elements)
 	{
@@ -254,14 +254,14 @@ void Array<T>::Reserve(s64 n)
 }
 
 template <typename T>
-void Array<T>::Resize(s64 n)
+void array<T>::Resize(s64 n)
 {
 	this->Reserve(n);
 	this->count = n;
 }
 
 template <typename T>
-void Array<T>::Append(T e)
+void array<T>::Append(T e)
 {
 	auto i = this->count;
 	this->Resize(this->count + 1);
@@ -271,24 +271,24 @@ void Array<T>::Append(T e)
 }
 
 template <typename T>
-void Array<T>::AppendAll(View<T> a)
+void array<T>::AppendAll(view<T> a)
 {
 	auto oldCount = this->count;
 	auto newCount = this->count + a.count;
 	this->Resize(newCount);
-	array::Copy(a, this->ToView(oldCount, newCount));
+	Copy(a, this->View(oldCount, newCount));
 }
 
 template <typename T>
-void Array<T>::OrderedRemove(s64 i)
+void array<T>::OrderedRemove(s64 i)
 {
 	Assert(i > 0 && i < this->count);
-	array::Copy(this->ToView(i + 1, this->count), this->ToView(i, this->count - 1));
+	Copy(this->View(i + 1, this->count), this->View(i, this->count - 1));
 	this->count -= 1;
 }
 
 template <typename T>
-void Array<T>::UnorderedRemove(s64 i)
+void array<T>::UnorderedRemove(s64 i)
 {
 	Assert(i > 0 && i < this->count);
 	this->elements[i] = this->elements[this->count - 1];
@@ -296,7 +296,7 @@ void Array<T>::UnorderedRemove(s64 i)
 }
 
 template <typename T>
-View<T> Array<T>::Sift(SiftProcedure p)
+view<T> array<T>::Sift(siftProcedure p)
 {
 	auto nValid = 0, nInvalid = 0;
 	auto i = 0;
@@ -323,7 +323,7 @@ View<T> Array<T>::Sift(SiftProcedure p)
 }
 
 template <typename T>
-void Array<T>::Free()
+void array<T>::Free()
 {
 	if (!this->elements)
 	{
@@ -336,7 +336,7 @@ void Array<T>::Free()
 }
 
 template <typename T>
-T Array<T>::Pop()
+T array<T>::Pop()
 {
 	Assert(this->count > 0);
 	this->Resize(this->count - 1);
@@ -344,7 +344,7 @@ T Array<T>::Pop()
 }
 
 template <typename T>
-T *Array<T>::Last()
+T *array<T>::Last()
 {
 	return &(*this)[this->count - 1];
 }

@@ -3,7 +3,7 @@
 #include "Allocator.h"
 #include "AllocatorBlocks.h"
 
-namespace Memory
+namespace mem
 {
 
 struct StackAllocator : Allocator
@@ -21,7 +21,7 @@ struct StackAllocator : Allocator
 	void Free();
 };
 
-StackAllocator NewStackAllocator(array::View<u8> mem);
+StackAllocator NewStackAllocator(arr::View<u8> mem);
 
 }
 

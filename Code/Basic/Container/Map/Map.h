@@ -10,7 +10,7 @@ const auto DefaultInitialLength = 16;
 const auto MaxLoadFactor = 0.75f;
 
 template <typename K, typename V>
-struct KeyValue
+struct keyValue
 {
 	K key;
 	V value;
@@ -19,17 +19,17 @@ struct KeyValue
 template <typename K, typename V> struct Iterator;
 
 template <typename K, typename V>
-struct Map
+struct map
 {
-	typedef u64 (*HashProcedure)(K);
-	array::Array<u64> hashes;
-	array::Array<KeyValue<K, V>> buckets;
-	HashProcedure hashProcedure;
+	arr::array<u64> hashes;
+	arr::array<keyValue<K, V>> buckets;
+	typedef u64 (*hashProcedure)(K);
+	hashProcedure hashProcedure;
 	s64 count;
 	f32 loadFactor;
 
-	Iterator<K, V> begin();
-	Iterator<K, V> end();
+	iterator<K, V> begin();
+	iterator<K, V> end();
 	void DoInsert(u64 hash, K k, V v);
 	void Insert(K k, V v);
 	V *DoLookup(K k);
@@ -42,12 +42,12 @@ struct Map
 };
 
 template <typename K, typename V>
-Map<K, V> NewIn(Memory::Allocator *a, s64 cap, typename Map<K, V>::HashProcedure hp)
+map<K, V> NewIn(mem::allocator *a, s64 cap, typename map<K, V>::hashProcedure hp)
 {
-	auto m = Map<K, V>
+	auto m = map<K, V>
 	{
-		.hashes = array::NewIn<u64>(a, cap),
-		.buckets = array::NewIn<KeyValue<K, V>>(a, cap),
+		.hashes = arr::NewIn<u64>(a, cap),
+		.buckets = arr::NewIn<KeyValue<K, V>>(a, cap),
 		.hashProcedure = hp,
 	};
 	for (auto &h : m.hashes)
@@ -58,9 +58,9 @@ Map<K, V> NewIn(Memory::Allocator *a, s64 cap, typename Map<K, V>::HashProcedure
 }
 
 template <typename K, typename V>
-Map<K, V> New(s64 cap, typename Map<K, V>::HashProcedure p)
+map<K, V> New(s64 cap, typename map<K, V>::hashProcedure p)
 {
-	return NewIn<K, V>(Memory::ContextAllocator(), cap, p);
+	return NewIn<K, V>(mem::ContextAllocator(), cap, p);
 }
 
 template <typename K, typename V>

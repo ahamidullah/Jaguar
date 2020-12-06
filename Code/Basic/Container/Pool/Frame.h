@@ -6,9 +6,9 @@ namespace pool
 {
 
 template <typename T>
-struct FramePool
+struct framePool
 {
-	array::Array<T> elements;
+	arr::array<T> elements;
 	s64 frontier;
 
 	void GrowIfNecessary();
@@ -18,7 +18,7 @@ struct FramePool
 };
 
 template <typename T>
-void FramePool<T>::GrowIfNecessary()
+void framePool<T>::GrowIfNecessary()
 {
 	if (this->frontier < this->elements.count)
 	{
@@ -41,7 +41,7 @@ void FramePool<T>::GrowIfNecessary()
 }
 
 template <typename T>
-T *FramePool<T>::Get()
+T *framePool<T>::Get()
 {
 	this->GrowIfNecessary();
 	auto i = this->frontier;
@@ -50,7 +50,7 @@ T *FramePool<T>::Get()
 }
 
 template <typename T>
-T FramePool<T>::GetValue()
+T framePool<T>::GetValue()
 {
 	this->GrowIfNecessary();
 	auto i = this->frontier;
@@ -59,7 +59,7 @@ T FramePool<T>::GetValue()
 }
 
 template <typename T>
-void FramePool<T>::Reset()
+void framePool<T>::Reset()
 {
 	this->frontier = 0;
 }

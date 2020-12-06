@@ -2,5 +2,5 @@
 
 #include "Basic/String.h"
 
-void ConsoleWrite(string::String s);
-string::String PlatformError();
+void ConsoleWrite(str::String s);
+str::String PlatformError();

@@ -1,6 +1,6 @@
 #include "PoolAllocator.h"
 
-namespace Memory
+namespace mem
 {
 
 PoolAllocator NewPoolAllocator(s64 blockSize, s64 blockCount, Allocator *blockAlloc, Allocator *arrayAlloc)
@@ -25,7 +25,7 @@ void *PoolAllocator::Resize(void *mem, s64 newSize)
 {
 	auto h = GetAllocationHeader(mem);
 	auto newMem = this->blocks.AllocateWithHeader(newSize, h->alignment);
-	array::Copy(array::NewView((u8 *)mem, h->size), array::NewView((u8 *)newMem, h->size));
+	arr::Copy(array::NewView((u8 *)mem, h->size), array::NewView((u8 *)newMem, h->size));
 	return newMem;
 }
 

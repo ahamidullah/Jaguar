@@ -7,8 +7,8 @@ namespace parser
 
 struct Parser
 {
-	string::String string;
-	string::String delimiters;
+	str::String string;
+	str::String delimiters;
 	bool done;
 	s64 index;
 	s64 line;
@@ -16,14 +16,14 @@ struct Parser
 
 	bool IsDelimiter(char c);
 	void Advance();
-	string::String Line();
-	string::String Token();
+	str::String Line();
+	str::String Token();
 	void Eat(char c);
 	s64 PeekChar();
 	void Expect(u8 c);
 };
 
-Parser NewFromFile(string::String filepath, string::String delims, bool *err);
-Parser NewFromString(string::String str, string::String delims);
+Parser NewFromFile(str::String filepath, str::String delims, bool *err);
+Parser NewFromString(str::String str, str::String delims);
 
 }

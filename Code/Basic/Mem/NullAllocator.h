@@ -2,7 +2,7 @@
 
 #include "Allocator.h"
 
-namespace Memory
+namespace mem
 {
 
 // @TODO: Get rid of the NullAllocator...

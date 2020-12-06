@@ -2,15 +2,15 @@
 
 #include "Basic/Container/Array.h"
 
-namespace Memory
+namespace mem
 {
 
 struct BlockAllocator
 {
 	s64 blockSize;
 	Allocator *allocator;
-	array::Array<u8 *> used;
-	array::Array<u8 *> unused;
+	arr::array<u8 *> used;
+	arr::array<u8 *> unused;
 	u8 *frontier;
 	u8 *end;
 

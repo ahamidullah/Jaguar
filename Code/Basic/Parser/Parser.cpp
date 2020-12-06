@@ -5,7 +5,7 @@
 namespace parser
 {
 
-Parser NewFromFile(string::String path, string::String delims, bool *err)
+Parser NewFromFile(str::String path, str::String delims, bool *err)
 {
 	auto buf = ReadEntireFile(path, err);
 	if (*err)
@@ -14,14 +14,14 @@ Parser NewFromFile(string::String path, string::String delims, bool *err)
 	}
 	return
 	{
-		.string = string::NewFromBuffer(buf),
+		.string = str::NewFromBuffer(buf),
 		.delimiters = delims,
 		.line = 1,
 		.column = 1,
 	};
 }
 
-Parser NewFromString(string::String s, string::String delims)
+Parser NewFromString(str::String s, str::String delims)
 {
 	return
 	{
@@ -59,7 +59,7 @@ void Parser::Advance()
 	this->column += 1;
 }
 
-string::String Parser::Line()
+str::String Parser::Line()
 {
 	if (this->index >= this->string.Length())
 	{
@@ -78,9 +78,9 @@ string::String Parser::Line()
 	return this->string.ToView(start, this->index);
 }
 
-string::String Parser::Token()
+str::String Parser::Token()
 {
-	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && str::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}
@@ -95,7 +95,7 @@ string::String Parser::Token()
 	}
 	else
 	{
-		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]) && !string::IsCharWhitespace(this->string[this->index]))
+		while (this->index < this->string.Length() && !this->IsDelimiter(this->string[this->index]) && !str::IsCharWhitespace(this->string[this->index]))
 		{
 			this->Advance();
 		}
@@ -118,7 +118,7 @@ void Parser::Eat(char c)
 
 s64 Parser::PeekChar()
 {
-	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && str::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}
@@ -131,7 +131,7 @@ s64 Parser::PeekChar()
 
 void Parser::Expect(u8 c)
 {
-	while (this->index < this->string.Length() && string::IsCharWhitespace(this->string[this->index]))
+	while (this->index < this->string.Length() && str::IsCharWhitespace(this->string[this->index]))
 	{
 		this->Advance();
 	}

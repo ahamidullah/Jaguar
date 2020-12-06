@@ -1,12 +1,12 @@
 #include "GlobalHeap.h"
 #include "Memory.h"
 
-namespace Memory
+namespace mem
 {
 
 const auto GlobalHeapBlockSize = 64 * Megabyte;
 
-struct GlobalHeapBlockAllocator : Allocator
+struct GlobalHeapBlockAllocator : allocator
 {
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);
@@ -50,7 +50,7 @@ void GlobalHeapBlockAllocator::Free()
 	Abort("Memory", "Unsupported call to Free in GlobalHeapBlockAllocator.");
 }
 
-struct GlobalHeapArrayAllocator : Allocator
+struct GlobalHeapArrayAllocator : allocator
 {
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

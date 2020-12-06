@@ -3,16 +3,16 @@
 #include "Find.h"
 #include "Copy.h"
 #include "../Memory/ContextAllocator.h"
-#include "../Assert.h"
+#include "Basic/Assert.h"
 #include "Common.h"
 
-namespace array
+namespace arr
 {
 
-template <typename T> struct Array;
+template <typename T> struct array;
 
 template <typename T>
-struct View
+struct view
 {
 	T *elements;
 	s64 count;
@@ -23,12 +23,12 @@ struct View
 	bool operator!=(View<T> a);
 	T *begin();
 	T *end();
-	View<u8> Bytes();
-	View<T> ToView(s64 start, s64 end);
-	Array<T> Copy();
-	Array<T> CopyIn(Memory::Allocator *a);
-	Array<T> CopyRange(s64 start, s64 end);
-	Array<T> CopyRangeIn(Memory::Allocator *a, s64 start, s64 end);
+	view<u8> Bytes();
+	view<T> View(s64 start, s64 end);
+	array<T> Copy();
+	array<T> CopyIn(mem::Allocator *a);
+	array<T> CopyRange(s64 start, s64 end);
+	array<T> CopyRangeIn(mem::Allocator *a, s64 start, s64 end);
 	s64 FindFirst(T e);
 	s64 FindLast(T e);
 };
@@ -103,7 +103,7 @@ View<u8> View<T>::Bytes()
 }
 
 template <typename T>
-View<T> View<T>::ToView(s64 start, s64 end)
+View<T> View<T>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -116,13 +116,13 @@ View<T> View<T>::ToView(s64 start, s64 end)
 }
 
 template <typename T>
-Array<T> View<T>::Copy()
+array<T> view<T>::Copy()
 {
-	return this->CopyIn(Memory::ContextAllocator());
+	return this->CopyIn(mem::ContextAllocator());
 }
 
 template <typename T>
-Array<T> View<T>::CopyIn(Memory::Allocator *a)
+array<T> view<T>::CopyIn(mem::Allocator *a)
 {
 	auto r = New<T>(a, this->count);
 	Copy(*this, r);
@@ -130,13 +130,13 @@ Array<T> View<T>::CopyIn(Memory::Allocator *a)
 }
 
 template <typename T>
-Array<T> View<T>::CopyRange(s64 start, s64 end)
+array<T> view<T>::CopyRange(s64 start, s64 end)
 {
-	this->CopyRangeIn(Memory::ContextAllocator(), start, end);
+	this->CopyRangeIn(mem::ContextAllocator(), start, end);
 }
 
 template <typename T>
-Array<T> View<T>::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
+array<T> view<T>::CopyRangeIn(mem::Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto ar = New<T>(a, end - start);

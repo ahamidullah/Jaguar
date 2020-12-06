@@ -8,18 +8,18 @@
 namespace str
 {
 
-String::String()
+str::String()
 {
 	this->buffer = {};
 	this->literal = false;
 }
 
-String::String(const char *s)
+str::String(const char *s)
 {
 	*this = Make(s);
 }
 
-String::String(char *s)
+str::String(char *s)
 {
 	*this = Make(s);
 }
@@ -32,7 +32,7 @@ String New(s64 len)
 	return s;
 }
 
-String NewIn(Memory::Allocator *a, s64 len)
+String NewIn(mem::Allocator *a, s64 len)
 {
 	auto s = String{};
 	s.buffer = arr::NewIn<u8>(a, len);
@@ -48,7 +48,7 @@ String NewWithCapacity(s64 cap)
 	return s;
 }
 
-String NewWithCapacityIn(Memory::Allocator *a, s64 cap)
+String NewWithCapacityIn(mem::Allocator *a, s64 cap)
 {
 	auto s = String{};
 	s.buffer = arr::NewWithCapacityIn<u8>(a, cap);
@@ -56,7 +56,7 @@ String NewWithCapacityIn(Memory::Allocator *a, s64 cap)
 	return s;
 }
 
-String NewFromBuffer(arr::Array<u8> b)
+String NewFromBuffer(arr::array<u8> b)
 {
 	auto s = String{};
 	s.buffer = b;
@@ -68,9 +68,9 @@ String Make(const char *cs)
 {
 	auto len = Length(cs);
 	auto s = String{};
-	s.buffer = arr::Array<u8>
+	s.buffer = arr::array<u8>
 	{
-		.allocator = Memory::NullAllocator(),
+		.allocator = mem::NullAllocator(),
 		.elements = (u8 *)cs,
 		.count = len,
 		.capacity = len,
@@ -89,13 +89,13 @@ String Make(char *cs)
 	return s;
 }
 
-const u8 &String::operator[](s64 i)
+const u8 &str::operator[](s64 i)
 {
 	Assert(i >= 0 && i < this->Length());
 	return this->buffer[i];
 }
 
-bool String::operator==(String s)
+bool str::operator==(String s)
 {
 	if (this->Length() != s.Length())
 	{
@@ -111,14 +111,14 @@ bool String::operator==(String s)
 	return true;
 }
 
-bool String::operator!=(String s)
+bool str::operator!=(String s)
 {
 	return !(s == *this);
 }
 
-bool String::operator==(const char *s)
+bool str::operator==(const char *s)
 {
-	if (this->Length() != string::Length(s))
+	if (this->Length() != str::Length(s))
 	{
 		return false;
 	}
@@ -132,83 +132,83 @@ bool String::operator==(const char *s)
 	return true;
 }
 
-bool String::operator!=(const char *s)
+bool str::operator!=(const char *s)
 {
 	return !(s == *this);
 }
 
-const u8 *String::begin()
+const u8 *str::begin()
 {
 	return this->buffer.begin();
 }
 
-const u8 *String::end()
+const u8 *str::end()
 {
 	return this->buffer.end();
 }
 
-s64 String::Length()
+s64 str::Length()
 {
 	return this->buffer.count;
 }
 
-String String::Copy()
+String str::Copy()
 {
-	return this->CopyIn(Memory::ContextAllocator());
+	return this->CopyIn(mem::ContextAllocator());
 }
 
-String String::CopyIn(Memory::Allocator *a)
+String str::CopyIn(mem::Allocator *a)
 {
 	return NewFromBuffer(this->buffer.CopyIn(a));
 }
 
-String String::CopyRange(s64 start, s64 end)
+String str::CopyRange(s64 start, s64 end)
 {
-	return this->CopyRangeIn(Memory::ContextAllocator(), start, end);
+	return this->CopyRangeIn(mem::ContextAllocator(), start, end);
 }
 
-String String::CopyRangeIn(Memory::Allocator *a, s64 start, s64 end)
+String str::CopyRangeIn(mem::Allocator *a, s64 start, s64 end)
 {
 	return NewFromBuffer(this->buffer.CopyRangeIn(a, start, end));
 }
 
-char *String::ToCString()
+char *str::CString()
 {
 	if (this->literal)
 	{
 		return (char *)this->buffer.elements;
 	}
-	auto s = (u8 *)Memory::Allocate(this->Length() + 1);
+	auto s = (u8 *)mem::Allocate(this->Length() + 1);
 	arr::Copy(this->buffer, arr::NewView(s, this->Length()));
 	s[this->Length()] = '\0';
 	return (char *)s;
 }
 
-String String::ToView(s64 start, s64 end)
+String str::View(s64 start, s64 end)
 {
 	Assert(start <= end);
-	auto buf = arr::Array<u8>
+	auto buf = arr::array<u8>
 	{
-		.allocator = Memory::NullAllocator(),
+		.allocator = mem::NullAllocator(),
 		.elements = &this->buffer[start],
 		.count = end - start,
 	};
 	return NewFromBuffer(buf);
 }
 
-s64 String::FindFirst(u8 c)
+s64 str::FindFirst(u8 c)
 {
 	return this->buffer.FindFirst(c);
 }
 
-s64 String::FindLast(u8 c)
+s64 str::FindLast(u8 c)
 {
 	return this->buffer.FindLast(c);
 }
 
-arr::Array<String> String::Split(char seperator)
+arr::array<String> str::Split(char seperator)
 {
-	auto splits = arr::Array<String>{};
+	auto splits = arr::array<String>{};
 	auto curStart = 0;
 	auto curLen = 0;
 	for (auto i = 0; i < this->Length(); i += 1)
@@ -271,7 +271,7 @@ s64 ParseInt(String s, bool *err)
 
 f32 ParseFloat(String s, bool *err)
 {
-	auto cs = s.ToCString();
+	auto cs = s.CString();
 	auto end = (char *){};
 	auto f = strtof(cs, &end);
 	if (end != &cs[s.Length()])

@@ -4,8 +4,64 @@
 namespace path
 {
 
+// Directory returns all but the last component of the path.
+str::View Directory(str::View path)
+{
+	auto slash = path.FindLast('/');
+	if (slash < 0)
+	{
+		return;
+	}
+	return path.ToView(0, slash);
+}
+
+str::View Extension(str::View path)
+{
+	auto dot = path.FindLast('.');
+	if (dot < 0)
+	{
+		return;
+	}
+	path.ToView(dot, path.Length());
+}
+
+// Filename returns the last component of the path.
+str::View Filename(str::View path)
+{
+	auto slash = path.FindLast('/');
+	if (slash < 0)
+	{
+		sb->Append(path);
+		return;
+	}
+	return path.ToView(slash + 1, path.Length());
+}
+
+// Filestem returns the filename without its extension.
+str::View Filestem(str::View path)
+{
+	auto start = 0;
+	auto slash = path.FindLast('/');
+	if (slash < 0)
+	{
+		start = 0;
+	}
+	else
+	{
+		start = slash + 1;
+	}
+	auto dot = path.FindLast('.');
+	if (dot <= start)
+	{
+		return;
+	}
+	Assert(dot > 0);
+	return path.ToView(start, dot);
+}
+
+#if 0
 // FilepathDirectory returns all but the last component of the path.
-void FilepathDirectoryIn(string::Builder *sb, string::String path)
+void FilepathDirectoryIn(str::Builder *sb, str::String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
@@ -15,15 +71,15 @@ void FilepathDirectoryIn(string::Builder *sb, string::String path)
 	return sb->Append(path.ToView(0, slash));
 }
 
-string::String FilepathDirectory(string::String path)
+str::String FilepathDirectory(str::String path)
 {
-	auto sb = string::Builder{};
+	auto sb = str::Builder{};
 	FilepathDirectoryIn(&sb, path);
-	return string::NewFromBuffer(sb.buffer);
+	return str::NewFromBuffer(sb.buffer);
 }
 
 // FilepathFilename returns the last component of the path.
-void FilepathFilenameIn(string::Builder *sb, string::String path)
+void FilepathFilenameIn(str::Builder *sb, str::String path)
 {
 	auto slash = path.FindLast('/');
 	if (slash < 0)
@@ -34,14 +90,14 @@ void FilepathFilenameIn(string::Builder *sb, string::String path)
 	sb->Append(path.ToView(slash + 1, path.Length()));
 }
 
-string::String FilepathFilename(string::String path)
+str::String FilepathFilename(str::String path)
 {
-	auto sb = string::Builder{};
+	auto sb = str::Builder{};
 	FilepathFilenameIn(&sb, path);
-	return string::NewFromBuffer(sb.buffer);
+	return str::NewFromBuffer(sb.buffer);
 }
 
-void FilepathFilenameNoExtIn(string::Builder *sb, string::String path)
+void FilepathFilenameNoExtIn(str::Builder *sb, str::String path)
 {
 	auto start = 0;
 	auto slash = path.FindLast('/');
@@ -62,15 +118,15 @@ void FilepathFilenameNoExtIn(string::Builder *sb, string::String path)
 	sb->Append(path.ToView(start, dot));
 }
 
-string::String FilepathFilenameNoExt(string::String path)
+str::String FilepathFilenameNoExt(str::String path)
 {
-	auto sb = string::Builder{};
+	auto sb = str::Builder{};
 	FilepathFilenameNoExtIn(&sb, path);
-	return string::NewFromBuffer(sb.buffer);
+	return str::NewFromBuffer(sb.buffer);
 }
 
 // FilepathExtension returns the file extension including the dot.
-void FilepathExtensionIn(string::Builder *sb, string::String path)
+void FilepathExtensionIn(str::Builder *sb, str::String path)
 {
 	auto dot = path.FindLast('.');
 	if (dot < 0)
@@ -80,16 +136,16 @@ void FilepathExtensionIn(string::Builder *sb, string::String path)
 	return sb->Append(path.ToView(dot, path.Length()));
 }
 
-string::String FilepathExtension(string::String path)
+str::String FilepathExtension(str::String path)
 {
-	auto sb = string::Builder{};
+	auto sb = str::Builder{};
 	FilepathExtensionIn(&sb, path);
-	return string::NewFromBuffer(sb.buffer);
+	return str::NewFromBuffer(sb.buffer);
 }
 
 // SetFilepathExtension replaces the portion of the path after the last dot character with the supplied extension.
 // If no dot character is found, a dot character and the supplied extension are appended to the path.
-void SetFilepathExtensionIn(string::Builder *path, string::String ext)
+void SetFilepathExtensionIn(str::Builder *path, str::String ext)
 {
 	auto dot = path->FindLast('.');
 	if (dot < 0)
@@ -99,15 +155,16 @@ void SetFilepathExtensionIn(string::Builder *path, string::String ext)
 		return;
 	}
 	path->Resize(dot + ext.Length());
-	array::Copy(ext.buffer, path->ToView(dot, path->Length()).buffer);
+	arr::Copy(ext.buffer, path->ToView(dot, path->Length()).buffer);
 }
 
-string::String SetFilepathExtension(string::String path, string::String ext)
+str::String SetFilepathExtension(str::String path, str::String ext)
 {
-	auto sb = string::NewBuilderWithCapacity(path.Length());
+	auto sb = str::NewBuilderWithCapacity(path.Length());
 	sb.Append(path);
 	SetFilepathExtensionIn(&sb, ext);
-	return string::NewFromBuffer(sb.buffer);
+	return str::NewFromBuffer(sb.buffer);
 }
+#endif
 
 }

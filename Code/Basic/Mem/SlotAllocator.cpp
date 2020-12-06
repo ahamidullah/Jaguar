@@ -1,6 +1,6 @@
 #include "SlotAllocator.h"
 
-namespace Memory
+namespace mem
 {
 
 SlotAllocator NewSlotAllocator(s64 slotSize, s64 slotAlign, s64 slotCount, s64 slotsPerBlock, Allocator *blockAlloc, Allocator *arrayAlloc)

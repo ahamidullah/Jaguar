@@ -476,11 +476,11 @@ Fiber New(Procedure proc, void *param)
 {
 #if !NEW_FIBER
 	auto f = Fiber{};
-	f.contextAllocatorStack.SetAllocator(Memory::GlobalHeap());
-	f.contextAllocator = Memory::GlobalHeap();
+	f.contextAllocatorStack.SetAllocator(mem::GlobalHeap());
+	f.contextAllocator = mem::GlobalHeap();
 	getcontext(&f.context);
-	auto stack = (u8 *)Memory::PlatformAllocate(StackSize + (StackGuardPageCount * CPUPageSize()));
-	Assert(Memory::AlignPointer(stack, CPUPageSize()) == stack);
+	auto stack = (u8 *)mem::PlatformAllocate(StackSize + (StackGuardPageCount * CPUPageSize()));
+	Assert(mem::AlignPointer(stack, CPUPageSize()) == stack);
 	if (mprotect(stack, (StackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
@@ -505,11 +505,11 @@ Fiber New(Procedure proc, void *param)
 #else
 	auto f = Fiber
 	{
-		.contextAllocator = Memory::GlobalHeap(),
-		.contextAllocatorStack = array::NewIn<Memory::Allocator *>(Memory::GlobalHeap(), 0),
+		.contextAllocator = mem::GlobalHeap(),
+		.contextAllocatorStack = arr::NewIn<mem::Allocator *>(mem::GlobalHeap(), 0),
 	};
-	auto stack = (u8 *)Memory::PlatformAllocate(StackPlusGuardSize);
-	Assert(Memory::AlignPointer(stack, CPUPageSize()) == stack);
+	auto stack = (u8 *)mem::PlatformAllocate(StackPlusGuardSize);
+	Assert(mem::AlignPointer(stack, CPUPageSize()) == stack);
 	if (mprotect(stack, (StackGuardPageCount * CPUPageSize()), PROT_NONE) == -1)
 	{
 		Abort("Fiber", "Failed to mprotect stack guard page: %k.", PlatformError());
@@ -533,8 +533,8 @@ Fiber New(Procedure proc, void *param)
 
 void ConvertThread(Fiber *f)
 {
-	f->contextAllocatorStack.SetAllocator(Memory::GlobalHeap());
-	f->contextAllocator = Memory::GlobalHeap();
+	f->contextAllocatorStack.SetAllocator(mem::GlobalHeap());
+	f->contextAllocator = mem::GlobalHeap();
 	SetRunningFiber(f);
 	#ifdef ThreadSanitizerBuild
 		f->tsan = __tsan_create_fiber(0);

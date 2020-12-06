@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Basic/String.h"
+#include "Basic/Str.h"
 
 namespace hash
 {
@@ -8,7 +8,7 @@ namespace hash
 u32 U32(u32 u);
 u64 U32(u64 u);
 u64 Pointer(void *p);
-u64 String(string::String s);
+u64 String(str::String s);
 
 struct Hasher32
 {

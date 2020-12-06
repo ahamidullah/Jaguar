@@ -9,7 +9,7 @@
 namespace filesystem
 {
 
-void ReadEntireFileIn(array::Array<u8> *a, string::String path, bool *err);
-array::Array<u8> ReadEntireFile(string::String path, bool *err);
+void ReadEntireFileIn(arr::array<u8> *a, str::String path, bool *err);
+arr::array<u8> ReadEntireFile(str::String path, bool *err);
 
 }

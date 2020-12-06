@@ -1,18 +1,18 @@
 #pragma once
 
+#include "Basic/Assert.h"
+
+namespace arr
+{
+
+template <typename T> struct array;
+template <typename T> struct view;
+
 // Implicit type conversion does not work with template functions, so we'll have to create overloads of CopyArray for each combination of
-// Array, StaticArray, and ArrayView. C++ sucks!
-
-#include "../../Assert.h"
-
-namespace array
-{
-
-template <typename T> struct Array;
-template <typename T> struct View;
+// array, static array, and array view. C++ sucks!
 
 template <typename T>
-void Copy(Array<T> src, View<T> dst)
+void Copy(array<T> src, view<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
@@ -22,7 +22,7 @@ void Copy(Array<T> src, View<T> dst)
 }
 
 template <typename T>
-void Copy(Array<T> src, Array<T> dst)
+void Copy(array<T> src, array<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
@@ -32,7 +32,7 @@ void Copy(Array<T> src, Array<T> dst)
 }
 
 template <typename T>
-void Copy(View<T> src, Array<T> dst)
+void Copy(view<T> src, array<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)

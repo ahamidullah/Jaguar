@@ -1,5 +1,5 @@
 #pragma once
 
-#include "../../../Container/Array/Array.h"
-#include "../../../Container/Array/View.h"
-#include "../../../Container/Array/Static.h"
+#include "../../../container/array/array.h"
+#include "../../../container/array/view.h"
+#include "../../../container/array/static.h"

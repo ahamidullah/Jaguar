@@ -1,7 +1,7 @@
 #include "Memory.h"
 #include "ContextAllocator.h"
 
-namespace Memory
+namespace mem
 {
 
 void *Allocate(s64 size)

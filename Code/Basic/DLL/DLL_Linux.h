@@ -8,12 +8,12 @@ namespace dll
 struct DLL
 {
 	void *handle;
-	string::String path;
+	str::String path;
 
 	bool Close();
-	void *Lookup(string::String name, bool *err);
+	void *Lookup(str::String name, bool *err);
 };
 
-DLL Open(string::String path, bool *err);
+DLL Open(str::String path, bool *err);
 
 }

@@ -1,33 +1,33 @@
 #pragma once
 
-#include "Basic/Container/Array.h"
+#include "Basic/Container/Arr.h"
 
 namespace pool
 {
 
 template <typename T>
-struct Pool
+struct pool
 {
-	array::Array<T> elements;
-	array::Array<T *> freeList;
+	arr::array<T> elements;
+	arr::array<T *> freeList;
 
-	void SetAllocator(Memory::Allocator *a);
+	void SetAllocator(mem::allocator *a);
 	T *Get();
 	void Release(T *e);
 	void GrowIfNecessary(s64 n);
 };
 
 template <typename T>
-Pool<T> NewIn(Memory::Allocator *a, s64 cap)
+pool<T> NewIn(mem::allocator *a, s64 cap)
 {
-	auto p = Pool<T>
+	auto p = pool<T>
 	{
-		.elements = array::NewIn<T>(a, cap),
-		.freeList = array::NewWithCapacityIn<T *>(a, cap),
+		.elements = arr::NewIn<T>(a, cap),
+		.freeList = arr::NewWithCapacityIn<T *>(a, cap),
 	};
 	for (auto &e : p.elements)
 	{
-		e = T{};
+		e = {};
 	}
 	for (auto i = 0; i < cap; i++)
 	{
@@ -37,20 +37,20 @@ Pool<T> NewIn(Memory::Allocator *a, s64 cap)
 }
 
 template <typename T>
-Pool<T> New(s64 size)
+pool<T> New(s64 size)
 {
-	return NewPoolIn<T>(Memory::ContextAllocator(), size);
+	return NewPoolIn<T>(mem::ContextAllocator(), size);
 }
 
 template <typename T>
-void Pool<T>::SetAllocator(Memory::Allocator *a)
+void pool<T>::SetAllocator(mem::allocator *a)
 {
 	this->elements.SetAllocator(a);
 	this->freeList.SetAllocator(a);
 }
 
 template <typename T>
-void Pool<T>::GrowIfNecessary(s64 n)
+void pool<T>::GrowIfNecessary(s64 n)
 {
 	if (this->freeList.count >= n)
 	{
@@ -83,14 +83,14 @@ void Pool<T>::GrowIfNecessary(s64 n)
 }
 
 template <typename T>
-T *Pool<T>::Get()
+T *pool<T>::Get()
 {
 	this->GrowIfNecessary(1);
 	return this->freeList.Pop();
 }
 
 template <typename T>
-void Pool<T>::Release(T *e)
+void pool<T>::Release(T *e)
 {
 	this->freeList.Append(e);
 }

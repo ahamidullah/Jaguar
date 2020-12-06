@@ -43,7 +43,7 @@ u64 Pointer(void *p)
 }
 
 // @TODO: Where did I get this from? Is the Knuth hash better?
-u64 String(string::String s)
+u64 String(str::String s)
 {
     auto x = u64{5381};
     for (auto c : s)

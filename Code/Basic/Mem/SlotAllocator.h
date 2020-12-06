@@ -3,7 +3,7 @@
 #include "Allocator.h"
 #include "AllocatorBlocks.h"
 
-namespace Memory
+namespace mem
 {
 
 struct SlotAllocator : Allocator
@@ -11,7 +11,7 @@ struct SlotAllocator : Allocator
 	BlockAllocator blocks;
 	s64 slotSize;
 	s64 slotAlignment;
-	array::Array<void *> freeSlots;
+	arr::array<void *> freeSlots;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

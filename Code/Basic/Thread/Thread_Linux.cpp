@@ -95,7 +95,7 @@ Thread NewThread(ThreadProcedure proc, void *param)
 	{
 		Abort("Thread", "Failed on pthread_attr_init(): %k.", PlatformError());
 	}
-	auto p = (RunThreadParameters *)Memory::GlobalHeap()->Allocate(sizeof(RunThreadParameters));
+	auto p = (RunThreadParameters *)mem::GlobalHeap()->Allocate(sizeof(RunThreadParameters));
 	p->threadIndex = AtomicFetchAndAdd64(&threadCount, 1);
 	p->procedure = proc;
 	p->parameter = param;
@@ -120,7 +120,7 @@ void SetThreadProcessorAffinity(Thread t, s64 cpuIndex)
 
 const auto MaxThreadNameLength = 15;
 
-void SetThreadName(string::String n)
+void SetThreadName(str::String n)
 {
 	if (n.Length() > MaxThreadNameLength)
 	{
@@ -133,15 +133,15 @@ void SetThreadName(string::String n)
 	}
 }
 
-string::String ThreadName()
+str::String ThreadName()
 {
-	auto buf = array::NewWithCapacity<u8>(MaxThreadNameLength);
+	auto buf = arr::NewWithCapacity<u8>(MaxThreadNameLength);
 	if (prctl(PR_GET_NAME, (char *)buf.elements, 0, 0, 0) != 0)
 	{
 		log::Error("Thread", "Failed to get thread name: %k.\n", PlatformError());
 	}
-	buf.count = string::Length((char *)buf.elements);
-	return string::NewFromBuffer(buf);
+	buf.count = str::Length((char *)buf.elements);
+	return str::NewFromBuffer(buf);
 }
 
 Thread CurrentThread()

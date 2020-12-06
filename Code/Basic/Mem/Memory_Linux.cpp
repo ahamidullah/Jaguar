@@ -2,7 +2,7 @@
 #include "../Log.h"
 #include "../PCH.h"
 
-namespace Memory
+namespace mem
 {
 
 #define MAP_ANONYMOUS 0x20

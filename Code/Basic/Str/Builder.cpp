@@ -69,29 +69,26 @@ s64 Builder::Length()
 	return this->buffer.count;
 }
 
-String Builder::ToString()
+String Builder::Build()
 {
-	return this->ToStringIn(mem::ContextAllocator());
+	return this->CopyStringIn(mem::ContextAllocator());
 }
 
-String Builder::ToView(s64 start, s64 end)
-{
-	Assert(start <= end);
-	Assert(end <= this->buffer.count);
-	auto b = arr::Array<u8>
-	{
-		.allocator = mem::NullAllocator(),
-		.elements = &this->buffer.elements[start],
-		.count = end - start,
-	};
-	return NewFromBuffer(b);
-}
-
-String Builder::ToStringIn(mem::Allocator *a)
+String Builder::BuildIn(mem::Allocator *a)
 {
 	auto buf = arr::NewIn<u8>(a, this->Length());
 	arr::Copy(this->buffer, buf);
 	return NewFromBuffer(buf);
+}
+
+View Builder::View(s64 start, s64 end)
+{
+	Assert(start <= end);
+	Assert(end <= this->buffer.count);
+	return
+	{
+		.buffer = this->buffer.View(start, this->buffer.Length());
+	};
 }
 
 void Builder::Resize(s64 len)
@@ -104,7 +101,7 @@ void Builder::Append(String s)
 	auto oldLen = this->Length();
 	auto newLen = this->Length() + s.Length();
 	this->Resize(newLen);
-	arr::Copy(s.buffer, this->buffer.ToView(oldLen, newLen));
+	arr::Copy(s.buffer, this->buffer.View(oldLen, newLen));
 }
 
 void Builder::AppendAll(arr::View<String> ss)
@@ -143,7 +140,7 @@ void Builder::FormatVarArgs(String fmt, va_list args)
 		sb->buffer.Resize(sb->Length() + STB_SPRINTF_MIN);
 		return (char *)&sb->buffer[len];
 	};
-	auto cfmt = fmt.ToCString();
+	auto cfmt = fmt.CString();
 	auto len = stbsp_vsprintfcb(Callback, this, (char *)&this->buffer[0], cfmt, args);
 	this->buffer.Resize(len);
 }

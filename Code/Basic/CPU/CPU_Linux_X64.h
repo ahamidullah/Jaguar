@@ -6,7 +6,7 @@
 namespace cpu
 {
 
-const auto CacheLineSize 64
+const auto CacheLineSize = 64;
 
 void SpinWaitHint();
 s64 ProcessorCount();

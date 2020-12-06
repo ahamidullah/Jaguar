@@ -4,13 +4,13 @@
 #include "AllocatorBlocks.h"
 #include "AllocationHeader.h"
 
-namespace Memory
+namespace mem
 {
 
 struct HeapAllocator : Allocator
 {
 	BlockAllocator blocks;
-	array::Array<AllocationHeader *> free;
+	arr::array<AllocationHeader *> free;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

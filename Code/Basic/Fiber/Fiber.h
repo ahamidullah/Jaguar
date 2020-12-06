@@ -1,7 +1,7 @@
 #pragma once
 
-#if defined(__linux__)
-	#include "Linux/Fiber.h"
+#ifdef __linux__
+	#include "Fiber_Linux.h"
 #else
 	#error Unsupported platform.
 #endif

@@ -13,7 +13,7 @@ struct Logger
 	sync::Spinlock lock;
 	Level level;
 	fs::File file;
-	arr::Array<CrashHandler> crashHandlers;
+	arr::array<CrashHandler> crashHandlers;
 
 	void Print(str::String file, str::String func, s64 line, LogLevel l, str::String cat, str::String fmt, ...);
 };
@@ -44,7 +44,7 @@ void ConsoleVarArgs(str::String fmt, va_list args)
 {
 	auto sb = str::Builder{};
 	sb.FormatVarArgs(fmt, args);
-	ConsoleWrite(sb.ToView(0, sb.Length()));
+	ConsoleWrite(sb.View(0, sb.Length()));
 }
 
 void Console(str::String fmt, ...)
@@ -152,7 +152,7 @@ File NewCrashLogFile()
 	sb.FormatTime();
 	sb.Append(".txt");
 	auto err = false;
-	auto path = sb.ToView(0, sb.Length());
+	auto path = sb.View(0, sb.Length());
 	return OpenFile(path,  OpenFileCreate | OpenFileWriteOnly, &err);
 }
 
@@ -170,7 +170,7 @@ void DoAbortActual(str::String file, str::String func, s64 line, str::String cat
 	// This is pretty ugly and I kind of hate it.
 	auto st = Stacktrace();
 	// @TODO
-	auto pool = mem::NewPoolAllocator(8 * Kilobyte, 1, Memory::GlobalHeap(), Memory::GlobalHeap());
+	auto pool = mem::NewPoolAllocator(8 * Kilobyte, 1, mem::GlobalHeap(), mem::GlobalHeap());
 	//SetContextAllocator(&pool);
 	//contextAllocator = &pool; // @TODO
 	Fatal(category, "###########################################################################");

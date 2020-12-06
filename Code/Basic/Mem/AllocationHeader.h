@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-namespace Memory
+namespace mem
 {
 
 struct AllocationHeader

@@ -4,7 +4,7 @@
 namespace time
 {
 
-Timer NewTimer(string::String name)
+Timer NewTimer(str::String name)
 {
 	return
 	{
@@ -23,7 +23,7 @@ void Timer::Print(s64 scale)
 {
 	auto delta = Now() - this->start;
 	this->runningSum += delta.Nanoseconds();
-	auto unit = string::String{};
+	auto unit = str::String{};
 	switch (scale)
 	{
 	case Nanosecond:

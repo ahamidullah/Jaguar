@@ -4,47 +4,64 @@
 namespace path
 {
 
-Builder NewBuilder(string::String s)
+Builder NewBuilder(s64 len)
 {
-	.buffer = s.buffer.Copy(),
+	return
+	{
+		.stringBuilder = str::NewBuilder(len),
+	};
 }
 
 Builder NewBuilderWithCapacity(s64 cap)
 {
 	return
 	{
-		.buffer = array::NewWithCapacity(cap),
+		.stringBuilder = str::NewBuilderWithCapacity(cap),
 	};
 }
 
-void Builder::Append(string::String s)
+void Builder::Append(str::View s)
 {
+	if (sb.Length() == 0 || sb[sb.Length() - 1] == '/')
+	{
+		this->stringBuilder.Append(s);
+	}
+	else
+	{
+		this->stringBuilder.Append('/');
+		this->stringBuilder.Append(s);
+	}
+}
+
+void Builder::AppendAll
 	auto count = sizeof...(sp);
 	if (count == 0)
 	{
 		return;
 	}
-	auto len = (string::Length(sp) + ...) + (count - 1);
-	auto sb = string::NewBuilderWithCapacity(len);
-	auto AddPathComponent = [](string::Builder *sb, string::String c)
+	auto len = (str::Length(sp) + ...) + (count - 1);
+	auto pb = NewBuilderWithCapacity(len);
+	auto AddPathComponent = [](str::Builder *sb, str::String c)
 	{
 		sb->Append(c);
 		sb->Append("/");
 	};
-	(AddPathComponent(&sb, sp), ...);
-	sb.Resize(sb.Length() - 1); // Get rid of the last extraneous '/'.
-	return string::NewFromBuffer(sb.buffer);
+	(pb.Append(sp), ...);
 }
 
-void Builder::SetFilename()
+void Builder::SetFilename(str::View name)
 {
 }
 
-void Builder::SetExtension()
+void Builder::SetFilestem(str::View stem)
 {
 }
 
-void Builder::SetParent()
+void Builder::SetExtension(str::View ext)
+{
+}
+
+void Builder::SetDirectory(str::View d)
 {
 }
 

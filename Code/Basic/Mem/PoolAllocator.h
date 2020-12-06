@@ -3,7 +3,7 @@
 #include "Allocator.h"
 #include "AllocatorBlocks.h"
 
-namespace Memory
+namespace mem
 {
 
 struct PoolAllocator : Allocator

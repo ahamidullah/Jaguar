@@ -1,7 +1,7 @@
 #include "AllocationHeader.h"
 #include "Memory.h"
 
-namespace Memory
+namespace mem
 {
 
 u8 *SetAllocationHeaderAndData(void *mem, s64 size, s64 align)

@@ -1,14 +1,14 @@
 #include "File.h"
 #include "../Log.h"
 
-namespace filesystem
+namespace fs
 {
 
-File Open(string::String path, s64 flags, bool *err)
+File Open(str::String path, s64 flags, bool *err)
 {
 	auto f = File
 	{
-		.handle = open(path.ToCString(), flags, 0666),
+		.handle = open(path.CString(), flags, 0666),
 		.path = path.Copy(),
 	};
 	if (f.handle < 0)
@@ -37,7 +37,7 @@ bool File::Close()
 	return true;
 }
 
-bool File::Read(array::View<u8> out)
+bool File::Read(arr::View<u8> out)
 {
 	auto totRead = 0;
 	auto curRead = 0; // Maximum number of bytes that can be returned by a read. (Like size_t, but signed.)
@@ -61,7 +61,7 @@ bool File::Read(array::View<u8> out)
 	return true;
 }
 
-bool File::Write(array::View<u8> a)
+bool File::Write(arr::View<u8> a)
 {
 	auto totWrit = size_t{0};
 	auto curWrit = ssize_t{0}; // Maximum number of bytes that can be returned by a write. (Like size_t, but signed.)
@@ -80,7 +80,7 @@ bool File::Write(array::View<u8> a)
 	return true;
 }
 
-bool File::WriteString(string::String s)
+bool File::WriteString(str::String s)
 {
 	return this->Write(s.buffer);
 }
@@ -110,7 +110,7 @@ s64 File::Seek(s64 seek, FileSeekRelative rel, bool *err)
 	return off;
 }
 
-Time::Time File::LastModifiedTime(bool *err)
+time::Time File::LastModifiedTime(bool *err)
 {
 	auto stat = (struct stat){};
 	if (fstat(this->handle, &stat) == -1)
@@ -125,18 +125,18 @@ Time::Time File::LastModifiedTime(bool *err)
 	};
 }
 
-bool Exists(string::String path)
+bool Exists(str::String path)
 {
-	if (access(path.ToCString(), F_OK) != -1)
+	if (access(path.CString(), F_OK) != -1)
 	{
 		return true;
 	}
 	return false;
 }
 
-bool Delete(string::String path)
+bool Delete(str::String path)
 {
-	if (unlink(path.ToCString()) != 0)
+	if (unlink(path.CString()) != 0)
 	{
 		log::Error("File", "Failed to delete file %k: %k.", path, PlatformError());
 		return false;

@@ -1,6 +1,6 @@
 #include "StackAllocator.h"
 
-namespace Memory
+namespace mem
 {
 
 void *StackAllocator::Allocate(s64 size)
@@ -42,7 +42,7 @@ void StackAllocator::Free()
 {
 }
 
-StackAllocator NewStackAllocator(array::View<u8> mem)
+StackAllocator NewStackAllocator(arr::View<u8> mem)
 {
 	auto a = StackAllocator{};
 	a.buffer = mem.elements;

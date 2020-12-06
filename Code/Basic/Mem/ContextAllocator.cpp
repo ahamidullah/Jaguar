@@ -2,12 +2,12 @@
 #include "Basic/Container/Array.h"
 #include "../Fiber.h"
 
-namespace Memory
+namespace mem
 {
 
 // We want these variables to have constant initialization so other global variable initializers can use the context allocator.
 ThreadLocal auto contextAllocator = (Allocator *){};
-ThreadLocal auto contextAllocatorStack = array::Array<Allocator *>{};
+ThreadLocal auto contextAllocatorStack = arr::array<Allocator *>{};
 
 Allocator *ContextAllocator()
 {
@@ -36,7 +36,7 @@ void PushContextAllocator(Allocator *a)
 
 void PopContextAllocator()
 {
-	auto stk = (array::Array<Allocator *> *){};
+	auto stk = (arr::array<Allocator *> *){};
 	auto ctx = (Allocator **){};
 	if (RunningFiber())
 	{

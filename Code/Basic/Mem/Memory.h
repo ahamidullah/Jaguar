@@ -1,12 +1,12 @@
 #pragma once
 
-#if __linux__
-	#include "MemoryLinux.h"
+#ifdef __linux__
+	#include "Memory_Linux.h"
 #else
 	#error Unsupported platform.
 #endif
 
-namespace Memory
+namespace mem
 {
 
 void *Allocate(s64 size);

@@ -1,13 +1,13 @@
-#include "DirectoryLinux.h"
+#include "Directory_Linux.h"
 
-namespace filesystem
+namespace fs
 {
 
-bool DirectoryIteration::Iterate(string::String path)
+bool DirectoryIteration::Iterate(str::String path)
 {
 	if (!this->dir)
 	{
-		this->dir = opendir(path.ToCString());
+		this->dir = opendir(path.CString());
 		if (!this->dir)
 		{
 			log::Error("File", "Failed to open directory %k: %k.", path, PlatformError());
@@ -16,7 +16,7 @@ bool DirectoryIteration::Iterate(string::String path)
 	}
 	while ((this->dirent = readdir(this->dir)))
 	{
-		if (string::Equal(this->dirent->d_name, ".") || string::Equal(this->dirent->d_name, ".."))
+		if (str::Equal(this->dirent->d_name, ".") || str::Equal(this->dirent->d_name, ".."))
 		{
 			continue;
 		}
@@ -27,9 +27,9 @@ bool DirectoryIteration::Iterate(string::String path)
 	return false;
 }
 
-bool CreateDirectory(string::String path)
+bool CreateDirectory(str::String path)
 {
-	if (mkdir(path.ToCString(), 0700) == -1)
+	if (mkdir(path.CString(), 0700) == -1)
 	{
 		log::Error("File", "Failed to create directory %k: %k.", path, PlatformError());
 		return false;
@@ -37,7 +37,7 @@ bool CreateDirectory(string::String path)
 	return true;
 }
 
-bool CreateDirectoryIfItDoesNotExist(string::String path)
+bool CreateDirectoryIfItDoesNotExist(str::String path)
 {
 	if (Exists(path))
 	{

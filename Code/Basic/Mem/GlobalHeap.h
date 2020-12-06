@@ -5,7 +5,7 @@
 #include "Basic/Thread.h"
 #include "Basic/Container/Array.h"
 
-namespace Memory
+namespace mem
 {
 
 struct GlobalHeapAllocator : Allocator
@@ -14,7 +14,7 @@ struct GlobalHeapAllocator : Allocator
 	s64 lockThreadID;
 	HeapAllocator heap;
 	StackAllocator backup;
-	array::Static<u8, 8 * Megabyte> backupBuffer;
+	arr::Static<u8, 8 * Megabyte> backupBuffer;
 
 	void *Allocate(s64 size);
 	void *AllocateAligned(s64 size, s64 align);

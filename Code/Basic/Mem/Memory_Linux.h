@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-namespace Memory
+namespace mem
 {
 
 void *PlatformAllocate(s64 size);

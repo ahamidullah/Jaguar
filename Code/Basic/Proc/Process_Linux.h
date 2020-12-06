@@ -13,11 +13,11 @@ enum class ExitStatus
 	Fail = 1,
 };
 
-s32 Run(string::String cmd);
+s32 Run(str::String cmd);
 void Exit(ExitStatus s);
 bool IsDebuggerAttached();
 void SignalBreakpoint();
-string::String EnvironmentVariable(string::String name, bool *exists);
-array::Array<string::String> Stacktrace();
+str::String EnvironmentVariable(str::String name, bool *exists);
+arr::array<str::String> Stacktrace();
 
 }

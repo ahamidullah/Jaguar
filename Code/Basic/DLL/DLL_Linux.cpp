@@ -4,13 +4,13 @@
 namespace dll
 {
 
-DLL Open(string::String path, bool *err)
+DLL Open(str::String path, bool *err)
 {
 	auto dll = DLL
 	{
 		.path = path,
 	};
-	dll.handle = dlopen(path.ToCString(), RTLD_NOW | RTLD_LOCAL);
+	dll.handle = dlopen(path.CString(), RTLD_NOW | RTLD_LOCAL);
 	if (!dll.handle)
 	{
 		log::Error("DLL", "Failed to open DLL %k: %s.\n", path, dlerror());
@@ -30,7 +30,7 @@ bool DLL::Close()
 	return true;
 }
 
-void *DLL::Lookup(string::String name, bool *err)
+void *DLL::Lookup(str::String name, bool *err)
 {
 	// According to https://linux.die.net/man/3/dlsym:
 	//     "If the symbol is not found, in the specified library or any of the libraries that were
@@ -40,7 +40,7 @@ void *DLL::Lookup(string::String name, bool *err)
 	//     old error conditions, then call dlsym(), and then call dlerror() again, saving its return
 	//     value into a variable, and check whether this saved value is not NULL."
 	dlerror();
-	auto ptr = dlsym(this->handle, name.ToCString());
+	auto ptr = dlsym(this->handle, name.CString());
 	if (auto errStr = dlerror(); errStr)
 	{
 		log::Error("DLL", "Failed to find DLL symbol %k in file %k: %s.\n", name, this->path, errStr);

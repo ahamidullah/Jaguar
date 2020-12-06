@@ -7,7 +7,7 @@ namespace proc
 
 s32 Run(str::String cmd)
 {
-	return system(cmd.ToCString());
+	return system(cmd.CString());
 }
 
 void Exit(ExitStatus s)
@@ -31,7 +31,7 @@ void SignalBreakpoint()
 
 str::String EnvironmentVariable(str::String name, bool *exists)
 {
-	auto result = getenv(name.ToCString());
+	auto result = getenv(name.CString());
 	if (!result)
 	{
 		*exists = false;
@@ -41,11 +41,11 @@ str::String EnvironmentVariable(str::String name, bool *exists)
 	return result;
 }
 
-arr::Array<str::String> Stacktrace()
+arr::array<str::String> Stacktrace()
 {
 	#if DebugBuild
 		const auto maxAddrs = 100;
-		auto addrs = array::Static<void *, maxAddrs>{};
+		auto addrs = arr::Static<void *, maxAddrs>{};
 		auto numAddrs = backtrace(&addrs[0], maxAddrs);
 		if (numAddrs == maxAddrs)
 		{

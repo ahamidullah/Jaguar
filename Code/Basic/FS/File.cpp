@@ -1,34 +1,29 @@
 #include "File.h"
 #include "Basic/String.h"
 
-namespace os
+namespace fs
 {
 
-void ReadEntireFileIn(array::Array<u8> *buf, string::String path, bool *err)
+arr::array<u8> ReadAll(str::String path, bool *err)
 {
-	auto f = OpenFile(path, OpenFileReadOnly, err);
+	auto buf = arr::array<u8>{};
+	auto f = Open(path, OpenFlags::ReadOnly, err);
 	if (*err)
 	{
-		return;
+		return {};
 	}
 	Defer(f.Close());
 	auto fLen = f.Length(err);
 	if (*err)
 	{
-		return;
+		return {};
 	}
 	buf->Resize(buf->count + fLen);
 	if (!f.Read(*buf))
 	{
 		*err = true;
-		return;
+		return {};
 	}
-}
-
-array::Array<u8> ReadEntireFile(string::String path, bool *err)
-{
-	auto buf = array::Array<u8>{};
-	ReadEntireFileIn(&buf, path, err);
 	return buf;
 }
 

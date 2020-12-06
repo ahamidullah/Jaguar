@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-namespace array
+namespace arr
 {
 
 template <typename T> struct View;

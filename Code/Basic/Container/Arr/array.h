@@ -7,9 +7,6 @@
 #include "../Assert.h"
 #include "Common.h"
 
-namespace arr
-{
-
 template <typename T>
 struct Array
 {
@@ -18,6 +15,15 @@ struct Array
 	s64 count;
 	s64 capacity;
 
+	operator view<T>();
+	T &operator[](s64 i);
+	const T &operator[](s64 i) const;
+	bool operator==(array<T> a);
+	bool operator!=(array<T> a);
+	T *begin();
+	T *end();
+
+#if 0
 	operator view<T>();
 	T &operator[](s64 i);
 	const T &operator[](s64 i) const;
@@ -45,10 +51,11 @@ struct Array
 	s64 FindLast(T e);
 	T Pop();
 	T *Last();
+#endif
 };
 
 template <typename T>
-array<T> NewIn(mem::allocator *a, s64 count)
+Array<T> make_array_in(Allocator *a, s64 count)
 {
 	return
 	{
@@ -60,13 +67,13 @@ array<T> NewIn(mem::allocator *a, s64 count)
 }
 
 template <typename T>
-array<T> New(s64 count)
+Array<T> make_array(s64 count)
 {
-	return NewIn<T>(mem::ContextAllocator(), count);
+	return new_array_in<T>(context_allocator(), count);
 }
 
 template <typename T>
-array<T> NewWithCapacityIn(mem::allocator *a, s64 cap)
+Array<T> make_array_with_capacity_in(Allocator *a, s64 cap)
 {
 	return
 	{
@@ -77,29 +84,29 @@ array<T> NewWithCapacityIn(mem::allocator *a, s64 cap)
 }
 
 template <typename T>
-Array<T> NewWithCapacity(s64 cap)
+Array<T> make_array_with_capacity(s64 cap)
 {
-	return NewWithCapacityIn<T>(mem::ContextAllocator(), cap);
+	return make_array_with_capacity_in<T>(context_allocator(), cap);
 }
 
 template <typename T, typename... Ts>
-array<T> MakeIn(mem::allocator *a, Ts... ts)
+Array<T> make_array_from_in(Allocator *a, Ts... ts)
 {
-	auto r = NewWithCapacityIn<T>(a, sizeof...(ts));
-	(r.Append(ts), ...);
+	auto r = new_array_with_capacity_in<T>(a, sizeof...(ts));
+	(array_append(&r, ts), ...);
 	return r;
 }
 
 template <typename T, typename... Ts>
-array<T> Make(Ts... ts)
+Array<T> make_array_from(Ts... ts)
 {
-	return MakeIn<T>(mem::ContextAllocator(), ts...);
+	return make_array_from_in<T>(context_allocator(), ts...);
 }
 
 template <typename T>
-array<T>::operator view<T>()
+Array<T>::operator Array_View<T>()
 {
-	return View<T>
+	return Array_View<T>
 	{
 		.elements = elements,
 		.count = count, 
@@ -107,21 +114,21 @@ array<T>::operator view<T>()
 }
 
 template <typename T>
-T &array<T>::operator[](s64 i)
+T &Array<T>::operator[](s64 i)
 {
-	Assert(i >= 0 && i < this->count);
+	assert(i >= 0 && i < this->count);
 	return this->elements[i];
 }
 
 template <typename T>
-const T &array<T>::operator[](s64 i) const
+const T &Array<T>::operator[](s64 i) const
 {
-	Assert(i >= 0 && i < this->count);
+	assert(i >= 0 && i < this->count);
 	return this->elements[i];
 }
 
 template <typename T>
-bool array<T>::operator==(array<T> a)
+bool Array<T>::operator==(array<T> a)
 {
 	if (this->count != a.count)
 	{
@@ -138,25 +145,25 @@ bool array<T>::operator==(array<T> a)
 }
 
 template <typename T>
-bool array<T>::operator!=(array<T> a)
+bool Array<T>::operator!=(Array<T> a)
 {
 	return !(*this == a);
 }
 
 template <typename T>
-T *array<T>::begin()
+T *Array<T>::begin()
 {
 	return &this->elements[0];
 }
 
 template <typename T>
-T *array<T>::end()
+T *Array<T>::end()
 {
 	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T>
-array<T> array<T>::Copy()
+Array<T> Array<T>::copy()
 {
 	return this->CopyIn(mem::ContextAllocator());
 }
@@ -208,25 +215,25 @@ view<T> array<T>::View(s64 start, s64 end)
 }
 
 template <typename T>
-s64 array<T>::FindFirst(T e)
+s64 Array<T>::FindFirst(T e)
 {
 	return FindFirst<T>(*this, e);
 }
 
 template <typename T>
-s64 array<T>::FindLast(T e)
+s64 Array<T>::FindLast(T e)
 {
 	return FindLast<T>(*this, e);
 }
 
 template <typename T>
-void array<T>::SetAllocator(mem::allocator *a)
+void Array<T>::SetAllocator(mem::allocator *a)
 {
 	this->allocator = a;
 }
 
 template <typename T>
-void array<T>::Reserve(s64 n)
+void Array<T>::Reserve(s64 n)
 {
 	if (!this->allocator)
 	{
@@ -254,14 +261,14 @@ void array<T>::Reserve(s64 n)
 }
 
 template <typename T>
-void array<T>::Resize(s64 n)
+void Array<T>::Resize(s64 n)
 {
 	this->Reserve(n);
 	this->count = n;
 }
 
 template <typename T>
-void array<T>::Append(T e)
+void Array<T>::Append(T e)
 {
 	auto i = this->count;
 	this->Resize(this->count + 1);
@@ -271,7 +278,7 @@ void array<T>::Append(T e)
 }
 
 template <typename T>
-void array<T>::AppendAll(view<T> a)
+void Array<T>::AppendAll(view<T> a)
 {
 	auto oldCount = this->count;
 	auto newCount = this->count + a.count;
@@ -280,7 +287,7 @@ void array<T>::AppendAll(view<T> a)
 }
 
 template <typename T>
-void array<T>::OrderedRemove(s64 i)
+void Array<T>::OrderedRemove(s64 i)
 {
 	Assert(i > 0 && i < this->count);
 	Copy(this->View(i + 1, this->count), this->View(i, this->count - 1));
@@ -288,7 +295,7 @@ void array<T>::OrderedRemove(s64 i)
 }
 
 template <typename T>
-void array<T>::UnorderedRemove(s64 i)
+void Array<T>::UnorderedRemove(s64 i)
 {
 	Assert(i > 0 && i < this->count);
 	this->elements[i] = this->elements[this->count - 1];
@@ -296,7 +303,7 @@ void array<T>::UnorderedRemove(s64 i)
 }
 
 template <typename T>
-view<T> array<T>::Sift(siftProcedure p)
+view<T> Array<T>::Sift(siftProcedure p)
 {
 	auto nValid = 0, nInvalid = 0;
 	auto i = 0;
@@ -323,7 +330,7 @@ view<T> array<T>::Sift(siftProcedure p)
 }
 
 template <typename T>
-void array<T>::Free()
+void Array<T>::Free()
 {
 	if (!this->elements)
 	{
@@ -336,7 +343,7 @@ void array<T>::Free()
 }
 
 template <typename T>
-T array<T>::Pop()
+T Array<T>::Pop()
 {
 	Assert(this->count > 0);
 	this->Resize(this->count - 1);
@@ -344,9 +351,7 @@ T array<T>::Pop()
 }
 
 template <typename T>
-T *array<T>::Last()
+T *Array<T>::Last()
 {
 	return &(*this)[this->count - 1];
-}
-
 }

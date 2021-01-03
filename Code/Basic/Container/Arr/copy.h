@@ -2,9 +2,6 @@
 
 #include "Basic/Assert.h"
 
-namespace arr
-{
-
 template <typename T> struct array;
 template <typename T> struct view;
 
@@ -12,7 +9,7 @@ template <typename T> struct view;
 // array, static array, and array view. C++ sucks!
 
 template <typename T>
-void Copy(array<T> src, view<T> dst)
+void CopyArray(array<T> src, view<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
@@ -22,7 +19,7 @@ void Copy(array<T> src, view<T> dst)
 }
 
 template <typename T>
-void Copy(array<T> src, array<T> dst)
+void CopyArray(array<T> src, array<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
@@ -32,7 +29,7 @@ void Copy(array<T> src, array<T> dst)
 }
 
 template <typename T>
-void Copy(view<T> src, array<T> dst)
+void CopyArray(view<T> src, array<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
@@ -42,13 +39,11 @@ void Copy(view<T> src, array<T> dst)
 }
 
 template <typename T>
-void Copy(View<T> src, View<T> dst)
+void CopyArray(View<T> src, View<T> dst)
 {
 	Assert(src.count == dst.count);
 	for (auto i = 0; i < src.count; i += 1)
 	{
 		dst[i] = src[i];
 	}
-}
-
 }

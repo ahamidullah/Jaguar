@@ -2,9 +2,6 @@
 
 #include "Common.h"
 
-namespace arr
-{
-
 template <typename T> struct View;
 
 template <typename T>
@@ -32,6 +29,4 @@ s64 FindLast(View<T> a, T e)
 		}
 	}
 	return last;
-}
-
 }

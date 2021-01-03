@@ -6,9 +6,6 @@
 #include "Basic/Assert.h"
 #include "Common.h"
 
-namespace arr
-{
-
 template <typename T> struct array;
 
 template <typename T>
@@ -19,8 +16,8 @@ struct view
 
 	T &operator[](s64 i);
 	const T &operator[](s64 i) const;
-	bool operator==(View<T> a);
-	bool operator!=(View<T> a);
+	bool operator==(view<T> a);
+	bool operator!=(view<T> a);
 	T *begin();
 	T *end();
 	view<u8> Bytes();
@@ -34,7 +31,7 @@ struct view
 };
 
 template <typename T>
-View<T> NewView(T *data, s64 count)
+view<T> NewView(T *data, s64 count)
 {
 	return
 	{
@@ -44,21 +41,21 @@ View<T> NewView(T *data, s64 count)
 }
 
 template <typename T>
-T &View<T>::operator[](s64 i)
+T &view<T>::operator[](s64 i)
 {
 	Assert(i >= 0 && i < count);
 	return elements[i];
 }
 
 template <typename T>
-const T &View<T>::operator[](s64 i) const
+const T &view<T>::operator[](s64 i) const
 {
 	Assert(i >= 0 && i < count);
 	return elements[i];
 }
 
 template <typename T>
-bool View<T>::operator==(View<T> a)
+bool view<T>::operator==(view<T> a)
 {
 	if (this->count != a.count)
 	{
@@ -75,25 +72,25 @@ bool View<T>::operator==(View<T> a)
 }
 
 template <typename T>
-bool View<T>::operator!=(View<T> a)
+bool view<T>::operator!=(view<T> a)
 {
 	return !(*this == a);
 }
 
 template <typename T>
-T *View<T>::begin()
+T *view<T>::begin()
 {
 	return &this->elements[0];
 }
 
 template <typename T>
-T *View<T>::end()
+T *view<T>::end()
 {
 	return &this->elements[this->count - 1] + 1;
 }
 
 template <typename T>
-View<u8> View<T>::Bytes()
+view<u8> view<T>::Bytes()
 {
 	return
 	{
@@ -103,7 +100,7 @@ View<u8> View<T>::Bytes()
 }
 
 template <typename T>
-View<T> View<T>::View(s64 start, s64 end)
+view<T> view<T>::View(s64 start, s64 end)
 {
 	Assert(start <= end);
 	Assert(start >= 0);
@@ -140,20 +137,18 @@ array<T> view<T>::CopyRangeIn(mem::Allocator *a, s64 start, s64 end)
 {
 	Assert(end >= start);
 	auto ar = New<T>(a, end - start);
-	Copy(this->ToView(start, end), ar);
+	Copy(this->View(start, end), ar);
 	return ar;
 }
 
 template <typename T>
-s64 View<T>::FindFirst(T e)
+s64 view<T>::FindFirst(T e)
 {
 	return FindFirst<T>(*this, e);
 }
 
 template <typename T>
-s64 View<T>::FindLast(T e)
+s64 view<T>::FindLast(T e)
 {
 	return FindLast<T>(*this, e);
-}
-
 }

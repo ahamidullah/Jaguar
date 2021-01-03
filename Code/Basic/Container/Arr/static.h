@@ -4,9 +4,6 @@
 #include "Copy.h"
 #include "Common.h"
 
-namespace arr
-{
-
 template <typename T, s64 N>
 struct fixed
 {
@@ -152,6 +149,4 @@ template <typename T, s64 N>
 s64 fixed<T, N>::FindLast(T e)
 {
 	return FindLast<T>(*this, e);
-}
-
 }
